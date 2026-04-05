@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData } from '@/lib/dataContext'
@@ -127,14 +127,14 @@ export default function UsuariosPage() {
   /* Persist everything */
   const [users, setUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   // Carregar dados online no load da página
-  import('react').then(R => R.useEffect(() => {
+  useEffect(() => {
     fetch('/api/configuracoes/usuarios', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
-        if (data && data.length > 0) setUsers(data as SysUser[]);
+        if (Array.isArray(data)) setUsers(data as SysUser[]);
       })
       .catch(console.error)
-  }, []))
+  }, [])
 
   const [perfis, setPerfis] = useLocalStorage<Perfil[]>('edu-sys-perfis', DEFAULT_PERFIS)
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
