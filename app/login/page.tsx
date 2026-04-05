@@ -36,52 +36,15 @@ function verificarSenha(uid: string, senha: string): boolean { return getSenhas(
 function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
 // ── Buscar todos os usuários ativos ───────────────────────────────────────────
-function getAllUsers(): FoundUser[] {
+async function fetchAllUsersFromDB(): Promise<FoundUser[]> {
   try {
-    const sysUsers: SysUser[] = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-    const fromSys = sysUsers
-      .filter(u => u.status === 'ativo')
-      .map(u => ({ id: u.id, nome: u.nome, email: u.email.toLowerCase(), login: u.email.toLowerCase(), cargo: u.cargo || u.perfil, perfil: u.perfil }))
-    
-    // Alunos & Responsáveis (Acesso Família)
-    const extraUsers: any[] = []
-    const alunos = JSON.parse(localStorage.getItem('edu-data-alunos') ?? '[]')
-    const authUsers = JSON.parse(localStorage.getItem('edu-auth-users') ?? '[]')
-
-    alunos.forEach((a: any) => {
-       const sAuth = authUsers.find((u: any) => u.academic_id === a.id && u.user_type === 'student')
-       if ((sAuth?.status || 'ATIVO') !== 'INATIVO') {
-          const login = sAuth?.login || a.codigo || a.matricula || a.id.substring(0,8)
-          const email = a.email || sAuth?.email || login
-          const loginStr = String(login || '').trim().toLowerCase()
-          const emailStr = String(email || '').trim().toLowerCase()
-          extraUsers.push({ id: sAuth?.id || `virtual-${a.id}`, nome: a.nome, email: emailStr, login: loginStr, cargo: 'Aluno', perfil: 'Família' })
-       }
-
-       const parseG = (g: any) => {
-         if (!g.nome) return
-         const emailRaw = g.email || g.email_responsavel || g.emailResponsavel || ''
-         const cpfRaw = g.cpf || g.cpf_responsavel || g.cpfResponsavel || ''
-         const celRaw = g.celular || g.telefone || g.celular_responsavel || g.telResponsavel || ''
-         
-         const key = emailRaw || cpfRaw || g.nome
-         const gAuth = authUsers.find((u: any) => u.reference_key === key && u.user_type === 'guardian')
-         if ((gAuth?.status || 'ATIVO') !== 'INATIVO') {
-            const login = gAuth?.login || emailRaw || celRaw || ''
-            const email = emailRaw || gAuth?.email || login
-            const loginStr = String(login || '').trim().toLowerCase()
-            const emailStr = String(email || '').trim().toLowerCase()
-            if (!extraUsers.some(u => u.id === (gAuth?.id || `virtual-${key}`))) {
-               extraUsers.push({ id: gAuth?.id || `virtual-${key}`, nome: g.nome, email: emailStr, login: loginStr, cargo: 'Responsável', perfil: 'Família' })
-            }
-         }
-       }
-       if (a._responsaveis && Array.isArray(a._responsaveis)) a._responsaveis.forEach(parseG)
-       else if (a.responsaveis && Array.isArray(a.responsaveis)) a.responsaveis.forEach(parseG)
-       else if (a.responsavel) parseG({ nome: a.responsavel, cpf: a.cpf_responsavel || a.cpfResponsavel, email: a.email_responsavel || a.emailResponsavel, celular: a.celular_responsavel || a.telResponsavel })
-    })
-
-    return [...fromSys, ...extraUsers] as FoundUser[]
+    const res = await fetch('/api/configuracoes/usuarios', { cache: 'no-store' })
+    if(!res.ok) return [];
+    const sysDb = await res.json();
+    return (sysDb || []).filter((u:any) => u.status === 'ativo').map((u:any) => ({
+      id: u.id, nome: u.nome, email: u.email?.toLowerCase(), login: u.email?.toLowerCase(),
+      cargo: u.cargo || u.perfil, perfil: u.perfil, senha: u.senha
+    }))
   } catch { return [] }
 }
 
@@ -177,58 +140,26 @@ export default function LoginPage() {
     await new Promise(r => setTimeout(r, 600))
     const q = email.trim().toLowerCase()
 
-    let foundSysDb: any = null
-    try {
-      const dbUsers = await fetch('/api/configuracoes/usuarios', { cache: 'no-store' }).then(r => r.json())
-      foundSysDb = (dbUsers || []).find((u: any) => u.email?.toLowerCase() === q)
-    } catch(err) {}
+    // Busca oficial da API Real
+    const dbUsers = await fetchAllUsersFromDB()
+    const found = dbUsers.find(u => (u.email && u.email === q) || ((u as any).login && (u as any).login === q))
 
-    let found: any = null;
-    let isDbUser = false;
-
-    if (foundSysDb) {
-       found = foundSysDb;
-       if (found.senha) {
-          if (found.senha !== password) {
-             setLoginLoading(false); setLoginError('Senha incorreta.'); return
-          }
-       } else {
-          if (!temSenha(found.id)) {
-            setLoginLoading(false); setLoginError('Você ainda não criou sua senha. Use "Primeiro Acesso" abaixo.'); return
-          }
-          if (!verificarSenha(found.id, password)) {
-            setLoginLoading(false); setLoginError('Senha incorreta.'); return
-          }
-       }
-       isDbUser = true;
+    if (!found) { setLoginLoading(false); setLoginError('Login não cadastrado ou inativo na nuvem.'); return }
+    
+    // Verificação de Senha conectada à nuvem primeiro, fallback localStorage mock temporário
+    const dbPass = (found as any).senha;
+    if (dbPass) {
+       if (dbPass !== password) { setLoginLoading(false); setLoginError('Senha incorreta.'); return }
     } else {
-       const users = getAllUsers()
-       found = users.find(u => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
-       
-       if (!found) { setLoginLoading(false); setLoginError('Login ou e-mail não cadastrado / inativo.'); return }
-       if (!temSenha(found.id)) {
-         setLoginLoading(false); setLoginError('Você ainda não criou sua senha. Use "Primeiro Acesso" abaixo.'); return
-       }
-       if (!verificarSenha(found.id, password)) {
-         setLoginLoading(false); setLoginError('Senha incorreta.'); return
-       }
+       if (!temSenha(found.id)) { setLoginLoading(false); setLoginError('Senha não criada.'); return }
+       if (!verificarSenha(found.id, password)) { setLoginLoading(false); setLoginError('Senha local incorreta.'); return }
     }
 
     setLoginLoading(false)
 
-    // ── Update último acesso (sys-users ou auth-users)
+    // ── Update último acesso
     const nowStr = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
-    if (isDbUser) {
-      fetch(`/api/configuracoes/usuarios/${found.id}`, { method: 'PUT', body: JSON.stringify({ ultimoAcesso: nowStr }) }).catch(()=>null)
-    } else {
-      const authUsers = JSON.parse(localStorage.getItem('edu-auth-users') ?? '[]')
-      const authId = found.id.replace('virtual-', '')
-      const authIdx = authUsers.findIndex((u: any) => u.id === authId || u.academic_id === authId)
-      if (authIdx >= 0) {
-        authUsers[authIdx].last_login = nowStr
-        localStorage.setItem('edu-auth-users', JSON.stringify(authUsers))
-      }
-    }
+    fetch(`/api/configuracoes/usuarios/${found.id}`, { method: 'PUT', body: JSON.stringify({ ultimoAcesso: nowStr }) }).catch(()=>null)
 
     // ── Salva o usuário logado no context e gera JWT no Server via Action
     await createSession({ id: found.id, nome: found.nome, email: found.email, cargo: found.cargo, perfil: found.perfil })
@@ -248,8 +179,11 @@ export default function LoginPage() {
     setFaLoading(true); setFaError('')
     await new Promise(r => setTimeout(r, 900))
     const q = faQuery.trim().toLowerCase()
-    const users = getAllUsers()
-    const found = users.find(u => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
+    
+    let users: FoundUser[] = []
+    try { users = await fetchAllUsersFromDB() } catch(e) {}
+    
+    const found = users.find((u: FoundUser) => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
     setFaLoading(false)
     if (found) { 
       if (temSenha(found.id)) {
@@ -315,18 +249,23 @@ export default function LoginPage() {
 
     // Salvar na API
     try {
-      await fetch('/api/configuracoes/usuarios', {
+      const res = await fetch('/api/configuracoes/usuarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser)
       })
-    } catch(err) { console.error('Erro ao salvar admin no banco', err) }
-
-    // Salvar local storage também para garantir o login imediato com mock
-    const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-    sysUsers.push(newUser)
-    localStorage.setItem('edu-sys-users', JSON.stringify(sysUsers))
-    setSenha(newId, setupPass)
+      if (!res.ok) {
+         setSetupLoading(false)
+         const err = await res.json()
+         alert('Falha ao salvar Administrador: ' + err.error)
+         return;
+      }
+    } catch(err) { 
+      console.error('Erro ao salvar admin no banco', err);
+      setSetupLoading(false)
+      alert('Erro critico da rede localizando API!')
+      return;
+    }
 
     setSetupLoading(false)
     setIsSystemEmpty(false)
