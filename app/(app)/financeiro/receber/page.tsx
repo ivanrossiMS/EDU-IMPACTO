@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useData, Titulo, newId } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
 import {
@@ -54,12 +55,24 @@ const BLANK: Omit<Titulo, 'id'> & { codigo: string; origemLanca?: string } = {
 }
 
 export default function ContasReceberPage() {
-  const { titulos, setTitulos, alunos, cfgEventos, cfgMetodosPagamento, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, logSystemAction } = useData()
+  const { alunos, cfgEventos, cfgMetodosPagamento, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, logSystemAction } = useData()
   const METODOS = cfgMetodosPagamento.filter(m => m.situacao === 'ativo').map(m => m.nome)
   const metodosSelect = METODOS.length > 0 ? METODOS : METODOS_FALLBACK
+  const queryClient = useQueryClient()
+
+  const { data: dbTitulos = [] } = useQuery<any[]>({
+    queryKey: ['titulos'],
+    queryFn: async () => {
+      const res = await fetch('/api/financeiro/titulos')
+      if (!res.ok) throw new Error('Erro ao carregar títulos')
+      return res.json()
+    },
+    staleTime: 30_000,
+  })
 
   // Apenas títulos marcados estritamente como lançamentos manuais nesta tela
-  const titulosReceber = titulos.filter(t => (t as any).origemLanca === 'manual_receber')
+  const titulosReceber = dbTitulos.filter(t => (t as any).origemLanca === 'manual_receber') || []
+  const titulos = dbTitulos
 
   // Eventos de receita ativos do sistema (sem fallback hardcoded)
   const eventosReceita = cfgEventos.filter(e => e.tipo === 'receita' && e.situacao === 'ativo')
@@ -205,48 +218,57 @@ export default function ContasReceberPage() {
     setModal('baixa')
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.aluno.trim() || !form.vencimento) return
+    const isNew = modal === 'new'
+    
+    // Save to the database using API
     if (gerarParcelas && previewParcelas.length > 0) {
-      // Gera múltiplos títulos
+      // Multiple items
       const novos = previewParcelas.map((p, i) => ({
         ...form,
-        id: newId('TIT'),
+        id: "", // Let API auto-gen or we can generate
         codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
         descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
         parcela: `${i+1}/${previewParcelas.length}`,
-        valor: p.valor,
-        vencimento: p.venc,
-        origemLanca: 'manual_receber'
-      } as Titulo))
-      setTitulos(prev => [...novos, ...prev])
+        valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber'
+      }))
+      for (const n of novos) {
+        await fetch('/api/financeiro/titulos', { method: 'POST', body: JSON.stringify(n), headers: { 'Content-Type': 'application/json' } })
+      }
       logSystemAction('Financeiro (Receber)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas para ${form.aluno}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
-    } else if (modal === 'new') {
-      const generatedId = newId('TIT')
-      setTitulos(prev => [{ ...form, id: generatedId } as Titulo, ...prev])
-      logSystemAction('Financeiro (Receber)', 'Cadastro', `Novo título gerado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno, detalhesDepois: form })
+    } else if (isNew) {
+      const payload = { ...form, id: '', origemLanca: 'manual_receber' }
+      await fetch('/api/financeiro/titulos', { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+      logSystemAction('Financeiro (Receber)', 'Cadastro', `Novo título gerado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     } else if (editingId) {
-      const tituloAnterior = titulos.find(t => t.id === editingId)
-      setTitulos(prev => prev.map(t => t.id === editingId ? { ...form, id: editingId } as Titulo : t))
-      // Sincronizar descrição/valor na movimentação automática vinculada (se existir)
+      await fetch(`/api/financeiro/titulos/${editingId}`, { method: 'PUT', body: JSON.stringify(form), headers: { 'Content-Type': 'application/json' } })
+      
       setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
         m.referenciaId === editingId
           ? { ...m, descricao: `Contas a Receber — ${form.descricao}${form.aluno ? ` · ${form.aluno}` : ''}`, valor: form.valor, editadoEm: new Date().toISOString() }
           : m
       ))
-      logSystemAction('Financeiro (Receber)', 'Edição', `Título atualizado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno, detalhesAntes: tituloAnterior, detalhesDepois: form })
+      logSystemAction('Financeiro (Receber)', 'Edição', `Título atualizado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     }
+    
+    queryClient.invalidateQueries({ queryKey: ['titulos'] })
     setModal(null); setEditingId(null)
   }
 
-  const handleBaixa = () => {
+  const handleBaixa = async () => {
     if (!editingId) return
     const titulo = titulos.find(t => t.id === editingId)
-    setTitulos(prev => prev.map(t => t.id === editingId ? {
-      ...t, status: 'pago' as const, pagamento: baixaForm.dataPagamento,
-      metodo: baixaForm.metodo, valor: baixaForm.valorPago || t.valor,
+    if (!titulo) return
+    
+    const changes = {
+      status: 'pago' as const, pagamento: baixaForm.dataPagamento,
+      metodo: baixaForm.metodo, valor: baixaForm.valorPago || titulo.valor,
       obs: baixaForm.obs,
-    } : t))
+    }
+    
+    await fetch(`/api/financeiro/titulos/${editingId}`, { method: 'PUT', body: JSON.stringify(changes), headers: { 'Content-Type': 'application/json' } })
+
     // Espelhar como Movimentação Manual no caixa selecionado
     if (baixaForm.caixaId && titulo) {
       const now = new Date().toISOString()
@@ -265,17 +287,19 @@ export default function ContasReceberPage() {
         origem: 'baixa_receber', referenciaId: editingId || ''
       }])
     }
+    
     logSystemAction('Financeiro (Receber)', 'Baixa de Pagamento', `Título liquidado via ${baixaForm.metodo}`, { registroId: (titulo as any)?.codigo, nomeRelacionado: titulo?.aluno })
+    queryClient.invalidateQueries({ queryKey: ['titulos'] })
     setModal(null); setEditingId(null)
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirmId) {
       const tituloAnterior = titulos.find(t => t.id === confirmId)
-      setTitulos(prev => prev.filter(t => t.id !== confirmId))
-      // Remover movimentação automática vinculada (se houver baixa registrada)
+      await fetch(`/api/financeiro/titulos/${confirmId}`, { method: 'DELETE' })
       setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
-      logSystemAction('Financeiro (Receber)', 'Exclusão', `Título removido do sistema permanentemente`, { registroId: (tituloAnterior as any)?.codigo, nomeRelacionado: tituloAnterior?.aluno, detalhesAntes: tituloAnterior })
+      logSystemAction('Financeiro (Receber)', 'Exclusão', `Título removido do sistema permanentemente`, { registroId: (tituloAnterior as any)?.codigo, nomeRelacionado: tituloAnterior?.aluno })
+      queryClient.invalidateQueries({ queryKey: ['titulos'] })
     }
     setConfirmId(null)
   }
@@ -500,7 +524,7 @@ export default function ContasReceberPage() {
             <tbody>
               {filtered.map(t => {
                 const atr = t.status === 'atrasado' ? diasAtraso(t.vencimento) : 0
-                const sc = STATUS_CFG[t.status]
+                const sc = STATUS_CFG[t.status as keyof typeof STATUS_CFG]
                 return (
                   <tr key={t.id}>
                     <td>
@@ -574,12 +598,10 @@ export default function ContasReceberPage() {
                             title="Reverter Baixa"
                             className="btn btn-sm"
                             style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 700, borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            onClick={() => {
+                            onClick={async () => {
                               // Reverter o título para pendente
-                              setTitulos(prev => prev.map(x => x.id === t.id
-                                ? { ...x, status: 'pendente' as const, pagamento: null as any, metodo: null as any, obs: undefined }
-                                : x
-                              ))
+                              await fetch(`/api/financeiro/titulos/${t.id}`, { method: 'PUT', body: JSON.stringify({ status: 'pendente', pagamento: null, metodo: null, obs: null }), headers: { 'Content-Type': 'application/json' } })
+                              queryClient.invalidateQueries({ queryKey: ['titulos'] })
                               // Remover movimentação automática vinculada
                               setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== t.id))
                             }}>

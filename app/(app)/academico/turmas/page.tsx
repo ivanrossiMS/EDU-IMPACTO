@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useData, Turma } from '@/lib/dataContext'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
 import TurmaModal from '@/components/turmas/TurmaModal'
@@ -27,8 +28,18 @@ function OccupancyRing({ pct, color }: { pct: number; color: string }) {
 }
 
 export default function TurmasPage() {
-  const { alunos, turmas, setTurmas, logSystemAction } = useData()
-  const isLoading = false
+  const { alunos, logSystemAction } = useData()
+  const queryClient = useQueryClient()
+
+  const { data: turmas = [], isLoading } = useQuery<any[]>({
+    queryKey: ['turmas'],
+    queryFn: async () => {
+      const res = await fetch('/api/turmas')
+      if (!res.ok) throw new Error('Erro ao carregar turmas')
+      return res.json()
+    },
+    staleTime: 30_000,
+  })
 
   const [view, setView] = useState<'grid' | 'lista'>('grid')
   const [segmento, setSegmento] = useState('Todos')
@@ -57,12 +68,20 @@ export default function TurmasPage() {
     return matchSeg && matchTurno && matchAno && matchSearch
   })
 
-  const handleDelete = () => {
-    if (confirmId) {
-      const turmaAntiga = turmas.find((t: any) => t.id === confirmId)
-      setTurmas((prev: any[]) => prev.filter((t: any) => t.id !== confirmId))
-      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome, detalhesAntes: turmaAntiga })
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/turmas/${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Erro ao deletar turma')
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['turmas'] })
+      const turmaAntiga = turmas.find((t: any) => t.id === deletedId)
+      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome })
     }
+  })
+
+  const handleDelete = () => {
+    if (confirmId) deleteMutation.mutate(confirmId)
     setConfirmId(null)
   }
 

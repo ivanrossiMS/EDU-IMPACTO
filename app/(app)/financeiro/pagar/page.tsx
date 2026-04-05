@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useData, ContaPagar, newId } from '@/lib/dataContext'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
@@ -53,7 +54,18 @@ const BLANK_CP = {
 }
 
 export default function ContasPagarPage() {
-  const { contasPagar, setContasPagar, fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction } = useData()
+  const { fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction } = useData()
+  const queryClient = useQueryClient()
+
+  const { data: contasPagar = [] } = useQuery<any[]>({
+    queryKey: ['contasPagar'],
+    queryFn: async () => {
+      const res = await fetch('/api/financeiro/contas-pagar')
+      if (!res.ok) throw new Error('Erro ao carregar contas a pagar')
+      return res.json()
+    },
+    staleTime: 30_000,
+  })
 
   // Métodos de pagamento dinâmicos (com fallback)
   const METODOS_FALLBACK = ['PIX', 'Dinheiro', 'Boleto Bancário', 'Cartão de Crédito', 'Transferência', 'Débito Automático', 'Cheque']
@@ -131,26 +143,25 @@ export default function ContasPagarPage() {
     setBaixaId(c.id)
   }
 
-  const confirmarBaixa = () => {
+  const confirmarBaixa = async () => {
     if (!baixaId) return
-    const conta = contasPagar.find(c => c.id === baixaId)
-    setContasPagar(prev => prev.map(c => c.id === baixaId
-      ? {
-          ...c,
-          status: 'pago' as ContaPagar['status'],
-          dataPagamento: baixaForm.dataPagamento,
-          valorPago: valorLiquido,
-          desconto: baixaForm.desconto,
-          juros: baixaForm.juros,
-          multa: baixaForm.multa,
-          obs: baixaForm.obs,
-          caixaId: baixaForm.caixaId,
-          tipoDocBaixa: baixaForm.tipoDoc,
-          planoContasBaixa: baixaForm.planoContasId,
-          composicaoBaixa: baixaForm.composicao,
-        } as any
-      : c
-    ))
+    const conta = contasPagar.find((c: any) => c.id === baixaId)
+    
+    const changes = {
+      status: 'pago' as ContaPagar['status'],
+      dataPagamento: baixaForm.dataPagamento,
+      valorPago: valorLiquido,
+      desconto: baixaForm.desconto,
+      juros: baixaForm.juros,
+      multa: baixaForm.multa,
+      obs: baixaForm.obs,
+      caixaId: baixaForm.caixaId,
+      tipoDocBaixa: baixaForm.tipoDoc,
+      planoContasBaixa: baixaForm.planoContasId,
+      composicaoBaixa: baixaForm.composicao,
+    }
+    await fetch(`/api/financeiro/contas-pagar/${baixaId}`, { method: 'PUT', body: JSON.stringify(changes), headers: { 'Content-Type': 'application/json' } })
+
     // Espelhar pagamento como Movimentação Manual
     if (baixaForm.caixaId && conta) {
       const now = new Date().toISOString()
@@ -162,7 +173,7 @@ export default function ContasPagarPage() {
         descricao: `Contas a Pagar — ${conta.descricao}${conta.fornecedor ? ` · ${conta.fornecedor}` : ''}`,
         dataLancamento: baixaForm.dataPagamento, dataMovimento: baixaForm.dataPagamento,
         valor: valorLiquido, planoContasId: baixaForm.planoContasId || '',
-        planoContasDesc: cfgPlanoContas.find(p => p.id === baixaForm.planoContasId)?.descricao || '',
+        planoContasDesc: cfgPlanoContas.find((p: any) => p.id === baixaForm.planoContasId)?.descricao || '',
         tipoDocumento: baixaForm.tipoDoc || 'PIX', numeroDocumento: (conta as any).numeroDocumento || '',
         dataEmissao: (conta as any).dataEmissao || baixaForm.dataPagamento,
         compensadoBanco: false, observacoes: baixaForm.obs || '',
@@ -171,6 +182,7 @@ export default function ContasPagarPage() {
       }])
     }
     logSystemAction('Financeiro (Pagar)', 'Baixa de Pagamento', `Pagamento de R$ ${valorLiquido} efetuado para ${conta?.fornecedor}`, { registroId: (conta as any)?.codigo, nomeRelacionado: conta?.fornecedor })
+    queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
     setBaixaId(null)
   }
 
@@ -262,10 +274,10 @@ export default function ContasPagarPage() {
     setPreviewParcelas(gerarParcelas(form.valor, numParcelas, form.vencimento, modoParcelas))
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.descricao.trim() || !form.valor || !form.vencimento) return
     const fn = fornecedoresCad.find(f => f.id === fornecedorId)
-    const payload: Omit<ContaPagar, 'id'> = {
+    const payload = {
       ...form,
       fornecedor: fn ? (fn.nomeFantasia || fn.razaoSocial) : form.fornecedor,
       numeroDocumento: numDoc,
@@ -274,43 +286,42 @@ export default function ContasPagarPage() {
     if (parcelar && previewParcelas.length > 0) {
       const novas = previewParcelas.map((p, i) => ({
         ...payload,
-        id: newId('CP'),
+        id: '', // let backend set ID
         codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
         descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
         valor: p.valor,
         vencimento: p.vencimento,
-        numeroDocumento: numDoc,
-        planoContasId: planoContasId,
       }))
-      setContasPagar(prev => [...prev, ...novas])
+      for (const n of novas) {
+        await fetch('/api/financeiro/contas-pagar', { method: 'POST', body: JSON.stringify(n), headers: { 'Content-Type': 'application/json' } })
+      }
       logSystemAction('Financeiro (Pagar)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas a pagar para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
     } else {
       if (modal === 'add') {
-        const id = newId('CP')
-        setContasPagar(prev => [...prev, { ...payload, id }])
-        logSystemAction('Financeiro (Pagar)', 'Cadastro', `Criada conta a pagar de R$ ${payload.valor} para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor, detalhesDepois: payload })
+        await fetch('/api/financeiro/contas-pagar', { method: 'POST', body: JSON.stringify({...payload, id: ''}), headers: { 'Content-Type': 'application/json' } })
+        logSystemAction('Financeiro (Pagar)', 'Cadastro', `Criada conta a pagar de R$ ${payload.valor} para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
       } else if (editingId) {
-        const anterior = contasPagar.find(c => c.id === editingId)
-        setContasPagar(prev => prev.map(c => c.id === editingId ? { ...payload, id: editingId } : c))
+        await fetch(`/api/financeiro/contas-pagar/${editingId}`, { method: 'PUT', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
         // Sincronizar movimentação automática vinculada (se houver baixa registrada)
         setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
           m.referenciaId === editingId
             ? { ...m, descricao: `Contas a Pagar — ${payload.descricao}${payload.fornecedor ? ` · ${payload.fornecedor}` : ''}`, valor: payload.valor, editadoEm: new Date().toISOString() }
             : m
         ))
-        logSystemAction('Financeiro (Pagar)', 'Edição', `Atualização da conta a pagar ${form.codigo}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor, detalhesAntes: anterior, detalhesDepois: payload })
+        logSystemAction('Financeiro (Pagar)', 'Edição', `Atualização da conta a pagar ${form.codigo}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
       }
     }
+    queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
     setModal(null)
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirmId) {
-      const deletedT = contasPagar.find(c => c.id === confirmId)
-      setContasPagar(prev => prev.filter(c => c.id !== confirmId))
-      // Remover movimentação automática vinculada (se houver baixa)
+      const deletedT = contasPagar.find((c: any) => c.id === confirmId)
+      await fetch(`/api/financeiro/contas-pagar/${confirmId}`, { method: 'DELETE' })
       setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
-      logSystemAction('Financeiro (Pagar)', 'Exclusão', `Exclusão definitiva de conta a pagar.`, { registroId: (deletedT as any)?.codigo, detalhesAntes: deletedT })
+      logSystemAction('Financeiro (Pagar)', 'Exclusão', `Exclusão definitiva de conta a pagar.`, { registroId: (deletedT as any)?.codigo })
+      queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
     }
     setConfirmId(null)
   }
@@ -477,8 +488,9 @@ export default function ContasPagarPage() {
                             title="Reverter Baixa"
                             className="btn btn-sm"
                             style={{ fontSize: 11, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-                            onClick={() => {
-                              setContasPagar(prev => prev.map(x => x.id === c.id ? { ...x, status: 'pendente', dataPagamento: undefined } : x))
+                            onClick={async () => {
+                              await fetch(`/api/financeiro/contas-pagar/${c.id}`, { method: 'PUT', body: JSON.stringify({ status: 'pendente', dataPagamento: null }), headers: { 'Content-Type': 'application/json' } })
+                              queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
                               // Remover movimentação automática ao reverter baixa
                               setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== c.id))
                             }}>

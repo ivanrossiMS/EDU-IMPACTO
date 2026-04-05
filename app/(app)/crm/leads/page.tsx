@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useData, Lead, newId } from '@/lib/dataContext'
 import { formatCurrency, getInitials } from '@/lib/utils'
 import {
@@ -55,7 +56,18 @@ function ProgressBar({ current, total, color }: { current: number; total: number
 }
 
 export default function LeadsPage() {
-  const { leads, setLeads } = useData()
+  const { setLeads } = useData()
+  const queryClient = useQueryClient()
+
+  const { data: leads = [] } = useQuery<any[]>({
+    queryKey: ['leads'],
+    queryFn: async () => {
+      const res = await fetch('/api/crm/leads')
+      if (!res.ok) throw new Error('Erro ao carregar leads')
+      return res.json()
+    },
+    staleTime: 30_000,
+  })
   const [viewMode, setViewMode] = useState<'kanban' | 'lista'>('kanban')
   const [modal, setModal] = useState<'add' | 'edit' | 'view' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -95,23 +107,32 @@ export default function LeadsPage() {
   const closeModal = () => { setModal(null); setEditingId(null); setViewLead(null) }
   const set = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nome.trim()) return
-    if (modal === 'add') setLeads(prev => [...prev, { ...form, id: newId('L'), data: new Date().toISOString().slice(0, 10) }])
-    else if (editingId) setLeads(prev => prev.map(l => l.id === editingId ? { ...form, id: editingId } : l))
+    const payload = { ...form }
+    if (modal === 'add') {
+      await fetch('/api/crm/leads', { method: 'POST', body: JSON.stringify({...payload, id: ''}), headers: { 'Content-Type': 'application/json' } })
+    } else if (editingId) {
+      await fetch(`/api/crm/leads/${editingId}`, { method: 'PUT', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+    }
+    queryClient.invalidateQueries({ queryKey: ['leads'] })
     closeModal()
   }
 
-  const handleDelete = () => {
-    if (confirmId) setLeads(prev => prev.filter(l => l.id !== confirmId))
+  const handleDelete = async () => {
+    if (confirmId) {
+      await fetch(`/api/crm/leads/${confirmId}`, { method: 'DELETE' })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+    }
     setConfirmId(null)
   }
 
-  const advanceStatus = (lead: Lead) => {
-    const idx = STATUS_ORDER.indexOf(lead.status)
+  const advanceStatus = async (lead: Lead) => {
+    const idx = STATUS_ORDER.indexOf(lead.status as any)
     if (idx < STATUS_ORDER.length - 1) {
       const next = STATUS_ORDER[idx + 1]
-      setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: next } : l))
+      await fetch(`/api/crm/leads/${lead.id}`, { method: 'PUT', body: JSON.stringify({ status: next }), headers: { 'Content-Type': 'application/json' } })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
     }
   }
 

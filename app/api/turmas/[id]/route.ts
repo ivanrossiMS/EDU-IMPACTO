@@ -1,40 +1,38 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/mockDb'
+import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, context: any) {
-  const id = context.params.id;
-  const record = db.turmas.find(r => r.id === id)
-  
-  if (!record) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  
-  return NextResponse.json(record)
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { data, error } = await supabaseServer.from('turmas').select('*').eq('id', id).single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+  return NextResponse.json({ ...data, ...(data.dados || {}) })
 }
 
-export async function PUT(request: Request, context: any) {
-  const id = context.params.id;
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
-    const data = await request.json()
-    const index = db.turmas.findIndex(r => r.id === id)
-    if (index === -1) {
-      // Upsert
-      db.turmas.push({ ...data, id })
-      return NextResponse.json(data)
+    const body = await request.json()
+    const { codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, ...rest } = body
+    const row = {
+      codigo: codigo || '', nome, serie: serie || '', turno: turno || '',
+      professor: professor || '', sala: sala || '',
+      capacidade: capacidade || 30, matriculados: matriculados || 0,
+      unidade: unidade || '', ano: ano || new Date().getFullYear(),
+      dados: rest, updated_at: new Date().toISOString(),
     }
-    
-    db.turmas[index] = { ...db.turmas[index], ...data }
-    return NextResponse.json(db.turmas[index])
-  } catch (error) {
-    return NextResponse.json({ error: 'Bad Request' }, { status: 400 })
+    const { data, error } = await supabaseServer.from('turmas').update(row).eq('id', id).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ...data, ...(data.dados || {}) })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
-export async function DELETE(request: Request, context: any) {
-  const id = context.params.id;
-  const index = db.turmas.findIndex(r => r.id === id)
-  if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  
-  db.turmas.splice(index, 1)
-  return NextResponse.json({ success: true })
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { error } = await supabaseServer.from('turmas').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
 }

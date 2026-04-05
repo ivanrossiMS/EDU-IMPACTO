@@ -1,5 +1,7 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
+
 import { useState, useMemo, useEffect } from 'react'
 import { useData, newId } from '@/lib/dataContext'
 import {
@@ -267,6 +269,7 @@ interface Props { open: boolean; onClose: () => void; editingId?: string | null 
 
 export default function CadastroAlunoModal({ open, onClose, editingId }: Props) {
   const { alunos, setAlunos, turmas, cfgPadroesPagamento, titulos, setTitulos } = useData()
+  const queryClient = useQueryClient()
   const [step, setStep] = useState(1)
 
   // ── PASSO 1: Dados do aluno ──────────────────────────────────────
@@ -443,11 +446,13 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
     }
     setAlunos((prev: any[]) => [...prev, novoAluno as any])
     
-    // Dispara POST para bater no React Query do banco Server State Mockado
+    // Dispara POST para banco de dados oficial (Supabase)
     fetch('/api/alunos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(novoAluno)
+    }).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['alunos'] })
     }).catch(console.error)
 
     onClose()

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/mockDb'
+import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,39 +9,53 @@ export async function GET(request: Request) {
   const serie = searchParams.get('serie')
   const status = searchParams.get('status')
 
-  let results = db.alunos
+  let query = supabaseServer.from('alunos').select('*').order('nome')
 
-  if (q) {
-    results = results.filter(a =>
-      a.nome.toLowerCase().includes(q) || 
-      a.matricula.toLowerCase().includes(q) ||
-      a.turma.toLowerCase().includes(q) ||
-      (a as any).codigo?.toLowerCase().includes(q)
-    )
-  }
+  if (q) query = query.or(`nome.ilike.%${q}%,matricula.ilike.%${q}%,turma.ilike.%${q}%`)
+  if (serie && serie !== 'Todos') query = query.eq('serie', serie)
+  if (status && status !== 'Todos') query = query.eq('status', status)
 
-  if (serie && serie !== 'Todos') {
-    results = results.filter(a => a.serie === serie)
-  }
+  const { data, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  if (status && status !== 'Todos') {
-    results = results.filter(a => a.status === status)
-  }
-
-  return NextResponse.json(results)
+  // Merge dados JSONB back into the flat structure pages expect
+  const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+  return NextResponse.json(result)
 }
 
 export async function POST(request: Request) {
   try {
-    const data = await request.json()
-    const newAluno = {
-      ...data,
-      id: data.id || `A${Math.floor(Math.random() * 10000)}`,
-      createdAt: data.createdAt || new Date().toISOString()
+    const body = await request.json()
+    const { id, nome, matricula, turma, serie, turno, status,
+      email, cpf, dataNascimento, responsavel, responsavelFinanceiro,
+      responsavelPedagogico, telefone, inadimplente, risco_evasao,
+      media, frequencia, obs, unidade, foto, ...rest } = body
+
+    const row = {
+      id: id || `A${Date.now()}`,
+      nome, matricula: matricula || '', turma: turma || '',
+      serie: serie || '', turno: turno || '',
+      status: status || 'matriculado',
+      email: email || '', cpf: cpf || '',
+      data_nascimento: dataNascimento || '',
+      responsavel: responsavel || '',
+      responsavel_financeiro: responsavelFinanceiro || '',
+      responsavel_pedagogico: responsavelPedagogico || '',
+      telefone: telefone || '',
+      inadimplente: inadimplente || false,
+      risco_evasao: risco_evasao || 'baixo',
+      media: media ?? null,
+      frequencia: frequencia ?? 100,
+      obs: obs || '', unidade: unidade || '', foto: foto || null,
+      dados: rest, // store all extra fields (_responsaveis, _matriculas, etc.)
     }
-    db.alunos.push(newAluno)
-    return NextResponse.json(newAluno, { status: 201 })
-  } catch (error) {
-    return NextResponse.json({ error: 'Erro ao criar aluno' }, { status: 400 })
+
+    const { data, error } = await supabaseServer
+      .from('alunos').upsert(row).select().single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }

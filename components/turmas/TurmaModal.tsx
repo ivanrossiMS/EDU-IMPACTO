@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useData, Turma, newId } from '@/lib/dataContext'
 import {
   X, Check, Users, BookOpen, Clock, DollarSign, Settings,
@@ -62,6 +63,7 @@ interface Props {
 
 export default function TurmaModal({ open, onClose, editingId }: Props) {
   const { turmas, setTurmas, alunos, setAlunos, cfgDisciplinas, funcionarios, cfgPadroesPagamento, mantenedores, logSystemAction } = useData()
+  const queryClient = useQueryClient()
 
   // Unidades reais cadastradas no sistema
   const unidadesList = mantenedores.flatMap(m => m.unidades ?? []).map(u => u.nomeFantasia || u.razaoSocial).filter(Boolean)
@@ -190,12 +192,16 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
         ? { ...payload, id: editingId }
         : t
       ))
-      fetch(`/api/turmas/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: editingId}) }).catch(console.error)
+      fetch(`/api/turmas/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: editingId}) })
+        .then(() => queryClient.invalidateQueries({ queryKey: ['turmas'] }))
+        .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Edição', `Atualização da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     } else {
       const nid = newId('T')
       setTurmas(prev => [...prev, { ...payload, id: nid }])
-      fetch(`/api/turmas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: nid}) }).catch(console.error)
+      fetch(`/api/turmas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: nid}) })
+        .then(() => queryClient.invalidateQueries({ queryKey: ['turmas'] }))
+        .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Cadastro', `Criação da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     }
     onClose()

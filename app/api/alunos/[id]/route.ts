@@ -1,39 +1,54 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/mockDb'
+import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, context: any) {
-  // Enforced to use params asynchronously in Next.js 15+ properly. Wait, the context params must be awaited inside the method if it's Next.js 15
-  // But doing it synchronously is fine if it works, wait, the standard for dynamic routing params is context.params: { id: string }
-  // We'll extract id.
-  const id = context.params.id;
-  const aluno = db.alunos.find(a => a.id === id)
-  
-  if (!aluno) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  
-  return NextResponse.json(aluno)
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { data, error } = await supabaseServer.from('alunos').select('*').eq('id', id).single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 })
+  return NextResponse.json({ ...data, ...(data.dados || {}) })
 }
 
-export async function PUT(request: Request, context: any) {
-  const id = context.params.id;
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
-    const data = await request.json()
-    const index = db.alunos.findIndex(a => a.id === id)
-    if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    
-    db.alunos[index] = { ...db.alunos[index], ...data }
-    return NextResponse.json(db.alunos[index])
-  } catch (error) {
-    return NextResponse.json({ error: 'Bad Request' }, { status: 400 })
+    const body = await request.json()
+    const { nome, matricula, turma, serie, turno, status,
+      email, cpf, dataNascimento, responsavel, responsavelFinanceiro,
+      responsavelPedagogico, telefone, inadimplente, risco_evasao,
+      media, frequencia, obs, unidade, foto, ...rest } = body
+
+    const row = {
+      nome, matricula: matricula || '', turma: turma || '',
+      serie: serie || '', turno: turno || '', status: status || 'matriculado',
+      email: email || '', cpf: cpf || '',
+      data_nascimento: dataNascimento || '',
+      responsavel: responsavel || '',
+      responsavel_financeiro: responsavelFinanceiro || '',
+      responsavel_pedagogico: responsavelPedagogico || '',
+      telefone: telefone || '',
+      inadimplente: inadimplente || false,
+      risco_evasao: risco_evasao || 'baixo',
+      media: media ?? null, frequencia: frequencia ?? 100,
+      obs: obs || '', unidade: unidade || '', foto: foto || null,
+      dados: rest,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await supabaseServer
+      .from('alunos').update(row).eq('id', id).select().single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ...data, ...(data.dados || {}) })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
-export async function DELETE(request: Request, context: any) {
-  const id = context.params.id;
-  const index = db.alunos.findIndex(a => a.id === id)
-  if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  
-  db.alunos.splice(index, 1)
-  return NextResponse.json({ success: true })
+export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const { error } = await supabaseServer.from('alunos').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
 }
