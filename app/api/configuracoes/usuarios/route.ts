@@ -4,20 +4,28 @@ import { supabase } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const { data, error } = await supabase.from('system_users').select('*')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  const { data, error } = await supabase.from('configuracoes').select('valor').eq('chave', 'usuarios').single()
+  if (error && error.code !== 'PGRST116') return NextResponse.json({ error: error.message }, { status: 500 }) // PGRST116 = zero rows
+  return NextResponse.json(data ? data.valor : [])
 }
 
 export async function POST(req: Request) {
   const body = await req.json()
-  // se array
+  
+  // get existing
+  const { data: current } = await supabase.from('configuracoes').select('valor').eq('chave', 'usuarios').single()
+  let users = current?.valor || []
+  if (!Array.isArray(users)) users = []
+
+  // Add elements
   if (Array.isArray(body)) {
-      const { data, error } = await supabase.from('system_users').insert(body).select()
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      return NextResponse.json(data)
+    users = [...users, ...body]
+  } else {
+    users.push(body)
   }
-  const { data, error } = await supabase.from('system_users').insert([body]).select()
+
+  // update config kv
+  const { data, error } = await supabase.from('configuracoes').upsert({ chave: 'usuarios', valor: users }).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data.valor)
 }
