@@ -174,29 +174,52 @@ export default function LoginPage() {
     e.preventDefault()
     if (!email || !password) { setLoginError('Preencha e-mail e senha.'); return }
     setLoginLoading(true); setLoginError('')
-    await new Promise(r => setTimeout(r, 1000))
-    const users = getAllUsers()
+    await new Promise(r => setTimeout(r, 600))
     const q = email.trim().toLowerCase()
-    const found = users.find(u => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
-    if (!found) { setLoginLoading(false); setLoginError('Login ou e-mail não cadastrado / inativo.'); return }
-    if (!temSenha(found.id)) {
-      setLoginLoading(false)
-      setLoginError('Você ainda não criou sua senha. Use "Primeiro Acesso" abaixo.')
-      return
+
+    let foundSysDb: any = null
+    try {
+      const dbUsers = await fetch('/api/configuracoes/usuarios').then(r => r.json())
+      foundSysDb = (dbUsers || []).find((u: any) => u.email?.toLowerCase() === q)
+    } catch(err) {}
+
+    let found: any = null;
+    let isDbUser = false;
+
+    if (foundSysDb) {
+       found = foundSysDb;
+       if (found.senha) {
+          if (found.senha !== password) {
+             setLoginLoading(false); setLoginError('Senha incorreta.'); return
+          }
+       } else {
+          if (!temSenha(found.id)) {
+            setLoginLoading(false); setLoginError('Você ainda não criou sua senha. Use "Primeiro Acesso" abaixo.'); return
+          }
+          if (!verificarSenha(found.id, password)) {
+            setLoginLoading(false); setLoginError('Senha incorreta.'); return
+          }
+       }
+       isDbUser = true;
+    } else {
+       const users = getAllUsers()
+       found = users.find(u => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
+       
+       if (!found) { setLoginLoading(false); setLoginError('Login ou e-mail não cadastrado / inativo.'); return }
+       if (!temSenha(found.id)) {
+         setLoginLoading(false); setLoginError('Você ainda não criou sua senha. Use "Primeiro Acesso" abaixo.'); return
+       }
+       if (!verificarSenha(found.id, password)) {
+         setLoginLoading(false); setLoginError('Senha incorreta.'); return
+       }
     }
-    if (!verificarSenha(found.id, password)) {
-      setLoginLoading(false); setLoginError('Senha incorreta.'); return
-    }
-    setLoginLoading(false)
+
     setLoginLoading(false)
 
     // ── Update último acesso (sys-users ou auth-users)
     const nowStr = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
-    const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-    const sysIdx = sysUsers.findIndex((u: any) => u.id === found.id)
-    if (sysIdx >= 0) {
-      sysUsers[sysIdx].ultimoAcesso = nowStr
-      localStorage.setItem('edu-sys-users', JSON.stringify(sysUsers))
+    if (isDbUser) {
+      fetch(`/api/configuracoes/usuarios/${found.id}`, { method: 'PUT', body: JSON.stringify({ ultimoAcesso: nowStr }) }).catch(()=>null)
     } else {
       const authUsers = JSON.parse(localStorage.getItem('edu-auth-users') ?? '[]')
       const authId = found.id.replace('virtual-', '')
