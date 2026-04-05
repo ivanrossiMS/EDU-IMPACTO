@@ -143,8 +143,12 @@ export default function LoginPage() {
     window.addEventListener('mousemove', h); 
     
     // Verifica se sistema está vazio para exibir botão Master
-    const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-    setIsSystemEmpty(sysUsers.length === 0)
+    fetch('/api/configuracoes/usuarios').then(r => r.json()).then(data => {
+      setIsSystemEmpty(!data || data.length === 0)
+    }).catch(() => {
+      const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
+      setIsSystemEmpty(sysUsers.length === 0)
+    })
 
     return () => window.removeEventListener('mousemove', h)
   }, [])
@@ -282,9 +286,20 @@ export default function LoginPage() {
       perfil: 'Diretor Geral',
       status: 'ativo',
       twofa: false,
-      ultimoAcesso: 'Agora'
+      ultimoAcesso: 'Agora',
+      senha: setupPass,
     }
 
+    // Salvar na API
+    try {
+      await fetch('/api/configuracoes/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser)
+      })
+    } catch(err) { console.error('Erro ao salvar admin no banco', err) }
+
+    // Salvar local storage também para garantir o login imediato com mock
     const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
     sysUsers.push(newUser)
     localStorage.setItem('edu-sys-users', JSON.stringify(sysUsers))

@@ -126,6 +126,16 @@ export default function UsuariosPage() {
 
   /* Persist everything */
   const [users, setUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
+  // Carregar dados online no load da página
+  import('react').then(R => R.useEffect(() => {
+    fetch('/api/configuracoes/usuarios')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) setUsers(data as SysUser[]);
+      })
+      .catch(console.error)
+  }, []))
+
   const [perfis, setPerfis] = useLocalStorage<Perfil[]>('edu-sys-perfis', DEFAULT_PERFIS)
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
@@ -167,20 +177,24 @@ export default function UsuariosPage() {
   /* ── User actions ── */
   const openAddUser = () => { setUserForm(BLANK_USER); setUserModal('add') }
   const openEditUser = (u: SysUser) => { setUserForm({ nome: u.nome, email: u.email, cargo: u.cargo, perfil: u.perfil, status: u.status, twofa: u.twofa }); setEditingUserId(u.id); setUserModal('edit') }
-  const saveUser = () => {
+  const saveUser = async () => {
     if (!userForm.nome.trim() || !userForm.email.trim()) return
     if (userModal === 'add') {
       const uId = newId('U')
-      setUsers(prev => [...prev, { ...userForm, id: uId, ultimoAcesso: 'Nunca' }])
+      const payload = { ...userForm, id: uId, ultimoAcesso: 'Nunca' }
+      try { await fetch('/api/configuracoes/usuarios', { method: 'POST', body: JSON.stringify(payload) }) } catch(e){}
+      setUsers(prev => [...prev, payload])
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: uId, detalhesDepois: userForm })
     } else if (editingUserId) {
+      try { await fetch(`/api/configuracoes/usuarios/${editingUserId}`, { method: 'PUT', body: JSON.stringify(userForm) }) } catch(e) {}
       setUsers(prev => prev.map(u => u.id === editingUserId ? { ...u, ...userForm } : u))
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, detalhesDepois: userForm })
     }
     setUserModal(null); setEditingUserId(null)
   }
-  const deleteUser = () => {
+  const deleteUser = async () => {
     if (deleteUserId) {
+      try { await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' }) } catch(e) {}
       const uDel = users.find(u => u.id === deleteUserId)
       setUsers(prev => prev.filter(u => u.id !== deleteUserId))
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, detalhesAntes: uDel })
