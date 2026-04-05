@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useData, Turma } from '@/lib/dataContext'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
 import TurmaModal from '@/components/turmas/TurmaModal'
 import { Plus, Search, Grid, List, Pencil, Trash2, Users, BookOpen, Clock } from 'lucide-react'
@@ -28,17 +27,8 @@ function OccupancyRing({ pct, color }: { pct: number; color: string }) {
 }
 
 export default function TurmasPage() {
-  const { logSystemAction } = useData()
-  const queryClient = useQueryClient()
-  
-  const { data: alunos = [], isLoading: loadA } = useQuery<any[]>({
-    queryKey: ['alunos'],
-    queryFn: async () => { const res = await fetch('/api/alunos'); return res.json() }
-  })
-  const { data: turmas = [], isLoading: loadT } = useQuery<any[]>({
-    queryKey: ['turmas'],
-    queryFn: async () => { const res = await fetch('/api/turmas'); return res.json() }
-  })
+  const { alunos, turmas, setTurmas, logSystemAction } = useData()
+  const isLoading = false
 
   const [view, setView] = useState<'grid' | 'lista'>('grid')
   const [segmento, setSegmento] = useState('Todos')
@@ -50,8 +40,6 @@ export default function TurmasPage() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
-
-  const isLoading = loadA || loadT
 
   // Conta alunos: prioriza turmaId (vínculo direto) e faz fallback pelo nome da turma
   const alunosDaTurma = (turmaId: string, turmaNome: string) =>
@@ -69,21 +57,11 @@ export default function TurmasPage() {
     return matchSeg && matchTurno && matchAno && matchSearch
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/turmas/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Erro ao deletar')
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ['turmas'] })
-      const turmaAntiga = turmas.find((t: any) => t.id === deletedId)
-      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome, detalhesAntes: turmaAntiga })
-    }
-  })
-
   const handleDelete = () => {
     if (confirmId) {
-      deleteMutation.mutate(confirmId)
+      const turmaAntiga = turmas.find((t: any) => t.id === confirmId)
+      setTurmas((prev: any[]) => prev.filter((t: any) => t.id !== confirmId))
+      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome, detalhesAntes: turmaAntiga })
     }
     setConfirmId(null)
   }

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInitials } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
 import CadastroAlunoModal from '@/components/alunos/CadastroAlunoModal'
@@ -43,17 +42,8 @@ function getResp(a: any): { fin: string; ped: string } {
 
 export default function AlunosPage() {
   const router = useRouter()
-  const { logSystemAction } = useData()
-  const queryClient = useQueryClient()
-  
-  const { data: alunos = [], isLoading } = useQuery<any[]>({
-    queryKey: ['alunos'],
-    queryFn: async () => {
-      const res = await fetch('/api/alunos')
-      if (!res.ok) throw new Error('Falha ao carregar alunos')
-      return res.json()
-    }
-  })
+  const { alunos, setAlunos, logSystemAction } = useData()
+  const isLoading = false
   const [search, setSearch]         = useState('')
   const [filterSerie, setFilterSerie]   = useState('Todos')
   const [filterStatus, setFilterStatus] = useState('Todos')
@@ -91,21 +81,11 @@ export default function AlunosPage() {
     )
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/alunos/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Erro ao deletar')
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ['alunos'] })
-      const alunoDel = alunos.find((a: any) => a.id === deletedId)
-      logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
-    }
-  })
-
   const handleDelete = () => {
     if (confirmId) {
-      deleteMutation.mutate(confirmId)
+      const alunoDel = alunos.find((a: any) => a.id === confirmId)
+      setAlunos((prev: any[]) => prev.filter((a: any) => a.id !== confirmId))
+      logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
     }
     setConfirmId(null)
   }

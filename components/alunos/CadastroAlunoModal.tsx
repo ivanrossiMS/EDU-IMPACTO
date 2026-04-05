@@ -11,6 +11,29 @@ import { CepAddressFields } from '@/components/ui/CepInput'
 
 // ─── helpers ────────────────────────────────────────────────────────
 const gerarCodigo = (seq: number) => String(seq).padStart(6, '0')
+
+// Retorna o próximo seq do aluno sem repetir mesmo que haja exclusões
+const proximoSeqAluno = (alunos: any[]): number => {
+  if (alunos.length === 0) return 1
+  const nums = alunos
+    .map(a => parseInt(a._dadosAluno?.codigo || '0', 10))
+    .filter(n => !isNaN(n) && n > 0)
+  return nums.length > 0 ? Math.max(...nums) + 1 : alunos.length + 1
+}
+
+// Gera código de responsável único verificando todos já cadastrados
+const gerarCodigoRespUnico = (alunos: any[]): string => {
+  const existentes = new Set<string>()
+  alunos.forEach(a => {
+    const resps: any[] = a._responsaveis || []
+    resps.forEach(r => { if (r.codigo) existentes.add(r.codigo) })
+  })
+  let code: string
+  do { code = gerarCodigo(Math.floor(Math.random() * 999999)) }
+  while (existentes.has(code))
+  return code
+}
+
 const calcIdade = (dataNasc: string) => {
   if (!dataNasc) return ''
   const h = new Date(), n = new Date(dataNasc)
@@ -53,8 +76,8 @@ interface ParcelaAluno {
   eventoDescricao?: string
 }
 
-const BLANK_RESP = (tipo: 'mae' | 'pai' | 'outro'): RespData => ({
-  tipo, codigo: gerarCodigo(Math.floor(Math.random() * 999999)),
+const BLANK_RESP = (tipo: 'mae' | 'pai' | 'outro', alunos: any[] = []): RespData => ({
+  tipo, codigo: gerarCodigoRespUnico(alunos),
   cpf: '', nome: '', dataNasc: '', sexo: '', rg: '', orgEmissor: '',
   nacionalidade: 'Brasileiro(a)', naturalidade: '', uf: 'SP',
   estadoCivil: '', profissao: '', email: '', celular: '',
@@ -247,20 +270,20 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
   const [step, setStep] = useState(1)
 
   // ── PASSO 1: Dados do aluno ──────────────────────────────────────
-  const totalAlunos = alunos.length + 1
+  const seq0 = proximoSeqAluno(alunos)
   const [dadosAluno, setDadosAluno] = useState({
-    codigo: gerarCodigo(totalAlunos),
+    codigo: gerarCodigo(seq0),
     cpf: '', nome: '', idCenso: '',
-    rga: `${anoAtual}00${String(totalAlunos).padStart(4, '0')}`,
+    rga: `${anoAtual}00${String(seq0).padStart(4, '0')}`,
     dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
     naturalidade: '', uf: 'SP', corRaca: '', outros: '',
   })
   const idadeAluno = calcIdade(dadosAluno.dataNasc)
 
   // ── PASSO 2: Responsáveis ────────────────────────────────────────
-  const [mae, setMae] = useState<RespData>(BLANK_RESP('mae'))
-  const [pai, setPai] = useState<RespData>(BLANK_RESP('pai'))
-  const [outro, setOutro] = useState<RespData>(BLANK_RESP('outro'))
+  const [mae, setMae] = useState<RespData>(() => BLANK_RESP('mae', alunos))
+  const [pai, setPai] = useState<RespData>(() => BLANK_RESP('pai', alunos))
+  const [outro, setOutro] = useState<RespData>(() => BLANK_RESP('outro', alunos))
   const [temOutro, setTemOutro] = useState(false)
 
   // ── PASSO 3: Matrículas ──────────────────────────────────────────
@@ -331,14 +354,14 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
   useEffect(() => {
     if (!open) return
     setStep(1)
-    const seq = alunos.length + 1
+    const seq = proximoSeqAluno(alunos)
     setDadosAluno({
       codigo: gerarCodigo(seq), cpf: '', nome: '', idCenso: '',
       rga: `${anoAtual}00${String(seq).padStart(4, '0')}`,
       dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
       naturalidade: '', uf: 'SP', corRaca: '', outros: '',
     })
-    setMae(BLANK_RESP('mae')); setPai(BLANK_RESP('pai')); setOutro(BLANK_RESP('outro'))
+    setMae(BLANK_RESP('mae', alunos)); setPai(BLANK_RESP('pai', alunos)); setOutro(BLANK_RESP('outro', alunos))
     setTemOutro(false); setMatriculas([]); setObs(''); setTemInfoMedica(false)
     setInfoMedica(''); setParcelas([]); setObsFinanceira('')
   }, [open])
