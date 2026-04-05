@@ -174,6 +174,7 @@ export default function AlunosPage() {
           <div style={{ display:'flex', gap:3 }}>
             <Link href={`/academico/alunos/ficha?id=${a.id}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha"><Eye size={11}/></button></Link>
             <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${a.id}`)}><Pencil size={11}/></button>
+            <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color:'#f87171' }} onClick={() => setConfirmId(a.id)}><Trash2 size={11}/></button>
           </div>
         </td>
       </tr>
