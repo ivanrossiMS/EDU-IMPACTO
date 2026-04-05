@@ -166,6 +166,7 @@ export default function UsuariosPage() {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
   const [userForm, setUserForm] = useState<Omit<SysUser, 'id' | 'ultimoAcesso'>>(BLANK_USER)
   const [showUser, setShowUser] = useState<SysUser | null>(null)
+  const [isSavingUser, setIsSavingUser] = useState(false)
 
   /* Perfil CRUD state */
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
@@ -178,7 +179,8 @@ export default function UsuariosPage() {
   const openAddUser = () => { setUserForm(BLANK_USER); setUserModal('add') }
   const openEditUser = (u: SysUser) => { setUserForm({ nome: u.nome, email: u.email, cargo: u.cargo, perfil: u.perfil, status: u.status, twofa: u.twofa }); setEditingUserId(u.id); setUserModal('edit') }
   const saveUser = async () => {
-    if (!userForm.nome.trim() || !userForm.email.trim()) return
+    if (!userForm.nome.trim() || !userForm.email.trim() || isSavingUser) return
+    setIsSavingUser(true)
     if (userModal === 'add') {
       const uId = newId('U')
       const payload = { ...userForm, id: uId, ultimoAcesso: 'Nunca' }
@@ -190,7 +192,7 @@ export default function UsuariosPage() {
       setUsers(prev => prev.map(u => u.id === editingUserId ? { ...u, ...userForm } : u))
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, detalhesDepois: userForm })
     }
-    setUserModal(null); setEditingUserId(null)
+    setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
   }
   const deleteUser = async () => {
     if (deleteUserId) {
@@ -401,8 +403,10 @@ export default function UsuariosPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-            <button className="btn btn-ghost" onClick={() => setUserModal(null)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={saveUser}><Save size={13} />{userModal === 'add' ? 'Inserir Usuário' : 'Salvar alterações'}</button>
+            <button className="btn btn-ghost" onClick={() => setUserModal(null)} disabled={isSavingUser}>Cancelar</button>
+            <button className="btn btn-primary" onClick={saveUser} disabled={isSavingUser} style={{ opacity: isSavingUser ? 0.7 : 1 }}>
+              <Save size={13} />{isSavingUser ? 'Salvando...' : (userModal === 'add' ? 'Inserir Usuário' : 'Salvar alterações')}
+            </button>
           </div>
         </Modal>
       )}

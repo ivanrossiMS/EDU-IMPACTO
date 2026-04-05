@@ -17,11 +17,15 @@ export async function POST(req: Request) {
   let users = current?.valor || []
   if (!Array.isArray(users)) users = []
 
-  // Add elements
-  if (Array.isArray(body)) {
-    users = [...users, ...body]
-  } else {
-    users.push(body)
+  // Add elements without duplication
+  const newItems = Array.isArray(body) ? body : [body]
+  for (const item of newItems) {
+    if (item.id && !users.some((u: any) => u.id === item.id)) {
+      users.push(item)
+    } else if (!item.id) {
+       // local storage should always provide IDs, but just in case
+       users.push(item)
+    }
   }
 
   // update config kv
