@@ -1,0 +1,371 @@
+const fs = require('fs');
+const path = 'c:/Users/ivanr/OneDrive/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/app/(app)/academico/alunos/nova-matricula/page.tsx';
+
+let content = fs.readFileSync(path, 'utf8');
+const lines = content.split('\n');
+
+// Find the exact start and end lines
+const startLine = lines.findIndex(l => l.trim() === '// STEP 4: Financeiro'); // 0-indexed
+// Find end: look for STEP 5 comment
+const endLine = lines.findIndex(l => l.trim() === '// STEP 5: Contratos');
+
+if (startLine === -1 || endLine === -1) {
+  console.error('Could not find boundaries. start:', startLine, 'end:', endLine);
+  process.exit(1);
+}
+
+console.log(`Found step 4 at lines ${startLine+1} to ${endLine} (1-indexed)`);
+
+// The new step 4 content - everything from "// STEP 4" up to (but not including) "// STEP 5"
+const newStep4 = `    // STEP 4: Financeiro
+    <div key="s4" style={{display:'flex',flexDirection:'column',gap:0,minHeight:600,background:'hsl(var(--bg-base))'}}>
+
+      {/* ══ PREMIUM FINANCIAL HEADER ══ */}
+      <div style={{
+        padding:'14px 24px',
+        background:'linear-gradient(135deg,hsl(var(--bg-elevated)) 0%,rgba(99,102,241,0.03) 100%)',
+        borderBottom:'1px solid hsl(var(--border-subtle))',
+        borderRadius:'16px 16px 0 0',
+        display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',
+      }}>
+        <div style={{width:46,height:46,borderRadius:12,background:aluno.foto?'transparent':'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid rgba(99,102,241,0.25)',boxShadow:'0 0 0 4px rgba(99,102,241,0.08),0 4px 12px rgba(99,102,241,0.18)'}}>
+          {aluno.foto?<img src={aluno.foto} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18,color:'#fff'}}>👤</span>}
+        </div>
+        <div style={{flex:'0 0 auto'}}>
+          <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Financeiro · Matr. <span style={{color:'#818cf8',fontFamily:'monospace',fontWeight:900}}>{numMatricula}</span></div>
+          <div style={{fontWeight:900,fontSize:15,letterSpacing:-.4,color:'hsl(var(--text-base))',lineHeight:1}}>{aluno.nome||'—'}</div>
+        </div>
+        <div style={{width:1,height:32,background:'hsl(var(--border-subtle))',flexShrink:0}}/>
+        <div style={{flex:'0 0 auto'}}>
+          <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:.8,textTransform:'uppercase',marginBottom:2}}>Resp. Financeiro</div>
+          <div style={{fontWeight:700,fontSize:12,color:'#818cf8'}}>{todosResp.find(r=>r.respFinanceiro)?.nome||'—'}</div>
+        </div>
+        <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          {obsAlunoFin&&<button type="button" onClick={()=>setModalObsAluno(true)} style={{fontSize:10,padding:'5px 14px',borderRadius:20,background:'rgba(245,158,11,0.1)',color:'#d97706',fontWeight:700,border:'1px solid rgba(245,158,11,0.22)',cursor:'pointer'}}>📝 Obs. Financeira</button>}
+          {parcelas.length>0&&<span style={{fontSize:10,padding:'5px 14px',borderRadius:20,background:parcelasConfirmadas?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.08)',color:parcelasConfirmadas?'#10b981':'#f59e0b',fontWeight:700,border:'1px solid '+(parcelasConfirmadas?'rgba(16,185,129,0.2)':'rgba(245,158,11,0.18)')}}>{parcelasConfirmadas?'✓ Confirmadas':'⚠ Não confirmadas'}</span>}
+        </div>
+      </div>
+
+      {/* ══ KPI CARDS ══ */}
+      {parcelas.length>0&&(()=>{
+        const valid=parcelas.filter(p=>p.status!=='cancelado')
+        return(
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:0,borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+            {([
+              {l:'Total Bruto',v:valid.reduce((s,p)=>s+p.valor,0),c:'hsl(var(--text-base))',cv:'hsl(var(--text-base))',accent:'#6366f1',icon:'💰'},
+              {l:'Descontos',v:valid.reduce((s,p)=>s+p.desconto,0),c:'#d97706',cv:'#d97706',accent:'#f59e0b',icon:'🏷️'},
+              {l:'Total Líquido',v:valid.reduce((s,p)=>s+p.valorFinal,0),c:'#10b981',cv:'#10b981',accent:'#10b981',icon:'✅'},
+              {l:'Recebido',v:valid.filter(p=>p.status==='pago').reduce((s,p)=>s+p.valorFinal,0),c:'#6366f1',cv:'#6366f1',accent:'#6366f1',icon:'💳'},
+            ] as any[]).map((k:any,i:number)=>(
+              <div key={k.l} style={{padding:'16px 22px',background:'hsl(var(--bg-elevated))',borderRight:i<3?'1px solid hsl(var(--border-subtle))':'none',position:'relative',overflow:'hidden'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:k.accent,opacity:.8}}/>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <div style={{width:28,height:28,borderRadius:7,background:k.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>{k.icon}</div>
+                  <span style={{fontSize:10,fontWeight:700,color:'hsl(var(--text-muted))',letterSpacing:.7,textTransform:'uppercase'}}>{k.l}</span>
+                </div>
+                <div style={{fontFamily:'monospace',fontWeight:900,fontSize:21,color:k.cv,lineHeight:1,letterSpacing:-.5}}>R$ {fmtMoeda(k.v)}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
+      {/* ══ ACTION TOOLBAR ══ */}
+      {(()=>{
+        const selCount=parcelasSelected.length
+        const temSel=selCount>0
+        const Btn=({icon,label,color,onClick,disabled,danger,title}:{icon:string;label:string;color?:string;onClick:()=>void;disabled?:boolean;danger?:boolean;title?:string})=>(
+          <button type="button" disabled={disabled||false} onClick={onClick} title={title||label}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',borderRadius:8,border:'1px solid',
+              borderColor:disabled?'transparent':danger?'rgba(239,68,68,0.25)':color?color+'28':'hsl(var(--border-subtle))',
+              background:disabled?'transparent':danger?'rgba(239,68,68,0.05)':color?color+'0d':'transparent',
+              cursor:disabled?'not-allowed':'pointer',opacity:disabled?.35:1,transition:'all 0.15s',
+              color:disabled?'hsl(var(--text-muted))':danger?'#f87171':color||'hsl(var(--text-secondary))',
+              fontSize:11,fontWeight:600,whiteSpace:'nowrap',
+            }}
+            onMouseEnter={e=>{if(!disabled)(e.currentTarget as HTMLElement).style.transform='translateY(-1px)'}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(0)'}}
+          >
+            <span style={{fontSize:13}}>{icon}</span><span>{label}</span>
+          </button>
+        )
+        const Sep=()=><div style={{width:1,height:20,background:'hsl(var(--border-subtle))',margin:'0 3px'}}/>
+        return (
+          <div style={{padding:'9px 20px',borderBottom:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-base))',display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+            {temSel&&(
+              <div style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:20,background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.25)',marginRight:4}}>
+                <span style={{width:5,height:5,borderRadius:3,background:'#6366f1',display:'inline-block'}}/>
+                <span style={{fontFamily:'monospace',fontWeight:900,fontSize:11,color:'#818cf8'}}>{selCount}</span>
+                <span style={{fontSize:10,color:'hsl(var(--text-muted))'}}>sel.</span>
+                <button type="button" style={{border:'none',background:'none',color:'#f87171',cursor:'pointer',fontSize:13,lineHeight:1,padding:0,marginLeft:2}} onClick={()=>setParcelasSelected([])}>×</button>
+              </div>
+            )}
+            <Btn icon="💳" label="Baixar" color="#10b981" disabled={!temSel} onClick={()=>{
+              if(selCount===1){
+                const p=parcelas.find(x=>x.num===parcelasSelected[0])
+                if(p&&p.status!=='pago'){const{juros,multa}=calcAtraso(p);const t=+(p.valorFinal+juros+multa).toFixed(2);setParcelaAtiva({...p});const c='BX'+String(p.num).padStart(3,'0')+String(Date.now()).slice(-6);setBaixaForm({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:fmtMoeda(t),cartao:null}],juros:juros>0?fmtMoeda(juros):'0',multa:multa>0?fmtMoeda(multa):'0',desconto:fmtMoeda(p.desconto||0),obs:'',comprovante:'',codPreview:c});setModalBaixarParcela(true)}
+              } else {
+                const sp=parcelas.filter(x=>parcelasSelected.includes(x.num)&&x.status!=='pago');const sj=sp.reduce((s,p)=>s+calcAtraso(p).juros,0);const sm=sp.reduce((s,p)=>s+calcAtraso(p).multa,0);const sd=sp.reduce((s,p)=>s+(p.desconto||0),0);const tl=sp.reduce((s,p)=>s+p.valorFinal,0)+sj+sm;const c='BX'+String(Date.now()).slice(-6)+String(Math.floor(Math.random()*100)).padStart(2,'0')+'LL';setBaixaLoteForm({dataPagto:new Date().toISOString().split('T')[0],formaPagto:'PIX',comprovante:'',obs:'',juros:sj>0?fmtMoeda(sj):'0',multa:sm>0?fmtMoeda(sm):'0',desconto:fmtMoeda(sd),codPreview:c});setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:fmtMoeda(tl),cartao:null}]);setModalBaixaLote(true)
+              }
+            }}/>
+            <Btn icon="✏️" label="Editar" color="#6366f1" disabled={selCount!==1} onClick={()=>{const p=parcelas.find(x=>x.num===parcelasSelected[0]);if(p){setParcelaAtiva({...p});setModalEditarParcela(true)}}}/>
+            <Sep/>
+            <Btn icon="➕" label="Inserir Evento" color="#8b5cf6" onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}/>
+            <Btn icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const sn=se?parcelas.filter(p=>(p as any).evento===se).map(p=>p.num):parcelas.map(p=>p.num);setDescLote({tipo:'%',valor:'',deParcela:String(Math.min(...sn)),ateParcela:String(Math.max(...sn)),eventoId:se,parcelasEvento:sn});setModalDesconto(true)}}/>
+            <Btn icon="📅" label="Alt. Vencimento" color="#06b6d4" onClick={()=>{const ev=[...new Set(parcelas.map(p=>(p as any).evento).filter(Boolean))];setVctoForm({deParcela:'1',ateParcela:String(parcelas.length),novoDia:'',eventoFiltro:(ev[0] as string)||''});setModalVcto(true)}}/>
+            <Btn icon="💲" label="Alt. Valor" color="#a78bfa" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const ns=se?parcelas.filter(p=>(p as any).evento===se).map(p=>p.num):parcelas.map(p=>p.num);setAlterarValorForm({parcelas:ns,eventoFiltro:se,novoValor:'',motivo:''});setModalAlterarValor(true)}}/>
+            <Sep/>
+            <Btn icon="🔍" label="Cons. Baixa" color="#38bdf8" onClick={()=>setModalConsultaBaixa(true)}/>
+            <Btn icon="↩️" label="Excluir Baixa" color="#f97316" disabled={!temSel||!parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} onClick={()=>setModalExcluirBaixa(true)}/>
+            <Btn icon="🗑️" label="Excluir" danger disabled={!temSel||parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} title={parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')?"Remova parcelas pagas para excluir":undefined} onClick={()=>{setExcluirMotivo('');setModalExcluirMotivo(true)}}/>
+            <Sep/>
+            <Btn icon="🖨️" label="Boleto" color="#0ea5e9" disabled={!temSel} onClick={()=>{setBoletoForm((f:any)=>({...f,tipo:'1via'}));setModalBoleto(true)}}/>
+            <Btn icon="📄" label="2ª Via" color="#64748b" disabled={!temSel} onClick={()=>{setBoletoForm((f:any)=>({...f,tipo:'2via'}));setModalBoleto(true)}}/>
+            <Sep/>
+            <Btn icon="📝" label="Obs. Aluno" color="#f472b6" onClick={()=>setModalObsAluno(true)}/>
+            <Btn icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>setModalBaixaResp(true)}/>
+            <Btn icon="🗂️" label="Excluídos" color="#6b7280" onClick={()=>setModalItensExcluidos(true)}/>
+          </div>
+        )
+      })()}
+
+      {/* ══ FILTROS + TABELA ══ */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        {(()=>{
+          const hoje=new Date();hoje.setHours(0,0,0,0)
+          const pd=(s:string)=>new Date(s.split('/').reverse().join('-')+'T12:00')
+          const calcJurosMulta=(p:any)=>{
+            if(p.status==='pago'||p.status==='isento') return {juros:p.juros||0,multa:p.multa||0,dias:0}
+            const dv=pd(p.vencimento);const dias=Math.max(0,Math.floor((hoje.getTime()-dv.getTime())/86400000))
+            if(dias<=0) return {juros:p.juros||0,multa:p.multa||0,dias:0}
+            return {juros:+(p.valor*0.00033*dias).toFixed(2),multa:+(p.valor*0.02).toFixed(2),dias}
+          }
+          const valid=parcelas.filter(p=>p.status!=='cancelado')
+          const aV=valid.filter(p=>p.status==='pendente'&&pd(p.vencimento)>=hoje)
+          const ven=valid.filter(p=>p.status==='pendente'&&pd(p.vencimento)<hoje)
+          const pag=valid.filter(p=>p.status==='pago')
+          const filtroAtual=fin._filtro||'a-vencer'
+          const pFilt=filtroAtual==='a-vencer'?aV:filtroAtual==='vencido'?ven:filtroAtual==='pago'?pag:valid
+          const allSel=pFilt.length>0&&pFilt.every(p=>parcelasSelected.includes(p.num))
+          const selCount=parcelasSelected.length
+          const FILTROS=[
+            {k:'todos',l:'Todos',n:valid.length,c:'#6366f1',bg:'rgba(99,102,241,0.1)'},
+            {k:'a-vencer',l:'A Vencer',n:aV.length,c:'#6366f1',bg:'rgba(99,102,241,0.1)'},
+            {k:'vencido',l:'Vencido',n:ven.length,c:'#ef4444',bg:'rgba(239,68,68,0.08)'},
+            {k:'pago',l:'Pago',n:pag.length,c:'#10b981',bg:'rgba(16,185,129,0.08)'},
+          ]
+          return (
+            <>
+              {/* Barra de Filtros */}
+              <div style={{padding:'10px 20px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',gap:6,alignItems:'center',background:'hsl(var(--bg-elevated))',flexWrap:'wrap'}}>
+                <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,color:'hsl(var(--text-muted))',fontWeight:600,padding:'4px 8px',borderRadius:6,border:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-base))'}}>
+                  <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:13,height:13,accentColor:'#6366f1'}}/>
+                  Sel. Todos
+                </label>
+                <div style={{width:1,height:20,background:'hsl(var(--border-subtle))'}}/>
+                <div style={{display:'flex',gap:2,padding:'2px',background:'rgba(0,0,0,0.03)',borderRadius:10,border:'1px solid hsl(var(--border-subtle))'}}>
+                  {FILTROS.map(f=>(
+                    <button key={f.k} type="button" onClick={()=>setFin(ff=>({...ff,_filtro:f.k}))}
+                      style={{padding:'4px 12px',borderRadius:8,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
+                        background:filtroAtual===f.k?f.bg:'transparent',
+                        color:filtroAtual===f.k?f.c:'hsl(var(--text-muted))',
+                        transition:'all 0.15s',boxShadow:filtroAtual===f.k?'0 1px 3px rgba(0,0,0,0.07)':'none',
+                      }}>
+                      {f.l}<span style={{opacity:.6,marginLeft:4,fontSize:9}}>({f.n})</span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{flex:1}}/>
+                {selCount>0&&(
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderRadius:20,background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.18)'}}>
+                    <span style={{fontSize:11,fontWeight:800,color:'#818cf8',fontFamily:'monospace'}}>Σ R$ {fmtMoeda(parcelas.filter(p=>parcelasSelected.includes(p.num)).reduce((s,p)=>s+p.valorFinal,0))}</span>
+                    {parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')&&(
+                      <button type="button" style={{fontSize:10,padding:'2px 8px',borderRadius:6,border:'1px solid rgba(16,185,129,0.25)',background:'rgba(16,185,129,0.07)',color:'#10b981',cursor:'pointer',fontWeight:700}} onClick={()=>{const pg=parcelas.find(p=>parcelasSelected.includes(p.num)&&p.status==='pago');if(pg){setParcelaAtiva(pg);setModalRecibo(true)}}}>🧾 Recibo</button>
+                    )}
+                    <button type="button" style={{border:'none',background:'none',color:'#f87171',cursor:'pointer',fontSize:13,lineHeight:1,padding:0}} onClick={()=>setParcelasSelected([])}>×</button>
+                  </div>
+                )}
+                <button type="button" style={{fontSize:11,padding:'6px 16px',borderRadius:20,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',cursor:'pointer',fontWeight:700,boxShadow:'0 2px 8px rgba(99,102,241,0.35)',display:'flex',alignItems:'center',gap:5}}
+                  onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}>
+                  + Adicionar Evento
+                </button>
+              </div>
+
+              {/* TABLE or EMPTY */}
+              {parcelas.length===0?(
+                <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:60,gap:12,textAlign:'center'}}>
+                  <div style={{fontSize:56,marginBottom:8}}>💳</div>
+                  <div style={{fontWeight:800,fontSize:18}}>Nenhuma parcela cadastrada</div>
+                  <div style={{fontSize:13,color:'hsl(var(--text-muted))',maxWidth:400}}>Use "Adicionar Evento" ou acesse a aba Matrícula para confirmar parcelas.</div>
+                  <div style={{display:'flex',gap:10,marginTop:8}}>
+                    <button className="btn btn-secondary" onClick={()=>setStep(3)}>← Ir para Matrícula</button>
+                    <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#8b5cf6,#6366f1)'}} onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}>+ Inserir Evento</button>
+                  </div>
+                </div>
+              ):(
+                <div style={{flex:1,overflowX:'auto',overflowY:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12,minWidth:860}}>
+                    <thead style={{position:'sticky',top:0,zIndex:10}}>
+                      <tr style={{background:'hsl(var(--bg-elevated))'}}>
+                        <th style={{padding:'11px 14px',width:40,borderBottom:'2px solid hsl(var(--border-subtle))',textAlign:'center',borderRight:'1px solid hsl(var(--border-subtle))'}}>
+                          <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
+                        </th>
+                        {[
+                          {l:'Parc.',w:62,center:true},
+                          {l:'Evento / Competência'},
+                          {l:'Vencimento',w:108},
+                          {l:'Valor Bruto',w:112,r:true},
+                          {l:'Desconto',w:100,r:true},
+                          {l:'Juros',w:85,r:true},
+                          {l:'Multa',w:85,r:true},
+                          {l:'Total a Pagar',w:124,r:true},
+                          {l:'Pagamento',w:104},
+                          {l:'Status',w:120,center:true},
+                          {l:'Ação',w:100,center:true},
+                        ].map((h:any)=>(
+                          <th key={h.l} style={{padding:'11px 14px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.6,textTransform:'uppercase'}}>{h.l}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...pFilt].sort((a,b)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()).map((p,rowIdx)=>{
+                        const dv=pd(p.vencimento)
+                        const isV=p.status==='pendente'&&dv<hoje
+                        const isH=dv.toDateString()===hoje.toDateString()&&p.status==='pendente'
+                        const sel=parcelasSelected.includes(p.num)
+                        const sColor=p.status==='pago'?'#10b981':isV?'#ef4444':isH?'#f59e0b':'#6366f1'
+                        const sBg=p.status==='pago'?'rgba(16,185,129,0.09)':isV?'rgba(239,68,68,0.07)':isH?'rgba(245,158,11,0.08)':'rgba(99,102,241,0.07)'
+                        const sLabel=p.status==='pago'?'✓ Pago':isV?'⚠ Vencido':isH?'📌 Hoje':'● Pendente'
+                        const atr=p.status!=='pago'?calcJurosMulta(p):{juros:0,multa:0,dias:0}
+                        const jEx=p.status==='pago'?((p as any).juros||0):atr.juros
+                        const mEx=p.status==='pago'?((p as any).multa||0):atr.multa
+                        const totalP=p.status==='pago'?p.valorFinal:+(p.valor-(p.desconto||0)+jEx+mEx).toFixed(2)
+                        const rowBg=sel?'rgba(99,102,241,0.055)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
+                        const eid=(p as any).eventoId
+                        const eparcs=eid?[...pFilt].filter(x=>(x as any).eventoId===eid).sort((a,b)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()):null
+                        const pNum=eparcs?eparcs.findIndex(x=>x.num===p.num)+1:rowIdx+1
+                        const pDen=eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length
+                        return(
+                          <tr key={p.num}
+                            style={{background:rowBg,transition:'background 0.1s',cursor:'pointer',borderLeft:sel?'3px solid #6366f1':'3px solid transparent'}}
+                            onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background='rgba(148,163,184,0.055)'}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=rowBg}}
+                            onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
+                          >
+                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',borderRight:'1px solid rgba(148,163,184,0.08)'}} onClick={e=>e.stopPropagation()}>
+                              <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{width:36,height:36,borderRadius:9,background:sBg,border:'1.5px solid '+sColor+'28',display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+                                <span style={{fontSize:12,fontWeight:900,color:sColor,lineHeight:1}}>{pNum}</span>
+                                <span style={{fontSize:8,color:sColor,opacity:.55}}>/{pDen}</span>
+                              </div>
+                              {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:2,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
+                            </td>
+                            <td style={{padding:'11px 14px',maxWidth:180,borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(p as any).evento||'Mensalidade'}</div>
+                              <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>{p.competencia}</div>
+                            </td>
+                            <td style={{padding:'11px 14px',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{fontFamily:'monospace',fontSize:12,fontWeight:isV||isH?800:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))'}}>{p.vencimento}</div>
+                              {isV&&atr.dias>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:700,marginTop:1}}>{atr.dias}d atraso</div>}
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'right',fontFamily:'monospace',fontSize:12,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid hsl(var(--border-subtle))'}}>R$ {fmtMoeda(p.valor)}</td>
+                            <td style={{padding:'11px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <span style={{fontFamily:'monospace',fontSize:12,color:p.desconto>0?'#d97706':'hsl(var(--text-muted))',fontWeight:p.desconto>0?700:400}}>{p.desconto>0?`- R$ ${fmtMoeda(p.desconto)}`:'—'}</span>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <span style={{fontFamily:'monospace',fontSize:12,color:jEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:jEx>0?700:400}}>{jEx>0?`R$ ${fmtMoeda(jEx)}`:'—'}</span>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <span style={{fontFamily:'monospace',fontSize:12,color:mEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:mEx>0?700:400}}>{mEx>0?`R$ ${fmtMoeda(mEx)}`:'—'}</span>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{fontFamily:'monospace',fontSize:13,fontWeight:900,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>R$ {fmtMoeda(totalP)}</div>
+                              {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:600}}>c/ encargos</div>}
+                            </td>
+                            <td style={{padding:'11px 14px',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <span style={{fontFamily:'monospace',fontSize:11,color:'hsl(var(--text-muted))'}}>
+                                {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
+                              </span>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,padding:'4px 10px',borderRadius:20,fontWeight:700,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25'}}>{sLabel}</span>
+                            </td>
+                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              {p.status!=='pago'?(
+                                <button type="button"
+                                  style={{fontSize:10,padding:'5px 10px',borderRadius:8,border:'1px solid rgba(14,165,233,0.3)',background:'rgba(14,165,233,0.07)',color:'#0ea5e9',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:3,whiteSpace:'nowrap'}}
+                                  onClick={e=>{e.stopPropagation();setBoletoForm((f:any)=>({...f,tipo:'1via'}));setParcelasSelected([p.num]);setModalBoleto(true)}}>
+                                  🖨️ Boleto
+                                </button>
+                              ):(
+                                <button type="button"
+                                  style={{fontSize:10,padding:'5px 10px',borderRadius:8,border:'1px solid rgba(16,185,129,0.3)',background:'rgba(16,185,129,0.07)',color:'#10b981',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:3}}
+                                  onClick={e=>{e.stopPropagation();setParcelaAtiva(p);setModalRecibo(true)}}>
+                                  🧾 Recibo
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{background:'hsl(var(--bg-elevated))'}}>
+                        <td colSpan={2} style={{padding:'10px 14px',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}
+                        </td>
+                        <td style={{padding:'10px 14px',fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          A Vencer: <strong style={{color:'#6366f1'}}>{aV.length}</strong>
+                          {ven.length>0&&<> · Vencido: <strong style={{color:'#ef4444'}}>{ven.length}</strong></>}
+                        </td>
+                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:700,fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}</td>
+                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:700,fontSize:12,color:'#d97706',borderTop:'2px solid hsl(var(--border-subtle))'}}>- R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.desconto,0))}</td>
+                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:900,fontSize:14,color:'#10b981',borderTop:'2px solid hsl(var(--border-subtle))'}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valorFinal+((p as any).juros||0)+((p as any).multa||0),0))}</td>
+                        <td colSpan={3} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+
+              {/* BARRA STATUS INFERIOR */}
+              <div style={{padding:'10px 20px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',alignItems:'center',background:'hsl(var(--bg-elevated))',fontSize:11,flexWrap:'wrap',gap:0}}>
+                {[
+                  {l:'A Vencer',v:parcelas.filter(p=>p.status!=='pago'&&p.status!=='cancelado').reduce((s,p)=>s+p.valorFinal,0),isV:true,c:'#6366f1'},
+                  {l:'Recebido',v:parcelas.filter(p=>p.status==='pago').reduce((s,p)=>s+p.valorFinal,0),isV:true,c:'#10b981'},
+                  {l:'Parcelas',n:parcelas.filter(p=>p.status!=='cancelado').length,isV:false,c:'hsl(var(--text-base))'},
+                  {l:'Canceladas',n:parcelas.filter(p=>p.status==='cancelado').length,isV:false,c:'#f87171'},
+                ].map((item,i)=>(
+                  <div key={item.l} style={{display:'flex',alignItems:'center'}}>
+                    {i>0&&<span style={{width:1,height:14,background:'hsl(var(--border-subtle))',display:'inline-block',margin:'0 14px'}}/>}
+                    <span style={{color:'hsl(var(--text-muted))'}}>{item.l}:&nbsp;</span>
+                    <strong style={{color:item.c,fontFamily:(item as any).isV?'monospace':'inherit'}}>
+                      {(item as any).isV?\`R$ \${fmtMoeda((item as any).v)}\`:(item as any).n}
+                    </strong>
+                  </div>
+                ))}
+                <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+                  <button type="button" style={{fontSize:10,padding:'4px 12px',borderRadius:20,border:'1px solid rgba(56,189,248,0.3)',background:'rgba(56,189,248,0.06)',color:'#38bdf8',cursor:'pointer',fontWeight:700}} onClick={()=>setModalConsultaBaixa(true)}>🔍 Consultar Baixas</button>
+                  <button type="button" style={{fontSize:10,padding:'4px 12px',borderRadius:20,border:'1px solid rgba(107,114,128,0.25)',background:'rgba(107,114,128,0.05)',color:'#9ca3af',cursor:'pointer',fontWeight:700}} onClick={()=>setModalItensExcluidos(true)}>🗂️ Cancelados ({parcelas.filter(p=>p.status==='cancelado').length})</button>
+                </div>
+              </div>
+            </>
+          )
+        })()}
+      </div>
+
+      {/* ══ EXTRA MODALS ══ */}
+
+`;
+
+// Build the new file content
+const before = lines.slice(0, startLine); // lines before step 4
+const after = lines.slice(endLine); // lines from step 5 onwards
+
+const newContent = before.join('\n') + '\n' + newStep4 + after.join('\n');
+fs.writeFileSync(path, newContent, 'utf8');
+console.log('Done! Step 4 redesigned successfully.');
+console.log('New line count:', newContent.split('\n').length);

@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Logs e arquivos temporarios de desenvolvimento
+*.log
+tmp/
+tmp-*.txt
+teste_remessa.rem
+build_audit.log
+build_check*.log
+build_output.txt
+build_success.log
+ts_error.log
+
+# Netlify
+.netlify/
+
