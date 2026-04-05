@@ -354,8 +354,18 @@ create index if not exists idx_leads_status on public.leads(status);
 create index if not exists idx_system_logs_data on public.system_logs(data_hora desc);
 create index if not exists idx_frequencias_turma on public.frequencias(turma_id);
 create index if not exists idx_lancamentos_turma on public.lancamentos_nota(turma_id);
-c r e a t e   t a b l e   i f   n o t   e x i s t s   p u b l i c . s y s t e m _ u s e r s   ( i d   t e x t   p r i m a r y   k e y ,   n o m e   t e x t   n o t   n u l l ,   e m a i l   t e x t   n o t   n u l l ,   c a r g o   t e x t   d e f a u l t    
- \ ' \ ' ,   p e r f i l   t e x t   d e f a u l t   \ ' \ ' ,   s t a t u s   t e x t   d e f a u l t   \ a t i v o \ ' ,   t w o f a   b o o l e a n   d e f a u l t   f a l s e ,   u l t i m o A c e s s o   t e x t   d e f a u l t   \ ' \ ' ,   s e n h a   t e x t   d e f a u l t   \ ' \ ' ,   d a d o s   j s o n b   d e f a u l t   \  
-  
- \ ' ,   c r e a t e d _ a t   t i m e s t a m p t z   d e f a u l t   n o w ( ) ) ;   a l t e r   t a b l e   p u b l i c . s y s t e m _ u s e r s   d i s a b l e   r o w   l e v e l   s e c u r i t y ;  
- 
+-- --- SYSTEM USERS --------------------------------------------------
+create table if not exists public.system_users (
+  id text primary key,
+  nome text not null,
+  email text not null,
+  cargo text default '',
+  perfil text default '',
+  status text default 'ativo',
+  twofa boolean default false,
+  ultimoAcesso text default 'Nunca',
+  senha text default '',
+  dados jsonb default '{}',
+  created_at timestamptz default now()
+);
+alter table public.system_users disable row level security;

@@ -184,11 +184,19 @@ export default function UsuariosPage() {
     if (userModal === 'add') {
       const uId = newId('U')
       const payload = { ...userForm, id: uId, ultimoAcesso: 'Nunca' }
-      try { await fetch('/api/configuracoes/usuarios', { method: 'POST', body: JSON.stringify(payload) }) } catch(e){}
+      try {
+        const res = await fetch('/api/configuracoes/usuarios', { method: 'POST', body: JSON.stringify(payload) })
+        if (!res.ok) { const err = await res.json(); alert('Erro na nuvem: ' + err.error); setIsSavingUser(false); return; }
+      } catch(e) { alert('Erro critico ao salvar usuario'); setIsSavingUser(false); return; }
+      
       setUsers(prev => [...prev, payload])
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: uId, detalhesDepois: userForm })
     } else if (editingUserId) {
-      try { await fetch(`/api/configuracoes/usuarios/${editingUserId}`, { method: 'PUT', body: JSON.stringify(userForm) }) } catch(e) {}
+      try {
+        const res = await fetch(`/api/configuracoes/usuarios/${editingUserId}`, { method: 'PUT', body: JSON.stringify(userForm) })
+        if (!res.ok) { const err = await res.json(); alert('Erro na nuvem (Netlify/Local): ' + err.error); setIsSavingUser(false); return; }
+      } catch(e) { alert('Erro critico ao atualizar'); setIsSavingUser(false); return; }
+
       setUsers(prev => prev.map(u => u.id === editingUserId ? { ...u, ...userForm } : u))
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, detalhesDepois: userForm })
     }
@@ -196,7 +204,11 @@ export default function UsuariosPage() {
   }
   const deleteUser = async () => {
     if (deleteUserId) {
-      try { await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' }) } catch(e) {}
+      try {
+        const res = await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error('Falha no db')
+      } catch(e) { alert('Falha ao excluir online'); return; }
+
       const uDel = users.find(u => u.id === deleteUserId)
       setUsers(prev => prev.filter(u => u.id !== deleteUserId))
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, detalhesAntes: uDel })
