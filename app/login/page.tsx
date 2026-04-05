@@ -143,7 +143,7 @@ export default function LoginPage() {
     window.addEventListener('mousemove', h); 
     
     // Verifica se sistema está vazio para exibir botão Master
-    fetch('/api/configuracoes/usuarios').then(r => r.json()).then(data => {
+    fetch('/api/configuracoes/usuarios', { cache: 'no-store' }).then(r => r.json()).then(data => {
       setIsSystemEmpty(!data || data.length === 0)
     }).catch(() => {
       const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
@@ -179,7 +179,7 @@ export default function LoginPage() {
 
     let foundSysDb: any = null
     try {
-      const dbUsers = await fetch('/api/configuracoes/usuarios').then(r => r.json())
+      const dbUsers = await fetch('/api/configuracoes/usuarios', { cache: 'no-store' }).then(r => r.json())
       foundSysDb = (dbUsers || []).find((u: any) => u.email?.toLowerCase() === q)
     } catch(err) {}
 

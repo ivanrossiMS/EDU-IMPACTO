@@ -128,7 +128,7 @@ export default function UsuariosPage() {
   const [users, setUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   // Carregar dados online no load da página
   import('react').then(R => R.useEffect(() => {
-    fetch('/api/configuracoes/usuarios')
+    fetch('/api/configuracoes/usuarios', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) setUsers(data as SysUser[]);

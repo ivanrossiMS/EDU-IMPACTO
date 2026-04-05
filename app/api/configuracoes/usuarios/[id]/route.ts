@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 export async function PUT(req: Request, context: { params: Promise<{ id: string }> }) {
   const body = await req.json()
   const { id } = await context.params
