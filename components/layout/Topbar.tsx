@@ -66,6 +66,21 @@ export function Topbar() {
     .map(w => w[0].toUpperCase())
     .join('')
 
+  const [userProfilePic, setUserProfilePic] = useState<string>('')
+  
+  useEffect(() => {
+    if (!currentUser) return;
+    const checkPic = () => {
+       try {
+         const d = JSON.parse(localStorage.getItem(`edu-profile-extra-${currentUser.id}`) ?? 'null')
+         setUserProfilePic(d?.foto || '')
+       } catch {}
+    }
+    checkPic()
+    const ival = setInterval(checkPic, 1500)
+    return () => clearInterval(ival)
+  }, [currentUser])
+
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -269,7 +284,12 @@ export function Topbar() {
             onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-elevated))')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <div className="avatar" style={{ width: 32, height: 32, fontSize: 12, background: 'var(--gradient-purple)', flexShrink: 0 }}>{displayInitials || '?'}</div>
+            {userProfilePic ? (
+               // eslint-disable-next-line @next/next/no-img-element
+               <img src={userProfilePic} alt={displayNome} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }} />
+            ) : (
+               <div className="avatar" style={{ width: 32, height: 32, fontSize: 12, background: 'var(--gradient-purple)', flexShrink: 0 }}>{displayInitials || '?'}</div>
+            )}
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))' }}>{displayNome}</div>
               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{displayPerfil}</div>
