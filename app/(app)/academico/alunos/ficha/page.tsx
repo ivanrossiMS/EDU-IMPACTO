@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useData } from '@/lib/dataContext'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInitials, formatDate } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -53,24 +52,8 @@ const MiniCard = ({ icon, label, value, bg, border, valueColor }: {
 )
 
 function Ficha360Inner() {
-  const { ocorrencias, lancamentosNota, titulos } = useData()
-  const queryClient = useQueryClient()
-
-  const { data: alunos = [], isLoading: loadA } = useQuery<any[]>({
-    queryKey: ['alunos'], queryFn: async () => { const r = await fetch('/api/alunos'); return r.json() }
-  })
-  const { data: turmas = [], isLoading: loadT } = useQuery<any[]>({
-    queryKey: ['turmas'], queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
-
-  const updateAlunoMutation = useMutation({
-    mutationFn: async (data: { id: string, foto: any }) => {
-      const res = await fetch(`/api/alunos/${data.id}`, { method: 'PUT', body: JSON.stringify(data) })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alunos'] })
-  })
-
+  const { ocorrencias, lancamentosNota, titulos, alunos = [], turmas = [], setAlunos } = useData()
+  
   const searchParams = useSearchParams()
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -89,10 +72,10 @@ function Ficha360Inner() {
     if (!file || !selectedId) return
     const reader = new FileReader()
     reader.onload = ev => {
-      updateAlunoMutation.mutate({ id: selectedId, foto: ev.target?.result })
+      setAlunos((prev: any[]) => prev.map(a => a.id === selectedId ? { ...a, foto: ev.target?.result } : a))
     }
     reader.readAsDataURL(file)
-  }, [selectedId, updateAlunoMutation])
+  }, [selectedId, setAlunos])
 
   useEffect(() => setMounted(true), [])
 
@@ -105,7 +88,7 @@ function Ficha360Inner() {
       ).slice(0, 10)
     : []
 
-  const aluno = selectedId ? (alunos.find(a => a.id === selectedId) ?? null) : null
+  const aluno = selectedId ? (alunos.find(a => String(a.id) === String(selectedId) || String((a as any).codigo) === String(selectedId) || String((a as any).matricula) === String(selectedId)) ?? null) : null
 
   // ── Responsáveis ──────────────────────────────────────────────────────────
   const responsaveis: any[] = useMemo(() => (aluno as any)?.responsaveis || [], [aluno])
@@ -174,14 +157,7 @@ function Ficha360Inner() {
 
   return (
     <div suppressHydrationWarning>
-      {(loadA || loadT) && (
-        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(255,255,255,0.7)', zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(2px)' }}>
-          <div style={{ textAlign:'center', color:'hsl(var(--text-muted))' }}>
-            <div style={{ width: 40, height: 40, border: '3px solid rgba(99,102,241,0.2)', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-            <div style={{ fontWeight:600 }}>Carregando 360°...</div>
-          </div>
-        </div>
-      )}
+
       <div className="page-header">
         <div>
           <h1 className="page-title">Ficha 360°</h1>
@@ -279,7 +255,7 @@ function Ficha360Inner() {
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:20, fontWeight:800, fontFamily:'Outfit,sans-serif' }}>{aluno.nome}</div>
                 <div style={{ fontSize:13, color:'hsl(var(--text-muted))', marginTop:2 }}>
-                  Matr.: <strong style={{ color:'hsl(var(--text-secondary))' }}>{aluno.matricula||'—'}</strong> •{' '}
+                  Cód.: <strong style={{ color:'hsl(var(--text-secondary))' }}>{aluno.codigo||aluno.matricula||'—'}</strong> •{' '}
                   RGA: <strong style={{ color:'#818cf8' }}>{(aluno as any).rga||(aluno as any).codigo||'—'}</strong> •{' '}
                   <strong style={{ color:'#60a5fa' }}>{aluno.turma||'—'}</strong> • {aluno.serie||'—'} • {aluno.turno||'—'}
                 </div>

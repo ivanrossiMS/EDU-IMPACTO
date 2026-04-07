@@ -1,7 +1,8 @@
 'use client'
 
 import { formatDate } from '@/lib/utils'
-import { useData, ConfigPadraoPagamento, ParcelaPadrao, newId } from '@/lib/dataContext'
+import { useData, ConfigPadraoPagamento, ParcelaPadrao, newId, ConfigEvento } from '@/lib/dataContext'
+import { useConfigDb } from '@/lib/useConfigDb'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, Zap, ChevronDown, ChevronRight, DollarSign, Search, Filter, Tag, X, CalendarDays } from 'lucide-react'
 
@@ -52,7 +53,8 @@ function gerarParcelas(
 const fmtCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default function PadraoPagamentoPage() {
-  const { cfgPadroesPagamento, setCfgPadroesPagamento, cfgEventos } = useData()
+  const { cfgPadroesPagamento, setCfgPadroesPagamento } = useData()
+  const { data: cfgEventos } = useConfigDb<ConfigEvento>('cfgEventos')
 
   // Form state
   const [form, setForm] = useState(BLANK_FORM)

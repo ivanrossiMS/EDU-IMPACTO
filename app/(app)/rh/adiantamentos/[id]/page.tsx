@@ -150,7 +150,7 @@ export default function AdiantamentoDetalhe() {
                     <div style={{ flex: 1 }}>
                       <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', margin: 0, lineHeight: 1.2 }}>{item.funcionarioNome}</h2>
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', fontSize: 13, color: '#64748b', gap: '8px 12px', marginTop: 8, fontWeight: 500 }}>
-                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><User size={14}/> Mat. {item.matricula}</span>
+                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><User size={14}/> Cód. {item.matricula}</span>
                          <span style={{ color: '#cbd5e1' }}>•</span>
                          <span>{item.cargo} ({item.setor})</span>
                          <span style={{ color: '#cbd5e1' }}>•</span>

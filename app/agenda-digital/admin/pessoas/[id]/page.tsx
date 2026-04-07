@@ -62,7 +62,7 @@ export default function ADAdminPessoaDetail() {
           </div>
           
           <div style={{ display: 'flex', gap: 16, color: 'hsl(var(--text-muted))', fontSize: 14 }}>
-            <span>Matrícula: <strong>{aluno.id.substring(0,6).toUpperCase()}</strong></span>
+            <span>Código: <strong>{((aluno as any).codigo || aluno.matricula)}</strong></span>
             • 
             <span>
               Turma: {' '} 

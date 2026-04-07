@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { RotinaItem } from '@/lib/dataContext'
+import { useData, RotinaItem } from '@/lib/dataContext'
 import { ArrowLeft, Download, Search, Clock, BookOpen, Users, Calendar } from 'lucide-react'
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -125,17 +124,8 @@ function GradeCompleta({ turmaId, rotinaItems }: { turmaId: string; rotinaItems:
 
 // ─── Página principal ──────────────────────────────────────────────────────────
 export default function GradePage() {
-  const { data: turmas = [], isLoading: loadTur } = useQuery<any[]>({
-    queryKey: ['turmas'], queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
-  const { data: rotinaItems = [], isLoading: loadRot } = useQuery<any[]>({
-    queryKey: ['rotinaItems'], queryFn: async () => { const r = await fetch('/api/academico/rotina'); return r.json() }
-  })
-  const { data: alunos = [], isLoading: loadAl } = useQuery<any[]>({
-    queryKey: ['alunos'], queryFn: async () => { const r = await fetch('/api/alunos'); return r.json() }
-  })
-
-  const isLoading = loadTur || loadRot || loadAl
+  const { turmas = [], rotinaItems = [], alunos = [] } = useData()
+  const isLoading = false
 
   const [mounted, setMounted] = useState(false)
   const [turmaSel, setTurmaSel] = useState<string | null>(null)

@@ -1,14 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useMemo } from 'react'
 import { useData, Turma } from '@/lib/dataContext'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
 import TurmaModal from '@/components/turmas/TurmaModal'
 import { Plus, Search, Grid, List, Pencil, Trash2, Users, BookOpen, Clock } from 'lucide-react'
 
-const SEGMENTOS = ['EI', 'EF1', 'EF2', 'EM', 'EJA']
 const SEG_COLORS: Record<string, string> = {
+  '1': '#ec4899', '2': '#3b82f6', '3': '#8b5cf6', '4': '#10b981', '5': '#f59e0b',
   EI: '#10b981', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#f59e0b', EJA: '#ec4899',
 }
 
@@ -28,18 +27,8 @@ function OccupancyRing({ pct, color }: { pct: number; color: string }) {
 }
 
 export default function TurmasPage() {
-  const { alunos, logSystemAction } = useData()
-  const queryClient = useQueryClient()
-
-  const { data: turmas = [], isLoading } = useQuery<any[]>({
-    queryKey: ['turmas'],
-    queryFn: async () => {
-      const res = await fetch('/api/turmas')
-      if (!res.ok) throw new Error('Erro ao carregar turmas')
-      return res.json()
-    },
-    staleTime: 30_000,
-  })
+  const { alunos, cfgTurnos, cfgNiveisEnsino, logSystemAction, turmas = [], setTurmas } = useData()
+  const isLoading = false
 
   const [view, setView] = useState<'grid' | 'lista'>('grid')
   const [segmento, setSegmento] = useState('Todos')
@@ -51,6 +40,23 @@ export default function TurmasPage() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+
+  // Mapear segmentos e turnos do ERP
+  const SEGMENTOS = useMemo(() => {
+    if (!cfgNiveisEnsino || cfgNiveisEnsino.length === 0) return [
+      { codigo: 'EI', nome: 'Educação Infantil' }, 
+      { codigo: 'EF1', nome: 'Ensino F. I' }, 
+      { codigo: 'EF2', nome: 'Ensino F. II' }, 
+      { codigo: 'EM', nome: 'Ensino Médio' }, 
+      { codigo: 'EJA', nome: 'EJA' }
+    ]
+    return cfgNiveisEnsino.filter(n => n.situacao === 'ativo').map(n => ({ codigo: n.codigo, nome: n.nome }))
+  }, [cfgNiveisEnsino])
+
+  const TURNOS = useMemo(() => {
+    if (!cfgTurnos || cfgTurnos.length === 0) return ['Manha', 'Tarde', 'Noite', 'Integral']
+    return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
+  }, [cfgTurnos])
 
   // Conta alunos: prioriza turmaId (vínculo direto) e faz fallback pelo nome da turma
   const alunosDaTurma = (turmaId: string, turmaNome: string) =>
@@ -68,21 +74,13 @@ export default function TurmasPage() {
     return matchSeg && matchTurno && matchAno && matchSearch
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/turmas/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Erro ao deletar turma')
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ['turmas'] })
-      const turmaAntiga = turmas.find((t: any) => t.id === deletedId)
-      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome })
-    }
-  })
-
   const handleDelete = () => {
-    if (confirmId) deleteMutation.mutate(confirmId)
-    setConfirmId(null)
+    if (confirmId) {
+      const turmaAntiga = turmas.find((t: any) => t.id === confirmId)
+      setTurmas((prev: any[]) => prev.filter(t => t.id !== confirmId))
+      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome })
+      setConfirmId(null)
+    }
   }
 
   const totalAlunos = turmas.reduce((s, t) => s + alunosDaTurma(t.id, t.nome), 0)
@@ -136,12 +134,13 @@ export default function TurmasPage() {
           <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Buscar turma ou professor..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <div className="tab-list">
-          {['Todos', ...SEGMENTOS].map(s => (
-            <button key={s} className={`tab-trigger ${segmento === s ? 'active' : ''}`} onClick={() => setSegmento(s)}>{s}</button>
+          <button className={`tab-trigger ${segmento === 'Todos' ? 'active' : ''}`} onClick={() => setSegmento('Todos')}>Todos</button>
+          {SEGMENTOS.map((s: any) => (
+            <button key={s.codigo} className={`tab-trigger ${segmento === s.codigo ? 'active' : ''}`} onClick={() => setSegmento(s.codigo)}>{s.nome}</button>
           ))}
         </div>
         <select className="form-input" style={{ width: 'auto' }} value={turno} onChange={e => setTurno(e.target.value)}>
-          {['Todos', 'Manha', 'Tarde', 'Noite', 'Integral'].map(t => <option key={t}>{t}</option>)}
+          {['Todos', ...TURNOS].map(t => <option key={t}>{t}</option>)}
         </select>
         {anosDisponiveis.length > 0 && (
           <select className="form-input" style={{ width: 'auto' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
@@ -186,7 +185,9 @@ export default function TurmasPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                      <span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>{turma.serie}</span>
+                      <span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+                        {SEGMENTOS.find(s => s.codigo === turma.serie)?.nome || turma.serie}
+                      </span>
                       <span className="badge badge-neutral">{turma.turno}</span>
                       {turma.ano && <span className="badge badge-neutral">{turma.ano}</span>}
                       {lotada && <span className="badge badge-danger">Lotada</span>}
@@ -232,7 +233,11 @@ export default function TurmasPage() {
                     <td>
                       <span style={{ fontWeight: 800, fontSize: 15, color, fontFamily: 'Outfit,sans-serif' }}>{turma.nome}</span>
                     </td>
-                    <td><span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>{turma.serie}</span></td>
+                    <td>
+                      <span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
+                        {SEGMENTOS.find(s => s.codigo === turma.serie)?.nome || turma.serie}
+                      </span>
+                    </td>
                     <td style={{ fontSize: 12 }}>{turma.turno}</td>
                     <td style={{ fontSize: 12 }}>{turma.professor || '—'}</td>
                     <td style={{ fontSize: 12 }}>{turma.sala || '—'}</td>

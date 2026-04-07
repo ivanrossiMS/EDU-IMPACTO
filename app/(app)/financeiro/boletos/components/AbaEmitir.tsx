@@ -353,7 +353,7 @@ function Etapa1({ alunos, titulos, onNext }: {
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{a.nome}</div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Matrícula: {a.matricula} · {a.turma}</div>
+                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Código: {a.matricula} · {a.turma}</div>
               </div>
             </button>
           ))}

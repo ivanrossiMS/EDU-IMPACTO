@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { newId } from '@/lib/dataContext'
-import { useQuery } from '@tanstack/react-query'
+import { newId, useData } from '@/lib/dataContext'
 import { Plus, X, Trash2, Search, Filter, ArrowUpRight, ArrowDownLeft, Smartphone, TrendingUp, TrendingDown } from 'lucide-react'
 
 interface Transacao {
@@ -25,13 +24,7 @@ const METODO_COLORS: Record<string, string> = {
 }
 
 export default function BankingPage() {
-  const { data: titulos = [], isLoading } = useQuery<any[]>({
-    queryKey: ['titulos'],
-    queryFn: async () => {
-      const res = await fetch('/api/financeiro/titulos')
-      return res.json()
-    }
-  })
+  const { titulos = [] } = useData()
 
   const [transacoes, setTransacoes] = useState<Transacao[]>([])
   const [showModal, setShowModal] = useState(false)

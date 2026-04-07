@@ -370,7 +370,7 @@ export default function EnsalamentoPage() {
                     </div>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontSize:13, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{aluno.nome}</div>
-                      {aluno.matricula && <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>Mat. {aluno.matricula}</div>}
+                      {aluno.matricula && <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>Cód. {aluno.matricula}</div>}
                     </div>
                   </div>
 

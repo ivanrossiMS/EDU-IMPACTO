@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
+
 import { useData, ContaPagar, newId } from '@/lib/dataContext'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
@@ -54,18 +54,7 @@ const BLANK_CP = {
 }
 
 export default function ContasPagarPage() {
-  const { fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction } = useData()
-  const queryClient = useQueryClient()
-
-  const { data: contasPagar = [] } = useQuery<any[]>({
-    queryKey: ['contasPagar'],
-    queryFn: async () => {
-      const res = await fetch('/api/financeiro/contas-pagar')
-      if (!res.ok) throw new Error('Erro ao carregar contas a pagar')
-      return res.json()
-    },
-    staleTime: 30_000,
-  })
+  const { fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction, contasPagar = [], setContasPagar } = useData()
 
   // Métodos de pagamento dinâmicos (com fallback)
   const METODOS_FALLBACK = ['PIX', 'Dinheiro', 'Boleto Bancário', 'Cartão de Crédito', 'Transferência', 'Débito Automático', 'Cheque']
@@ -82,6 +71,8 @@ export default function ContasPagarPage() {
   const [search, setSearch] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<'todos'|'pendente'|'pago'|'vencendo'>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState('Todas')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
   const [filtroMes, setFiltroMes] = useState('Todos')
   const [filtroAno, setFiltroAno] = useState('Todos')
   const [modal, setModal] = useState<'add'|'edit'|null>(null)
@@ -145,44 +136,7 @@ export default function ContasPagarPage() {
 
   const confirmarBaixa = async () => {
     if (!baixaId) return
-    const conta = contasPagar.find((c: any) => c.id === baixaId)
-    
-    const changes = {
-      status: 'pago' as ContaPagar['status'],
-      dataPagamento: baixaForm.dataPagamento,
-      valorPago: valorLiquido,
-      desconto: baixaForm.desconto,
-      juros: baixaForm.juros,
-      multa: baixaForm.multa,
-      obs: baixaForm.obs,
-      caixaId: baixaForm.caixaId,
-      tipoDocBaixa: baixaForm.tipoDoc,
-      planoContasBaixa: baixaForm.planoContasId,
-      composicaoBaixa: baixaForm.composicao,
-    }
-    await fetch(`/api/financeiro/contas-pagar/${baixaId}`, { method: 'PUT', body: JSON.stringify(changes), headers: { 'Content-Type': 'application/json' } })
-
-    // Espelhar pagamento como Movimentação Manual
-    if (baixaForm.caixaId && conta) {
-      const now = new Date().toISOString()
-      const refId = 'CP-' + conta.id.slice(-8)
-      setMovimentacoesManuais((prev: any) => [...prev, {
-        id: refId, caixaId: baixaForm.caixaId, tipo: 'despesa',
-        fornecedorId: (conta as any).fornecedorId || '',
-        fornecedorNome: conta.fornecedor || '',
-        descricao: `Contas a Pagar — ${conta.descricao}${conta.fornecedor ? ` · ${conta.fornecedor}` : ''}`,
-        dataLancamento: baixaForm.dataPagamento, dataMovimento: baixaForm.dataPagamento,
-        valor: valorLiquido, planoContasId: baixaForm.planoContasId || '',
-        planoContasDesc: cfgPlanoContas.find((p: any) => p.id === baixaForm.planoContasId)?.descricao || '',
-        tipoDocumento: baixaForm.tipoDoc || 'PIX', numeroDocumento: (conta as any).numeroDocumento || '',
-        dataEmissao: (conta as any).dataEmissao || baixaForm.dataPagamento,
-        compensadoBanco: false, observacoes: baixaForm.obs || '',
-        criadoEm: now, editadoEm: now,
-        origem: 'baixa_pagar', referenciaId: conta.id
-      }])
-    }
-    logSystemAction('Financeiro (Pagar)', 'Baixa de Pagamento', `Pagamento de R$ ${valorLiquido} efetuado para ${conta?.fornecedor}`, { registroId: (conta as any)?.codigo, nomeRelacionado: conta?.fornecedor })
-    queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
+    setContasPagar((prev: any[]) => prev.map(a => a.id === baixaId ? { ...a, status: 'pago', dataPagamento: baixaForm.dataPagamento, valorPago: valorLiquido, caixaId: baixaForm.caixaId } : a))
     setBaixaId(null)
   }
 
@@ -194,7 +148,11 @@ export default function ContasPagarPage() {
   const [planoContasId, setPlanoContasId] = useState('')
   const [planoSearch, setPlanoSearch] = useState('')
   const [showPlanoDrop, setShowPlanoDrop] = useState(false)
+  
   const [centroCustoId, setCentroCustoId] = useState('')
+  const [usaRateio, setUsaRateio] = useState(false)
+  const [aiSugerido, setAiSugerido] = useState(false)
+  
   const [tipoDoc, setTipoDoc] = useState('NF')
   const [numDoc, setNumDoc] = useState('')
   const [dataEmissao, setDataEmissao] = useState(new Date().toISOString().slice(0, 10))
@@ -205,6 +163,41 @@ export default function ContasPagarPage() {
   const [previewParcelas, setPreviewParcelas] = useState<{ num:number; vencimento:string; valor:number }[]>([])
   const set = (k: string, v: unknown) => setForm(prev => ({ ...prev, [k]: v }))
   const fmtC = formatCurrency
+
+  // 🤖 Inteligência de Classificação Automática do Centro de Custo
+  useEffect(() => {
+    if (modal !== 'add' || centroCustoId || !cfgCentrosCusto.length) return
+    
+    const textoAnalise = `${form.descricao} ${fornecedorSearch} ${planoSearch}`.toLowerCase()
+    
+    // Mapeamento Enxuto de Palavras-Chave -> Código do Centro
+    const keywords: Record<string, string[]> = {
+      'CC001': ['aluno', 'professor', 'pedagógico', 'aula', 'ead', 'livro', 'apostila', 'didático', 'acervo'], // ACADÊMICO
+      'CC002': ['energia', 'luz', 'água', 'aluguel', 'condomínio', 'limpeza', 'segurança', 'manutenção', 'obra', 'reforma'], // INFRAESTRUTURA
+      'CC003': ['secretaria', 'diretoria', 'coordenação', 'material de escritório', 'papelaria', 'correios'], // ADMINISTRATIVO
+      'CC004': ['ads', 'facebook', 'google', 'instagram', 'mídia', 'panfleto', 'evento', 'captação', 'brinde'], // MARKETING
+      'CC005': ['taxa', 'banco', 'juros', 'bancária', 'boleto', 'maquininha', 'cobrança', 'inadimplência'], // FINANCEIRO
+      'CC006': ['erp', 'sistema', 'software', 'ti', 'servidor', 'computador', 'internet', 'nuvem', 'licença'], // TECNOLOGIA
+      'CC007': ['advogado', 'jurídico', 'processo', 'honorários', 'tributário', 'consultoria', 'contador'], // JURÍDICO
+      'CC008': ['unimed', 'plano de saúde', 'vale alimentação', 'vr', 'va', 'vt', 'transporte', 'convênio'], // BENEFÍCIOS
+    }
+
+    let detectedId = ''
+    for (const [codCentro, keys] of Object.entries(keywords)) {
+      if (keys.some(k => textoAnalise.includes(k))) {
+        const centro = cfgCentrosCusto.find(c => c.codigo === codCentro)
+        if (centro) {
+          detectedId = centro.id
+          break
+        }
+      }
+    }
+
+    if (detectedId) {
+      setCentroCustoId(detectedId)
+      setAiSugerido(true)
+    }
+  }, [form.descricao, fornecedorSearch, planoSearch, modal, centroCustoId, cfgCentrosCusto])
 
   // Typeahead helpers
   const fornecedoresFiltrados = useMemo(() => {
@@ -242,19 +235,29 @@ export default function ContasPagarPage() {
     return matchSearch && matchStatus && matchCat && matchMes && matchAno && matchDe && matchAte
   }), [contasPagar, search, filtroStatus, filtroCategoria, filtroMes, filtroAno, filtroDe, filtroAte])
 
+  // Reset paginação ao buscar
+  useEffect(() => setCurrentPage(1), [search, filtroStatus, filtroCategoria, filtroMes, filtroAno, filtroDe, filtroAte])
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+  
+  const contasLista = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filtered.slice(start, start + itemsPerPage)
+  }, [filtered, currentPage])
+
   const totalPendente = contasPagar.filter(c=>c.status==='pendente').reduce((s,c)=>s+c.valor,0)
   const totalPago = contasPagar.filter(c=>c.status==='pago').reduce((s,c)=>s+c.valor,0)
   const totalVencendo = contasPagar.filter(c=>isVencendo(c)).reduce((s,c)=>s+c.valor,0)
   const totalVencidos = contasPagar.filter(c=>isVencido(c)).reduce((s,c)=>s+c.valor,0)
 
-  const clearFilters = () => { setFiltroCategoria('Todas'); setFiltroMes('Todos'); setFiltroAno('Todos'); setFiltroStatus('todos'); setSearch(''); setFiltroDe(''); setFiltroAte('') }
+  const clearFilters = () => { setFiltroCategoria('Todas'); setFiltroMes('Todos'); setFiltroAno('Todos'); setFiltroStatus('todos'); setSearch(''); setFiltroDe(''); setFiltroAte(''); setCurrentPage(1) }
   const activeFilters = [filtroCategoria!=='Todas', filtroMes!=='Todos', filtroAno!=='Todos', filtroStatus!=='todos', !!filtroDe, !!filtroAte].filter(Boolean).length
 
   const resetForm = () => {
     setForm({ ...BLANK_CP, codigo: gerarCodCP(contasPagar.length) })
     setFornecedorId(''); setFornecedorSearch(''); setShowFornecedorDrop(false)
     setPlanoContasId(''); setPlanoSearch(''); setShowPlanoDrop(false)
-    setCentroCustoId(''); setTipoDoc('NF'); setNumDoc(''); setDataEmissao(new Date().toISOString().slice(0,10))
+    setCentroCustoId(''); setUsaRateio(false); setAiSugerido(false); setTipoDoc('NF'); setNumDoc(''); setDataEmissao(new Date().toISOString().slice(0,10))
     setUnidade(''); setParcelar(false); setNumParcelas(3); setModoParcelas('corridos')
     setPreviewParcelas([])
   }
@@ -264,6 +267,8 @@ export default function ContasPagarPage() {
     setForm({ codigo: (c as any).codigo || gerarCodCP(contasPagar.length), descricao: c.descricao, categoria: c.categoria, valor: c.valor, vencimento: c.vencimento, status: c.status, fornecedor: c.fornecedor })
     setNumDoc(c.numeroDocumento || '')
     setPlanoContasId(c.planoContasId || '')
+    setCentroCustoId(c.centroCustoId || '')
+    setUsaRateio(c.usaRateio || false)
     const pc = cfgPlanoContas.find(p => p.id === c.planoContasId)
     setPlanoSearch(pc ? `${(pc as any).codPlano || ''} — ${pc.descricao}` : '')
     setEditingId(c.id); setParcelar(false); setPreviewParcelas([]); setModal('edit')
@@ -276,12 +281,15 @@ export default function ContasPagarPage() {
 
   const handleSave = async () => {
     if (!form.descricao.trim() || !form.valor || !form.vencimento) return
+    if (!centroCustoId) { alert('Atenção: A seleção de um Centro de Custo é obrigatória no novo modelo executivo.'); return }
     const fn = fornecedoresCad.find(f => f.id === fornecedorId)
     const payload = {
       ...form,
       fornecedor: fn ? (fn.nomeFantasia || fn.razaoSocial) : form.fornecedor,
       numeroDocumento: numDoc,
       planoContasId: planoContasId,
+      centroCustoId,
+      usaRateio,
     }
     if (parcelar && previewParcelas.length > 0) {
       const novas = previewParcelas.map((p, i) => ({
@@ -292,17 +300,15 @@ export default function ContasPagarPage() {
         valor: p.valor,
         vencimento: p.vencimento,
       }))
-      for (const n of novas) {
-        await fetch('/api/financeiro/contas-pagar', { method: 'POST', body: JSON.stringify(n), headers: { 'Content-Type': 'application/json' } })
-      }
+      const novasComId = novas.map(n => ({ ...n, id: newId('CP') }))
+      setContasPagar((prev: any[]) => [...prev, ...novasComId])
       logSystemAction('Financeiro (Pagar)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas a pagar para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
     } else {
       if (modal === 'add') {
-        await fetch('/api/financeiro/contas-pagar', { method: 'POST', body: JSON.stringify({...payload, id: ''}), headers: { 'Content-Type': 'application/json' } })
+        setContasPagar((prev: any[]) => [...prev, { ...payload, id: newId('CP') }])
         logSystemAction('Financeiro (Pagar)', 'Cadastro', `Criada conta a pagar de R$ ${payload.valor} para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
       } else if (editingId) {
-        await fetch(`/api/financeiro/contas-pagar/${editingId}`, { method: 'PUT', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
-        // Sincronizar movimentação automática vinculada (se houver baixa registrada)
+        setContasPagar((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...payload } : a))
         setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
           m.referenciaId === editingId
             ? { ...m, descricao: `Contas a Pagar — ${payload.descricao}${payload.fornecedor ? ` · ${payload.fornecedor}` : ''}`, valor: payload.valor, editadoEm: new Date().toISOString() }
@@ -311,17 +317,15 @@ export default function ContasPagarPage() {
         logSystemAction('Financeiro (Pagar)', 'Edição', `Atualização da conta a pagar ${form.codigo}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
       }
     }
-    queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
     setModal(null)
   }
 
   const handleDelete = async () => {
     if (confirmId) {
       const deletedT = contasPagar.find((c: any) => c.id === confirmId)
-      await fetch(`/api/financeiro/contas-pagar/${confirmId}`, { method: 'DELETE' })
+      setContasPagar((prev: any[]) => prev.filter(x => x.id !== confirmId))
       setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
       logSystemAction('Financeiro (Pagar)', 'Exclusão', `Exclusão definitiva de conta a pagar.`, { registroId: (deletedT as any)?.codigo })
-      queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
     }
     setConfirmId(null)
   }
@@ -428,7 +432,7 @@ export default function ContasPagarPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => {
+              {contasLista.map(c => {
                 const vencido = isVencido(c)
                 const vencendo = isVencendo(c)
                 return (
@@ -489,8 +493,7 @@ export default function ContasPagarPage() {
                             className="btn btn-sm"
                             style={{ fontSize: 11, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
                             onClick={async () => {
-                              await fetch(`/api/financeiro/contas-pagar/${c.id}`, { method: 'PUT', body: JSON.stringify({ status: 'pendente', dataPagamento: null }), headers: { 'Content-Type': 'application/json' } })
-                              queryClient.invalidateQueries({ queryKey: ['contasPagar'] })
+                                setContasPagar((prev: any[]) => prev.map(a => a.id === c.id ? { ...a, status: 'pendente', dataPagamento: null } : a))
                               // Remover movimentação automática ao reverter baixa
                               setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== c.id))
                             }}>
@@ -524,6 +527,18 @@ export default function ContasPagarPage() {
               </tr>
             </tfoot>
           </table>
+          {totalPages > 1 && (
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} contas
+              </span>
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
+                <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {/* Modal Gráfico Premium */}
@@ -761,15 +776,22 @@ export default function ContasPagarPage() {
 
                 {/* Centro de custo */}
                 <div>
-                  <label className="form-label">Centro de Custo</label>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Centro de Custo *
+                    {aiSugerido && <span style={{ fontSize: 9, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', padding: '2px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}><Building2 size={9} /> Auto-sugerido</span>}
+                  </label>
                   {cfgCentrosCusto.length > 0 ? (
-                    <select className="form-input" value={centroCustoId} onChange={e => setCentroCustoId(e.target.value)}>
-                      <option value="">Selecionar</option>
+                    <select className="form-input" value={centroCustoId} onChange={e => { setCentroCustoId(e.target.value); setAiSugerido(false) }} style={{ borderColor: !centroCustoId ? '#f87171' : aiSugerido ? '#60a5fa' : '' }}>
+                      <option value="">Selecione obirgatoriamente...</option>
                       {cfgCentrosCusto.map(cc => <option key={cc.id} value={cc.id}>{cc.codigo} — {cc.descricao}</option>)}
                     </select>
                   ) : (
                     <input className="form-input" placeholder="Configure em Config. Financeiro" disabled style={{ opacity: 0.5 }} />
                   )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <input type="checkbox" id="chkRateio" checked={usaRateio} onChange={e => setUsaRateio(e.target.checked)} />
+                    <label htmlFor="chkRateio" style={{ fontSize: 11, cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>Possui Rateio Avançado (Dividir entre múltiplos centros)</label>
+                  </div>
                 </div>
               </div>
 

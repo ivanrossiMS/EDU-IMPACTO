@@ -1,6 +1,6 @@
 'use client'
-import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
+
 import { useData, Titulo, newId } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
 import {
@@ -55,20 +55,9 @@ const BLANK: Omit<Titulo, 'id'> & { codigo: string; origemLanca?: string } = {
 }
 
 export default function ContasReceberPage() {
-  const { alunos, cfgEventos, cfgMetodosPagamento, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, logSystemAction } = useData()
+  const { alunos, cfgEventos, cfgMetodosPagamento, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, logSystemAction, titulos: dbTitulos = [], setTitulos } = useData()
   const METODOS = cfgMetodosPagamento.filter(m => m.situacao === 'ativo').map(m => m.nome)
   const metodosSelect = METODOS.length > 0 ? METODOS : METODOS_FALLBACK
-  const queryClient = useQueryClient()
-
-  const { data: dbTitulos = [] } = useQuery<any[]>({
-    queryKey: ['titulos'],
-    queryFn: async () => {
-      const res = await fetch('/api/financeiro/titulos')
-      if (!res.ok) throw new Error('Erro ao carregar títulos')
-      return res.json()
-    },
-    staleTime: 30_000,
-  })
 
   // Apenas títulos marcados estritamente como lançamentos manuais nesta tela
   const titulosReceber = dbTitulos.filter(t => (t as any).origemLanca === 'manual_receber') || []
@@ -90,6 +79,8 @@ export default function ContasReceberPage() {
   const [dataVencAte, setDataVencAte] = useState('')
   const [filtroAging, setFiltroAging] = useState('todos')
   const [filtroEvento, setFiltroEvento] = useState('todos')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
 
   // ── Modal ──
   const [modal, setModal] = useState<'new' | 'edit' | 'baixa' | 'view' | null>(null)
@@ -169,6 +160,16 @@ export default function ContasReceberPage() {
     return true
   }), [titulosReceber, search, tabStatus, filtroMetodo, filtroMes, filtroAno, dataVencDe, dataVencAte, filtroAging])
 
+  // Reset pagination when filters change
+  useEffect(() => { setCurrentPage(1) }, [search, tabStatus, filtroMetodo, filtroMes, filtroAno, dataVencDe, dataVencAte, filtroAging])
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+
+  const titulosLista = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filtered.slice(start, start + itemsPerPage)
+  }, [filtered, currentPage])
+
   // ── KPIs ──
   const totalPago = titulosReceber.filter(t => t.status === 'pago').reduce((s, t) => s + t.valor, 0)
   const totalAtrasado = titulosReceber.filter(t => t.status === 'atrasado').reduce((s, t) => s + t.valor, 0)
@@ -233,16 +234,15 @@ export default function ContasReceberPage() {
         parcela: `${i+1}/${previewParcelas.length}`,
         valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber'
       }))
-      for (const n of novos) {
-        await fetch('/api/financeiro/titulos', { method: 'POST', body: JSON.stringify(n), headers: { 'Content-Type': 'application/json' } })
-      }
+      const novosComId = novos.map(n => ({ ...n, id: newId('CR') }))
+      setTitulos((prev: any[]) => [...prev, ...novosComId])
       logSystemAction('Financeiro (Receber)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas para ${form.aluno}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     } else if (isNew) {
       const payload = { ...form, id: '', origemLanca: 'manual_receber' }
-      await fetch('/api/financeiro/titulos', { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+      setTitulos((prev: any[]) => [...prev, { ...payload, id: newId('CR') }])
       logSystemAction('Financeiro (Receber)', 'Cadastro', `Novo título gerado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     } else if (editingId) {
-      await fetch(`/api/financeiro/titulos/${editingId}`, { method: 'PUT', body: JSON.stringify(form), headers: { 'Content-Type': 'application/json' } })
+      setTitulos((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...form } : a))
       
       setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
         m.referenciaId === editingId
@@ -251,8 +251,7 @@ export default function ContasReceberPage() {
       ))
       logSystemAction('Financeiro (Receber)', 'Edição', `Título atualizado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     }
-    
-    queryClient.invalidateQueries({ queryKey: ['titulos'] })
+
     setModal(null); setEditingId(null)
   }
 
@@ -267,7 +266,7 @@ export default function ContasReceberPage() {
       obs: baixaForm.obs,
     }
     
-    await fetch(`/api/financeiro/titulos/${editingId}`, { method: 'PUT', body: JSON.stringify(changes), headers: { 'Content-Type': 'application/json' } })
+    setTitulos((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...changes } : a))
 
     // Espelhar como Movimentação Manual no caixa selecionado
     if (baixaForm.caixaId && titulo) {
@@ -289,17 +288,16 @@ export default function ContasReceberPage() {
     }
     
     logSystemAction('Financeiro (Receber)', 'Baixa de Pagamento', `Título liquidado via ${baixaForm.metodo}`, { registroId: (titulo as any)?.codigo, nomeRelacionado: titulo?.aluno })
-    queryClient.invalidateQueries({ queryKey: ['titulos'] })
+
     setModal(null); setEditingId(null)
   }
 
   const handleDelete = async () => {
     if (confirmId) {
       const tituloAnterior = titulos.find(t => t.id === confirmId)
-      await fetch(`/api/financeiro/titulos/${confirmId}`, { method: 'DELETE' })
+      setTitulos((prev: any[]) => prev.filter(x => x.id !== confirmId))
       setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
       logSystemAction('Financeiro (Receber)', 'Exclusão', `Título removido do sistema permanentemente`, { registroId: (tituloAnterior as any)?.codigo, nomeRelacionado: tituloAnterior?.aluno })
-      queryClient.invalidateQueries({ queryKey: ['titulos'] })
     }
     setConfirmId(null)
   }
@@ -522,7 +520,7 @@ export default function ContasReceberPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(t => {
+              {titulosLista.map(t => {
                 const atr = t.status === 'atrasado' ? diasAtraso(t.vencimento) : 0
                 const sc = STATUS_CFG[t.status as keyof typeof STATUS_CFG]
                 return (
@@ -600,8 +598,7 @@ export default function ContasReceberPage() {
                             style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 700, borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
                             onClick={async () => {
                               // Reverter o título para pendente
-                              await fetch(`/api/financeiro/titulos/${t.id}`, { method: 'PUT', body: JSON.stringify({ status: 'pendente', pagamento: null, metodo: null, obs: null }), headers: { 'Content-Type': 'application/json' } })
-                              queryClient.invalidateQueries({ queryKey: ['titulos'] })
+                                setTitulos((prev: any[]) => prev.map(a => a.id === t.id ? { ...a, status: 'pendente', pagamento: null, metodo: null, obs: null } : a))
                               // Remover movimentação automática vinculada
                               setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== t.id))
                             }}>
@@ -630,6 +627,18 @@ export default function ContasReceberPage() {
             <span>{filtered.length} de {titulos.length} títulos</span>
             <span style={{ fontWeight: 800, color: 'hsl(var(--text-primary))' }}>Subtotal: {fmtCur(totalFiltrado)}</span>
           </div>
+          {totalPages > 1 && (
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filtered.length)}
+              </span>
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
+                <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

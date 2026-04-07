@@ -2,25 +2,13 @@
 
 import { useData } from '@/lib/dataContext'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
 import { useState, useMemo } from 'react'
 import { AlertTriangle, Phone, Mail, MessageSquare, Brain, Send, CheckCircle, Search, Filter, X, TrendingUp, RefreshCw } from 'lucide-react'
 
 export default function InadimplenciaPage() {
-  const queryClient = useQueryClient()
-  const { data: titulos = [], isLoading } = useQuery<any[]>({
-    queryKey: ['titulos'],
-    queryFn: async () => { const r = await fetch('/api/financeiro/titulos'); return r.json() }
-  })
-  
-  const updateTituloMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await fetch(`/api/financeiro/titulos/${data.id}`, { method: 'PUT', body: JSON.stringify(data) })
-      if (!res.ok) throw new Error('Falha ao atualizar titulo')
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey:['titulos'] })
-  })
+  const { titulos = [], setTitulos } = useData()
+  const isLoading = false
 
   // Filtros
   const [search, setSearch] = useState('')
@@ -70,14 +58,14 @@ export default function InadimplenciaPage() {
   }
 
   const marcarPago = (id: string) => {
-    updateTituloMutation.mutate({ id, status:'pago', pagamento:new Date().toISOString().slice(0,10), metodo:'PIX' })
+    setTitulos((prev: any[]) => prev.map(t => t.id === id ? { ...t, status:'pago', pagamento:new Date().toISOString().slice(0,10), metodo:'PIX' } : t))
   }
 
   const salvarRenegociacao = (tituloId: string) => {
     const titulo = titulos.find((t: any)=>t.id===tituloId)
     if (!titulo) return
     const novoValor = titulo.valor * (1 - parseFloat(negDesconto)/100)
-    updateTituloMutation.mutate({ id:tituloId, valor:novoValor, descricao:`${titulo.descricao} [Reneg. ${negParcelas}x]`, status:'pendente' })
+    setTitulos((prev: any[]) => prev.map(t => t.id === tituloId ? { ...t, valor:novoValor, descricao:`${titulo.descricao} [Reneg. ${negParcelas}x]`, status:'pendente' } : t))
     setShowNeg(null)
     setNegDesconto('0'); setNegParcelas('3')
   }

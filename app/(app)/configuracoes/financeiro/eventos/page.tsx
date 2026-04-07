@@ -1,5 +1,6 @@
 'use client'
-import { useData, ConfigEvento, newId } from '@/lib/dataContext'
+import { ConfigEvento, ConfigPlanoContas, ConfigCentroCusto, newId } from '@/lib/dataContext'
+import { useConfigDb } from '@/lib/useConfigDb'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, Tag, Search, Upload, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -9,7 +10,9 @@ const BLANK: Omit<ConfigEvento, 'id' | 'createdAt'> = {
 }
 
 export default function EventosPage() {
-  const { cfgEventos, setCfgEventos, cfgPlanoContas, cfgCentrosCusto } = useData()
+  const { data: cfgEventos, setData: setCfgEventos, loading } = useConfigDb<ConfigEvento>('cfgEventos')
+  const { data: cfgPlanoContas } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
+  const { data: cfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto')
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -19,15 +22,12 @@ export default function EventosPage() {
   const [showImport, setShowImport] = useState(false)
   const [importMsg, setImportMsg] = useState('')
 
-  const gerarCodEV = (tipo: string): string => {
-    const sufixo = tipo === 'receita' ? 'R' : 'D'
-    const existentes = cfgEventos.map(e => e.codigo)
+  const gerarCodEV = (): string => {
+    const existentes = cfgEventos.map(e => parseInt(e.codigo, 10)).filter(n => !isNaN(n))
     let i = cfgEventos.length + 1
-    let cod = `EV${String(i).padStart(3, '0')}${sufixo}`
-    while (existentes.includes(cod)) { i++; cod = `EV${String(i).padStart(3, '0')}${sufixo}` }
-    return cod
+    while (existentes.includes(i)) { i++ }
+    return String(i)
   }
-  const codigoPreview = editId ? form.codigo : gerarCodEV(form.tipo)
   const corEvento = form.tipo === 'receita' ? '#34d399' : '#f87171'
   const filtered = useMemo(() => {
     let list = filtroTipo === 'todos' ? cfgEventos : cfgEventos.filter(e => e.tipo === filtroTipo)
@@ -40,13 +40,31 @@ export default function EventosPage() {
   }, [cfgEventos, filtroTipo, filtroSit, busca])
 
   const downloadModelo = () => {
-    const csv = 'Descricao,Tipo,PlanoDeContas,CentroDeCusto\n'
-      + 'Mensalidade,receita,1.1.01,CC001\n'
-      + 'Salarios,despesa,2.1.01,CC002\n'
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = 'modelo_eventos_financeiros.csv'; a.click()
-    URL.revokeObjectURL(url)
+    const wb = XLSX.utils.book_new()
+    const header = [['Codigo', 'Descricao', 'Tipo', 'PlanoDeContas', 'CentroDeCusto', 'Situacao']]
+    const examples = [
+      ['1', 'Mensalidade Escolar', 'receita', '1.1.01', 'CC001', 'ativo'],
+      ['2', 'Pagamento de Salários', 'despesa', '2.1.01', 'CC002', 'ativo']
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([...header, ...examples])
+    ws['!cols'] = [{ wch: 10 }, { wch: 30 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 12 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'Modelo')
+
+    // ── Aba legenda ──────────────────────────────────────────────────
+    const legenda = [
+      ['Campo', 'Valores aceitos', 'Obrigatório'],
+      ['Codigo', 'Número único. Ex: 1, 2, 10', 'Não (Gerado automático se vazio)'],
+      ['Descricao', 'Texto livre', 'Sim'],
+      ['Tipo', 'receita | despesa', 'Sim'],
+      ['PlanoDeContas', 'Código exato do Plano de Contas (ex: 1.1.01)', 'Não'],
+      ['CentroDeCusto', 'Código exato do Centro de Custo (ex: CC001)', 'Não'],
+      ['Situacao', 'ativo | inativo', 'Não (Padrão: ativo)'],
+    ]
+    const wsLeg = XLSX.utils.aoa_to_sheet(legenda)
+    wsLeg['!cols'] = [{ wch: 18 }, { wch: 52 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, wsLeg, 'Legenda')
+
+    XLSX.writeFile(wb, 'modelo_eventos_financeiros.xlsx')
   }
 
   const handleImportXlsx = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,23 +76,62 @@ export default function EventosPage() {
         const data = ev.target?.result
         const wb = XLSX.read(data, { type: 'binary' })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1 })
         let count = 0
+        let ignorados = 0
         const novos: ConfigEvento[] = []
         rows.slice(1).forEach(row => {
-          const [descricao, tipo] = row.map(c => String(c ?? '').trim())
-          if (!descricao || !tipo) return
-          const tipoNorm = tipo.toLowerCase().includes('rec') ? 'receita' : 'despesa'
-          const codigo = gerarCodEV(tipoNorm)
-          if (cfgEventos.some(ev => ev.descricao.toLowerCase() === descricao.toLowerCase())) return
-          novos.push({ id: newId('EV'), codigo, descricao, tipo: tipoNorm as 'receita' | 'despesa', planoContasId: '', centroCustoId: '', situacao: 'ativo', createdAt: new Date().toISOString() })
+          const codigoRaw     = String(row[0] || '').trim()
+          const descricao     = String(row[1] || '').trim()
+          const tipoRaw       = String(row[2] || '').trim().toLowerCase()
+          const pContasRaw    = String(row[3] || '').trim()
+          const cCustoRaw     = String(row[4] || '').trim()
+          const situacaoRaw   = String(row[5] || 'ativo').trim().toLowerCase()
+
+          if (!descricao || !tipoRaw) return
+          if (cfgEventos.some(ev => ev.descricao.toLowerCase() === descricao.toLowerCase())) { ignorados++; return }
+
+          const tipoNorm = tipoRaw.includes('rec') ? 'receita' : 'despesa'
+          const situacaoNorm = situacaoRaw === 'inativo' ? 'inativo' : 'ativo'
+
+          // Código automático caso vazio
+          let codigoFinal = codigoRaw
+          if (!codigoFinal) {
+            const existentesNum = cfgEventos.map(e => parseInt(e.codigo, 10)).filter(n => !isNaN(n))
+            const novosNum = novos.map(n => parseInt(n.codigo, 10)).filter(n => !isNaN(n))
+            let i = cfgEventos.length + count + 1;
+            while (existentesNum.includes(i) || novosNum.includes(i)) { i++ }
+            codigoFinal = String(i)
+          } else {
+            // Remove zeros à esquerda (ex: 01 -> 1)
+            const num = parseInt(codigoFinal, 10)
+            if (!isNaN(num)) codigoFinal = String(num)
+          }
+
+          // Se ainda colidir com um código existente (mesmo preenchido manual), aborta
+          if (cfgEventos.some(ev => ev.codigo === codigoFinal) || novos.some(n => n.codigo === codigoFinal)) { ignorados++; return }
+
+          // Associa os relacionamentos pelo código numérico / alphanumérico fornecido
+          const pcMatch = pContasRaw ? cfgPlanoContas.find(p => p.codPlano === pContasRaw) : null
+          const ccMatch = cCustoRaw ? cfgCentrosCusto.find(c => c.codigo === cCustoRaw) : null
+
+          novos.push({ 
+            id: newId('EV'), 
+            codigo: codigoFinal, 
+            descricao, 
+            tipo: tipoNorm as 'receita' | 'despesa', 
+            planoContasId: pcMatch?.id || '', 
+            centroCustoId: ccMatch?.id || '', 
+            situacao: situacaoNorm, 
+            createdAt: new Date().toISOString() 
+          })
           count++
         })
         if (novos.length > 0) setCfgEventos(prev => [...prev, ...novos])
-        setImportMsg(`✓ ${count} evento(s) importado(s) com sucesso! Código gerado automaticamente.`)
-        setTimeout(() => setImportMsg(''), 4000)
+        setImportMsg(`✓ ${count} evento(s) importado(s) com sucesso! ${ignorados > 0 ? `(${ignorados} ignorados por duplicação)` : ''}`)
+        setTimeout(() => setImportMsg(''), 6000)
       } catch (err) {
-        setImportMsg('Erro ao processar arquivo. Verifique o formato.')
+        setImportMsg('Erro ao processar arquivo. Verifique o formato do XLSX.')
         console.error(err)
       }
     }
@@ -83,7 +140,7 @@ export default function EventosPage() {
     e.target.value = ''
   }
 
-  const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
+  const openNew = () => { setEditId(null); setForm({ ...BLANK, codigo: gerarCodEV() }); setShowForm(true) }
   const openEdit = (e: ConfigEvento) => {
     setEditId(e.id)
     setForm({ codigo: e.codigo, descricao: e.descricao, planoContasId: e.planoContasId, tipo: e.tipo, centroCustoId: e.centroCustoId, situacao: e.situacao })
@@ -91,12 +148,25 @@ export default function EventosPage() {
   }
   const handleDelete = (id: string) => setCfgEventos(prev => prev.filter(e => e.id !== id))
   const handleSave = () => {
-    if (!form.descricao.trim()) return
-    const codigo = editId ? form.codigo : gerarCodEV(form.tipo)
+    if (!form.descricao.trim()) { alert("A descrição é obrigatória"); return; }
+    if (!form.codigo.trim()) { alert("O código é obrigatório"); return; }
+    
+    // Converte para inteiros para evitar que '01' seja diferente de '1'
+    const codigoNum = parseInt(form.codigo, 10);
+    const exists = cfgEventos.some(e => parseInt(e.codigo, 10) === codigoNum && e.id !== editId)
+    
+    if (exists) {
+      alert("O código numérico informado já existe. Insira um número único.")
+      return
+    }
+    
+    // Removemos zeros da esquerda ao salvar para padronização ('01' -> '1')
+    const cleanedCode = String(codigoNum);
+
     if (editId) {
-      setCfgEventos(prev => prev.map(e => e.id === editId ? { ...e, ...form, codigo } : e))
+      setCfgEventos(prev => prev.map(e => e.id === editId ? { ...e, ...form, codigo: cleanedCode } : e))
     } else {
-      const novo: ConfigEvento = { ...form, id: newId('EV'), codigo, createdAt: new Date().toISOString() }
+      const novo: ConfigEvento = { ...form, codigo: cleanedCode, id: newId('EV'), createdAt: new Date().toISOString() }
       setCfgEventos(prev => [...prev, novo])
     }
     setShowForm(false)
@@ -130,19 +200,18 @@ export default function EventosPage() {
       {showImport && (
         <div className="card" style={{ padding:'18px', marginBottom:16, border:'1px solid rgba(59,130,246,0.3)', background:'rgba(59,130,246,0.04)' }}>
           <div style={{ fontWeight:700, fontSize:14, marginBottom:8, display:'flex', alignItems:'center', gap:8 }}>
-            <Upload size={16} color="#60a5fa" />Importar Eventos via CSV/Excel
+            <Upload size={16} color="#60a5fa" />Importar Eventos via XLSX
           </div>
           <div style={{ fontSize:12, color:'hsl(var(--text-muted))', marginBottom:12, lineHeight:1.6 }}>
-            <strong>Formato esperado (CSV ou XLSX convertido para CSV):</strong><br />
-            • Coluna A: Descrição · Coluna B: Tipo (receita/despesa) · Coluna C: Plano de Contas · Coluna D: Centro de Custo<br />
-            • <strong>Situação:</strong> sempre importado como <code style={{ color:'#10b981', background:'rgba(16,185,129,0.1)', padding:'1px 5px', borderRadius:3 }}>ativo</code><br />
-            • <strong>Código:</strong> gerado automaticamente ao enviar (EV001R, EV002D, etc.)
+            <strong>Formato esperado (XLSX com colunas separadas):</strong><br />
+            • Coluna A: Código <em>(Opcional)</em> · Coluna B: Descrição · Coluna C: Tipo (receita/despesa)<br />
+            • Coluna D: Plano de Contas (cód.) · Coluna E: Centro de Custo (cód.) · Coluna F: Situação (ativo/inativo)
           </div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            <button className="btn btn-secondary btn-sm" onClick={downloadModelo}><Download size={12} />Baixar Modelo CSV</button>
+            <button className="btn btn-secondary btn-sm" onClick={downloadModelo}><Download size={12} />Baixar Modelo XLSX</button>
             <label className="btn btn-primary btn-sm" style={{ cursor:'pointer' }}>
               <Upload size={12} />Selecionar arquivo
-              <input type="file" accept=".csv,.xlsx" style={{ display:'none' }} onChange={handleImportXlsx} />
+              <input type="file" accept=".xlsx" style={{ display:'none' }} onChange={handleImportXlsx} />
             </label>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowImport(false)}><X size={12} />Fechar</button>
           </div>
@@ -204,14 +273,10 @@ export default function EventosPage() {
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '120px 2fr 1fr 2fr 2fr 1fr', gap: 12 }}>
-            {/* Código auto-gerado — muda cor por tipo */}
+            {/* Código auto-gerado — agora editável numérico */}
             <div>
-              <label className="form-label">Código</label>
-              <div style={{ display: 'flex', alignItems: 'center', height: 38, borderRadius: 8, border: `1px solid ${corEvento}30`, overflow: 'hidden', background: `${corEvento}08` }}>
-                <span style={{ padding: '0 8px', fontSize: 10, color: 'hsl(var(--text-muted))', borderRight: `1px solid ${corEvento}20`, height: '100%', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>AUTO</span>
-                <span style={{ padding: '0 10px', fontWeight: 900, fontSize: 13, fontFamily: 'monospace', color: corEvento, letterSpacing: '0.03em' }}>{codigoPreview}</span>
-              </div>
-              <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>Tipo: {form.tipo === 'receita' ? 'R' : 'D'}</div>
+              <label className="form-label">Código numérico</label>
+              <input type="number" min="1" className="form-input" style={{fontFamily:'monospace', fontWeight:800}} value={form.codigo} onChange={e => setForm(p => ({ ...p, codigo: e.target.value }))} />
             </div>
             <div>
               <label className="form-label">Descrição *</label>
@@ -258,7 +323,9 @@ export default function EventosPage() {
         </div>
       )}
 
-      {cfgEventos.length === 0 ? (
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40, color: 'hsl(var(--text-muted))' }}>Carregando eventos do banco de dados...</div>
+      ) : cfgEventos.length === 0 ? (
         <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Tag size={44} style={{ margin: '0 auto 14px', opacity: 0.2 }} />
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Nenhum evento cadastrado</div>

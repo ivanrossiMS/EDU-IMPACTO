@@ -72,6 +72,10 @@ function MantenedorForm({ data, onChange, logoRef, onLogoUpload }: {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <Field label="Nome / Fantasia" required><input className="form-input" value={data.nome} onChange={f('nome')} placeholder="Grupo Educacional..." /></Field>
+        <Field label="Razão Social"><input className="form-input" value={data.razaoSocial || ''} onChange={f('razaoSocial')} placeholder="Razão Social Ltda..." /></Field>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <Field label="CNPJ"><input className="form-input" value={data.cnpj || ''} onChange={f('cnpj')} placeholder="00.000.000/0001-00" /></Field>
         <Field label="Telefone"><input className="form-input" value={data.telefone} onChange={f('telefone')} placeholder="(11) 0000-0000" /></Field>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

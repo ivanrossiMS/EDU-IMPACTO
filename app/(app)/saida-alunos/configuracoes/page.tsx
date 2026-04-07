@@ -45,7 +45,7 @@ function TabConfiguracoes() {
             As pessoas autorizadas a retirar o aluno, os cartões RFID, os dias da semana e os
             bloqueios são configurados diretamente em{' '}
             <strong style={{ color: 'hsl(var(--text-base))' }}>
-              Acadêmico → Alunos → Nova Matrícula → Saúde → Autorizados a Retirar
+              Acadêmico → Alunos → Nova Código → Saúde → Autorizados a Retirar
             </strong>.
           </div>
         </div>

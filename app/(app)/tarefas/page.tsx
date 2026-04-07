@@ -1,8 +1,7 @@
 'use client'
 
-import { Tarefa } from '@/lib/dataContext'
+import { Tarefa, useData, newId } from '@/lib/dataContext'
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, CheckCircle, Clock, AlertTriangle, Brain, X } from 'lucide-react'
 
 type Priority = 'urgente' | 'alta' | 'media' | 'baixa'
@@ -31,39 +30,8 @@ const BLANK: Omit<Tarefa, 'id'> = {
 }
 
 export default function TarefasPage() {
-  const queryClient = useQueryClient()
-  
-  const { data: tarefas = [], isLoading } = useQuery<Tarefa[]>({
-    queryKey: ['tarefas'],
-    queryFn: async () => {
-      const res = await fetch('/api/tarefas')
-      return res.json()
-    }
-  })
-
-  const addMutation = useMutation({
-    mutationFn: async (data: Omit<Tarefa, 'id'>) => {
-      const res = await fetch('/api/tarefas', { method: 'POST', body: JSON.stringify(data) })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tarefas'] })
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: async (data: Partial<Tarefa> & { id: string }) => {
-      const res = await fetch(`/api/tarefas/${data.id}`, { method: 'PUT', body: JSON.stringify(data) })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tarefas'] })
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/tarefas/${id}`, { method: 'DELETE' })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tarefas'] })
-  })
+  const { tarefas = [], setTarefas } = useData()
+  const isLoading = false
 
   const [filtroStatus, setFiltroStatus] = useState<Status | 'todas'>('todas')
   const [showNew, setShowNew] = useState(false)
@@ -77,18 +45,18 @@ export default function TarefasPage() {
 
   const handleAdd = () => {
     if (!form.titulo.trim()) return
-    addMutation.mutate(form)
+    setTarefas((prev: Tarefa[]) => [...prev, { ...form, id: newId('TAR') }])
     setForm(BLANK)
     setShowNew(false)
   }
 
   const toggleStatus = (id: string, current: Status) => {
     const next: Status = current === 'pendente' ? 'em-andamento' : current === 'em-andamento' ? 'concluida' : 'pendente'
-    updateMutation.mutate({ id, status: next })
+    setTarefas((prev: Tarefa[]) => prev.map(t => t.id === id ? { ...t, status: next } : t))
   }
 
   const handleDelete = (id: string) => {
-    deleteMutation.mutate(id)
+    setTarefas((prev: Tarefa[]) => prev.filter(t => t.id !== id))
   }
 
   return (

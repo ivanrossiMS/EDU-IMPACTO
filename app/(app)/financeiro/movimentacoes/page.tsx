@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useData, MovimentacaoManual, TipoDocumento, newId } from '@/lib/dataContext'
 import {
   Plus, Pencil, Trash2, Printer, Search, Filter, X, Check,
@@ -20,6 +20,7 @@ const BLANK_FORM: Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'> = {
   valor: 0, planoContasId: '', planoContasDesc: '',
   tipoDocumento: 'NF' as TipoDocumento, numeroDocumento: '', dataEmissao: new Date().toISOString().slice(0, 10),
   compensadoBanco: false, observacoes: '',
+  centroCustoId: '', centroCustoDesc: '',
 }
 
 // ─── Modal de lançamento ────────────────────────────────────────────
@@ -32,17 +33,19 @@ interface FormModalProps {
   caixas: { id: string; label: string; operador: string }[]
   fornecedores: { id: string; nome: string }[]
   planosContas: { id: string; codPlano: string; descricao: string; grupoConta?: string }[]
+  centrosCusto: { id: string; codigo: string; descricao: string; tipo: string }[]
   metodosPagamento: { id: string; nome: string }[]
   tiposDocumento: string[]
 }
 
-function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, fornecedores, planosContas, metodosPagamento, tiposDocumento }: FormModalProps) {
+function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, fornecedores, planosContas, centrosCusto, metodosPagamento, tiposDocumento }: FormModalProps) {
   const [form, setForm] = useState<Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'>>(initial ? {
     caixaId: initial.caixaId, tipo: initial.tipo,
     fornecedorId: initial.fornecedorId, fornecedorNome: initial.fornecedorNome,
     descricao: initial.descricao, dataLancamento: initial.dataLancamento,
     dataMovimento: initial.dataMovimento, valor: initial.valor,
     planoContasId: initial.planoContasId, planoContasDesc: initial.planoContasDesc,
+    centroCustoId: initial.centroCustoId, centroCustoDesc: initial.centroCustoDesc,
     tipoDocumento: initial.tipoDocumento, numeroDocumento: initial.numeroDocumento,
     dataEmissao: initial.dataEmissao, compensadoBanco: initial.compensadoBanco,
     observacoes: initial.observacoes,
@@ -200,23 +203,41 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
             </div>
           </div>
 
-          {/* Linha C: Plano de Contas — botão + modal */}
-          <div style={{ marginBottom: 14 }}>
-            <label className="form-label">Conta (Plano de Contas)
-              {form.planoContasId && <span style={{ fontSize: 10, color: '#10b981', fontWeight: 600, marginLeft: 8 }}>✓ Vinculado</span>}
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1, padding: '9px 14px', background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, fontSize: 13, color: form.planoContasId ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {form.planoContasId ? (
-                  <><code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{planosContas.find(p => p.id === form.planoContasId)?.codPlano || ''}</code>
-                  <span style={{ fontWeight: 600 }}>{planosContas.find(p => p.id === form.planoContasId)?.descricao}</span></>
-                ) : <span>Nenhuma conta selecionada</span>}
+          {/* Linha C: Plano de Contas e Centro de Custo */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            {/* Plano de Contas */}
+            <div>
+              <label className="form-label">Conta (Plano de Contas)
+                {form.planoContasId && <span style={{ fontSize: 10, color: '#10b981', fontWeight: 600, marginLeft: 8 }}>✓ Vinculado</span>}
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1, padding: '9px 14px', background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, fontSize: 13, color: form.planoContasId ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {form.planoContasId ? (
+                    <><code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{planosContas.find(p => p.id === form.planoContasId)?.codPlano || ''}</code>
+                    <span style={{ fontWeight: 600 }}>{planosContas.find(p => p.id === form.planoContasId)?.descricao}</span></>
+                  ) : <span>Nenhuma conta selecionada</span>}
+                </div>
+                <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '0 12px' }}
+                  onClick={() => { setPlanoMovSearch(''); setShowPlanoMov(true) }}>
+                  <Search size={12} />Selecionar
+                </button>
+                {form.planoContasId && <button type="button" className="btn btn-ghost btn-icon" onClick={() => handlePlano('')}><X size={12} /></button>}
               </div>
-              <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap', fontSize: 12 }}
-                onClick={() => { setPlanoMovSearch(''); setShowPlanoMov(true) }}>
-                <Search size={12} />Selecionar Conta
-              </button>
-              {form.planoContasId && <button type="button" className="btn btn-ghost btn-icon" onClick={() => handlePlano('')}><X size={12} /></button>}
+            </div>
+
+            {/* Centro de Custo */}
+            <div>
+              <label className="form-label">Centro de Custo</label>
+              <select className="form-input" value={form.centroCustoId || ''} onChange={e => {
+                const cId = e.target.value;
+                const cc = centrosCusto.find(x => x.id === cId)
+                setForm(p => ({ ...p, centroCustoId: cId, centroCustoDesc: cc ? `${cc.codigo} - ${cc.descricao}` : '' }))
+              }}>
+                <option value="">Nenhum centro de custo</option>
+                {centrosCusto
+                  .filter(c => c.tipo === 'ambos' || c.tipo === form.tipo)
+                  .map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.descricao}</option>)}
+              </select>
             </div>
           </div>
 
@@ -324,7 +345,7 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
 
 // ─── Página principal ───────────────────────────────────────────────
 export default function MovimentacoesPage() {
-  const { movimentacoesManuais, setMovimentacoesManuais, caixasAbertos, setCaixasAbertos, fornecedoresCad, cfgPlanoContas, cfgMetodosPagamento, cfgTiposDocumento } = useData()
+  const { movimentacoesManuais, setMovimentacoesManuais, caixasAbertos, setCaixasAbertos, fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, cfgMetodosPagamento, cfgTiposDocumento } = useData()
   const printRef = useRef<HTMLDivElement>(null)
 
   // Métodos e tipos dinâmicos
@@ -345,6 +366,8 @@ export default function MovimentacoesPage() {
   const [filtroCompensado, setFiltroCompensado] = useState<'todos' | 'sim' | 'nao'>('todos')
   const [filtroCaixa, setFiltroCaixa] = useState('todos')
   const [search, setSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
 
   // Listas derivadas
   const caixasSelect = useMemo(() =>
@@ -363,6 +386,10 @@ export default function MovimentacoesPage() {
     cfgPlanoContas.filter(p => p.situacao === 'ativo')
   , [cfgPlanoContas])
 
+  const centrosCustoSelect = useMemo(() =>
+    (cfgCentrosCusto || []).filter(c => c.situacao === 'ativo')
+  , [cfgCentrosCusto])
+
   // (metodosPagamentoSelect agora vem do DataContext acima)
 
   // Filtros aplicados
@@ -376,6 +403,16 @@ export default function MovimentacoesPage() {
     if (search && !m.descricao.toLowerCase().includes(search.toLowerCase()) && !m.fornecedorNome.toLowerCase().includes(search.toLowerCase()) && !m.numeroDocumento.includes(search)) return false
     return true
   }).sort((a, b) => b.dataLancamento.localeCompare(a.dataLancamento)), [movimentacoesManuais, filtroTipo, filtroCaixa, filtroDataDe, filtroDataAte, filtroCompensado, search])
+
+  // Reset pagination when filters change
+  useEffect(() => setCurrentPage(1), [search, filtroTipo, filtroCaixa, filtroDataDe, filtroDataAte, filtroCompensado])
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+  
+  const movLista = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filtered.slice(start, start + itemsPerPage)
+  }, [filtered, currentPage])
 
   const totalReceitas = filtered.filter(m => m.tipo === 'receita').reduce((s, m) => s + m.valor, 0)
   const totalDespesas = filtered.filter(m => m.tipo === 'despesa').reduce((s, m) => s + m.valor, 0)
@@ -421,6 +458,8 @@ export default function MovimentacoesPage() {
           planoContas: planoDesc,
           compensadoBanco: banco,
           caixaId: data.caixaId,
+          centroCustoId: data.centroCustoId,
+          centroCustoDesc: data.centroCustoDesc,
         }
 
         if (editId) {
@@ -460,7 +499,7 @@ export default function MovimentacoesPage() {
     return c ? `${new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR')} (${c.operador})` : '—'
   }
 
-  const limparFiltros = () => { setFiltroTipo('todos'); setFiltroCaixa('todos'); setFiltroDataDe(''); setFiltroDataAte(''); setFiltroCompensado('todos'); setSearch('') }
+  const limparFiltros = () => { setFiltroTipo('todos'); setFiltroCaixa('todos'); setFiltroDataDe(''); setFiltroDataAte(''); setFiltroCompensado('todos'); setSearch(''); setCurrentPage(1); }
   const filtrosAtivos = filtroTipo !== 'todos' || filtroCaixa !== 'todos' || filtroDataDe || filtroDataAte || filtroCompensado !== 'todos' || search
 
   return (
@@ -570,7 +609,7 @@ export default function MovimentacoesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(m => {
+              {movLista.map(m => {
                 // Color-code by origem
                 const origemCfg: Record<string,{label:string;color:string;bg:string}> = {
                   baixa_aluno:   { label:'🎓 Aluno',    color:'#818cf8', bg:'rgba(129,140,248,0.1)' },
@@ -632,6 +671,18 @@ export default function MovimentacoesPage() {
               <span style={{ color: saldo >= 0 ? '#3b82f6' : '#f59e0b', fontWeight: 900, fontSize: 14 }}>Saldo: {fmt(saldo)}</span>
             </div>
           </div>
+          {totalPages > 1 && (
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
+              </span>
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
+                <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -645,6 +696,7 @@ export default function MovimentacoesPage() {
         caixas={editId ? caixasSelect : caixasAbertosAtivos}
         fornecedores={fornecedoresSelect}
         planosContas={planosSelect as any}
+        centrosCusto={centrosCustoSelect}
         metodosPagamento={metodosPagamentoSelect}
         tiposDocumento={TIPOS_DOC}
       />

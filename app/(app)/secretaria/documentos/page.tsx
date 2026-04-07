@@ -53,7 +53,7 @@ export default function SecretariaPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 6, cursor: 'pointer', background: alunoSel === a.id ? 'rgba(59,130,246,0.1)' : 'transparent', border: 'none', textAlign: 'left', width: '100%' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{a.nome}</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Matríc.: {a.matricula} • Turma: {a.turma} • {a.serie}</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Cód.: {a.matricula} • Turma: {a.turma} • {a.serie}</div>
                 </div>
               </button>
             ))}
@@ -62,7 +62,7 @@ export default function SecretariaPage() {
         {alunoSelecionado && (
           <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 10, fontSize: 13 }}>
             <span style={{ fontWeight: 700, color: '#60a5fa' }}>✓ Aluno selecionado:</span>{' '}
-            {alunoSelecionado.nome} — Matríc. {alunoSelecionado.matricula} • {alunoSelecionado.turma} • {alunoSelecionado.status}
+            {alunoSelecionado.nome} — Cód. {(alunoSelecionado as any).codigo || alunoSelecionado.matricula} • {alunoSelecionado.turma} • {alunoSelecionado.status}
           </div>
         )}
       </div>

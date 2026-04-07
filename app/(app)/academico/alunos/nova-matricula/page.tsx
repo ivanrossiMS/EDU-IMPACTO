@@ -2,15 +2,17 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useData, newId } from '@/lib/dataContext'
+
 import {
-  Users, Baby, Heart, GraduationCap, DollarSign, FileText,
+  User, MapPin, Layers, Users, Baby, Heart, GraduationCap, DollarSign, FileText,
   Check, ChevronRight, ChevronLeft, AlertCircle, CheckCircle,
-  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt
+  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt, Trash2
 } from 'lucide-react'
 import { ModalEmitirAluno }     from '@/app/(app)/financeiro/boletos/components/ModalEmitirAluno'
 import { ModalHistoricoBoletos } from '@/app/(app)/financeiro/boletos/components/ModalHistoricoBoletos'
 import { Modal2aVia }            from '@/app/(app)/financeiro/boletos/components/Modal2aVia'
-import ExtratoModal              from '@/components/financeiro/ExtratoModal'
+import dynamic from 'next/dynamic'
+const ExtratoModal = dynamic(() => import('@/components/financeiro/ExtratoModal'), { ssr: false })
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function validarCPF(cpf: string) {
@@ -27,12 +29,22 @@ const fmtCEP = (v: string) => v.replace(/\D/g, '').slice(0, 8).replace(/(\d{5})(
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 const ESTADOS_CIVIS = ['Solteiro(a)', 'Casado(a)', 'Divorciado(a)', 'Viúvo(a)', 'União Estável', 'Separado(a)']
 const SEXOS = ['Masculino', 'Feminino', 'Não Declarado']
+const fmtDateMask = (v: string) => {
+  let r = v.replace(/\D/g, '').slice(0, 8)
+  if (r.length >= 5) return `${r.slice(0, 2)}/${r.slice(2, 4)}/${r.slice(4)}`
+  if (r.length >= 3) return `${r.slice(0, 2)}/${r.slice(2)}`
+  return r
+}
 const calcIdade = (nasc: string) => {
-  if (!nasc) return ''
-  const hoje = new Date(), n = new Date(nasc)
+  if (!nasc || nasc.length < 10) return ''
+  let y, m, d;
+  if (nasc.includes('/')) { [d, m, y] = nasc.split('/') } else { [y, m, d] = nasc.split('-') }
+  const n = new Date(+y, +m - 1, +d)
+  const hoje = new Date()
+  if (isNaN(n.getTime())) return ''
   let age = hoje.getFullYear() - n.getFullYear()
   if (hoje.getMonth() < n.getMonth() || (hoje.getMonth() === n.getMonth() && hoje.getDate() < n.getDate())) age--
-  return `${age} anos`
+  return age >= 0 && age < 130 ? `${age} anos` : ''
 }
 const genCodigo = () => String(Math.floor(10000 + Math.random() * 90000))
 async function buscarCEP(cep: string) {
@@ -74,21 +86,30 @@ const mkResp = (tipo: Resp['tipo']): Resp => ({
 })
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+const ultraInputStyle = { borderRadius: 12, border: '1px solid #cbd5e1', background: '#f8fafc', padding: '14px 16px', fontSize: 14, fontWeight: 600, color: '#0f172a', width: '100%', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.025)', outline: 'none', transition: 'all 0.2s' }
+
 function F({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="form-label">{label}</label>{children}</div>
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      <label style={{fontSize:10,fontWeight:800,color:'#64748b',textTransform:'uppercase',letterSpacing:0.8,paddingLeft:2}}>{label}</label>
+      {children}
+    </div>
+  )
 }
 
 function CPFInput({ value, onChange, existentes }: { value: string; onChange: (v:string)=>void; existentes: string[] }) {
   const raw = value.replace(/\D/g,''); const ok = raw.length===11 && validarCPF(raw) && !existentes.some(c=>c.replace(/\D/g,'')===raw)
   const invalid = raw.length===11 && !validarCPF(raw); const dup = raw.length===11 && validarCPF(raw) && existentes.some(c=>c.replace(/\D/g,'')===raw)
+  const currentBorder = raw.length===11 ? (ok?'rgba(16,185,129,0.5)':'rgba(239,68,68,0.5)') : ultraInputStyle.border;
+  const currentBg = raw.length===11 ? (ok?'rgba(16,185,129,0.02)':'rgba(239,68,68,0.02)') : ultraInputStyle.background;
+  
   return (
     <div style={{position:'relative'}}>
-      <input className="form-input" value={value} onChange={e=>onChange(fmtCPF(e.target.value))} placeholder="000.000.000-00"
-        style={{paddingRight:32, borderColor: raw.length===11?(ok?'rgba(16,185,129,0.5)':'rgba(239,68,68,0.5)'):''}} />
-      {raw.length===11 && (ok ? <CheckCircle size={14} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',color:'#10b981'}} />
-        : <AlertCircle size={14} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',color:'#ef4444'}} />)}
-      {invalid && <div style={{fontSize:10,color:'#f87171',marginTop:2}}>CPF inválido</div>}
-      {dup && <div style={{fontSize:10,color:'#f87171',marginTop:2}}>CPF já cadastrado</div>}
+      <input style={{...ultraInputStyle, paddingRight:32, borderColor: currentBorder, background: currentBg}} value={value} onChange={e=>onChange(fmtCPF(e.target.value))} placeholder="000.000.000-00" />
+      {raw.length===11 && (ok ? <CheckCircle size={16} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#10b981'}} />
+        : <AlertCircle size={16} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',color:'#ef4444'}} />)}
+      {invalid && <div style={{fontSize:10,color:'#f87171',marginTop:4,paddingLeft:4,fontWeight:700}}>CPF inválido</div>}
+      {dup && <div style={{fontSize:10,color:'#f87171',marginTop:4,paddingLeft:4,fontWeight:700}}>CPF já cadastrado</div>}
     </div>
   )
 }
@@ -101,36 +122,75 @@ function EnderecoSection({ end, onChange }: { end: Endereco; onChange: (e:Endere
     if (v.replace(/\D/g,'').length===8) { setLoading(true); const d = await buscarCEP(v); if(d) onChange({...end,cep:fmtCEP(v),...d}); setLoading(false) }
   }
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:8}}>
-      <div style={{display:'grid',gridTemplateColumns:'120px 1fr 80px',gap:8}}>
-        <F label="CEP"><div style={{position:'relative'}}><input className="form-input" value={end.cep} onChange={e=>handleCEP(e.target.value)} placeholder="00000-000"/>{loading&&<Loader2 size={12} style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)'}}/>}</div></F>
-        <F label="Logradouro"><input className="form-input" value={end.logradouro} onChange={e=>upd('logradouro')(e.target.value)}/></F>
-        <F label="Nº"><input className="form-input" value={end.numero} onChange={e=>upd('numero')(e.target.value)}/></F>
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{display:'grid',gridTemplateColumns:'150px minmax(200px, 1fr) 110px',gap:20}}>
+        <F label="CEP"><div style={{position:'relative'}}><input style={ultraInputStyle} value={end.cep} onChange={e=>handleCEP(e.target.value)} placeholder="00000-000"/>{loading&&<Loader2 size={12} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',animation:'spin 1s linear infinite',color:'#64748b'}}/>}</div></F>
+        <F label="Logradouro"><input style={ultraInputStyle} value={end.logradouro} onChange={e=>upd('logradouro')(e.target.value)}/></F>
+        <F label="Nº"><input style={ultraInputStyle} value={end.numero} onChange={e=>upd('numero')(e.target.value)}/></F>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 60px',gap:8}}>
-        <F label="Complemento"><input className="form-input" value={end.complemento} onChange={e=>upd('complemento')(e.target.value)} placeholder="Apto..."/></F>
-        <F label="Bairro"><input className="form-input" value={end.bairro} onChange={e=>upd('bairro')(e.target.value)}/></F>
-        <F label="Cidade"><input className="form-input" value={end.cidade} onChange={e=>upd('cidade')(e.target.value)}/></F>
-        <F label="UF"><select className="form-input" value={end.estado} onChange={e=>upd('estado')(e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F>
+      <div style={{display:'grid',gridTemplateColumns:'160px minmax(180px, 1fr) minmax(180px, 1fr) 110px',gap:20}}>
+        <F label="Complemento"><input style={ultraInputStyle} value={end.complemento} onChange={e=>upd('complemento')(e.target.value)} placeholder="Apto..."/></F>
+        <F label="Bairro"><input style={ultraInputStyle} value={end.bairro} onChange={e=>upd('bairro')(e.target.value)}/></F>
+        <F label="Cidade"><input style={ultraInputStyle} value={end.cidade} onChange={e=>upd('cidade')(e.target.value)}/></F>
+        <F label="UF"><select style={ultraInputStyle} value={end.estado} onChange={e=>upd('estado')(e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F>
       </div>
     </div>
   )
 }
 
-function RespCard({ resp, onChange, cpfExistentes, allResps = [] }: { resp: Resp; onChange:(r:Resp)=>void; cpfExistentes:string[]; allResps?: Resp[] }) {
+function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { resp: Resp; onChange:(r:Resp)=>void; cpfExistentes:string[]; allResps?: Resp[]; onRemove?: ()=>void }) {
   const [open, setOpen] = useState(true)
   const [buscarOpen, setBuscarOpen] = useState(false)
   const [buscarQ, setBuscarQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+
+  useEffect(() => {
+    setIsSearching(true)
+    const timeout = setTimeout(() => {
+      setDebouncedQ(buscarQ)
+      setIsSearching(false)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [buscarQ])
+
   const u = (k: keyof Resp, v: any) => onChange({...resp,[k]:v})
   const labels: Record<string,string> = { mae:'👩 Mãe', pai:'👨 Pai', outro1:'👤 Outro 1', outro2:'👤 Outro 2' }
   const cpfOk = resp.cpf.replace(/\D/g,'').length===11 && validarCPF(resp.cpf.replace(/\D/g,''))
-  const respsFiltrados = allResps.filter(r =>
-    r.nome && (
-      r.nome.toLowerCase().includes(buscarQ.toLowerCase()) ||
-      r.cpf.replace(/\D/g,'').includes(buscarQ.replace(/\D/g,'')) ||
-      (r.celular || '').replace(/\D/g,'').includes(buscarQ.replace(/\D/g,''))
-    )
-  )
+
+  const respsFiltrados = useMemo(() => {
+    if (debouncedQ.length < 3) return []
+    
+    const norm = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    const rawSearch = debouncedQ.replace(/\s+/g, ' ').trim()
+    const searchTerms = norm(rawSearch).split(' ')
+    const searchNumber = debouncedQ.replace(/\D/g, '')
+
+    const matches = allResps.reduce((acc, r) => {
+       if (!r.nome) return acc
+       const normN = norm(r.nome)
+       const rCpf = (r.cpf || '').replace(/\D/g, '')
+       const rCel = (r.celular || '').replace(/\D/g, '')
+
+       const nameMatch = searchTerms.every(term => normN.includes(term))
+       const numMatch = searchNumber && (rCpf.includes(searchNumber) || rCel.includes(searchNumber))
+
+       if (nameMatch || numMatch) {
+         let score = 0
+         if (normN.startsWith(norm(rawSearch))) score += 10
+         else if (normN.includes(norm(rawSearch))) score += 5
+         else if (nameMatch) score += 2
+         
+         if (numMatch) score += 8
+         
+         acc.push({ item: r, score })
+       }
+       return acc
+    }, [] as {item: Resp, score: number}[])
+
+    return matches.sort((a,b) => b.score - a.score).slice(0, 15).map(m => m.item)
+  }, [allResps, debouncedQ])
+
   const selecionarResp = (r: Resp) => {
     onChange({ ...resp, nome: r.nome, cpf: r.cpf, rg: r.rg, orgEmissor: r.orgEmissor,
       sexo: r.sexo, dataNasc: r.dataNasc, estadoCivil: r.estadoCivil, celular: r.celular,
@@ -139,27 +199,49 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [] }: { resp: Resp
     setBuscarOpen(false); setBuscarQ(''); setOpen(true)
   }
   return (
-    <div className="card" style={{marginBottom:12,overflow:'visible'}}>
-      <div style={{padding:'10px 16px',background:'hsl(var(--bg-elevated))',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',borderBottom:open?'1px solid hsl(var(--border-subtle))':'none',borderRadius:'inherit'}} onClick={()=>setOpen(!open)}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <span style={{fontWeight:700,fontSize:13}}>{labels[resp.tipo]}</span>
-          <code suppressHydrationWarning style={{fontSize:10,background:'hsl(var(--bg-overlay))',padding:'1px 6px',borderRadius:4,color:'hsl(var(--text-muted))'}}>{resp.codigo}</code>
-          {resp.nome && <span style={{fontSize:12,color:'hsl(var(--text-muted))'}}>{resp.nome}</span>}
-          {cpfOk && <CheckCircle size={12} color="#10b981"/>}
+    <div style={{marginBottom:24,border:'1px solid hsl(var(--border-subtle))',borderRadius:16,background:'hsl(var(--bg-base))',overflow:'visible',boxShadow:'0 10px 40px -10px rgba(0,0,0,0.08)'}}>
+      {/* ── HEADER DARK ── */}
+      <div style={{
+           padding:'18px 24px', 
+           background: '#1c2938',
+           display:'flex', alignItems:'center', justifyContent:'space-between',
+           cursor:'pointer', borderBottom:open?'1px solid rgba(255,255,255,0.08)':'none',
+           borderTopLeftRadius:15, borderTopRightRadius:15,
+           borderBottomLeftRadius:open?0:15, borderBottomRightRadius:open?0:15,
+           color:'#fff', transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+           boxShadow: open ? 'none' : '0 8px 30px rgba(0,0,0,0.15)'
+      }} onClick={()=>setOpen(!open)}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <span style={{fontWeight:800,fontSize:15,color:'#f8fafc',letterSpacing:0.5}}>{labels[resp.tipo]}</span>
+          <code suppressHydrationWarning style={{fontSize:11,background:'rgba(255,255,255,0.08)',padding:'2px 8px',borderRadius:6,color:'#cbd5e1',border:'1px solid rgba(255,255,255,0.15)',fontWeight:600}}>{resp.codigo}</code>
+          {resp.nome && <span style={{fontSize:14,color:'#94a3b8',fontWeight:500,marginLeft:4}}>{resp.nome}</span>}
+          {cpfOk && <div style={{background:'rgba(16,185,129,0.15)',borderRadius:'50%',padding:2,marginLeft:4}}><CheckCircle size={15} color="#34d399"/></div>}
         </div>
-        <div style={{display:'flex',gap:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-          {resp.respPedagogico&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:20,background:'rgba(99,102,241,0.12)',color:'#818cf8',fontWeight:700}}>Pedagógico</span>}
-          {resp.respFinanceiro&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:20,background:'rgba(16,185,129,0.12)',color:'#10b981',fontWeight:700}}>Financeiro</span>}
+        <div style={{display:'flex',gap:10,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+          {resp.respPedagogico&&<span style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',fontWeight:800,display:'flex',alignItems:'center',gap:4}}><Check size={12}/> Pedagógico</span>}
+          {resp.respFinanceiro&&<span style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:'rgba(16,185,129,0.2)',border:'1px solid rgba(16,185,129,0.4)',color:'#6ee7b7',fontWeight:800,display:'flex',alignItems:'center',gap:4}}><Check size={12}/> Financeiro</span>}
           {/* ── Botão Buscar Responsável ── */}
-          <div style={{position:'relative'}}>
-            <button
-              type="button"
-              onClick={()=>{setBuscarOpen(v=>!v);setBuscarQ('')}}
-              title="Buscar responsável já cadastrado"
-              style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:8,border:'1px solid rgba(99,102,241,0.35)',background:buscarOpen?'rgba(99,102,241,0.15)':'rgba(99,102,241,0.07)',cursor:'pointer',fontSize:11,fontWeight:700,color:'#818cf8',transition:'all .15s'}}
-            >
-              <Search size={11}/> Buscar
-            </button>
+          <div style={{position:'relative',marginLeft:8}}>
+            <div style={{display:'flex',gap:8}}>
+              <button
+                type="button"
+                onClick={()=>{setBuscarOpen(v=>!v);setBuscarQ('')}}
+                title="Buscar responsável já cadastrado"
+                style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,0.15)',background:buscarOpen?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.05)',cursor:'pointer',fontSize:12,fontWeight:700,color:'#f8fafc',transition:'all .15s'}}
+              >
+                <Search size={14} color="#94a3b8"/> Buscar
+              </button>
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={e=>{e.stopPropagation(); onRemove()}}
+                  title="Remover este responsável"
+                  style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:8,border:'1px solid rgba(239,68,68,0.3)',background:'rgba(239,68,68,0.1)',cursor:'pointer',transition:'all .15s',color:'#fca5a5'}}
+                >
+                  <Trash2 size={14}/>
+                </button>
+              )}
+            </div>
             {buscarOpen && (
               <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:9999,width:340,background:'hsl(var(--bg-base))',border:'1px solid rgba(99,102,241,0.3)',borderRadius:12,boxShadow:'0 16px 48px rgba(0,0,0,0.55)',overflow:'hidden'}}>
                 {/* Header */}
@@ -181,9 +263,13 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [] }: { resp: Resp
                     <div style={{padding:'20px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>
                       Digite ao menos 3 letras para buscar
                     </div>
+                  ) : isSearching ? (
+                    <div style={{padding:'20px 16px',color:'hsl(var(--text-muted))',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:8}}>
+                      <Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...
+                    </div>
                   ) : respsFiltrados.length===0 ? (
                     <div style={{padding:'20px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>
-                      Nenhum resultado para &quot;{buscarQ}&quot;
+                      Nenhum resultado encontrado.
                     </div>
                   ) : respsFiltrados.map((r,i) => (
                     <div
@@ -218,54 +304,84 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [] }: { resp: Resp
         </div>
       </div>
       {open && (
-        <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:12}}>
-          {/* Linha 1 */}
-          <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:10}}>
-            <F label="Nome Completo"><input className="form-input" value={resp.nome} onChange={e=>u('nome',e.target.value)}/></F>
-            <F label="CPF"><CPFInput value={resp.cpf} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F>
-            <F label="Sexo">
-              <select className="form-input" value={resp.sexo} onChange={e=>u('sexo',e.target.value)}>
-                <option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}
-              </select>
-            </F>
+        <div className="ultra-form-panel" style={{
+          padding:'32px', display:'flex', flexDirection:'column', gap:32, 
+          background: '#ffffff', borderRadius: '0 0 16px 16px', 
+          boxShadow: '0 18px 48px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.04)', 
+          border: '1px solid rgba(0,0,0,0.04)', borderTop: 'none'
+        }}>
+          {/* Identificação Bloco */}
+          <div style={{display:'flex', flexDirection:'column', gap:20}}>
+            <h4 style={{fontSize:12, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:10}}>Identificação e Documentos</h4>
+            <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
+              <div style={{flex:2,minWidth:250}}><F label="Nome Completo"><input style={ultraInputStyle} value={resp.nome} onChange={e=>u('nome',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:170}}><F label="CPF"><CPFInput value={resp.cpf} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F></div>
+              <div style={{flexShrink:0,width:150}}><F label="Sexo"><select style={ultraInputStyle} value={resp.sexo} onChange={e=>u('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+              <div style={{flex:1,minWidth:170}}><F label="Data de Nascimento"><input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={resp.dataNasc} onChange={e=>u('dataNasc',fmtDateMask(e.target.value))}/></F></div>
+              <div style={{flexShrink:0,width:180}}><F label="Estado Civil"><select style={ultraInputStyle} value={resp.estadoCivil} onChange={e=>u('estadoCivil',e.target.value)}><option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+            </div>
+            
+            <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
+              <div style={{flexShrink:0,width:160}}><F label="RG"><input style={ultraInputStyle} value={resp.rg} onChange={e=>u('rg',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:120}}><F label="Org. Emissor RG"><input style={ultraInputStyle} value={resp.orgEmissor} onChange={e=>u('orgEmissor',e.target.value)} placeholder="SSP/SP"/></F></div>
+              <div style={{flex:2,minWidth:250}}><F label="Profissão"><input style={ultraInputStyle} value={resp.profissao} onChange={e=>u('profissao',e.target.value)}/></F></div>
+              <div style={{flex:2,minWidth:200}}><F label="Naturalidade"><input style={ultraInputStyle} value={resp.naturalidade} onChange={e=>u('naturalidade',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:90}}><F label="UF"><select style={ultraInputStyle} value={resp.uf} onChange={e=>u('uf',e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F></div>
+              <div style={{flex:2,minWidth:180}}><F label="Nacionalidade"><input style={ultraInputStyle} value={resp.nacionalidade} onChange={e=>u('nacionalidade',e.target.value)}/></F></div>
+            </div>
+            {(resp.tipo==='outro1'||resp.tipo==='outro2') && (
+              <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
+                <div style={{flex:1}}><F label="Parentesco"><input style={ultraInputStyle} value={resp.parentesco} onChange={e=>u('parentesco',e.target.value)} placeholder="Avó, Tio..."/></F></div>
+              </div>
+            )}
           </div>
-          {/* Linha 2 */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
-            <F label="RG"><input className="form-input" value={resp.rg} onChange={e=>u('rg',e.target.value)}/></F>
-            <F label="Org. Emissor RG"><input className="form-input" value={resp.orgEmissor} onChange={e=>u('orgEmissor',e.target.value)} placeholder="SSP/SP"/></F>
-            <F label="Data de Nascimento"><input className="form-input" type="date" value={resp.dataNasc} onChange={e=>u('dataNasc',e.target.value)}/></F>
-            <F label="Estado Civil">
-              <select className="form-input" value={resp.estadoCivil} onChange={e=>u('estadoCivil',e.target.value)}>
-                <option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}
-              </select>
-            </F>
+
+          {/* Contato Bloco */}
+          <div style={{display:'flex', flexDirection:'column', gap:20}}>
+            <h4 style={{fontSize:12, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:10}}>Contato e Localização</h4>
+            
+            <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
+              <div style={{flexShrink:0,width:200}}><F label="Celular Principal"><input style={ultraInputStyle} value={resp.celular} onChange={e=>u('celular',fmtPhone(e.target.value))}/></F></div>
+              <div style={{flex:2,minWidth:250}}><F label="E-mail Pessoal ou Empresarial"><input style={ultraInputStyle} type="email" value={resp.email} onChange={e=>u('email',e.target.value)}/></F></div>
+              <div style={{flex:3,minWidth:300}}><F label="Observações Cadastrais"><input style={ultraInputStyle} value={resp.obs} onChange={e=>u('obs',e.target.value)} placeholder="Detalhes de saúde, restrições ou horários..."/></F></div>
+            </div>
+            
+            <EnderecoSection end={resp.endereco} onChange={e=>onChange({...resp,endereco:e})}/>
           </div>
-          {/* Linha 3 */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
-            <F label="Naturalidade"><input className="form-input" value={resp.naturalidade} onChange={e=>u('naturalidade',e.target.value)}/></F>
-            <F label="UF"><select className="form-input" value={resp.uf} onChange={e=>u('uf',e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F>
-            <F label="Nacionalidade"><input className="form-input" value={resp.nacionalidade} onChange={e=>u('nacionalidade',e.target.value)}/></F>
-            <F label="Profissão"><input className="form-input" value={resp.profissao} onChange={e=>u('profissao',e.target.value)}/></F>
-          </div>
-          {/* Linha 4 */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <F label="Celular"><input className="form-input" value={resp.celular} onChange={e=>u('celular',fmtPhone(e.target.value))}/></F>
-            <F label="E-mail"><input className="form-input" type="email" value={resp.email} onChange={e=>u('email',e.target.value)}/></F>
-          </div>
-          {(resp.tipo==='outro1'||resp.tipo==='outro2') && (
-            <F label="Parentesco"><input className="form-input" value={resp.parentesco} onChange={e=>u('parentesco',e.target.value)} placeholder="Avó, Tio..."/></F>
-          )}
-          <EnderecoSection end={resp.endereco} onChange={e=>onChange({...resp,endereco:e})}/>
-          <F label="Observações"><textarea className="form-input" rows={2} value={resp.obs} onChange={e=>u('obs',e.target.value)}/></F>
+
           {/* Responsabilidades */}
-          <div style={{display:'flex',gap:20,padding:'10px 14px',background:'hsl(var(--bg-overlay))',borderRadius:8,border:'1px solid hsl(var(--border-subtle))'}}>
-            <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:13,fontWeight:600}}>
-              <input type="checkbox" checked={resp.respPedagogico} onChange={e=>u('respPedagogico',e.target.checked)}/>
-              <span style={{color:'#818cf8'}}>📚 Responsável Pedagógico</span>
+          <div style={{display:'grid',gridTemplateColumns:'minmax(auto, 1fr) minmax(auto, 1fr)',gap:20,marginTop:12}}>
+            <label style={{
+              display:'flex',alignItems:'center',gap:18,padding:'24px',borderRadius:16,cursor:'pointer',
+              border:`2px solid ${resp.respPedagogico ? '#6366f1' : '#e2e8f0'}`,
+              background: resp.respPedagogico ? 'linear-gradient(135deg, rgba(99,102,241,0.06), #fff)' : '#f8fafc',
+              boxShadow: resp.respPedagogico ? '0 12px 30px rgba(99,102,241,0.12)' : 'none',
+              transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              <div style={{width:28,height:28,borderRadius:10,border:resp.respPedagogico?'none':'2px solid #cbd5e1',background:resp.respPedagogico?'#6366f1':'#fff',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.3s',flexShrink:0,boxShadow:resp.respPedagogico?'0 4px 10px rgba(99,102,241,0.3)':'none'}}>
+                 {resp.respPedagogico && <Check size={18} color="#fff" strokeWidth={3.5}/>}
+              </div>
+              <input type="checkbox" style={{display:'none'}} checked={resp.respPedagogico} onChange={e=>u('respPedagogico',e.target.checked)} />
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                 <span style={{color:resp.respPedagogico?'#4f46e5':'#475569',fontWeight:800,fontSize:15,lineHeight:1.3}}>🎯 Responsável Pedagógico</span>
+                 <span style={{fontSize:12,color:'#8492a6',marginTop:4,lineHeight:1.3}}>Detentor dos direitos e acessos acadêmicos para aulas, reuniões e rotina escolar da criança.</span>
+              </div>
             </label>
-            <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:13,fontWeight:600}}>
-              <input type="checkbox" checked={resp.respFinanceiro} onChange={e=>u('respFinanceiro',e.target.checked)}/>
-              <span style={{color:'#10b981'}}>💵 Responsável Financeiro</span>
+            <label style={{
+              display:'flex',alignItems:'center',gap:18,padding:'24px',borderRadius:16,cursor:'pointer',
+              border:`2px solid ${resp.respFinanceiro ? '#10b981' : '#e2e8f0'}`,
+              background: resp.respFinanceiro ? 'linear-gradient(135deg, rgba(16,185,129,0.06), #fff)' : '#f8fafc',
+              boxShadow: resp.respFinanceiro ? '0 12px 30px rgba(16,185,129,0.12)' : 'none',
+              transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+            }}>
+              <div style={{width:28,height:28,borderRadius:10,border:resp.respFinanceiro?'none':'2px solid #cbd5e1',background:resp.respFinanceiro?'#10b981':'#fff',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.3s',flexShrink:0,boxShadow:resp.respFinanceiro?'0 4px 10px rgba(16,185,129,0.3)':'none'}}>
+                 {resp.respFinanceiro && <Check size={18} color="#fff" strokeWidth={3.5}/>}
+              </div>
+              <input type="checkbox" style={{display:'none'}} checked={resp.respFinanceiro} onChange={e=>u('respFinanceiro',e.target.checked)} />
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'center'}}>
+                 <span style={{color:resp.respFinanceiro?'#059669':'#475569',fontWeight:800,fontSize:15,lineHeight:1.3}}>💵 Responsável Financeiro</span>
+                 <span style={{fontSize:12,color:'#8492a6',marginTop:4,lineHeight:1.3}}>Titular responsável pela assinatura de contratos, cobranças e obrigações monetárias.</span>
+              </div>
             </label>
           </div>
         </div>
@@ -282,25 +398,27 @@ function FiliacaoInput({ label, respList, value, onChange }: { label:string; res
   return (
     <div style={{position:'relative'}}>
       <F label={label}>
-        <div style={{display:'flex',gap:6}}>
-          <input className="form-input" style={{flex:1}} value={value} onChange={e=>onChange(e.target.value)} placeholder="Nome do responsável"/>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={()=>setOpen(!open)} title="Buscar responsável"><Search size={13}/></button>
+        <div style={{display:'flex',gap:8}}>
+          <input style={{...ultraInputStyle, flex:1}} value={value} onChange={e=>onChange(e.target.value)} placeholder="Nome do responsável"/>
+          <button type="button" style={{padding:'0 16px',background:'#6366f1',color:'#fff',border:'none',borderRadius:12,cursor:'pointer',boxShadow:'0 4px 12px rgba(99,102,241,0.3)',transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setOpen(!open)} title="Buscar responsável" onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#4f46e5'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='#6366f1'}><Search size={16}/></button>
         </div>
       </F>
       {open && (
-        <div style={{position:'absolute',top:'100%',left:0,right:0,zIndex:100,background:'hsl(var(--bg-base))',border:'1px solid hsl(var(--border-subtle))',borderRadius:8,boxShadow:'0 8px 30px rgba(0,0,0,0.4)',maxHeight:200,overflowY:'auto'}}>
-          <div style={{padding:'8px'}}>
-            <input className="form-input" placeholder="Filtrar..." value={q} onChange={e=>setQ(e.target.value)} autoFocus style={{fontSize:12}}/>
+        <div style={{position:'absolute',top:'calc(100% + 8px)',left:0,right:0,zIndex:100,background:'#fff',border:'1px solid #e2e8f0',borderRadius:16,boxShadow:'0 12px 40px rgba(0,0,0,0.12)',maxHeight:250,overflowY:'auto',padding:8}}>
+          <div style={{padding:'4px 4px 10px'}}>
+            <input style={{...ultraInputStyle, padding:'10px 14px', fontSize:13}} placeholder="Filtrar por nome ou código..." value={q} onChange={e=>setQ(e.target.value)} autoFocus />
           </div>
-          {filtered.map(r=>(
-            <div key={r.id} style={{padding:'8px 12px',cursor:'pointer',borderTop:'1px solid hsl(var(--border-subtle))'}} onClick={()=>{onChange(r.nome); setOpen(false); setQ('')}}>
-              <div style={{fontSize:13,fontWeight:600}}>{r.nome}</div>
-              <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>
-                <code style={{background:'hsl(var(--bg-overlay))',padding:'0 4px',borderRadius:3}}>{r.codigo}</code> · {r.parentesco}
+          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+            {filtered.map(r=>(
+              <div key={r.id} style={{padding:'10px 12px',cursor:'pointer',borderRadius:10,transition:'background 0.2s',display:'flex',flexDirection:'column',gap:4}} onClick={()=>{onChange(r.nome); setOpen(false); setQ('')}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#f8fafc'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}>
+                <div style={{fontSize:13,fontWeight:700,color:'#0f172a'}}>{r.nome}</div>
+                <div style={{fontSize:11,color:'#64748b',display:'flex',alignItems:'center',gap:6}}>
+                  <code style={{background:'#e2e8f0',padding:'2px 6px',borderRadius:6,fontWeight:600}}>{r.codigo}</code> <span style={{width:4,height:4,borderRadius:'50%',background:'#cbd5e1'}}/> {r.parentesco}
+                </div>
               </div>
-            </div>
-          ))}
-          {filtered.length===0 && <div style={{padding:'12px',fontSize:12,color:'hsl(var(--text-muted))',textAlign:'center'}}>Nenhum responsável encontrado</div>}
+            ))}
+            {filtered.length===0 && <div style={{padding:'20px',fontSize:12,color:'#94a3b8',textAlign:'center',fontWeight:600}}>Nenhum responsável encontrado</div>}
+          </div>
         </div>
       )}
     </div>
@@ -329,7 +447,9 @@ export default function NovaMatriculaPage() {
     : BANDEIRAS_FALLBACK
   const searchParams = useSearchParams()
   const editId = searchParams.get('edit')  // ID do aluno a editar (vindo de /alunos)
-  const alunoEditando = editId ? alunos.find(a => a.id === editId) ?? null : null
+
+  const sourceAlunos = alunos
+  const alunoEditando = editId ? sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) ?? null : null
   const [step, setStep] = useState(0)
   const [salvando, setSalvando] = useState(false)
   const isEdicao = !!alunoEditando
@@ -379,17 +499,39 @@ export default function NovaMatriculaPage() {
     }
 
     // ── Dados extras do aluno ─────────────────────────────────────────────────
-    // (já carregados no useState lazy initializer - só garantir campos faltantes)
-    if (a.filiacaoMae) updA('filiacaoMae', a.filiacaoMae)
-    if (a.filiacaoPai) updA('filiacaoPai', a.filiacaoPai)
-    if (a.idCenso) updA('idCenso', a.idCenso)
+    setAluno(prev => ({ 
+       ...prev, 
+       codigo: a.codigo || prev.codigo,
+       rga: a.rga || prev.rga,
+       cpf: a.cpf || '', 
+       nome: a.nome || '', 
+       dataNasc: a.dataNascimento || '', 
+       sexo: a.sexo || '', 
+       estadoCivil: a.estadoCivil || '', 
+       nacionalidade: a.nacionalidade || 'Brasileira', 
+       naturalidade: a.naturalidade || '', 
+       uf: a.uf || '', 
+       racaCor: a.racaCor || '', 
+       email: a.email || '', 
+       celular: a.telefone || '', 
+       filiacaoMae: a.filiacaoMae || '', 
+       filiacaoPai: a.filiacaoPai || '', 
+       idCenso: a.idCenso || '', 
+       foto: a.foto || '', 
+       endereco: a.endereco || {...EMPTY_END} 
+    }))
+
+    // Sincroniza refs estáticos para não usarem lixo temporário inicial
+    if (a.codigo) codigoAlunoRef.current = a.codigo
+    if (a.codigo) numMatriculaRef.current = a.codigo
+    if (a.codigo) rgaAlunoRef.current = a.rga || `${new Date().getFullYear()}${a.codigo}`
 
     // ── Saúde ─────────────────────────────────────────────────────────────────
     if (a.saude) {
       setSaude(prev => ({ ...prev, ...a.saude }))
     }
 
-    // ── Matrícula ─────────────────────────────────────────────────────────────
+    // ── Código ─────────────────────────────────────────────────────────────
     if (a.dadosMatricula) {
       setMat(prev => ({ ...prev, ...a.dadosMatricula }))
     } else {
@@ -444,7 +586,7 @@ export default function NovaMatriculaPage() {
     requestAnimationFrame(() => { isInitializingRef.current = false })
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId])
+  }, [editId, alunoEditando?.id, sourceAlunos.length])
 
   // Responsaveis
   const [mae, setMae] = useState<Resp>(mkResp('mae'))
@@ -461,8 +603,15 @@ export default function NovaMatriculaPage() {
   const codigoAluno = codigoAlunoRef.current
   // Bloqueia auto-saves enquanto o useEffect de carregamento inicial popula os states
   const isInitializingRef = useRef(false)
-  const numMatricula = (alunoEditando as any)?.matricula || `${anoAtual}${String(alunos.length+1).padStart(4,'0')}`
-  const rgaAluno = (alunoEditando as any)?.rga || `${anoAtual}${codigoAluno}`
+  const numMatriculaRef = useRef<string>((alunoEditando as any)?.codigo || codigoAluno)
+  const numMatricula = numMatriculaRef.current
+  const rgaAlunoRef = useRef<string>(
+    (alunoEditando as any)?.rga ||
+    ((alunoEditando as any)?.codigo
+      ? `${new Date().getFullYear()}${(alunoEditando as any).codigo}`
+      : `${new Date().getFullYear()}${codigoAluno}`)
+  )
+  const rgaAluno = rgaAlunoRef.current
 
   const [aluno, setAluno] = useState(() => ({
     codigo: codigoAluno,
@@ -503,12 +652,20 @@ export default function NovaMatriculaPage() {
         // 1. Preview imediato na UI
         updA('foto', base64)
         // 2. Persiste diretamente no alunos array (contorna closure stale do autoSalvar)
+        //    Salva também o fotoNome = {codigo}.jpg para identificação correta no export
         const sid = autoSaveIdRef.current || (isEdicao ? editId : null)
         if (sid) {
           setAlunos((prev: any[]) =>
-            prev.map((a: any) => a.id === sid ? { ...a, foto: base64 } : a)
+            prev.map((a: any) => {
+              if (a.id !== sid) return a
+              const codigoAluno = ((a as any).codigo || a.matricula || a.id || '').toString().trim()
+              return { ...a, foto: base64, fotoNome: codigoAluno ? `${codigoAluno}.jpg` : a.fotoNome }
+            })
           )
         }
+        // 3. Atualiza também o campo no estado local do formulário
+        const codigoLocal = (aluno.codigo || (alunoEditando as any)?.codigo || '').toString().trim()
+        if (codigoLocal) updA('fotoNome', `${codigoLocal}.jpg`)
       }
       img.src = ev.target?.result as string
     }
@@ -529,7 +686,7 @@ export default function NovaMatriculaPage() {
     autorizaImagem:true, autorizaSaida:false, obs:'', obsMedica:'', autorizados:[],
   })
 
-  // Matrícula (dados básicos)
+  // Código (dados básicos)
   const [mat, setMat] = useState({
     anoLetivo: String(anoAtual), turmaId:'', turno:'', escola:'', dataIngresso: new Date().toISOString().split('T')[0],
     tipoMatricula: '' as string  // '' = auto (derivado do histórico), 'nova' ou 'rematricula'
@@ -546,16 +703,19 @@ export default function NovaMatriculaPage() {
   const [historico, setHistorico] = useState<HistoricoItem[]>([])
   const [modalMatricula, setModalMatricula] = useState(false)
   const [editHistId, setEditHistId] = useState<string|null>(null)
-  const novoHistItem = (): HistoricoItem => ({
-    id: Date.now().toString(), ano: String(anoAtual), turmaId: mat.turmaId,
-    turno: mat.turno, padraoId: '', situacao: 'Cursando',
-    dataMatricula: new Date().toISOString().split('T')[0],
-    dataResultado: '', grupoAlunos: '', bolsista: 'Não',
-    respFinanceiroId: todosResp.find(r=>r.respFinanceiro)?.id ?? '',
-    nrContrato: numMatricula, dataAlteracao: new Date().toLocaleDateString('pt-BR'),
-    // Auto-detecta: se já existe alguma matrícula no histórico ou aluno está sendo editado → rematricula
-    tipoMatricula: (historico.length > 0 || (isEdicao && (alunoEditando as any)?.historicoMatriculas?.length > 0)) ? 'rematricula' : 'nova'
-  })
+  const novoHistItem = (): HistoricoItem => {
+    const matriculaId = Date.now().toString()
+    return {
+      id: matriculaId, ano: String(anoAtual), turmaId: mat.turmaId,
+      turno: mat.turno, padraoId: '', situacao: 'Cursando',
+      dataMatricula: new Date().toISOString().split('T')[0],
+      dataResultado: '', grupoAlunos: '', bolsista: 'Não',
+      respFinanceiroId: todosResp.find(r=>r.respFinanceiro)?.id ?? '',
+      nrContrato: matriculaId, dataAlteracao: new Date().toLocaleDateString('pt-BR'),
+      // Auto-detecta: se já existe alguma matrícula no histórico ou aluno está sendo editado → rematricula
+      tipoMatricula: (historico.length > 0 || (isEdicao && (alunoEditando as any)?.historicoMatriculas?.length > 0)) ? 'rematricula' : 'nova'
+    }
+  }
   const [formHist, setFormHist] = useState<HistoricoItem>(novoHistItem)
   const fH = (k: keyof HistoricoItem, v: string) => setFormHist(h=>({...h,[k]:v}))
 
@@ -1071,7 +1231,7 @@ export default function NovaMatriculaPage() {
         if (!win) { alert('Permita pop-ups para gerar o documento.'); return }
         win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${doc.nome}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Georgia,serif;font-size:12pt;color:#000;background:#fff}@page{size:A4;margin:2cm}.wrap{max-width:800px;margin:0 auto}.title{font-size:16pt;font-weight:bold;text-align:center;margin-bottom:24pt}.body{line-height:1.9;white-space:pre-wrap}.footer{margin-top:40pt;display:flex;justify-content:space-between;font-size:10pt;color:#444;border-top:1px solid #ccc;padding-top:8pt}</style></head>
-<body><div class="wrap"><div class="title">${doc.nome}</div><div class="body">${conteudo.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}</div><div class="footer"><span>IMPACTO EDU   ${aluno.nome}   Matrícula ${numMatricula}</span><span>${new Date().toLocaleDateString('pt-BR')}</span></div></div><script>window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`)
+<body><div class="wrap"><div class="title">${doc.nome}</div><div class="body">${conteudo.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}</div><div class="footer"><span>IMPACTO EDU   ${aluno.nome}   Código ${numMatricula}</span><span>${new Date().toLocaleDateString('pt-BR')}</span></div></div><script>window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`)
         win.document.close()
       }
     } catch(err) {
@@ -1103,7 +1263,7 @@ export default function NovaMatriculaPage() {
     setModalAlterarValor(false);
   };
 
-  const handleFinalizar = async () => {
+  const handleFinalizar = async (forcarSaida: boolean = false) => {
     setSalvando(true)
     await new Promise(r=>setTimeout(r,700))
     // Resolve turmaId: mat.turmaId ou fallback no histórico
@@ -1124,6 +1284,13 @@ export default function NovaMatriculaPage() {
       frequencia: isEdicao ? ((alunoEditando as any).frequencia ?? 100) : 100,
       obs:saude.obs, unidade: isEdicao ? ((alunoEditando as any).unidade ?? '') : '',
       foto:aluno.foto,
+      // fotoNome: nome do arquivo de exportação = {codigo do sistema}.jpg
+      fotoNome: aluno.foto
+        ? ((aluno as any).fotoNome || (() => {
+            const cod = (aluno.codigo || numMatricula || '').toString().trim()
+            return cod ? `${cod}.jpg` : undefined
+          })())
+        : undefined,
       racaCor:aluno.racaCor, sexo:aluno.sexo, naturalidade:aluno.naturalidade,
       uf:aluno.uf, nacionalidade:aluno.nacionalidade, endereco:aluno.endereco,
       filiacaoMae: aluno.filiacaoMae, filiacaoPai: aluno.filiacaoPai,
@@ -1142,7 +1309,7 @@ export default function NovaMatriculaPage() {
       setAlunos(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
       logSystemAction('Acadêmico (Alunos)', 'Edição', `Atualização da matrícula/dados de ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     } else {
-      const novoId = autoSaveIdRef.current || `ALU${Date.now()}`
+      const novoId = autoSaveIdRef.current || `ALU${aluno.codigo}`
       autoSaveIdRef.current = novoId
       setAlunos(prev => {
         const existe = prev.some(a => a.id === novoId)
@@ -1176,7 +1343,18 @@ export default function NovaMatriculaPage() {
       }
     }
     setSalvando(false)
-    router.push('/academico/alunos')
+    if (isEdicao && !forcarSaida) {
+      if (editId) {
+        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      }
+      setAutoSaveMsg('✅ Todas as alterações foram salvas com sucesso!')
+      setTimeout(() => setAutoSaveMsg(''), 4000)
+    } else {
+      if (isEdicao && forcarSaida && editId) {
+        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      }
+      router.push('/academico/alunos')
+    }
   }
 
   // ── Auto-save ao trocar de step (steps 0-3) ───────────────────────────────
@@ -1254,7 +1432,7 @@ export default function NovaMatriculaPage() {
       racaCor:aluno.racaCor, sexo:aluno.sexo, naturalidade:aluno.naturalidade,
       uf:aluno.uf, nacionalidade:aluno.nacionalidade, endereco:aluno.endereco,
       filiacaoMae:aluno.filiacaoMae, filiacaoPai:aluno.filiacaoPai,
-      idCenso:aluno.idCenso, codigo:aluno.codigo,
+      idCenso:aluno.idCenso, codigo:aluno.codigo, rga:aluno.rga,
       responsaveis:todosResp,
       saude:saude,
       dadosMatricula:mat,
@@ -1266,11 +1444,13 @@ export default function NovaMatriculaPage() {
     }
     if (isEdicao && editId) {
       setAlunos(prev => prev.map(a => a.id === editId ? {...a, ...payload} : a))
-      // Integração Mock API
-      fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      // Mock API HTTP só se houver nome garantido
+      if (payload.nome && payload.nome.trim()) {
+        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      }
     } else {
       // Nova matrícula: upsert usando id estável gerado na primeira vez
-      if (!autoSaveIdRef.current) autoSaveIdRef.current = `ALU${Date.now()}`
+      if (!autoSaveIdRef.current) autoSaveIdRef.current = `ALU${aluno.codigo}`
       const sid = autoSaveIdRef.current
       setAlunos(prev => {
         // 1. Busca por ID estável
@@ -1290,8 +1470,10 @@ export default function NovaMatriculaPage() {
         // 3. Cria novo registro
         return [...prev, {id: sid, ...payload}]
       })
-      // Integração Mock API
-      fetch('/api/alunos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, id: sid }) }).catch(console.error)
+      // Só empurra pro BD real se a matrícula tiver ganhado nome mínimo nas abas do wizard
+      if (payload.nome && payload.nome.trim()) {
+        fetch('/api/alunos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, id: sid }) }).catch(console.error)
+      }
     }
     setAutoSaveMsg('✅ Dados salvos')
     setTimeout(() => setAutoSaveMsg(''), 2500)
@@ -1348,165 +1530,194 @@ export default function NovaMatriculaPage() {
   }, [alunos])
   const stepContent = [
     // STEP 0: Responsáveis
-    <div key="s0">
-      <div style={{padding:'12px 16px',background:'rgba(99,102,241,0.06)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:10,marginBottom:16,fontSize:12}}>
-        <strong style={{color:'#818cf8'}}>Passo 1 — Responsáveis</strong> · Preencha mãe e pai (obrigatório). CPF será validado. Defina Responsável Pedagógico e Financeiro.
+    <div key="s0" style={{display:'flex',flexDirection:'column',gap:8}}>
+      <div style={{padding:'16px 20px',background:'linear-gradient(135deg, #0f172a, #1e1b4b)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:16,marginBottom:8,display:'flex',alignItems:'center',gap:16,boxShadow:'0 8px 30px rgba(15,23,42,0.1)'}}>
+        <div style={{width:36,height:36,borderRadius:'50%',background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.5)',color:'#818cf8',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:16,flexShrink:0}}>1</div>
+        <div style={{display:'flex',flexDirection:'column'}}>
+           <div style={{color:'#f8fafc',fontWeight:800,fontSize:15,letterSpacing:0.5}}>Dados dos Responsáveis</div>
+           <div style={{color:'#94a3b8',fontSize:12,marginTop:2}}>Preencha os responsáveis legais, indicando as autorizações pedagógicas e financeiras.</div>
+        </div>
       </div>
       <RespCard resp={mae} onChange={setMae} cpfExistentes={cpfsExist} allResps={allResps}/>
       <RespCard resp={pai} onChange={setPai} cpfExistentes={cpfsExist} allResps={allResps}/>
-      {showOutro1 ? <RespCard resp={outro1} onChange={setOutro1} cpfExistentes={cpfsExist} allResps={allResps}/> : (
-        <button className="btn btn-secondary btn-sm" style={{marginBottom:8}} onClick={()=>setShowOutro1(true)}><Plus size={13}/>Adicionar Outro Responsável</button>
+      {showOutro1 ? <RespCard resp={outro1} onChange={setOutro1} cpfExistentes={cpfsExist} allResps={allResps} onRemove={() => { setShowOutro1(false); setOutro1(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
+        <button type="button" onClick={()=>setShowOutro1(true)} style={{display:'flex',width:'100%',justifyContent:'center',alignItems:'center',gap:8,padding:'14px 20px',marginBottom:16,background:'#1c2938',color:'#f8fafc',borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',fontWeight:700,fontSize:13,transition:'all 0.2s',boxShadow:'0 6px 16px rgba(0,0,0,0.08)'}}>
+          <Plus size={16} color="#94a3b8"/> Adicionar Outro Responsável
+        </button>
       )}
-      {showOutro1 && (showOutro2 ? <RespCard resp={outro2} onChange={setOutro2} cpfExistentes={cpfsExist} allResps={allResps}/> : (
-        <button className="btn btn-secondary btn-sm" onClick={()=>setShowOutro2(true)}><Plus size={13}/>Adicionar Outro Responsável 2</button>
+      {showOutro1 && (showOutro2 ? <RespCard resp={outro2} onChange={setOutro2} cpfExistentes={cpfsExist} allResps={allResps} onRemove={() => { setShowOutro2(false); setOutro2(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
+        <button type="button" onClick={()=>setShowOutro2(true)} style={{display:'flex',width:'100%',justifyContent:'center',alignItems:'center',gap:8,padding:'14px 20px',marginBottom:16,background:'#1c2938',color:'#f8fafc',borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',fontWeight:700,fontSize:13,transition:'all 0.2s',boxShadow:'0 6px 16px rgba(0,0,0,0.08)'}}>
+          <Plus size={16} color="#94a3b8"/> Adicionar Outro Responsável 2
+        </button>
       ))}
     </div>,
 
     // STEP 1: Dados do Aluno
-    <div key="s1" style={{display:'flex',flexDirection:'column',gap:14}}>
-      <div style={{padding:'12px 16px',background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:10,fontSize:12}}>
-        <strong style={{color:'#60a5fa'}}>Passo 2 — Dados do Aluno</strong>
+    <div key="s1" style={{display:'flex',flexDirection:'column',gap:24,animation:'fadeIn 0.4s ease-out'}}>
+      <div style={{padding:'20px 24px',background:'linear-gradient(135deg, #0f172a, #172554)',border:'1px solid rgba(59,130,246,0.3)',borderRadius:20,display:'flex',alignItems:'center',gap:20,boxShadow:'0 12px 40px rgba(15,23,42,0.15)'}}>
+        <div style={{width:48,height:48,borderRadius:'50%',background:'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(99,102,241,0.2))',border:'2px solid rgba(99,102,241,0.5)',color:'#818cf8',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900,fontSize:20,flexShrink:0,boxShadow:'inset 0 2px 10px rgba(255,255,255,0.1)'}}>2</div>
+        <div style={{display:'flex',flexDirection:'column'}}>
+           <div style={{color:'#f8fafc',fontWeight:900,fontSize:18,letterSpacing:0.5}}>Dados Físicos do Aluno</div>
+           <div style={{color:'#94a3b8',fontSize:13,marginTop:4}}>Informações fundamentais, identificação oficial e dados de contato.</div>
+        </div>
       </div>
-      <div className="card" style={{padding:16,display:'flex',flexDirection:'column',gap:12}}>
-        {/* ── Foto do Aluno ── */}
-        <div style={{display:'flex',alignItems:'center',gap:20,padding:'4px 0 16px',borderBottom:'1px solid hsl(var(--border-subtle))',marginBottom:4}}>
-          <div
-            onClick={()=>fotoInputRef.current?.click()}
-            title="Clique para enviar ou trocar foto"
-            style={{
-              width:96,height:96,borderRadius:16,flexShrink:0,cursor:'pointer',
-              position:'relative',overflow:'hidden',
-              background:aluno.foto?'transparent':'linear-gradient(135deg,rgba(99,102,241,0.1),rgba(59,130,246,0.06))',
-              border:`2px ${aluno.foto?'solid':'dashed'} ${aluno.foto?'rgba(99,102,241,0.5)':'rgba(99,102,241,0.3)'}`,
-              display:'flex',alignItems:'center',justifyContent:'center',
-              transition:'all 0.2s',
-              boxShadow:aluno.foto?'0 8px 24px rgba(99,102,241,0.2)':'none',
-            }}
-          >
-            {aluno.foto ? (
-              <img src={aluno.foto} alt="Foto do aluno" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
-            ) : (
-              <div style={{textAlign:'center',pointerEvents:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-                <Camera size={24} color="rgba(99,102,241,0.5)"/>
-                <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:.8,textTransform:'uppercase'}}>Foto</div>
-              </div>
-            )}
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:800,fontSize:14,marginBottom:3}}>📸 Foto do Aluno</div>
-            <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginBottom:12,lineHeight:1.6}}>
-              JPG, PNG ou WebP · Máx 5MB<br/>
-              Utilizada na ficha, cartão e documentos.
-            </div>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                style={{background:'linear-gradient(135deg,#6366f1,#3b82f6)',fontSize:12,gap:6}}
+      
+      <div className="ultra-form-panel" style={{
+        padding:'40px 32px', display:'flex', flexDirection:'column', gap:40, 
+        background: '#ffffff', borderRadius: '24px', 
+        boxShadow: '0 20px 50px rgba(0,0,0,0.06), 0 4px 15px rgba(0,0,0,0.03)', 
+        border: '1px solid rgba(0,0,0,0.05)', position: 'relative'
+      }}>
+        
+        {/* ── Seção: Foto e Identificação Básica ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:12, display:'flex', alignItems:'center', gap:8}}>
+            <User size={16} color="#60a5fa"/> Perfil Principal
+          </h4>
+          
+          <div style={{display:'flex', gap:32, flexWrap:'wrap', alignItems:'flex-start'}}>
+            {/* 📸 Foto Modernizada */}
+            <div style={{flexShrink:0, width:140, display:'flex', flexDirection:'column', alignItems:'center', gap:16}}>
+              <div
                 onClick={()=>fotoInputRef.current?.click()}
+                title="Clique para enviar ou trocar foto"
+                style={{
+                  width:140,height:140,borderRadius:32,cursor:'pointer',
+                  position:'relative',overflow:'hidden',
+                  background:aluno.foto?'#fff':'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(59,130,246,0.08))',
+                  border:`2px ${aluno.foto?'solid':'dashed'} ${aluno.foto?'rgba(99,102,241,0.4)':'rgba(99,102,241,0.3)'}`,
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow:aluno.foto?'0 16px 32px rgba(99,102,241,0.25)':'0 8px 20px rgba(0,0,0,0.03)',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px) scale(1.02)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(99,102,241,0.15)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0) scale(1)'; (e.currentTarget as HTMLElement).style.boxShadow = aluno.foto?'0 16px 32px rgba(99,102,241,0.25)':'0 8px 20px rgba(0,0,0,0.03)' }}
               >
-                <Camera size={13}/> {aluno.foto?'Trocar Foto':'Enviar Foto'}
-              </button>
+                {aluno.foto ? (
+                  <img src={aluno.foto} alt="Foto do aluno" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                ) : (
+                  <div style={{textAlign:'center',pointerEvents:'none',display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+                    <div style={{width:52,height:52,borderRadius:'50%',background:'rgba(99,102,241,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}><Camera size={26} color="#6366f1"/></div>
+                    <div style={{fontSize:11,color:'#64748b',fontWeight:800,textTransform:'uppercase',letterSpacing:.5}}>Adicionar<br/>Foto</div>
+                  </div>
+                )}
+              </div>
+              <input ref={fotoInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleFotoUpload}/>
               {aluno.foto && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{fontSize:12,color:'#f87171',border:'1px solid rgba(248,113,113,0.3)'}}
-                  onClick={()=>updA('foto','')}
-                >
-                  <X size={12}/> Remover
-                </button>
+                <button type="button" onClick={()=>updA('foto','')} style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',border:'none',padding:'8px 16px',borderRadius:20,cursor:'pointer',transition:'all 0.2s'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='rgba(239,68,68,0.15)'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='rgba(239,68,68,0.1)'}>Remover Foto</button>
               )}
             </div>
-          </div>
-          {aluno.foto && (
-            <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,padding:'8px 12px',background:'rgba(16,185,129,0.06)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:10}}>
-              <CheckCircle size={18} color="#10b981"/>
-              <div style={{fontSize:10,fontWeight:700,color:'#10b981'}}>Foto OK</div>
+
+            {/* Inputs Principais */}
+            <div style={{flex:1, minWidth:300, display:'flex', flexDirection:'column', gap:22}}>
+              <div style={{display:'flex', gap:22, flexWrap:'wrap'}}>
+                <div style={{flex:2, minWidth:250}}><F label="Nome Completo"><input style={{...ultraInputStyle, fontSize:15}} value={aluno.nome} onChange={e=>updA('nome',e.target.value)} placeholder="Nome completo do aluno"/></F></div>
+                <div style={{flex:1, minWidth:160}}><F label="Sexo"><select style={ultraInputStyle} value={aluno.sexo} onChange={e=>updA('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:22}}>
+                <div>
+                  <F label="Data de Nascimento">
+                    <div style={{position:'relative'}}>
+                      <input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={aluno.dataNasc} onChange={e=>updA('dataNasc',fmtDateMask(e.target.value))}/>
+                      {aluno.dataNasc && <div style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',fontSize:12,color:'#10b981',fontWeight:800,letterSpacing:.5,display:'flex',alignItems:'center',gap:4,background:'rgba(16,185,129,0.1)',padding:'4px 8px',borderRadius:8,pointerEvents:'none'}}><CheckCircle size={14}/> {calcIdade(aluno.dataNasc)}</div>}
+                    </div>
+                  </F>
+                </div>
+                <div><F label="CPF"><CPFInput value={aluno.cpf} onChange={v=>updA('cpf',v)} existentes={cpfsExist}/></F></div>
+                <div><F label="Celular do Aluno / WhatsApp"><input style={ultraInputStyle} value={aluno.celular} onChange={e=>updA('celular',fmtPhone(e.target.value))} placeholder="(00) 00000-0000"/></F></div>
+              </div>
             </div>
-          )}
-          <input ref={fotoInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleFotoUpload}/>
-        </div>
-        {/* IDs */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
-          <F label="Código">
-            <input className="form-input" value={aluno.codigo} readOnly style={{fontFamily:'monospace',background:'hsl(var(--bg-overlay))',cursor:'not-allowed'}}/>
-          </F>
-          <F label="CPF"><CPFInput value={aluno.cpf} onChange={v=>updA('cpf',v)} existentes={cpfsExist}/></F>
-          <F label="ID Censo"><input className="form-input" value={aluno.idCenso} onChange={e=>updA('idCenso',e.target.value)}/></F>
-          <F label="RGA (auto)">
-            <input className="form-input" value={rgaAluno} readOnly style={{fontFamily:'monospace',background:'hsl(var(--bg-overlay))',cursor:'not-allowed'}}/>
-          </F>
-        </div>
-        {/* Nome */}
-        <F label="Nome Completo"><input className="form-input" value={aluno.nome} onChange={e=>updA('nome',e.target.value)}/></F>
-        {/* Nascimento + idade */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr',gap:10}}>
-          <div>
-            <F label="Data de Nascimento"><input className="form-input" type="date" value={aluno.dataNasc} onChange={e=>updA('dataNasc',e.target.value)}/></F>
-            {aluno.dataNasc && <div style={{fontSize:11,color:'#10b981',marginTop:3,fontWeight:700}}>{calcIdade(aluno.dataNasc)}</div>}
-          </div>
-          <F label="Sexo">
-            <select className="form-input" value={aluno.sexo} onChange={e=>updA('sexo',e.target.value)}>
-              <option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}
-            </select>
-          </F>
-          <F label="Estado Civil">
-            <select className="form-input" value={aluno.estadoCivil} onChange={e=>updA('estadoCivil',e.target.value)}>
-              <option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}
-            </select>
-          </F>
-          <F label="Cor/Raça">
-            <select className="form-input" value={aluno.racaCor} onChange={e=>updA('racaCor',e.target.value)}>
-              <option value="">Selecione</option>
-              {['Branca','Preta','Parda','Amarela','Indígena','Não Declarada'].map(s=><option key={s}>{s}</option>)}
-            </select>
-          </F>
-          <F label="Nacionalidade"><input className="form-input" value={aluno.nacionalidade} onChange={e=>updA('nacionalidade',e.target.value)}/></F>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-          <F label="Naturalidade"><input className="form-input" value={aluno.naturalidade} onChange={e=>updA('naturalidade',e.target.value)}/></F>
-          <F label="UF">
-            <select className="form-input" value={aluno.uf} onChange={e=>updA('uf',e.target.value)}>
-              <option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}
-            </select>
-          </F>
-          <F label="E-mail"><input className="form-input" type="email" value={aluno.email} onChange={e=>updA('email',e.target.value)}/></F>
-        </div>
-        <F label="Celular"><input className="form-input" value={aluno.celular} onChange={e=>updA('celular',fmtPhone(e.target.value))} style={{maxWidth:200}}/></F>
-        {/* Filiação com busca */}
-        <div style={{padding:'12px 14px',background:'hsl(var(--bg-elevated))',borderRadius:8,border:'1px solid hsl(var(--border-subtle))'}}>
-          <div style={{fontWeight:700,fontSize:12,marginBottom:10,color:'hsl(var(--text-muted))'}}>📎 FILIAÇÃO</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <FiliacaoInput label="Filiação — Mãe" respList={todosResp} value={aluno.filiacaoMae||mae.nome} onChange={v=>updA('filiacaoMae',v)}/>
-            <FiliacaoInput label="Filiação — Pai" respList={todosResp} value={aluno.filiacaoPai||pai.nome} onChange={v=>updA('filiacaoPai',v)}/>
           </div>
         </div>
-        {/* Endereço */}
-        <div>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-            <span style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-muted))'}}>🏠 ENDEREÇO</span>
-            <div style={{display:'flex',gap:6}}>
+
+        {/* ── Seção: Documentos Institucionais ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:24,background:'#f8fafc',padding:28,borderRadius:24,border:'1px solid #e2e8f0',boxShadow:'inset 0 4px 14px rgba(0,0,0,0.02)'}}>
+            <F label="Código Sistema">
+              <input style={{...ultraInputStyle, background:'rgba(226,232,240,0.5)', color:'#64748b', cursor:'not-allowed', border:'1px solid #e2e8f0', fontFamily:'JetBrains Mono, monospace',letterSpacing:1.5,fontSize:15}} value={aluno.codigo} readOnly/>
+            </F>
+            <F label="RGA (Registro Acadêmico)">
+              <input style={{...ultraInputStyle, background:'rgba(226,232,240,0.5)', color:'#64748b', cursor:'not-allowed', border:'1px solid #e2e8f0', fontFamily:'JetBrains Mono, monospace',letterSpacing:1.5,fontSize:15}} value={rgaAluno} readOnly/>
+            </F>
+            <F label="ID Censo Escolar"><input style={ultraInputStyle} value={aluno.idCenso} onChange={e=>updA('idCenso',e.target.value)} placeholder="Identificador INEP"/></F>
+          </div>
+        </div>
+
+        {/* ── Seção: Detalhes Pessoais ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:12, display:'flex', alignItems:'center', gap:8}}>
+            <Layers size={16} color="#f59e0b"/> Informações Complementares
+          </h4>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:22}}>
+            <div style={{minWidth:220}}><F label="E-mail do Aluno"><input style={ultraInputStyle} type="email" value={aluno.email} onChange={e=>updA('email',e.target.value)} placeholder="aluno@email.com"/></F></div>
+            <F label="Estado Civil">
+              <select style={ultraInputStyle} value={aluno.estadoCivil} onChange={e=>updA('estadoCivil',e.target.value)}>
+                <option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </F>
+            <F label="Cor/Raça">
+              <select style={ultraInputStyle} value={aluno.racaCor} onChange={e=>updA('racaCor',e.target.value)}>
+                <option value="">Selecione</option>
+                {['Branca','Preta','Parda','Amarela','Indígena','Não Declarada'].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </F>
+            <F label="Nacionalidade"><input style={ultraInputStyle} value={aluno.nacionalidade} onChange={e=>updA('nacionalidade',e.target.value)}/></F>
+            <F label="Naturalidade"><input style={ultraInputStyle} value={aluno.naturalidade} onChange={e=>updA('naturalidade',e.target.value)}/></F>
+            <F label="UF">
+              <select style={ultraInputStyle} value={aluno.uf} onChange={e=>updA('uf',e.target.value)}>
+                <option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}
+              </select>
+            </F>
+          </div>
+        </div>
+
+        {/* ── Seção: Filiação ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:12, display:'flex', alignItems:'center', gap:8}}>
+            <Users size={16} color="#ec4899"/> Filiação
+          </h4>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))',gap:24}}>
+            <div style={{background:'linear-gradient(135deg, rgba(244,114,182,0.05), #ffffff)',padding:24,borderRadius:20,border:'1px solid rgba(244,114,182,0.2)',boxShadow:'0 8px 24px rgba(244,114,182,0.05)'}}>
+              <FiliacaoInput label="Filiação — Mãe" respList={todosResp} value={aluno.filiacaoMae||mae.nome} onChange={v=>updA('filiacaoMae',v)}/>
+            </div>
+            <div style={{background:'linear-gradient(135deg, rgba(56,189,248,0.05), #ffffff)',padding:24,borderRadius:20,border:'1px solid rgba(56,189,248,0.2)',boxShadow:'0 8px 24px rgba(56,189,248,0.05)'}}>
+              <FiliacaoInput label="Filiação — Pai" respList={todosResp} value={aluno.filiacaoPai||pai.nome} onChange={v=>updA('filiacaoPai',v)}/>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Seção: Endereço ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end', borderBottom:'1px solid #f1f5f9', paddingBottom:12}}>
+            <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, display:'flex', alignItems:'center', gap:8, margin:0}}>
+              <MapPin size={16} color="#10b981"/> Endereço do Aluno
+            </h4>
+            <div style={{display:'flex',gap:10}}>
               {todosResp.filter(r=>r.nome).map(r=>(
-                <button key={r.id} type="button" className="btn btn-secondary btn-sm" onClick={()=>updA('endereco',{...r.endereco})}>
-                  <Copy size={11}/> {r.parentesco}
+                <button key={r.id} type="button" style={{fontSize:12,fontWeight:700,padding:'8px 16px',background:'#f1f5f9',color:'#475569',borderRadius:12,border:'1px solid #cbd5e1',cursor:'pointer',transition:'all 0.2s',display:'flex',alignItems:'center',gap:6,boxShadow:'0 2px 6px rgba(0,0,0,0.05)'}} onClick={()=>updA('endereco',{...r.endereco})} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#e2e8f0'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='#f1f5f9'}>
+                  <MapPin size={12}/> Copiar {r.parentesco}
                 </button>
               ))}
             </div>
           </div>
           <EnderecoSection end={aluno.endereco} onChange={e=>updA('endereco',e)}/>
         </div>
+        
       </div>
     </div>,
 
     // STEP 2: Saúde
     <div key="s2" style={{display:'flex',flexDirection:'column',gap:14}}>
-      <div style={{padding:'12px 16px',background:'rgba(16,185,129,0.06)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:10,fontSize:12}}>
-        <strong style={{color:'#34d399'}}>Passo 3 — Saúde & Observações</strong>
+      <div style={{padding:'16px 20px',background:'linear-gradient(135deg, #0f172a, #064e3b)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:16,display:'flex',alignItems:'center',gap:16,boxShadow:'0 8px 30px rgba(15,23,42,0.1)'}}>
+        <div style={{width:36,height:36,borderRadius:'50%',background:'rgba(16,185,129,0.2)',border:'1px solid rgba(16,185,129,0.5)',color:'#34d399',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:16,flexShrink:0}}>3</div>
+        <div style={{display:'flex',flexDirection:'column'}}>
+           <div style={{color:'#f8fafc',fontWeight:800,fontSize:15,letterSpacing:0.5}}>Saúde, Observações & Imagem</div>
+           <div style={{color:'#94a3b8',fontSize:12,marginTop:2}}>Dados médicos críticos e acordos de confidencialidade/imagem da escola.</div>
+        </div>
       </div>
       <div className="card" style={{padding:16,display:'flex',flexDirection:'column',gap:12}}>
         <div style={{fontWeight:700,fontSize:12,color:'#34d399'}}>🏥 Informações Médicas</div>
-        <div style={{display:'grid',gridTemplateColumns:'160px 1fr 1fr',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'140px minmax(200px, 1fr) minmax(200px, 1fr)',gap:16}}>
           <F label="Tipo Sanguíneo">
             <select className="form-input" value={saude.tipoSanguineo} onChange={e=>setSaude(s=>({...s,tipoSanguineo:e.target.value}))}>
               <option value="">Não sei</option>{['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(t=><option key={t}>{t}</option>)}
@@ -1515,17 +1726,20 @@ export default function NovaMatriculaPage() {
           <F label="Alergias"><input className="form-input" value={saude.alergias} onChange={e=>setSaude(s=>({...s,alergias:e.target.value}))} placeholder="Alimentos, medicamentos, látex..."/></F>
           <F label="Deficiências (CID)"><input className="form-input" value={saude.deficiencias} onChange={e=>setSaude(s=>({...s,deficiencias:e.target.value}))} placeholder="Ex: F84.0, H54.0"/></F>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
           <F label="Medicamentos em Uso"><textarea className="form-input" rows={2} value={saude.medicamentos} onChange={e=>setSaude(s=>({...s,medicamentos:e.target.value}))} placeholder="Nome, dosagem e horário..."/></F>
           <F label="Necessidades Especiais / NEE"><textarea className="form-input" rows={2} value={saude.necessidades} onChange={e=>setSaude(s=>({...s,necessidades:e.target.value}))} placeholder="Descreva as necessidades..."/></F>
         </div>
-        <div style={{display:'flex',gap:20,padding:'10px 14px',background:'hsl(var(--bg-overlay))',borderRadius:8}}>
-          <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:13}}>
-            <input type="checkbox" checked={saude.autorizaImagem} onChange={e=>setSaude(s=>({...s,autorizaImagem:e.target.checked}))}/>
+        <div style={{display:'flex',gap:20,padding:'14px 18px',background:'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(16,185,129,0.02))',borderRadius:12,border:'1px solid rgba(16,185,129,0.25)',boxShadow:'0 2px 10px rgba(16,185,129,0.05)'}}>
+          <label style={{display:'flex',alignItems:'center',gap:12,cursor:'pointer',fontSize:13,fontWeight:700,color:'hsl(var(--text-primary))'}}>
+            <div style={{width:20,height:20,borderRadius:6,border:saude.autorizaImagem?'none':'2px solid hsl(var(--border-subtle))',background:saude.autorizaImagem?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s',flexShrink:0}}>
+               {saude.autorizaImagem && <Check size={14} color="#fff" strokeWidth={4}/>}
+            </div>
+            <input type="checkbox" style={{display:'none'}} checked={saude.autorizaImagem} onChange={e=>setSaude(s=>({...s,autorizaImagem:e.target.checked}))}/>
             Autorizo uso de imagem
           </label>
         </div>
-        <F label="Observações Gerais"><textarea className="form-input" rows={3} value={saude.obs} onChange={e=>setSaude(s=>({...s,obs:e.target.value}))} placeholder="Informações adicionais relevantes para a escola..."/></F>
+        <F label="Observações Gerais"><textarea className="form-input" rows={2} value={saude.obs} onChange={e=>setSaude(s=>({...s,obs:e.target.value}))} placeholder="Informações adicionais relevantes para a escola..."/></F>
       </div>
 
       {/* ── Card: Autorizados a Retirar ── */}
@@ -1824,7 +2038,7 @@ export default function NovaMatriculaPage() {
             </div>
             <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
 
-              {/* ── Tipo de Matrícula ── */}
+              {/* ── Tipo de Código ── */}
               {(()=>{
                 // Regra de auto-detecção:
                 // editando item já existente → baseado na posição dele no histórico
@@ -2112,43 +2326,49 @@ export default function NovaMatriculaPage() {
 
       {/* ══ PREMIUM FINANCIAL HEADER ══ */}
       <div style={{
-        padding:'14px 24px',
-        background:'linear-gradient(135deg,hsl(var(--bg-elevated)) 0%,rgba(99,102,241,0.03) 100%)',
-        borderBottom:'1px solid hsl(var(--border-subtle))',
-        borderRadius:'16px 16px 0 0',
-        display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',
+        padding: '20px 28px',
+        background: 'linear-gradient(135deg, hsl(var(--bg-elevated)) 0%, rgba(99, 102, 241, 0.06) 50%, rgba(139, 92, 246, 0.08) 100%)',
+        borderBottom: '2px solid rgba(99,102,241,0.5)',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        boxShadow: '0 8px 24px -8px rgba(99, 102, 241, 0.15), inset 0 1px 0 rgba(255,255,255,0.1)',
+        position: 'relative', overflow: 'hidden', zIndex: 10
       }}>
-        <div style={{width:46,height:46,borderRadius:12,background:aluno.foto?'transparent':'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid rgba(99,102,241,0.25)',boxShadow:'0 0 0 4px rgba(99,102,241,0.08),0 4px 12px rgba(99,102,241,0.18)'}}>
-          {aluno.foto?<img src={aluno.foto} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:18,color:'#fff'}}>👤</span>}
+        <div style={{ position: 'absolute', top: -40, right: '10%', width: 200, height: 200, background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)', filter: 'blur(30px)', pointerEvents: 'none' }} />
+        
+        <div style={{width:52,height:52,borderRadius:14,background:aluno.foto?'transparent':'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid rgba(99,102,241,0.3)',boxShadow:'0 0 0 4px rgba(99,102,241,0.08),0 8px 16px rgba(99,102,241,0.2)'}}>
+          {aluno.foto?<img src={aluno.foto} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:20,color:'#fff'}}>👤</span>}
         </div>
-        <div style={{flex:'0 0 auto'}}>
-          <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:1,textTransform:'uppercase',marginBottom:2}}>Financeiro · Matr. <span style={{color:'#818cf8',fontFamily:'monospace',fontWeight:900}}>{numMatricula}</span></div>
-          <div style={{fontWeight:900,fontSize:15,letterSpacing:-.4,color:'hsl(var(--text-base))',lineHeight:1}}>{aluno.nome||'—'}</div>
+        <div style={{flex:'0 0 auto', zIndex: 1}}>
+          <div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Financeiro · Cód. <span style={{color:'#818cf8',fontFamily:'monospace',fontWeight:900, background: 'rgba(99,102,241,0.1)', padding:'2px 6px', borderRadius:4}}>{codigoAluno}</span></div>
+          <div style={{fontWeight:900,fontSize:17,letterSpacing:-.5,color:'hsl(var(--text-base))',lineHeight:1}}>{aluno.nome||'—'}</div>
         </div>
-        <div style={{width:1,height:32,background:'hsl(var(--border-subtle))',flexShrink:0}}/>
-        <div style={{flex:'0 0 auto'}}>
-          <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:.8,textTransform:'uppercase',marginBottom:2}}>Resp. Financeiro</div>
-          <div style={{fontWeight:700,fontSize:12,color:'#818cf8'}}>{todosResp.find(r=>r.respFinanceiro)?.nome||'—'}</div>
+        <div style={{width:1,height:36,background:'rgba(148, 163, 184, 0.2)',flexShrink:0, margin: '0 4px', zIndex: 1}}/>
+        <div style={{flex:'0 0 auto', zIndex: 1}}>
+          <div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:800,letterSpacing:.8,textTransform:'uppercase',marginBottom:4}}>Resp. Financeiro</div>
+          <div style={{fontWeight:800,fontSize:13,color:'#818cf8'}}>{todosResp.find(r=>r.respFinanceiro)?.nome||'—'}</div>
         </div>
-        <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <div style={{marginLeft:'auto',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap', zIndex: 1}}>
           {/* Botão de Observação Financeira — sempre visível */}
           <button
             type="button"
             onClick={()=>setModalObsAluno(true)}
             style={{
-              fontSize:10,padding:'5px 14px',borderRadius:20,cursor:'pointer',fontWeight:700,
-              background: obsAlunoFin ? 'rgba(245,158,11,0.1)' : 'hsl(var(--bg-elevated))',
-              color:       obsAlunoFin ? '#d97706' : 'hsl(var(--text-muted))',
-              border:      obsAlunoFin ? '1px solid rgba(245,158,11,0.35)' : '1px solid hsl(var(--border-subtle))',
+              fontSize:11,padding:'8px 16px',borderRadius:20,cursor:'pointer',fontWeight:800,
+              background: obsAlunoFin ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.03)',
+              color:       obsAlunoFin ? '#f59e0b' : 'hsl(var(--text-secondary))',
+              border:      obsAlunoFin ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(148, 163, 184, 0.3)',
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
               transition:'all 0.2s',
             }}
-            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(245,158,11,0.15)';(e.currentTarget as HTMLButtonElement).style.color='#d97706';(e.currentTarget as HTMLButtonElement).style.borderColor='rgba(245,158,11,0.4)'}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background=obsAlunoFin?'rgba(245,158,11,0.1)':'hsl(var(--bg-elevated))';(e.currentTarget as HTMLButtonElement).style.color=obsAlunoFin?'#d97706':'hsl(var(--text-muted))';(e.currentTarget as HTMLButtonElement).style.borderColor=obsAlunoFin?'rgba(245,158,11,0.35)':'hsl(var(--border-subtle))'}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.background=obsAlunoFin?'rgba(245,158,11,0.15)':'rgba(255,255,255,0.08)';(e.currentTarget as HTMLButtonElement).style.color=obsAlunoFin?'#f59e0b':'hsl(var(--text-base))';(e.currentTarget as HTMLButtonElement).style.borderColor=obsAlunoFin?'rgba(245,158,11,0.6)':'rgba(148, 163, 184, 0.5)';(e.currentTarget as HTMLButtonElement).style.transform='translateY(-1px)';(e.currentTarget as HTMLButtonElement).style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background=obsAlunoFin?'rgba(245,158,11,0.1)':'rgba(255,255,255,0.03)';(e.currentTarget as HTMLButtonElement).style.color=obsAlunoFin?'#f59e0b':'hsl(var(--text-secondary))';(e.currentTarget as HTMLButtonElement).style.borderColor=obsAlunoFin?'rgba(245,158,11,0.4)':'rgba(148, 163, 184, 0.3)';(e.currentTarget as HTMLButtonElement).style.transform='translateY(0)';(e.currentTarget as HTMLButtonElement).style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'}}
             title={obsAlunoFin ? `Observação: ${obsAlunoFin}` : 'Adicionar observação financeira'}
           >
             {obsAlunoFin ? '📝 Obs. Financeira' : '📝 Adicionar Obs.'}
           </button>
-          {parcelas.length>0&&<span style={{fontSize:10,padding:'5px 14px',borderRadius:20,background:parcelasConfirmadas?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.08)',color:parcelasConfirmadas?'#10b981':'#f59e0b',fontWeight:700,border:'1px solid '+(parcelasConfirmadas?'rgba(16,185,129,0.2)':'rgba(245,158,11,0.18)')}}>{parcelasConfirmadas?'✓ Confirmadas':'⚠ Não confirmadas'}</span>}
+          {parcelas.length>0&&<span style={{fontSize:11,padding:'8px 16px',borderRadius:20,background:parcelasConfirmadas?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.08)',color:parcelasConfirmadas?'#10b981':'#f59e0b',fontWeight:800,border:'1px solid '+(parcelasConfirmadas?'rgba(16,185,129,0.2)':'rgba(245,158,11,0.18)'),boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>{parcelasConfirmadas?'✓ Confirmadas':'⚠ Não confirmadas'}</span>}
         </div>
       </div>
 
@@ -2207,46 +2427,68 @@ export default function NovaMatriculaPage() {
       {(()=>{
         const selCount=parcelasSelected.length
         const temSel=selCount>0
+        
+        const GroupCard = ({ title, icon, color, children }: { title: string; icon: string; color: string; children: React.ReactNode }) => (
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: 10,
+            padding: '16px',
+            background: `linear-gradient(180deg, hsl(var(--bg-elevated)) 0%, rgba(255,255,255,0.01) 100%)`,
+            border: '1px solid hsl(var(--border-subtle))',
+            borderTop: `2px solid ${color}`,
+            borderRadius: '16px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.05)',
+            position: 'relative', overflow: 'hidden'
+          }}>
+            <div style={{ position: 'absolute', top: -30, right: -30, width: 80, height: 80, background: color, filter: 'blur(40px)', opacity: 0.1, pointerEvents: 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: 13, background: `${color}15`, padding: '4px', borderRadius: 6 }}>{icon}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-base))', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
+            </div>
+            {children}
+          </div>
+        )
+
         const Btn=({icon,label,color,onClick,disabled,danger,title,full}:{icon:string;label:string;color?:string;onClick:()=>void;disabled?:boolean;danger?:boolean;title?:string;full?:boolean})=>{
           const c=danger?'#ef4444':color||'#64748b'
           return(
             <button type="button" disabled={disabled||false} onClick={onClick} title={title||label}
               style={{
-                display:'flex',alignItems:'center',gap:5,
-                padding:'7px 10px',
-                borderRadius:10,
-                border:'1px solid '+(disabled?'hsl(var(--border-subtle))':c+'30'),
-                background:disabled?'transparent':c+'09',
-                boxShadow:disabled?'none':'0 1px 4px rgba(0,0,0,0.05)',
-                cursor:disabled?'not-allowed':'pointer',
-                opacity:disabled?.3:1,
-                transition:'all 0.15s',
-                fontSize:11,fontWeight:700,
+                display:'flex',alignItems:'center',justifyContent:'center',gap:6,
+                padding:'8px 12px',
+                borderRadius:12,
+                border:`1px solid ${disabled ? 'hsl(var(--border-subtle))' : c+'40'}`,
+                background:disabled ? 'hsl(var(--bg-overlay))' : `linear-gradient(135deg, ${c}12 0%, ${c}05 100%)`,
+                boxShadow:disabled ? 'none' : `0 2px 6px ${c}10, inset 0 1px 0 rgba(255,255,255,0.1)`,
+                cursor:disabled ? 'not-allowed' : 'pointer',
+                opacity:disabled ? 0.4 : 1,
+                transition:'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                fontSize:12,fontWeight:700,
                 whiteSpace:'nowrap',
-                flex:full?'1 1 0':'0 0 auto',
+                flex:full ? '1 1 0' : '0 0 auto',
                 minWidth:0,
-                overflow:'hidden',
+                color: disabled ? 'hsl(var(--text-muted))' : c,
               }}
-              onMouseEnter={e=>{if(!disabled){const el=e.currentTarget as HTMLElement;el.style.transform='translateY(-1px)';el.style.boxShadow='0 4px 10px rgba(0,0,0,0.1)';el.style.background=c+'18'}}}
-              onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.transform='translateY(0)';el.style.boxShadow=disabled?'none':'0 1px 4px rgba(0,0,0,0.05)';el.style.background=disabled?'transparent':c+'09'}}
+              onMouseEnter={e=>{if(!disabled){const el=e.currentTarget as HTMLElement;el.style.transform='translateY(-2px)';el.style.boxShadow=`0 6px 14px ${c}25, inset 0 1px 0 rgba(255,255,255,0.2)`;el.style.background=`linear-gradient(135deg, ${c}20 0%, ${c}10 100%)`}}}
+              onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.transform='translateY(0)';el.style.boxShadow=disabled?'none':`0 2px 6px ${c}10, inset 0 1px 0 rgba(255,255,255,0.1)`;el.style.background=disabled?'hsl(var(--bg-overlay))':`linear-gradient(135deg, ${c}12 0%, ${c}05 100%)`}}
             >
-              <span style={{fontSize:13,lineHeight:1,flexShrink:0}}>{icon}</span>
-              <span style={{color:disabled?'#94a3b8':c,fontSize:11,fontWeight:700,overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span>
+              <span style={{fontSize:14,lineHeight:1,flexShrink:0, filter: disabled ? 'grayscale(1)' : 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'}}>{icon}</span>
+              <span style={{fontWeight:800,overflow:'hidden',textOverflow:'ellipsis'}}>{label}</span>
             </button>
           )
         }
         const Row=({children}:{children:React.ReactNode})=>(
-          <div style={{display:'flex',gap:6}}>{children}</div>
+          <div style={{display:'flex',gap:8}}>{children}</div>
         )
+
         return (
           <div style={{
-            display:'grid',gridTemplateColumns:'repeat(4,1fr)',
-            gap:14,padding:'14px 20px',
-            background:'hsl(var(--bg-base))',
+            display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))',
+            gap:16, padding:'20px 24px',
+            background:'var(--bg-base)',
             borderBottom:'1px solid hsl(var(--border-subtle))',
           }}>
             {/* Coluna 1 — Baixas / Exclusão */}
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <GroupCard title="Liquidação & Gestão" icon="💸" color="#10b981">
               <Row>
                 <Btn full icon="💳" label="Baixar" color="#10b981" disabled={!temSel} onClick={()=>{
                   if(selCount===1){
@@ -2262,22 +2504,22 @@ export default function NovaMatriculaPage() {
                 <Btn full icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>setModalBaixaResp(true)}/>
                 <Btn full icon="🗑️" label="Excluir" danger disabled={!temSel||parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} title={parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')?"Parcelas pagas não podem ser excluídas":undefined} onClick={()=>{setExcluirMotivo('');setModalExcluirMotivo(true)}}/>
               </Row>
-            </div>
+            </GroupCard>
 
             {/* Coluna 2 — Eventos / Ajustes */}
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <GroupCard title="Lançamentos Manuais" icon="🛠️" color="#8b5cf6">
               <Row>
                 <Btn full icon="➕" label="Inserir Evento" color="#8b5cf6" onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}/>
                 <Btn full icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const sn=se?parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===se).map(p=>p.num):parcelas.filter(p=>p.status!=='cancelado').map(p=>p.num);setDescLote({tipo:'%',valor:'',deParcela:sn.length?String(Math.min(...sn)):'1',ateParcela:sn.length?String(Math.max(...sn)):'1',eventoId:se,parcelasEvento:sn});setModalDesconto(true)}}/>
               </Row>
               <Row>
-                <Btn full icon="📅" label="Alt. Vencimento" color="#06b6d4" onClick={()=>{const ev=[...new Set(parcelas.filter(p=>p.status!=='cancelado').map(p=>(p as any).evento).filter(Boolean))];setVctoForm({deParcela:'1',ateParcela:String(parcelas.filter(p=>p.status!=='cancelado').length),novoDia:'',eventoFiltro:(ev[0] as string)||''});setModalVcto(true)}}/>
+                <Btn full icon="📅" label="Vencimento" color="#06b6d4" onClick={()=>{const ev=[...new Set(parcelas.filter(p=>p.status!=='cancelado').map(p=>(p as any).evento).filter(Boolean))];setVctoForm({deParcela:'1',ateParcela:String(parcelas.filter(p=>p.status!=='cancelado').length),novoDia:'',eventoFiltro:(ev[0] as string)||''});setModalVcto(true)}}/>
                 <Btn full icon="💲" label="Alt. Valor" color="#a78bfa" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const ns=se?parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===se).map(p=>p.num):parcelas.filter(p=>p.status!=='cancelado').map(p=>p.num);setAlterarValorForm({parcelas:ns,eventoFiltro:se,novoValor:'',motivo:''});setModalAlterarValor(true)}}/>
               </Row>
-            </div>
+            </GroupCard>
 
             {/* Coluna 3 — Consultas */}
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <GroupCard title="Consultas & Estorno" icon="🔍" color="#38bdf8">
               <Row>
                 <Btn full icon="🔍" label="Cons. Baixa" color="#38bdf8" onClick={()=>setModalConsultaBaixa(true)}/>
                 <Btn full icon="↩️" label="Excluir Baixa" color="#f97316" disabled={!temSel||!parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} onClick={()=>setModalExcluirBaixa(true)}/>
@@ -2286,15 +2528,15 @@ export default function NovaMatriculaPage() {
                 <Btn full icon="🗂️" label="Extrato" color="#64748b" onClick={()=>setModalExtrato(true)}/>
                 <Btn full icon="🗑️" label="Excluídos" color="#94a3b8" onClick={()=>setModalItensExcluidos(true)}/>
               </Row>
-            </div>
+            </GroupCard>
 
             {/* Coluna 4 — Boletos */}
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            <GroupCard title="Cobrança Bancária" icon="🏦" color="#0ea5e9">
               <Row>
                 <Btn full icon="📋" label="Histórico" color="#818cf8" onClick={()=>setModalHistorico(true)}/>
               </Row>
               <Row>
-                <Btn full icon="🏦" label="Emitir Boleto" color="#0ea5e9"
+                <Btn full icon="🧾" label="Emitir Boleto" color="#0ea5e9"
                   disabled={parcelas.filter(p=>p.status!=='pago'&&p.status!=='cancelado').length===0}
                   onClick={()=>{
                     const pendentes=parcelas.filter(p=>p.status!=='pago'&&p.status!=='cancelado')
@@ -2309,7 +2551,7 @@ export default function NovaMatriculaPage() {
                     if(ultimo) setModal2aVia(ultimo)
                   }}/>
               </Row>
-            </div>
+            </GroupCard>
           </div>
         )
       })()}
@@ -2384,7 +2626,7 @@ export default function NovaMatriculaPage() {
                 <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:60,gap:12,textAlign:'center'}}>
                   <div style={{fontSize:56,marginBottom:8}}>💳</div>
                   <div style={{fontWeight:800,fontSize:18}}>Nenhuma parcela cadastrada</div>
-                  <div style={{fontSize:13,color:'hsl(var(--text-muted))',maxWidth:400}}>Use "Adicionar Evento" ou acesse a aba Matrícula para confirmar parcelas.</div>
+                  <div style={{fontSize:13,color:'hsl(var(--text-muted))',maxWidth:400}}>Use "Adicionar Evento" ou acesse a aba Código para confirmar parcelas.</div>
                   <div style={{display:'flex',gap:10,marginTop:8}}>
                     <button className="btn btn-secondary" onClick={()=>setStep(3)}>← Ir para Matrícula</button>
                     <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#8b5cf6,#6366f1)'}} onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}>+ Inserir Evento</button>
@@ -4701,7 +4943,7 @@ export default function NovaMatriculaPage() {
         )
         return(
           <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:16}}>
-            {/* Linha 1: Aluno + Matrícula */}
+            {/* Linha 1: Aluno + Código */}
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <Card title="👤 Aluno">
                 <CardRow k="Nome"        v={aluno.nome}/>
@@ -4935,7 +5177,7 @@ export default function NovaMatriculaPage() {
           <span style={{fontSize:16}}>✏️</span>
           <div>
             <div style={{fontWeight:800,fontSize:13,color:'#fbbf24'}}>Modo Edição — {(alunoEditando as any)?.nome}</div>
-            <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Matrícula {(alunoEditando as any)?.matricula} · Atualize os dados abaixo e clique em Salvar.</div>
+            <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Código {(alunoEditando as any)?.matricula} · Atualize os dados abaixo e clique em Salvar.</div>
           </div>
         </div>
       )}
@@ -4943,14 +5185,14 @@ export default function NovaMatriculaPage() {
         <div>
           <h1 className="page-title" style={{margin:0}}>{isEdicao ? 'Editar Matrícula' : 'Nova Matricula'}</h1>
           <p className="page-subtitle" style={{margin:'2px 0 0'}} suppressHydrationWarning>
-            {isEdicao ? `Editando dados de ${(alunoEditando as any)?.nome ?? ''}` : `Processo completo · 6 etapas · Matrícula ${numMatricula}`}
+            {isEdicao ? `Editando dados de ${(alunoEditando as any)?.nome ?? ''}` : `Processo completo · 6 etapas · Código ${numMatricula}`}
           </p>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <button className="btn btn-ghost btn-sm" style={{fontSize:12,color:'#10b981',border:'1px solid rgba(16,185,129,0.3)'}} onClick={handleFinalizar} disabled={salvando}>
-            {salvando?<><Loader2 size={12} style={{animation:'spin 1s linear infinite'}}/>Salvando...</>:<><Check size={12}/>{isEdicao ? 'Salvar Alterações' : 'Concluir'}</>}
+        <div style={{display:'flex',gap:12,alignItems:'center'}}>
+          <button className="btn" style={{background:'linear-gradient(135deg, #10b981, #059669)',color:'#fff',fontSize:13,fontWeight:700,padding:'8px 20px',border:'none',boxShadow:'0 4px 14px rgba(16,185,129,0.3)',cursor:'pointer',borderRadius:8}} onClick={() => handleFinalizar(false)} disabled={salvando}>
+            {salvando?<><Loader2 size={14} style={{animation:'spin 1s linear infinite',marginRight:6}}/>Salvando...</>:<><Check size={16} style={{marginRight:6,color:'#fff'}}/>{isEdicao ? 'Salvar Alterações' : 'Concluir'}</>}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={()=>router.push('/academico/alunos')}><X size={13}/>Cancelar</button>
+          <button className="btn" style={{background:'hsl(var(--bg-elevated))',color:'hsl(var(--text-muted))',fontSize:13,fontWeight:600,padding:'8px 16px',border:'1px solid hsl(var(--border-subtle))',cursor:'pointer',borderRadius:8}} onClick={()=>router.push('/academico/alunos')}><X size={15} style={{marginRight:6}}/>Cancelar</button>
         </div>
       </div>
 
@@ -5033,15 +5275,15 @@ export default function NovaMatriculaPage() {
       {/* Bottom Nav */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:24,padding:'16px 32px 0',borderTop:'1px solid hsl(var(--border-subtle))'}}>
         <button className="btn btn-secondary" disabled={step===0} onClick={()=>setStep(s=>s-1)}><ChevronLeft size={15}/>Anterior</button>
-        <div style={{display:'flex',gap:10,alignItems:'center'}}>
-          <span style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Etapa {step+1} de {STEPS.length}</span>
-          <button className="btn btn-ghost btn-sm" style={{fontSize:12,color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',padding:'5px 14px'}} onClick={handleFinalizar} disabled={salvando}>
-            {salvando?<><Loader2 size={12} style={{animation:'spin 1s linear infinite'}}/>Salvando...</>:<><Check size={12}/>Concluir e Salvar</>}
+        <div style={{display:'flex',gap:14,alignItems:'center'}}>
+          <span style={{fontSize:12,color:'hsl(var(--text-muted))',fontWeight:600}}>Etapa {step+1} de {STEPS.length}</span>
+          <button className="btn" style={{background:'linear-gradient(135deg, #10b981, #059669)',color:'#fff',fontSize:13,fontWeight:700,padding:'8px 20px',border:'none',boxShadow:'0 4px 14px rgba(16,185,129,0.3)',cursor:'pointer',borderRadius:8}} onClick={() => handleFinalizar(true)} disabled={salvando}>
+            {salvando?<><Loader2 size={14} style={{animation:'spin 1s linear infinite',marginRight:6}}/>Salvando...</>:<><Check size={16} style={{marginRight:6,color:'#fff'}}/>Concluir e Salvar</>}
           </button>
         </div>
         {step<STEPS.length-1
           ? <button className="btn btn-primary" onClick={()=>setStep(s=>s+1)}>Proximo<ChevronRight size={15}/></button>
-          : <button className="btn btn-primary" disabled={salvando} onClick={handleFinalizar} style={{background:'linear-gradient(135deg,#10b981,#059669)'}}>
+          : <button className="btn btn-primary" disabled={salvando} onClick={() => handleFinalizar()} style={{background:'linear-gradient(135deg,#10b981,#059669)'}}>
               {salvando?<><Loader2 size={13} style={{animation:'spin 1s linear infinite'}}/>Salvando...</>:<><Check size={13}/>Finalizar Matricula</>}
             </button>
         }

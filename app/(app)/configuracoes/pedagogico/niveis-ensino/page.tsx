@@ -5,36 +5,29 @@ import { Plus, Edit2, Trash2, Check, GraduationCap, ChevronDown, ChevronUp, X, B
 
 // ─── Cores por código ──────────────────────────────────────────────
 const LEVEL_COLORS: Record<string, string> = {
+  '1': '#ec4899', '2': '#3b82f6', '3': '#8b5cf6', '4': '#10b981', '5': '#f59e0b',
   EI: '#ec4899', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#10b981', EJA: '#f59e0b',
 }
 const getCor = (codigo: string) => LEVEL_COLORS[codigo] ?? '#6b7280'
 
 // ─── Geração automática de código de nível ─────────────────────────
-// "Educação Infantil" → "EI"   |   "Ensino Fundamental I" → "EF1"
-// "Ensino Médio" → "EM"        |   "Ensino Fundamental II" → "EF2"
 function gerarCodigoNivel(nome: string, existentes: string[]): string {
   const tokens = nome
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove acentos
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
     .split(/\s+/)
-    .filter(t => t.length > 2 || /^[IVX]+$/.test(t) || /^\d+$/.test(t)) // ignora artigos
+    .filter(t => t.length > 2 || /^[IVX]+$/.test(t) || /^\d+$/.test(t))
 
-  // Extrai iniciais e mantém numerais romanos/arábicos
   const sigla = tokens.map(t => /^[IVX]+$/.test(t) || /^\d+$/.test(t) ? t : t[0]).join('')
-
-  // Garante unicidade
   if (!existentes.includes(sigla)) return sigla
   let i = 2
   while (existentes.includes(`${sigla}${i}`)) i++
   return `${sigla}${i}`
 }
 
-// ─── Geração automática de código de série ─────────────────────────
-// codigoNivel="EF1", ordem=1 → "EF1-01"
 const gerarCodigoSerie = (codigoNivel: string, ordem: number): string =>
   `${codigoNivel}-${String(ordem).padStart(2, '0')}`
 
-// ─── Presets MEC ───────────────────────────────────────────────────
 const PRESET: Record<string, { nome: string; faixaEtaria: string; duracaoAnos: number; series: string[] }> = {
   EI:  { nome: 'Educação Infantil',           faixaEtaria: '0–5 anos',   duracaoAnos: 5, series: ['Berçário', 'Maternal I', 'Maternal II', 'Jardim', 'Pré-Escola'] },
   EF1: { nome: 'Ensino Fundamental I',         faixaEtaria: '6–10 anos',  duracaoAnos: 5, series: ['1º Ano', '2º Ano', '3º Ano', '4º Ano', '5º Ano'] },
@@ -43,10 +36,17 @@ const PRESET: Record<string, { nome: string; faixaEtaria: string; duracaoAnos: n
   EJA: { nome: 'Educação de Jovens e Adultos', faixaEtaria: '18+ anos',   duracaoAnos: 3, series: ['Fase I', 'Fase II', 'Fase III'] },
 }
 
+const PADROES_NIVEIS_MEC = [
+  { codigo: '1', nome: 'Educação Infantil', faixaEtaria: '0–5 anos', duracaoAnos: 5, situacao: 'ativo', series: PRESET['EI'].series },
+  { codigo: '2', nome: 'Ensino Fundamental I', faixaEtaria: '6–10 anos', duracaoAnos: 5, situacao: 'ativo', series: PRESET['EF1'].series },
+  { codigo: '3', nome: 'Ensino Fundamental II', faixaEtaria: '11–14 anos', duracaoAnos: 4, situacao: 'ativo', series: PRESET['EF2'].series },
+  { codigo: '4', nome: 'Ensino Médio', faixaEtaria: '15–17 anos', duracaoAnos: 3, situacao: 'ativo', series: PRESET['EM'].series },
+  { codigo: '5', nome: 'Educação de Jovens e Adultos', faixaEtaria: '18+ anos', duracaoAnos: 3, situacao: 'ativo', series: PRESET['EJA'].series },
+] as const
+
 const buildSeries = (nomes: string[], codigoNivel: string): SerieEnsino[] =>
   nomes.map((nome, i) => ({ id: newId('SE'), codigo: gerarCodigoSerie(codigoNivel, i + 1), nome, ordem: i + 1, ativo: true }))
 
-// ─── Painel expansível de séries ──────────────────────────────────
 function SeriesPanel({ nivel, onUpdate }: { nivel: ConfigNivelEnsino; onUpdate: (s: SerieEnsino[]) => void }) {
   const [newNome, setNewNome] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
@@ -139,7 +139,6 @@ function SeriesPanel({ nivel, onUpdate }: { nivel: ConfigNivelEnsino; onUpdate: 
         ))}
       </div>
 
-      {/* Adicionar */}
       <div style={{ display: 'flex', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px', background: `${cor}10`, border: `1px dashed ${cor}30`, borderRadius: 6, fontSize: 10, color: cor, fontWeight: 700, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
           {gerarCodigoSerie(nivel.codigo, series.length + 1)}
@@ -156,9 +155,7 @@ function SeriesPanel({ nivel, onUpdate }: { nivel: ConfigNivelEnsino; onUpdate: 
   )
 }
 
-// ─── Página principal ──────────────────────────────────────────────
 export default function NiveisEnsinoPage() {
-  // Coleta todas as unidades de todos os mantenedores
   const { cfgNiveisEnsino, setCfgNiveisEnsino, mantenedores } = useData()
   const todasUnidades = mantenedores.flatMap(m => m.unidades ?? [])
 
@@ -168,16 +165,14 @@ export default function NiveisEnsinoPage() {
   const [form, setForm] = useState<FormNivel>(BLANK)
   const [formSeries, setFormSeries] = useState<SerieEnsino[]>([])
   const [editId, setEditId] = useState<string | null>(null)
-  const [editCodigo, setEditCodigo] = useState('')   // código fixo do nível em edição
+  const [editCodigo, setEditCodigo] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  // Novo nome de série sendo digitado no modal
   const [msNewNome, setMsNewNome] = useState('')
   const [msEditId, setMsEditId] = useState<string | null>(null)
   const [msEditNome, setMsEditNome] = useState('')
 
-  // Código gerado em preview durante criação
   const codigosExistentes = cfgNiveisEnsino.map(n => n.codigo)
   const codigoPreview = editId ? editCodigo : gerarCodigoNivel(form.nome, codigosExistentes)
 
@@ -200,11 +195,36 @@ export default function NiveisEnsinoPage() {
     setFormSeries(buildSeries(p.series, codigo))
   }
 
+  const loadPadroes = () => {
+    setCfgNiveisEnsino(prev => {
+      const existingCodes = new Set(prev.map(p => p.codigo))
+      const autoAssignedUnits = todasUnidades.map(u => u.id)
+      
+      const news = PADROES_NIVEIS_MEC.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+        id: newId('NE'), 
+        codigo: p.codigo,
+        nome: p.nome,
+        faixaEtaria: p.faixaEtaria,
+        duracaoAnos: p.duracaoAnos,
+        situacao: p.situacao as 'ativo',
+        unidadeIds: autoAssignedUnits,
+        series: buildSeries([...p.series], p.codigo),
+        createdAt: new Date().toISOString()
+      }))
+      return [...prev, ...news]
+    })
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Tem certeza que deseja apagar TODOS os níveis de ensino? Isso removerá as referências de matrículas atreladas.')) {
+      setCfgNiveisEnsino([])
+    }
+  }
+
   const handleSave = () => {
     if (!form.nome.trim()) return
-    if (form.unidadeIds.length === 0) return   // unidade obrigatória
+    if (form.unidadeIds.length === 0) return
     const codigo = editId ? editCodigo : gerarCodigoNivel(form.nome, codigosExistentes)
-    // Re-gera códigos das séries com o código final do nível
     const series = formSeries.map((s, i) => ({ ...s, ordem: i + 1, codigo: gerarCodigoSerie(codigo, i + 1) }))
 
     if (editId) {
@@ -222,7 +242,6 @@ export default function NiveisEnsinoPage() {
   const updateSeries = (nId: string, series: SerieEnsino[]) =>
     setCfgNiveisEnsino(prev => prev.map(n => n.id === nId ? { ...n, series } : n))
 
-  // --- Helpers séries no modal
   const msAdicionarSerie = () => {
     if (!msNewNome.trim()) return
     const ordem = formSeries.length + 1
@@ -248,12 +267,20 @@ export default function NiveisEnsinoPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Níveis de Ensino</h1>
-          <p className="page-subtitle">Segmentos com códigos gerados automaticamente — séries numeradas sequencialmente</p>
+          <p className="page-subtitle">Segmentos padronizados com códigos paramétricos</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Nível</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={loadPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+            <GraduationCap size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Nível</button>
+        </div>
       </div>
 
       {/* Cards */}

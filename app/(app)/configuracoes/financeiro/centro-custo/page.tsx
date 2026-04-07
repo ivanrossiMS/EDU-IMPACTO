@@ -1,53 +1,33 @@
 'use client'
+import { useConfigDb } from '@/lib/useConfigDb'
 import { ConfigCentroCusto, newId } from '@/lib/dataContext'
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Check, Layers, Search } from 'lucide-react'
 
 const BLANK: Omit<ConfigCentroCusto, 'id' | 'createdAt'> = {
   codigo: '', descricao: '', tipo: 'receita', responsavel: '', situacao: 'ativo',
 }
 
+const PADROES = [
+  { codigo: 'CC001', descricao: 'ACADÊMICO' },
+  { codigo: 'CC002', descricao: 'INFRAESTRUTURA' },
+  { codigo: 'CC003', descricao: 'ADMINISTRATIVO' },
+  { codigo: 'CC004', descricao: 'MARKETING' },
+  { codigo: 'CC005', descricao: 'FINANCEIRO' },
+  { codigo: 'CC006', descricao: 'TECNOLOGIA' },
+  { codigo: 'CC007', descricao: 'JURÍDICO' },
+  { codigo: 'CC008', descricao: 'BENEFÍCIOS / CONVÊNIOS' },
+]
+
 export default function CentroCustoPage() {
-  const queryClient = useQueryClient()
-  
-  const { data: cfgCentrosCusto = [], isLoading } = useQuery<ConfigCentroCusto[]>({
-    queryKey: ['cfgCentrosCusto'],
-    queryFn: async () => {
-      const res = await fetch('/api/configuracoes/centro-custo')
-      return res.json()
-    }
-  })
-
-  const addMutation = useMutation({
-    mutationFn: async (data: Omit<ConfigCentroCusto, 'id' | 'createdAt'>) => {
-      const res = await fetch('/api/configuracoes/centro-custo', { method: 'POST', body: JSON.stringify(data) })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgCentrosCusto'] })
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: async (data: Partial<ConfigCentroCusto> & { id: string }) => {
-      const res = await fetch(`/api/configuracoes/centro-custo/${data.id}`, { method: 'PUT', body: JSON.stringify(data) })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgCentrosCusto'] })
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/configuracoes/centro-custo/${id}`, { method: 'DELETE' })
-      return res.json()
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgCentrosCusto'] })
-  })
+  const { data: cfgCentrosCusto, setData: setCfgCentrosCusto, loading } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto')
 
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState<'todos' | 'ativo' | 'inativo'>('todos')
+  const [saving, setSaving] = useState(false)
 
   const gerarCodCC = (): string => {
     const existentes = cfgCentrosCusto.map(c => c.codigo)
@@ -58,7 +38,29 @@ export default function CentroCustoPage() {
   }
   const codigoPreview = editId ? form.codigo : gerarCodCC()
 
-  const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
+  const handleCarregarPadroes = async () => {
+    if (!confirm('Deseja carregar os Centros de Custos padrões de escola? (Isto ignorará os que já existirem)')) return
+    setSaving(true)
+    const novos = PADROES
+      .filter(p => !cfgCentrosCusto.some(c => c.codigo === p.codigo || c.descricao === p.descricao))
+      .map(p => ({ ...BLANK, codigo: p.codigo, descricao: p.descricao, id: newId('CC'), createdAt: new Date().toISOString() }))
+    if (novos.length > 0) {
+      setCfgCentrosCusto(prev => [...prev, ...novos])
+    }
+    setTimeout(() => setSaving(false), 600)
+  }
+
+  const handleExcluirTudo = () => {
+    if (cfgCentrosCusto.length === 0) { alert('Nenhum centro cadastrado.'); return }
+    if (!confirm('Tem certeza absoluta que deseja EXCLUIR TODOS os centros de custos? Esta ação pode desorganizar relatórios se eles já estiverem em uso.')) return
+    const confirmTexto = prompt('Digite "EXCLUIR TUDO" para continuar:')
+    if (confirmTexto !== 'EXCLUIR TUDO') { alert('Operação cancelada por segurança.'); return }
+    setSaving(true)
+    setCfgCentrosCusto([])
+    setTimeout(() => setSaving(false), 600)
+  }
+
+  const openNew = () => { setEditId(null); setForm({ ...BLANK, codigo: gerarCodCC() }); setShowForm(true) }
   const openEdit = (c: ConfigCentroCusto) => {
     setEditId(c.id)
     setForm({ codigo: c.codigo, descricao: c.descricao, tipo: c.tipo, responsavel: c.responsavel, situacao: c.situacao })
@@ -66,21 +68,22 @@ export default function CentroCustoPage() {
   }
   const handleDelete = (id: string) => {
     if (!confirm('Excluir este centro de custo?')) return
-    deleteMutation.mutate(id)
+    setCfgCentrosCusto(prev => prev.filter(c => c.id !== id))
   }
   const handleSave = () => {
     if (!form.descricao.trim()) return
-    const codigo = editId ? form.codigo : gerarCodCC()
+    const exists = cfgCentrosCusto.some(c => c.codigo === form.codigo && c.id !== editId)
+    if (exists) { alert('Já existe um centro com este código!'); return }
     if (editId) {
-      updateMutation.mutate({ ...form, id: editId, codigo })
+      setCfgCentrosCusto(prev => prev.map(c => c.id === editId ? { ...c, ...form } : c))
     } else {
-      addMutation.mutate({ ...form, codigo })
+      const novo: ConfigCentroCusto = { ...form, id: newId('CC'), createdAt: new Date().toISOString() }
+      setCfgCentrosCusto(prev => [...prev, novo])
     }
     setShowForm(false)
   }
   const handleToggleSituacao = (id: string) => {
-    const c = cfgCentrosCusto.find(x => x.id === id)
-    if (c) updateMutation.mutate({ id, situacao: c.situacao === 'ativo' ? 'inativo' : 'ativo' })
+    setCfgCentrosCusto(prev => prev.map(c => c.id === id ? { ...c, situacao: c.situacao === 'ativo' ? 'inativo' : 'ativo' } : c))
   }
 
   const ativos = cfgCentrosCusto.filter(c => c.situacao === 'ativo').length
@@ -93,28 +96,25 @@ export default function CentroCustoPage() {
 
   return (
     <div suppressHydrationWarning>
-      {isLoading && (
-        <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(255,255,255,0.7)', zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(2px)' }}>
-          <div style={{ textAlign:'center', color:'hsl(var(--text-muted))' }}>
-            <div style={{ width: 40, height: 40, border: '3px solid rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-            <div style={{ fontWeight:600 }}>Carregando centros de custo...</div>
-          </div>
-        </div>
-      )}
       <div className="page-header">
         <div>
           <h1 className="page-title">Centro de Custo</h1>
-          <p className="page-subtitle">Centros para classificação financeira de lançamentos — {cfgCentrosCusto.length} cadastrados</p>
+          <p className="page-subtitle">Centros para classificação financeira de lançamentos — {loading ? '…' : `${cfgCentrosCusto.length} cadastrados`}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Centro</button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} disabled={saving || loading}>{saving ? '↻ Salvando…' : 'Carregar Padrões'}</button>
+          <button className="btn btn-ghost btn-sm" style={{color: '#ef4444'}} onClick={handleExcluirTudo} disabled={saving || loading}><Trash2 size={13}/> Excluir Tudo</button>
+          <div style={{ width: 1, height: 20, background: 'hsl(var(--border-subtle))' }} />
+          <button className="btn btn-primary btn-sm" onClick={openNew} disabled={saving || loading}><Plus size={13} />Novo Centro</button>
+        </div>
       </div>
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total', value: cfgCentrosCusto.length, color: '#3b82f6' },
-          { label: 'Ativos', value: ativos, color: '#10b981' },
-          { label: 'Inativos', value: cfgCentrosCusto.length - ativos, color: '#6b7280' },
+          { label: 'Total', value: loading ? '…' : cfgCentrosCusto.length, color: '#3b82f6' },
+          { label: 'Ativos', value: loading ? '…' : ativos, color: '#10b981' },
+          { label: 'Inativos', value: loading ? '…' : cfgCentrosCusto.length - ativos, color: '#6b7280' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div style={{ fontSize: 28, fontWeight: 800, color: k.color, fontFamily: 'Outfit, sans-serif' }}>{k.value}</div>
@@ -145,7 +145,6 @@ export default function CentroCustoPage() {
             {editId ? '✏️ Editar Centro de Custo' : '➕ Novo Centro de Custo'}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 130px', gap: 12 }}>
-            {/* Código auto-gerado */}
             <div>
               <label className="form-label">Código</label>
               <div style={{ display: 'flex', alignItems: 'center', height: 38, borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', background: 'hsl(var(--bg-elevated))' }}>
@@ -178,15 +177,22 @@ export default function CentroCustoPage() {
         </div>
       )}
 
+      {/* Loading state */}
+      {loading && (
+        <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+          ↻ Carregando do banco de dados…
+        </div>
+      )}
+
       {/* Tabela */}
-      {cfgCentrosCusto.length === 0 ? (
+      {!loading && cfgCentrosCusto.length === 0 ? (
         <div className="card" style={{ padding: '56px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Layers size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Nenhum centro de custo cadastrado</div>
           <div style={{ fontSize: 13, marginBottom: 20 }}>Crie centros de custo para categorizar lançamentos financeiros.</div>
           <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Cadastrar primeiro centro</button>
         </div>
-      ) : (
+      ) : !loading && (
         <div className="table-container">
           <table>
             <thead>
@@ -230,7 +236,7 @@ export default function CentroCustoPage() {
             </div>
           )}
           <div style={{ padding: '10px 16px', borderTop: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
-            Exibindo {filtered.length} de {cfgCentrosCusto.length} centro{cfgCentrosCusto.length !== 1 ? 's' : ''}
+            Exibindo {filtered.length} de {cfgCentrosCusto.length} centro{cfgCentrosCusto.length !== 1 ? 's' : ''} · <span style={{ color: '#10b981' }}>✓ Dados salvos no banco</span>
           </div>
         </div>
       )}

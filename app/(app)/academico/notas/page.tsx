@@ -458,7 +458,7 @@ export default function NotasPage() {
                   </div>
                   <div>
                     <div style={{ fontSize:13, fontWeight:700 }}>{aluno.nome}</div>
-                    <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>Nº {String(idx+1).padStart(2,'0')} {aluno.matricula ? `• Mat. ${aluno.matricula}` : ''}</div>
+                    <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>Nº {String(idx+1).padStart(2,'0')} {aluno.matricula ? `• Cód. ${aluno.matricula}` : ''}</div>
                   </div>
                 </div>
 

@@ -1,9 +1,9 @@
 'use client'
-import { useData, ConfigTipoDocumento, newId } from '@/lib/dataContext'
+import { useConfigDb } from '@/lib/useConfigDb'
+import { ConfigTipoDocumento, newId } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, FileText, Sparkles, Search, Hash } from 'lucide-react'
 
-// ── Tipos de documentos padrão ─────────────────────────────────────────────
 const TIPOS_PADRAO: Omit<ConfigTipoDocumento, 'id' | 'createdAt'>[] = [
   { codigo: 'TD001', nome: 'Boleto Bancário',          descricao: 'Documento de cobrança bancária gerado para mensalidades e taxas.', categoria: 'receita', requerNumeracao: true,  situacao: 'ativo' },
   { codigo: 'TD002', nome: 'Nota Fiscal de Serviço',   descricao: 'NFS-e emitida para prestação de serviços educacionais.', categoria: 'receita', requerNumeracao: true,  situacao: 'ativo' },
@@ -30,7 +30,7 @@ const BLANK: Omit<ConfigTipoDocumento, 'id' | 'createdAt'> = {
 }
 
 export default function TipoDocumentosPage() {
-  const { cfgTiposDocumento, setCfgTiposDocumento } = useData()
+  const { data: cfgTiposDocumento, setData: setCfgTiposDocumento, loading } = useConfigDb<ConfigTipoDocumento>('cfgTiposDocumento')
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -55,7 +55,10 @@ export default function TipoDocumentosPage() {
     setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const handleDelete = (id: string) => setCfgTiposDocumento(prev => prev.filter(t => t.id !== id))
+  const handleDelete = (id: string) => {
+    if (!confirm('Excluir este tipo de documento?')) return
+    setCfgTiposDocumento(prev => prev.filter(t => t.id !== id))
+  }
   const handleSave = () => {
     if (!form.nome.trim()) return
     const codigo = editId ? ((cfgTiposDocumento.find(t => t.id === editId) as any)?.codigo || gerarCod()) : gerarCod()
@@ -71,7 +74,7 @@ export default function TipoDocumentosPage() {
     const nomesExistentes = new Set(cfgTiposDocumento.map(t => t.nome.trim().toLowerCase()))
     const codigosExistentes = new Set(cfgTiposDocumento.map(t => (t as any).codigo).filter(Boolean))
     const novos = TIPOS_PADRAO.filter(t => !nomesExistentes.has(t.nome.trim().toLowerCase()))
-    if (novos.length === 0) return
+    if (novos.length === 0) { alert('Todos os tipos padrão já estão cadastrados.'); return }
     const gerados = novos.map(t => {
       let codigo = t.codigo
       if (codigosExistentes.has(codigo)) {
@@ -85,7 +88,6 @@ export default function TipoDocumentosPage() {
     setCfgTiposDocumento(prev => [...prev, ...gerados])
   }
 
-  const hoje = new Date().toISOString().slice(0, 10)
   const padroesPendentes = TIPOS_PADRAO.filter(p => !cfgTiposDocumento.some(t => t.nome.trim().toLowerCase() === p.nome.trim().toLowerCase())).length
 
   const filtered = useMemo(() => {
@@ -110,22 +112,22 @@ export default function TipoDocumentosPage() {
           <p className="page-subtitle">Classifique os documentos financeiros utilizados em receitas e despesas</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {padroesPendentes > 0 && (
+          {padroesPendentes > 0 && !loading && (
             <button className="btn btn-secondary btn-sm" onClick={carregarPadroes} style={{ color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' }}>
               <Sparkles size={13} style={{ color: '#a78bfa' }} />Carregar padrões ({padroesPendentes})
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Tipo</button>
+          <button className="btn btn-primary btn-sm" onClick={openNew} disabled={loading}><Plus size={13} />Novo Tipo</button>
         </div>
       </div>
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total',   value: cfgTiposDocumento.length,             color: '#3b82f6', icon: '📄' },
-          { label: 'Receita', value: porCategoria('receita').length,        color: '#10b981', icon: '📥' },
-          { label: 'Despesa', value: porCategoria('despesa').length,        color: '#ef4444', icon: '📤' },
-          { label: 'Ambos',   value: porCategoria('ambos').length,          color: '#60a5fa', icon: '↔️' },
+          { label: 'Total',   value: loading ? '…' : cfgTiposDocumento.length,       color: '#3b82f6', icon: '📄' },
+          { label: 'Receita', value: loading ? '…' : porCategoria('receita').length,  color: '#10b981', icon: '📥' },
+          { label: 'Despesa', value: loading ? '…' : porCategoria('despesa').length,  color: '#ef4444', icon: '📤' },
+          { label: 'Ambos',   value: loading ? '…' : porCategoria('ambos').length,    color: '#60a5fa', icon: '↔️' },
         ].map(k => (
           <div key={k.label} className="kpi-card" style={{ borderLeft: `4px solid ${k.color}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -137,8 +139,15 @@ export default function TipoDocumentosPage() {
         ))}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+          ↻ Carregando do banco de dados…
+        </div>
+      )}
+
       {/* Banner padrões */}
-      {cfgTiposDocumento.length === 0 && (
+      {!loading && cfgTiposDocumento.length === 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14, marginBottom: 20 }}>
           <Sparkles size={28} color="#a78bfa" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
@@ -157,8 +166,6 @@ export default function TipoDocumentosPage() {
       {showForm && (
         <div className="card" style={{ padding: '22px', marginBottom: 18, border: '1px solid rgba(59,130,246,0.3)' }}>
           <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 16 }}>{editId ? 'Editar Tipo de Documento' : 'Novo Tipo de Documento'}</div>
-
-          {/* Linha 1: Código + Nome + Descrição */}
           <div style={{ display: 'grid', gridTemplateColumns: '110px 2fr 3fr', gap: 12, marginBottom: 12 }}>
             <div>
               <label className="form-label">Código</label>
@@ -177,8 +184,6 @@ export default function TipoDocumentosPage() {
               <input className="form-input" value={form.descricao} onChange={e => sf('descricao', e.target.value)} placeholder="Descreva o uso deste tipo de documento" />
             </div>
           </div>
-
-          {/* Linha 2: Categoria (visual) + Requer Numeração + Situação */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, alignItems: 'end' }}>
             <div>
               <label className="form-label">Categoria / Contexto de Uso</label>
@@ -207,7 +212,6 @@ export default function TipoDocumentosPage() {
               </select>
             </div>
           </div>
-
           <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
             <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={!form.nome.trim()}><Check size={13} />{editId ? 'Salvar Alterações' : 'Cadastrar'}</button>
@@ -216,7 +220,7 @@ export default function TipoDocumentosPage() {
       )}
 
       {/* Filtros */}
-      {cfgTiposDocumento.length > 0 && (
+      {!loading && cfgTiposDocumento.length > 0 && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', padding: '10px 14px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
             <Search size={12} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
@@ -241,7 +245,7 @@ export default function TipoDocumentosPage() {
       )}
 
       {/* Lista */}
-      {cfgTiposDocumento.length === 0 ? (
+      {!loading && cfgTiposDocumento.length === 0 ? (
         <div className="card" style={{ padding: '52px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>Nenhum tipo de documento cadastrado</div>
@@ -250,69 +254,72 @@ export default function TipoDocumentosPage() {
             <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Criar manualmente</button>
           </div>
         </div>
-      ) : filtered.length === 0 ? (
+      ) : !loading && filtered.length === 0 ? (
         <div style={{ padding: '32px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
           Nenhum tipo com esses filtros.
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 8, display: 'block', margin: '8px auto 0' }} onClick={() => { setBusca(''); setFiltroCateg('todos'); setFiltroSit('todos') }}>✕ Limpar filtros</button>
         </div>
-      ) : (
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 90 }}>Código</th>
-                <th>Nome do Documento</th>
-                <th>Descrição</th>
-                <th style={{ textAlign: 'center', width: 100 }}>Categoria</th>
-                <th style={{ textAlign: 'center', width: 110 }}>Nº Documento</th>
-                <th style={{ textAlign: 'center', width: 90 }}>Situação</th>
-                <th style={{ width: 80 }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(t => {
-                const cfg = CAT_CONFIG[t.categoria]
-                return (
-                  <tr key={t.id} style={{ opacity: t.situacao === 'inativo' ? 0.55 : 1 }}>
-                    <td>
-                      <code style={{ fontSize: 11, fontWeight: 800, color: cfg.color, background: cfg.bg, padding: '2px 7px', borderRadius: 5, fontFamily: 'monospace', border: `1px solid ${cfg.border}` }}>
-                        {(t as any).codigo}
-                      </code>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{t.nome}</div>
-                    </td>
-                    <td style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', maxWidth: 260 }}>
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.descricao}</div>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: cfg.bg, color: cfg.color, fontWeight: 700, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
-                        {cfg.icon} {cfg.label}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      {t.requerNumeracao
-                        ? <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}><Hash size={10} style={{ display: 'inline', marginRight: 3 }} />Obrigatório</span>
-                        : <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>—</span>
-                      }
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className={`badge ${t.situacao === 'ativo' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 10 }}>
-                        {t.situacao === 'ativo' ? '✓ Ativo' : '✗ Inativo'}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => openEdit(t)}><Edit2 size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} title="Excluir" onClick={() => handleDelete(t.id)}><Trash2 size={13} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+      ) : !loading && (
+        <>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 90 }}>Código</th>
+                  <th>Nome do Documento</th>
+                  <th>Descrição</th>
+                  <th style={{ textAlign: 'center', width: 100 }}>Categoria</th>
+                  <th style={{ textAlign: 'center', width: 110 }}>Nº Documento</th>
+                  <th style={{ textAlign: 'center', width: 90 }}>Situação</th>
+                  <th style={{ width: 80 }}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(t => {
+                  const cfg = CAT_CONFIG[t.categoria]
+                  return (
+                    <tr key={t.id} style={{ opacity: t.situacao === 'inativo' ? 0.55 : 1 }}>
+                      <td>
+                        <code style={{ fontSize: 11, fontWeight: 800, color: cfg.color, background: cfg.bg, padding: '2px 7px', borderRadius: 5, fontFamily: 'monospace', border: `1px solid ${cfg.border}` }}>
+                          {(t as any).codigo}
+                        </code>
+                      </td>
+                      <td><div style={{ fontWeight: 700, fontSize: 13 }}>{t.nome}</div></td>
+                      <td style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', maxWidth: 260 }}>
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.descricao}</div>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: cfg.bg, color: cfg.color, fontWeight: 700, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
+                          {cfg.icon} {cfg.label}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {t.requerNumeracao
+                          ? <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}><Hash size={10} style={{ display: 'inline', marginRight: 3 }} />Obrigatório</span>
+                          : <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>—</span>
+                        }
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`badge ${t.situacao === 'ativo' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 10 }}>
+                          {t.situacao === 'ativo' ? '✓ Ativo' : '✗ Inativo'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => openEdit(t)}><Edit2 size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} title="Excluir" onClick={() => handleDelete(t.id)}><Trash2 size={13} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+            {cfgTiposDocumento.length} tipo(s) cadastrado(s) · <span style={{ color: '#10b981' }}>✓ Dados salvos no banco</span>
+          </div>
+        </>
       )}
     </div>
   )

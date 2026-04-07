@@ -64,3 +64,16 @@ export function RisksPieChartComponent({ data }: { data: any[] }) {
     </ResponsiveContainer>
   )
 }
+
+export function CostCentersPieChartComponent({ data }: { data: any[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <PieChart>
+        <Pie data={data} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="valor" stroke="none">
+          {data.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+        </Pie>
+        <Tooltip formatter={(v: any) => [formatCurrency(Number(v)), 'Despesa']} contentStyle={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-default))', borderRadius: 8, fontSize: 12 }} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
+}

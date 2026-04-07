@@ -1,8 +1,7 @@
 'use client'
-import { ConfigDisciplina, newId } from '@/lib/dataContext'
+import { ConfigDisciplina, newId, useData } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, Check, BookOpen, Search, Download } from 'lucide-react'
+import { Plus, Edit2, Trash2, Check, BookOpen, Search, Download, Layers } from 'lucide-react'
 
 const NIVEIS_OPTS = ['EI', 'EF1', 'EF2', 'EM', 'EJA']
 const NIVEL_COLORS: Record<string, string> = { EI: '#ec4899', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#10b981', EJA: '#f59e0b' }
@@ -12,44 +11,43 @@ const BLANK: Omit<ConfigDisciplina, 'id' | 'createdAt'> = {
   codigo: '', nome: '', cargaHoraria: 2, niveisEnsino: ['EF1'], obrigatoria: true, situacao: 'ativa',
 }
 
-// Gera código a partir das iniciais do nome + número sequencial
-// Ex: "Matemática" → "MAT", "Língua Portuguesa" → "LP", n=1 → "MAT001"
-function gerarCodigoDisc(nome: string, existentes: string[]): string {
-  const tokens = nome
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .split(/\s+/)
-    .filter(t => t.length > 1)
-  const sigla = tokens.length >= 2 ? tokens.map(t => t[0]).join('') : tokens[0]?.slice(0, 3) ?? 'DSC'
+const PADROES_DISCIPLINAS = [
+  { codigo: '1', nome: 'Língua Portuguesa', cargaHoraria: 4, niveisEnsino: ['EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '2', nome: 'Matemática', cargaHoraria: 4, niveisEnsino: ['EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '3', nome: 'História', cargaHoraria: 2, niveisEnsino: ['EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '4', nome: 'Geografia', cargaHoraria: 2, niveisEnsino: ['EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '5', nome: 'Ciências', cargaHoraria: 3, niveisEnsino: ['EF1', 'EF2', 'EI'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '6', nome: 'Biologia', cargaHoraria: 2, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '7', nome: 'Física', cargaHoraria: 2, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '8', nome: 'Química', cargaHoraria: 2, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '9', nome: 'Educação Física', cargaHoraria: 2, niveisEnsino: ['EI', 'EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '10', nome: 'Artes', cargaHoraria: 1, niveisEnsino: ['EI', 'EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '11', nome: 'Língua Inglesa', cargaHoraria: 2, niveisEnsino: ['EF1', 'EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '12', nome: 'Ensino Religioso', cargaHoraria: 1, niveisEnsino: ['EF1', 'EF2'], obrigatoria: false, situacao: 'ativa' },
+  { codigo: '13', nome: 'Filosofia', cargaHoraria: 1, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '14', nome: 'Sociologia', cargaHoraria: 1, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '15', nome: 'Redação', cargaHoraria: 1, niveisEnsino: ['EF2', 'EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '16', nome: 'Literatura', cargaHoraria: 1, niveisEnsino: ['EM', 'EJA'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '17', nome: 'Linguagens e Movimento', cargaHoraria: 4, niveisEnsino: ['EI'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '18', nome: 'Natureza e Sociedade', cargaHoraria: 4, niveisEnsino: ['EI'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '19', nome: 'Projeto de Vida', cargaHoraria: 1, niveisEnsino: ['EF2', 'EM'], obrigatoria: true, situacao: 'ativa' },
+  { codigo: '20', nome: 'Empreendedorismo', cargaHoraria: 1, niveisEnsino: ['EM'], obrigatoria: false, situacao: 'ativa' },
+  { codigo: '21', nome: 'Informática / Tecnologia', cargaHoraria: 1, niveisEnsino: ['EF1', 'EF2'], obrigatoria: false, situacao: 'ativa' },
+  { codigo: '22', nome: 'Língua Espanhola', cargaHoraria: 1, niveisEnsino: ['EF2', 'EM'], obrigatoria: false, situacao: 'ativa' },
+]
+
+// Formatação auto-numérica para obedecer à regra do usuário
+function gerarCodigoDisc(existentes: string[]): string {
   let i = 1
-  let cod = `${sigla}${String(i).padStart(3, '0')}`
-  while (existentes.includes(cod)) { i++; cod = `${sigla}${String(i).padStart(3, '0')}` }
+  let cod = String(i)
+  while (existentes.includes(cod)) { i++; cod = String(i) }
   return cod
 }
 
 export default function DisciplinasPage() {
-  const queryClient = useQueryClient()
+  const { cfgDisciplinas, setCfgDisciplinas, turmas = [] } = useData()
+  const isLoading = false
 
-  const { data: cfgDisciplinas = [], isLoading: loadDisc } = useQuery<ConfigDisciplina[]>({
-    queryKey: ['cfgDisciplinas'], queryFn: async () => { const r = await fetch('/api/configuracoes/disciplinas'); return r.json() }
-  })
-  const { data: turmas = [], isLoading: loadTur } = useQuery<any[]>({
-    queryKey: ['turmas'], queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
-  const isLoading = loadDisc || loadTur
-
-  const addMutation = useMutation({
-    mutationFn: async (data: any) => { const r = await fetch('/api/configuracoes/disciplinas', { method: 'POST', body: JSON.stringify(data) }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgDisciplinas'] })
-  })
-  const updateMutation = useMutation({
-    mutationFn: async (data: any) => { const r = await fetch(`/api/configuracoes/disciplinas/${data.id}`, { method: 'PUT', body: JSON.stringify(data) }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgDisciplinas'] })
-  })
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const r = await fetch(`/api/configuracoes/disciplinas/${id}`, { method: 'DELETE' }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cfgDisciplinas'] })
-  })
   const [search, setSearch] = useState('')
   const [filtroNivel, setFiltroNivel] = useState('todos')
   const [filtroSituacao, setFiltroSituacao] = useState<'todos' | 'ativa' | 'inativa'>('todos')
@@ -59,12 +57,10 @@ export default function DisciplinasPage() {
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false)
 
   const codigosExistentes = cfgDisciplinas.map(d => d.codigo)
-  // Preview em tempo real: gera código baseado no nome sendo digitado
-  const codigoPreview = form.nome
-    ? (editId ? form.codigo : gerarCodigoDisc(form.nome, codigosExistentes))
-    : ''
+  const codigoPreview = editId ? form.codigo : gerarCodigoDisc(codigosExistentes)
   const turmasUnicas = useMemo(() => [...new Set(turmas.map(t => t.nome))].sort(), [turmas])
 
   const filtered = useMemo(() =>
@@ -83,7 +79,9 @@ export default function DisciplinasPage() {
 
   const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
   const openEdit = (d: ConfigDisciplina) => { setEditId(d.id); setForm({ codigo: d.codigo, nome: d.nome, cargaHoraria: d.cargaHoraria, niveisEnsino: d.niveisEnsino, obrigatoria: d.obrigatoria, situacao: d.situacao }); setShowForm(true) }
-  const handleDelete = (id: string) => deleteMutation.mutate(id)
+  const handleDelete = (id: string) => {
+    setCfgDisciplinas(prev => prev.filter(c => c.id !== id))
+  }
 
   const toggleNivel = (n: string) =>
     setForm(prev => ({
@@ -93,13 +91,41 @@ export default function DisciplinasPage() {
 
   const handleSave = () => {
     if (!form.nome.trim()) return
-    const codigo = editId ? form.codigo : gerarCodigoDisc(form.nome, codigosExistentes)
+    const codigo = editId ? form.codigo : gerarCodigoDisc(codigosExistentes)
     if (editId) {
-      updateMutation.mutate({ ...form, id: editId, codigo })
+      setCfgDisciplinas(prev => prev.map(c => c.id === editId ? { ...c, ...form, codigo } as ConfigDisciplina : c))
     } else {
-      addMutation.mutate({ ...form, codigo })
+      setCfgDisciplinas(prev => [...prev, { ...form, id: newId('DS'), codigo, createdAt: new Date().toISOString() } as ConfigDisciplina])
     }
     setShowForm(false)
+  }
+
+  const handleCarregarPadroes = async () => {
+    setIsProcessingBulk(true)
+    const existingCodes = new Set(cfgDisciplinas.map(p => p.codigo))
+    const news = PADROES_DISCIPLINAS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+      ...p, id: newId('DS'), createdAt: new Date().toISOString()
+    } as ConfigDisciplina))
+
+    if (news.length > 0) {
+      // Pequeno timeout visual para dar impressao de processamento batch
+      setTimeout(() => {
+        setCfgDisciplinas(prev => [...prev, ...news])
+        setIsProcessingBulk(false)
+      }, 800)
+    } else {
+      setIsProcessingBulk(false)
+    }
+  }
+
+  const handleClearAll = async () => {
+    if (confirm('Tem certeza que deseja apagar TODAS as disciplinas? Isso afetará os quadros de horários já vinculados.')) {
+      setIsProcessingBulk(true)
+      setTimeout(() => {
+        setCfgDisciplinas([])
+        setIsProcessingBulk(false)
+      }, 500)
+    }
   }
 
   const limparFiltros = () => {
@@ -109,22 +135,27 @@ export default function DisciplinasPage() {
 
   return (
     <div suppressHydrationWarning>
-      {isLoading && (
+      {(isLoading || isProcessingBulk) && (
         <div style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', background:'rgba(255,255,255,0.7)', zIndex:50, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(2px)' }}>
           <div style={{ textAlign:'center', color:'hsl(var(--text-muted))' }}>
             <div style={{ width: 40, height: 40, border: '3px solid rgba(59,130,246,0.2)', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-            <div style={{ fontWeight:600 }}>Carregando disciplinas...</div>
+            <div style={{ fontWeight:600 }}>{isProcessingBulk ? 'Sincronizando lote com banco de dados...' : 'Carregando disciplinas...'}</div>
           </div>
         </div>
       )}
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Disciplinas</h1>
           <p className="page-subtitle">Cadastro global de disciplinas — {cfgDisciplinas.length} registradas</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm"><Download size={13} />Exportar</button>
-          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Nova Disciplina</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }} disabled={isProcessingBulk}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }} disabled={isProcessingBulk}>
+            <Layers size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew} disabled={isProcessingBulk}><Plus size={13} /> Nova Disciplina</button>
         </div>
       </div>
 

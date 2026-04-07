@@ -80,49 +80,7 @@ interface RelatoriosContextState {
 const RelatoriosContext = createContext<RelatoriosContextState | null>(null)
 
 // Seed Data mimicking the User's "Rotina - Meio Período (Fund)" example
-const MOCK_TEMPLATES: ReportTemplate[] = [
-  {
-    id: 'TPL-001',
-    name: 'Rotina - Meio Período (Fund)',
-    description: 'Relatório diário de rotina para alunos do ensino fundamental.',
-    category: 'Rotina Diária',
-    icon: 'Sun',
-    color: '#3b82f6',
-    status: 'ativo',
-    permissions: { view: ['todos'], fill: ['todos'], edit: ['admin'], approve: ['admin'] },
-    version: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    author: 'Admin',
-    sections: [
-      {
-        id: 'SEC-001',
-        title: 'Informações Básicas',
-        fields: [
-          { id: 'F-PRESENCA', type: 'unica-escolha', label: 'Presença', required: true, options: ['Presente', 'Ausente'] },
-          { id: 'F-MOTIVO', type: 'texto-curto', label: 'Motivo da ausência', required: true, conditionalRule: { fieldId: 'F-PRESENCA', operator: 'equals', value: 'Ausente' } }
-        ]
-      },
-      {
-        id: 'SEC-002',
-        title: 'Avaliação Comportamental e Alimentar',
-        fields: [
-          { id: 'F-DISPOSICAO', type: 'multipla-escolha', label: 'Disposição', required: false, options: ['Participativo', 'Agitado', 'Cansado', 'Tímido', 'Alegre'] },
-          { id: 'F-LANCHE', type: 'unica-escolha', label: 'Lanche', required: true, options: ['Comeu Tudo', 'Comeu Pouco', 'Não Comeu'] },
-          { id: 'F-JUSTIF-LANCHE', type: 'texto-curto', label: 'Justificativa do lanche', required: true, conditionalRule: { fieldId: 'F-LANCHE', operator: 'equals', value: 'Não Comeu' } }
-        ]
-      },
-      {
-        id: 'SEC-003',
-        title: 'Considerações Finais',
-        fields: [
-          { id: 'F-DESENV', type: 'texto-longo', label: 'Desenvolvimento em sala', required: true },
-          { id: 'F-OBS', type: 'texto-longo', label: 'Observações Extras', required: false }
-        ]
-      }
-    ]
-  }
-]
+const MOCK_TEMPLATES: ReportTemplate[] = []
 
 export function RelatoriosProvider({ children }: { children: ReactNode }) {
   const [templates, setTemplates] = useState<ReportTemplate[]>([])

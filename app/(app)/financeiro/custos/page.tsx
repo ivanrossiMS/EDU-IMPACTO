@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/lib/dataContext'
 import { PieChart, TrendingUp, TrendingDown, Filter, Search, ChevronDown, ChevronRight, BarChart2 } from 'lucide-react'
 
 const fmtCur = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -9,39 +9,22 @@ const MESES_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out'
 const MESES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 const CAT_COLORS: Record<string, string> = {
-  'Mensalidades':    '#10b981',
-  'Matrículas':      '#06b6d4',
-  'Taxas Diversas':  '#3b82f6',
-  'RH / Pessoal':    '#ef4444',
-  'Utilidades':      '#f59e0b',
-  'Materiais':       '#8b5cf6',
-  'Tecnologia':      '#ec4899',
-  'Infraestrutura':  '#a78bfa',
-  'Marketing':       '#f97316',
-  'Outros':          '#6b7280',
+  'ACADÊMICO': '#10b981',
+  'INFRAESTRUTURA': '#f59e0b',
+  'ADMINISTRATIVO': '#3b82f6',
+  'MARKETING': '#ec4899',
+  'FINANCEIRO': '#a78bfa',
+  'TECNOLOGIA': '#06b6d4',
+  'JURÍDICO': '#8b5cf6',
+  'BENEFÍCIOS / CONVÊNIOS': '#f97316',
+  'Não Classificado': '#6b7280',
 }
 
-interface CentroItem { label: string; valor: number; tipo: 'receita'|'despesa'; categoria: string; percentual: number }
+interface CentroItem { label: string; valor: number; tipo: 'receita'|'despesa'; nomeCentro: string; percentual: number }
 
 export default function CentroCustosPage() {
-  const { data: titulos = [], isLoading: loadTi } = useQuery<any[]>({
-    queryKey: ['titulos'],
-    queryFn: async () => { const r = await fetch('/api/financeiro/titulos'); return r.json() }
-  })
-  const { data: contasPagar = [], isLoading: loadCP } = useQuery<any[]>({
-    queryKey: ['contasPagar'],
-    queryFn: async () => { const r = await fetch('/api/financeiro/contas-pagar'); return r.json() }
-  })
-  const { data: funcionarios = [], isLoading: loadF } = useQuery<any[]>({
-    queryKey: ['funcionarios'],
-    queryFn: async () => { const r = await fetch('/api/rh/funcionarios'); return r.json() }
-  })
-  const { data: cfgCentrosCusto = [], isLoading: loadCC } = useQuery<any[]>({
-    queryKey: ['cfgCentrosCusto'],
-    queryFn: async () => { const r = await fetch('/api/configuracoes/centro-custo'); return r.json() }
-  })
-
-  const isLoading = loadTi || loadCP || loadF || loadCC
+  const { titulos = [], contasPagar = [], funcionarios = [], cfgCentrosCusto = [] } = useData()
+  const isLoading = false
 
   const [filtroTipo, setFiltroTipo] = useState<'todos'|'receita'|'despesa'>('todos')
   const [filtroMes, setFiltroMes] = useState<number>(-1) // -1 = acumulado
@@ -68,54 +51,83 @@ export default function CentroCustosPage() {
     return true
   })
 
-  const receitaMensalidades = titulosFiltered.filter(t=>t.status==='pago').reduce((s,t)=>s+t.valor,0)
+  const receitaTotalPeriodo = titulosFiltered.filter(t=>t.status==='pago').reduce((s,t)=>s+t.valor,0)
   const receitaPrevista = titulosFiltered.filter(t=>t.status!=='pago').reduce((s,t)=>s+t.valor,0)
-  const folhaMensal = filtroMes>=0 ? funcionarios.reduce((s,f)=>s+(f.salario||0),0) : funcionarios.reduce((s,f)=>s+(f.salario||0),0)
-  const custosPagar = pagarFiltered.reduce((s,c)=>s+c.valor,0)
-  const custoTotal = folhaMensal + custosPagar
-  const resultado = receitaMensalidades - custoTotal
-  const margemOp = (receitaMensalidades+receitaPrevista) > 0 ? ((resultado / (receitaMensalidades+receitaPrevista))*100).toFixed(1):'0.0'
+  const despesaPagaPeriodo = pagarFiltered.filter(c=>c.status==='pago').reduce((s,c)=>s+c.valor,0) 
+  const despesaPrevista = pagarFiltered.filter(c=>c.status!=='pago').reduce((s,c)=>s+c.valor,0)
+  const custoTotal = despesaPagaPeriodo + despesaPrevista
+  const resultado = receitaTotalPeriodo - despesaPagaPeriodo
+  const margemOp = (receitaTotalPeriodo) > 0 ? ((resultado / (receitaTotalPeriodo))*100).toFixed(1):'0.0'
 
-  // Itens do centro de custo
+  // Itens do centro de custo mapeados 100% sobre Títulos e Contas com base nos Centros de Custo reais
   const centros: CentroItem[] = useMemo(() => {
-    const totalReceita = receitaMensalidades + receitaPrevista || 1
-    const totalCusto = custoTotal || 1
-    const items: CentroItem[] = [
-      { label:'Mensalidades Recebidas', valor:receitaMensalidades, tipo:'receita', categoria:'Mensalidades', percentual:(receitaMensalidades/totalReceita)*100 },
-      { label:'Mensalidades a Receber', valor:receitaPrevista, tipo:'receita', categoria:'Matrículas', percentual:(receitaPrevista/totalReceita)*100 },
-      { label:'Folha de Pagamento / RH', valor:folhaMensal, tipo:'despesa', categoria:'RH / Pessoal', percentual:(folhaMensal/totalCusto)*100 },
-    ]
-    // Contas a pagar por categoria
-    const cats: Record<string,number> = {}
-    pagarFiltered.forEach(c=>{ cats[c.categoria]=(cats[c.categoria]||0)+c.valor })
-    Object.entries(cats).forEach(([cat,val])=>{
-      items.push({ label:`Contas a Pagar — ${cat}`, valor:val, tipo:'despesa', categoria:cat, percentual:(val/totalCusto)*100 })
-    })
-    // Centros cadastrados
+    const totalReceita = (receitaTotalPeriodo + receitaPrevista) || 1
+    const totalDespesa = custoTotal || 1
+    
+    const items: CentroItem[] = []
+    
+    // Mapeador auxiliar para Centro de Custo
+    const agruparPorCentro = (lista: any[], isReceita: boolean) => {
+      const mapa: Record<string, number> = {}
+      lista.forEach(item => {
+        const centro = cfgCentrosCusto.find(cc => cc.id === item.centroCustoId)
+        // Se para receita for "ACADÊMICO" podemos tentar mapear melhor com base no plano, ou para simplificar usamos "Não Classificado" se vazio.
+        let centroNome = centro ? centro.descricao : 'Não Classificado'
+        // Fallback p/ Receitas Academicas padroes caso não tenha Centro setado no título
+        if (isReceita && !item.centroCustoId && item.planoContasId && cfgCentrosCusto.find(cc=>cc.codigo==='CC001')) {
+           centroNome = cfgCentrosCusto.find(cc=>cc.codigo==='CC001')!.descricao
+        }
+
+        mapa[centroNome] = (mapa[centroNome] || 0) + (item.valor || 0)
+      })
+      
+      const subTotal = isReceita ? totalReceita : totalDespesa
+
+      Object.entries(mapa).forEach(([nome, val]) => {
+        if (val > 0) {
+          items.push({
+            label: isReceita ? `Receita: ${nome}` : `Despesa: ${nome}`,
+            valor: val,
+            tipo: isReceita ? 'receita' : 'despesa',
+            nomeCentro: nome,
+            percentual: (val / subTotal) * 100
+          })
+        }
+      })
+    }
+
+    agruparPorCentro(titulosFiltered, true)
+    agruparPorCentro(pagarFiltered, false)
+
+    // Adiciona centros vazios que estão ativos mas não têm contas vinculadas no período
     cfgCentrosCusto?.filter(c=>c.situacao==='ativo').forEach(cc=>{
-      if(!items.some(i=>i.label.includes(cc.descricao))) {
-        items.push({ label:cc.descricao, valor:0, tipo:'receita', categoria:'Outros', percentual:0 })
+      if(!items.some(i => i.nomeCentro === cc.descricao && i.tipo === 'despesa')) {
+        items.push({ label:`Despesa: ${cc.descricao}`, valor:0, tipo:'despesa', nomeCentro:cc.descricao, percentual:0 })
       }
     })
+
     return items
-  }, [receitaMensalidades, receitaPrevista, folhaMensal, pagarFiltered, cfgCentrosCusto])
+  }, [titulosFiltered, pagarFiltered, cfgCentrosCusto, receitaTotalPeriodo, receitaPrevista, custoTotal])
 
   const filtered = useMemo(() => centros.filter(c=>{
     const matchTipo = filtroTipo==='todos' || c.tipo===filtroTipo
-    const matchSearch = search.trim().length < 3 || (!search || c.label.toLowerCase().includes(search.toLowerCase()) || c.categoria.toLowerCase().includes(search.toLowerCase()))
+    const matchSearch = search.trim().length < 3 || (!search || c.label.toLowerCase().includes(search.toLowerCase()) || c.nomeCentro.toLowerCase().includes(search.toLowerCase()))
     return matchTipo && matchSearch
   }), [centros, filtroTipo, search])
 
   const totalReceitas = centros.filter(c=>c.tipo==='receita').reduce((s,c)=>s+c.valor,0)
   const totalDespesas = centros.filter(c=>c.tipo==='despesa').reduce((s,c)=>s+c.valor,0)
 
-  // Agrupamento por categoria
+  // Agrupamento estático por Centro (Ignorando se é rec ou despesa para o gráfico de pizza consolidado)
   const porCategoria = useMemo(() => {
-    const map: Record<string,{valor:number, tipo:'receita'|'despesa'}> = {}
-    centros.forEach(c=>{ if(!map[c.categoria]) map[c.categoria]={valor:0,tipo:c.tipo}; map[c.categoria].valor+=c.valor })
+    const map: Record<string, { valor: number, tipo: 'receita' | 'despesa' }> = {}
+    centros.filter(c => c.tipo === 'despesa').forEach(c => { // O gráfico mostrará a distribuição do dinheiro gasto
+      if(!map[c.nomeCentro]) map[c.nomeCentro] = { valor: 0, tipo: c.tipo };
+      map[c.nomeCentro].valor += c.valor
+    })
     return Object.entries(map).sort((a,b)=>b[1].valor-a[1].valor)
   }, [centros])
-  const maxCat = Math.max(...porCategoria.map(([,v])=>v.valor),1)
+  const maxCat = Math.max(...porCategoria.map(([,v])=>v.valor), 1)
 
   return (
     <div suppressHydrationWarning>
@@ -154,11 +166,11 @@ export default function CentroCustosPage() {
       {/* KPIs */}
       <div style={{display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20}}>
         {[
-          { label:'Receitas Realizadas', value:fmtCur(receitaMensalidades), color:'#10b981', icon:'📈', sub:'recebidas no período' },
-          { label:'Receitas Previstas', value:fmtCur(receitaPrevista), color:'#06b6d4', icon:'⌛', sub:'a receber' },
-          { label:'Folha de Pagamento', value:fmtCur(folhaMensal), color:'#ef4444', icon:'👥', sub:`${funcionarios.length} funcionários` },
-          { label:'Outras Despesas', value:fmtCur(custosPagar), color:'#f59e0b', icon:'📤', sub:'contas a pagar' },
-          { label:'Resultado Operacional', value:fmtCur(resultado), color:resultado>=0?'#10b981':'#ef4444', icon:'💰', sub:resultado>=0?'superávit':'déficit' },
+          { label:'Receitas Realizadas', value:fmtCur(receitaTotalPeriodo), color:'#10b981', icon:'📈', sub:'pagas no período' },
+          { label:'Receitas à Receber', value:fmtCur(receitaPrevista), color:'#06b6d4', icon:'⌛', sub:'a receber' },
+          { label:'Despesas Pagas', value:fmtCur(despesaPagaPeriodo), color:'#ef4444', icon:'💳', sub: 'desembolsadas no prazo' },
+          { label:'Custo e Obrigações a Pagar', value:fmtCur(despesaPrevista), color:'#f59e0b', icon:'📤', sub:'próximos compromissos' },
+          { label:'Resultado Operacional Real', value:fmtCur(resultado), color:resultado>=0?'#10b981':'#ef4444', icon:'💰', sub:resultado>=0?'superávit (receita - despesa paga)':'déficit de caixa' },
         ].map(k=>(
           <div key={k.label} className="kpi-card">
             <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:6}}>
@@ -196,8 +208,8 @@ export default function CentroCustosPage() {
                   <tr key={i}>
                     <td style={{fontWeight:500, fontSize:13}}>{c.label}</td>
                     <td>
-                      <span style={{fontSize:11, padding:'2px 7px', borderRadius:5, background:`${CAT_COLORS[c.categoria]||'#6b7280'}18`, color:CAT_COLORS[c.categoria]||'#6b7280', fontWeight:600}}>
-                        {c.categoria}
+                      <span style={{fontSize:11, padding:'2px 7px', borderRadius:5, background:`${CAT_COLORS[c.nomeCentro]||'#6b7280'}18`, color:CAT_COLORS[c.nomeCentro]||'#6b7280', fontWeight:600}}>
+                        {c.nomeCentro}
                       </span>
                     </td>
                     <td>
@@ -228,7 +240,7 @@ export default function CentroCustosPage() {
 
         {/* Chart por categoria */}
         <div className="card" style={{padding:'20px'}}>
-          <div style={{fontWeight:700, fontSize:13, marginBottom:16}}>Distribuição por Categoria</div>
+          <div style={{fontWeight:700, fontSize:13, marginBottom:16}}>Distribuição Operacional das Despesas</div>
           <div style={{display:'flex', flexDirection:'column', gap:10}}>
             {porCategoria.map(([cat,val])=>(
               <div key={cat}>

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useData, ConfigTurno, newId } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, Clock, Search } from 'lucide-react'
@@ -6,6 +6,13 @@ import { Plus, Edit2, Trash2, Check, Clock, Search } from 'lucide-react'
 const BLANK: Omit<ConfigTurno, 'id' | 'createdAt'> = {
   codigo: '', nome: '', horarioInicio: '', horarioFim: '', situacao: 'ativo',
 }
+
+const PADROES_TURNOS = [
+  { codigo: '1', nome: 'Matutino', horarioInicio: '07:00', horarioFim: '12:00', situacao: 'ativo' },
+  { codigo: '2', nome: 'Vespertino', horarioInicio: '13:00', horarioFim: '18:00', situacao: 'ativo' },
+  { codigo: '3', nome: 'Noturno', horarioInicio: '19:00', horarioFim: '22:30', situacao: 'ativo' },
+  { codigo: '4', nome: 'Integral', horarioInicio: '07:00', horarioFim: '17:00', situacao: 'ativo' },
+] as const
 
 export default function TurnosPage() {
   const { cfgTurnos, setCfgTurnos } = useData()
@@ -28,6 +35,22 @@ export default function TurnosPage() {
   const openEdit = (t: ConfigTurno) => { setEditId(t.id); setForm({ codigo: t.codigo, nome: t.nome, horarioInicio: t.horarioInicio, horarioFim: t.horarioFim, situacao: t.situacao }); setShowForm(true) }
   const handleDelete = (id: string) => setCfgTurnos(prev => prev.filter(t => t.id !== id))
 
+  const loadPadroes = () => {
+    setCfgTurnos(prev => {
+      const existingCodes = new Set(prev.map(p => p.codigo))
+      const news = PADROES_TURNOS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+        ...p, id: newId('TRN'), createdAt: new Date().toISOString()
+      }))
+      return [...prev, ...news]
+    })
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Tem certeza que deseja apagar TODOS os turnos? Essa ação afeta as matrículas e turmas deste turno.')) {
+      setCfgTurnos([])
+    }
+  }
+
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
     if (editId) {
@@ -44,12 +67,20 @@ export default function TurnosPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Turnos Escolares</h1>
           <p className="page-subtitle">Personalize os turnos de aula da instituição</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Turno</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={loadPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+            <Clock size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Turno</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>

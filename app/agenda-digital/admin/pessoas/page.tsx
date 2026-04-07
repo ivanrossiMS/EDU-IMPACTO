@@ -27,6 +27,7 @@ export default function ADAdminPessoas() {
   }
 
   const filtered = (alunos || []).filter(a => {
+    if (!a.nome || a.nome.trim() === '') return false
     if (search && !a.nome.toLowerCase().includes(search.toLowerCase())) return false
     if (filterTurma && a.turma !== filterTurma) return false
     if (filterAno) {

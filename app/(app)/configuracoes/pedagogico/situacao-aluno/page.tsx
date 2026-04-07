@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useData, ConfigSituacaoAluno, newId } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, UserCheck, Search } from 'lucide-react'
@@ -8,6 +8,18 @@ const TIPOS_SITUACAO = ['Ativo', 'Inativo', 'Historico', 'Transferido', 'Cancela
 const BLANK: Omit<ConfigSituacaoAluno, 'id' | 'createdAt'> = {
   codigo: '', nome: '', tipo: 'Ativo', situacao: 'ativo',
 }
+
+const PADROES_MEC = [
+  { codigo: '1', nome: 'Apr.c/PP', tipo: 'Historico', situacao: 'ativo' },
+  { codigo: '2', nome: 'Aprovado', tipo: 'Historico', situacao: 'ativo' },
+  { codigo: '3', nome: 'Transferido', tipo: 'Transferido', situacao: 'inativo' },
+  { codigo: '4', nome: 'Cursando', tipo: 'Ativo', situacao: 'ativo' },
+  { codigo: '5', nome: 'Matrícula cancelada', tipo: 'Cancelado', situacao: 'inativo' },
+  { codigo: '6', nome: 'Reprovado', tipo: 'Historico', situacao: 'ativo' },
+  { codigo: '7', nome: 'Prog. Continuada', tipo: 'Historico', situacao: 'ativo' },
+  { codigo: '8', nome: 'Remanejado', tipo: 'Transferido', situacao: 'ativo' },
+  { codigo: '9', nome: 'Concluído', tipo: 'Historico', situacao: 'inativo' },
+] as const
 
 export default function SituacaoAlunoPage() {
   const { cfgSituacaoAluno, setCfgSituacaoAluno } = useData()
@@ -27,6 +39,22 @@ export default function SituacaoAlunoPage() {
   const openNew = () => { setEditId(null); setForm({ ...BLANK }); setShowForm(true) }
   const openEdit = (s: ConfigSituacaoAluno) => { setEditId(s.id); setForm({ codigo: s.codigo, nome: s.nome, tipo: s.tipo, situacao: s.situacao }); setShowForm(true) }
   const handleDelete = (id: string) => setCfgSituacaoAluno(prev => prev.filter(s => s.id !== id))
+
+  const loadPadroes = () => {
+    setCfgSituacaoAluno(prev => {
+      const existingCodes = new Set(prev.map(p => p.codigo))
+      const news = PADROES_MEC.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+        ...p, id: newId('SIT'), createdAt: new Date().toISOString()
+      }))
+      return [...prev, ...news]
+    })
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Tem certeza que deseja apagar TODAS as situações? Essa ação afeta todos que usam estas situações no ERP.')) {
+      setCfgSituacaoAluno([])
+    }
+  }
 
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
@@ -55,12 +83,20 @@ export default function SituacaoAlunoPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Situação do Aluno</h1>
           <p className="page-subtitle">Personalize os status e situações acadêmicas dos alunos</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Nova Situação</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={loadPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+            <Check size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Nova Situação</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
@@ -104,7 +140,7 @@ export default function SituacaoAlunoPage() {
               <label className="form-label">Nome *</label>
               <input className="form-input" value={form.nome}
                 onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
-                placeholder="Ex: Aprovado, Matrícula Trancada..." />
+                placeholder="Ex: Aprovado, Código Trancada..." />
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

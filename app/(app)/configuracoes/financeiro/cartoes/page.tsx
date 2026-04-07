@@ -1,5 +1,6 @@
 'use client'
-import { useData, ConfigCartao, BandeiraCartao, newId } from '@/lib/dataContext'
+import { useConfigDb } from '@/lib/useConfigDb'
+import { ConfigCartao, BandeiraCartao, newId } from '@/lib/dataContext'
 import { useState } from 'react'
 import { Plus, Edit2, Trash2, Check, CreditCard, Sparkles } from 'lucide-react'
 
@@ -12,7 +13,6 @@ const BANDEIRA_ICON: Record<BandeiraCartao, string> = {
   Visa: '🔵', Mastercard: '🔴', Elo: '🟡', Amex: '🔷', Hipercard: '🟣', Outro: '💳',
 }
 
-// ── Cartões padrão pré-definidos ──────────────────────────────────────────
 const CARTOES_PADRAO: Omit<ConfigCartao, 'id' | 'createdAt'>[] = [
   { codigo: 'CART001', nome: 'Visa Crédito à Vista',        tipo: 'credito', bandeira: 'Visa',       diasCredito: 30, taxaTipo: 'percentual', taxaValor: 2.49, maquineta: 'Cielo',      situacao: 'ativo' },
   { codigo: 'CART002', nome: 'Visa Crédito Parcelado',      tipo: 'credito', bandeira: 'Visa',       diasCredito: 30, taxaTipo: 'percentual', taxaValor: 3.49, maquineta: 'Cielo',      situacao: 'ativo' },
@@ -32,7 +32,7 @@ const BLANK: Omit<ConfigCartao, 'id' | 'createdAt'> = {
 }
 
 export default function CartoesPage() {
-  const { cfgCartoes, setCfgCartoes } = useData()
+  const { data: cfgCartoes, setData: setCfgCartoes, loading } = useConfigDb<ConfigCartao>('cfgCartoes')
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -52,7 +52,10 @@ export default function CartoesPage() {
     setForm({ codigo: (c as any).codigo || '', nome: c.nome, tipo: c.tipo, bandeira: c.bandeira, diasCredito: c.diasCredito, taxaTipo: c.taxaTipo, taxaValor: c.taxaValor, maquineta: c.maquineta, situacao: c.situacao })
     setShowForm(true)
   }
-  const handleDelete = (id: string) => setCfgCartoes(prev => prev.filter(c => c.id !== id))
+  const handleDelete = (id: string) => {
+    if (!confirm('Excluir este cartão?')) return
+    setCfgCartoes(prev => prev.filter(c => c.id !== id))
+  }
   const handleSave = () => {
     if (!form.nome.trim()) return
     const codigo = editId ? ((cfgCartoes.find(c => c.id === editId) as any)?.codigo || gerarCodCART()) : gerarCodCART()
@@ -65,12 +68,11 @@ export default function CartoesPage() {
     setShowForm(false)
   }
 
-  // Carrega padrões sem duplicar pelo nome
   const carregarPadroes = () => {
     const nomesExistentes = new Set(cfgCartoes.map(c => c.nome.trim().toLowerCase()))
     const codigosExistentes = new Set(cfgCartoes.map(c => (c as any).codigo).filter(Boolean))
     const novos = CARTOES_PADRAO.filter(c => !nomesExistentes.has(c.nome.trim().toLowerCase()))
-    if (novos.length === 0) return
+    if (novos.length === 0) { alert('Todos os cartões padrão já estão cadastrados.'); return }
     const gerados: ConfigCartao[] = novos.map(c => {
       let codigo = c.codigo
       if (codigosExistentes.has(codigo)) {
@@ -96,21 +98,21 @@ export default function CartoesPage() {
           <p className="page-subtitle">Formas de pagamento em cartão, bandeiras, taxas e prazos</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {padroesPendentes > 0 && (
+          {padroesPendentes > 0 && !loading && (
             <button className="btn btn-secondary btn-sm" onClick={carregarPadroes} style={{ color: '#a78bfa', borderColor: 'rgba(139,92,246,0.3)' }}>
               <Sparkles size={13} style={{ color: '#a78bfa' }} />Carregar padrões ({padroesPendentes})
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Cartão</button>
+          <button className="btn btn-primary btn-sm" onClick={openNew} disabled={loading}><Plus size={13} />Novo Cartão</button>
         </div>
       </div>
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total', value: cfgCartoes.length, color: '#3b82f6' },
-          { label: 'Crédito', value: credito.length, color: '#8b5cf6' },
-          { label: 'Débito', value: debito.length, color: '#10b981' },
+          { label: 'Total', value: loading ? '…' : cfgCartoes.length, color: '#3b82f6' },
+          { label: 'Crédito', value: loading ? '…' : credito.length, color: '#8b5cf6' },
+          { label: 'Débito', value: loading ? '…' : debito.length, color: '#10b981' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div style={{ fontSize: 28, fontWeight: 800, color: k.color, fontFamily: 'Outfit, sans-serif' }}>{k.value}</div>
@@ -119,8 +121,15 @@ export default function CartoesPage() {
         ))}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+          ↻ Carregando do banco de dados…
+        </div>
+      )}
+
       {/* Banner padrões — só aparece quando está vazio */}
-      {cfgCartoes.length === 0 && (
+      {!loading && cfgCartoes.length === 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: 14, marginBottom: 20 }}>
           <Sparkles size={28} color="#a78bfa" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
@@ -205,7 +214,7 @@ export default function CartoesPage() {
       )}
 
       {/* Lista */}
-      {cfgCartoes.length === 0 ? (
+      {!loading && cfgCartoes.length === 0 ? (
         <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <CreditCard size={44} style={{ margin: '0 auto 14px', opacity: 0.2 }} />
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 18 }}>Nenhum cartão cadastrado</div>
@@ -214,9 +223,8 @@ export default function CartoesPage() {
             <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Criar manualmente</button>
           </div>
         </div>
-      ) : (
+      ) : !loading && (
         <>
-          {/* Grupo Crédito */}
           {credito.length > 0 && (
             <div style={{ marginBottom: 22 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -229,7 +237,6 @@ export default function CartoesPage() {
               </div>
             </div>
           )}
-          {/* Grupo Débito */}
           {debito.length > 0 && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -242,21 +249,21 @@ export default function CartoesPage() {
               </div>
             </div>
           )}
+          <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+            {cfgCartoes.length} cartão(ões) cadastrado(s) · <span style={{ color: '#10b981' }}>✓ Dados salvos no banco</span>
+          </div>
         </>
       )}
     </div>
   )
 }
 
-// ── Card individual ────────────────────────────────────────────────────────
 function CartaoCard({ c, onEdit, onDelete }: { c: ConfigCartao; onEdit: (c: ConfigCartao) => void; onDelete: (id: string) => void }) {
   const bc = BANDEIRA_COLOR[c.bandeira]
   const icon = BANDEIRA_ICON[c.bandeira]
   return (
     <div className="card" style={{ padding: '18px 20px', position: 'relative', overflow: 'hidden', opacity: c.situacao === 'inativo' ? 0.55 : 1, borderTop: `3px solid ${bc}` }}>
-      {/* Watermark bandeira — pointerEvents: none para não bloquear botões */}
       <div style={{ position: 'absolute', right: 14, top: 10, fontSize: 36, opacity: 0.06, userSelect: 'none', pointerEvents: 'none' }}>{icon}</div>
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
         <div style={{ flex: 1, paddingRight: 8 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
@@ -273,12 +280,9 @@ function CartaoCard({ c, onEdit, onDelete }: { c: ConfigCartao; onEdit: (c: Conf
           <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => onDelete(c.id)}><Trash2 size={12} /></button>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
         <div style={{ textAlign: 'center', padding: '7px 6px', background: 'hsl(var(--bg-elevated))', borderRadius: 8 }}>
-          <div style={{ fontSize: 15, fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>
-            {c.taxaValor}{c.taxaTipo === 'percentual' ? '%' : ''}
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{c.taxaValor}{c.taxaTipo === 'percentual' ? '%' : ''}</div>
           <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1 }}>Taxa</div>
         </div>
         <div style={{ textAlign: 'center', padding: '7px 6px', background: 'hsl(var(--bg-elevated))', borderRadius: 8 }}>
@@ -289,7 +293,6 @@ function CartaoCard({ c, onEdit, onDelete }: { c: ConfigCartao; onEdit: (c: Conf
           <span className={`badge ${c.situacao === 'ativo' ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 9 }}>{c.situacao === 'ativo' ? '✓ Ativo' : '✗ Inativo'}</span>
         </div>
       </div>
-
       {c.maquineta && <div style={{ marginTop: 10, fontSize: 11, color: 'hsl(var(--text-muted))' }}>🏦 {c.maquineta}</div>}
     </div>
   )

@@ -2,7 +2,7 @@
 
 import { BarChart2, TrendingUp, Brain, Download, Filter, Users, DollarSign, BarChart3 } from 'lucide-react'
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -14,20 +14,8 @@ const TABS = ['Panorama Geral', 'Acadêmico', 'Financeiro', 'Alunos & Evasão', 
 export default function BIPage() {
   const [tab, setTab] = useState('Panorama Geral')
   
-  const { data: alunos = [], isLoading: loadAl } = useQuery<any[]>({
-    queryKey: ['alunos'], queryFn: async () => { const r = await fetch('/api/alunos'); return r.json() }
-  })
-  const { data: turmas = [], isLoading: loadTur } = useQuery<any[]>({
-    queryKey: ['turmas'], queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
-  const { data: funcionarios = [], isLoading: loadFunc } = useQuery<any[]>({
-    queryKey: ['funcionarios'], queryFn: async () => { const r = await fetch('/api/rh/funcionarios'); return r.json() }
-  })
-  const { data: titulos = [], isLoading: loadTit } = useQuery<any[]>({
-    queryKey: ['titulos'], queryFn: async () => { const r = await fetch('/api/financeiro/titulos'); return r.json() }
-  })
-
-  const isLoading = loadAl || loadTur || loadFunc || loadTit
+  const { alunos = [], turmas = [], funcionarios = [], titulos = [] } = useData()
+  const isLoading = false
 
   // Real-data KPIs
   const totalAlunos = alunos.length

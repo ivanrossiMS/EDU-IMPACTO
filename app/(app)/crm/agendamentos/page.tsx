@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { newId, Agendamento } from '@/lib/dataContext'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useData, newId, Agendamento, Lead } from '@/lib/dataContext'
 import {
   CalendarCheck, Plus, X, Trash2, Clock, Search, Filter,
   Phone, Video, MessageSquare, Mail, MapPin, Pencil,
@@ -44,34 +43,10 @@ const BLANK_FORM: FormState = {
 }
 
 export default function AgendamentosPage() {
-  const queryClient = useQueryClient()
-  
-  const { data: agendamentos = [], isLoading: loadingAg } = useQuery<Agendamento[]>({
-    queryKey: ['agendamentos'],
-    queryFn: async () => { const r = await fetch('/api/crm/agendamentos'); return r.json() }
-  })
-  
-  const { data: leads = [], isLoading: loadingLeads } = useQuery<any[]>({
-    queryKey: ['leads'],
-    queryFn: async () => { const r = await fetch('/api/crm/leads'); return r.json() }
-  })
+  const { agendamentos = [], setAgendamentos, leads = [] } = useData()
+  const isLoading = false
 
-  const isLoading = loadingAg || loadingLeads
 
-  const addMutation = useMutation({
-    mutationFn: async (data: any) => { const r = await fetch('/api/crm/agendamentos', { method: 'POST', body: JSON.stringify(data) }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] })
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: async (data: any) => { const r = await fetch(`/api/crm/agendamentos/${data.id}`, { method: 'PUT', body: JSON.stringify(data) }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] })
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const r = await fetch(`/api/crm/agendamentos/${id}`, { method: 'DELETE' }); return r.json() },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agendamentos'] })
-  })
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [confirmId, setConfirmId] = useState<string | null>(null)
@@ -95,20 +70,20 @@ export default function AgendamentosPage() {
   function handleSave() {
     if (!form.lead) return
     if (editingId) {
-      updateMutation.mutate({ ...form, id: editingId })
+      setAgendamentos((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...form } : a))
     } else {
-      addMutation.mutate(form)
+      setAgendamentos((prev: any[]) => [...prev, { ...form, id: newId('AG') }])
     }
     setShowModal(false); setEditingId(null)
   }
 
   function handleDelete() {
-    if (confirmId) deleteMutation.mutate(confirmId)
+    if (confirmId) setAgendamentos((prev: any[]) => prev.filter(x => x.id !== confirmId))
     setConfirmId(null)
   }
 
   function changeStatus(id: string, status: StatusAg) {
-    updateMutation.mutate({ id, status })
+    setAgendamentos((prev: any[]) => prev.map(a => a.id === id ? { ...a, status } : a))
   }
 
   // Filtros

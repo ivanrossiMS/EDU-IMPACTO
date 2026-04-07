@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useData } from '@/lib/dataContext'
 import { ALUNOS, FREQUENCIA_TURMA } from '@/lib/data'
-import { useQuery } from '@tanstack/react-query'
 import { CheckCircle, XCircle, Save, Brain, Calendar, Users, Clock, AlertTriangle } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
 
@@ -27,11 +26,8 @@ const turmaAlunos = [
 ]
 
 export default function DiarioPage() {
-  const { logSystemAction } = useData()
-  const { data: turmas = [], isLoading } = useQuery<any[]>({
-    queryKey: ['turmas'],
-    queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
+  const { logSystemAction, turmas = [] } = useData()
+  const isLoading = false
   
   const [selectedTurma, setSelectedTurma] = useState('9A')
   const [selectedAula, setSelectedAula] = useState(0)

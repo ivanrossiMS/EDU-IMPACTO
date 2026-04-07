@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getInitials } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
-import CadastroAlunoModal from '@/components/alunos/CadastroAlunoModal'
+import dynamic from 'next/dynamic'
+const CadastroAlunoModal = dynamic(() => import('@/components/alunos/CadastroAlunoModal'), { ssr: false })
 import {
   Search, UserPlus, Download, Trash2, Pencil, Eye,
   ClipboardList, Users, AlertTriangle, TrendingDown,
@@ -43,18 +43,45 @@ function getResp(a: any): { fin: string; ped: string } {
 
 export default function AlunosPage() {
   const router = useRouter()
-  const { logSystemAction } = useData()
-  const queryClient = useQueryClient()
+  const { logSystemAction, alunos = [], setAlunos: setAlunosCtx } = useData()
+  const isLoading = false
 
-  const { data: alunos = [], isLoading } = useQuery<any[]>({
-    queryKey: ['alunos'],
-    queryFn: async () => {
-      const res = await fetch('/api/alunos')
-      if (!res.ok) throw new Error('Falha ao carregar alunos')
-      return res.json()
-    },
-    staleTime: 30_000,
-  })
+  // ── Exportação de fotos: cada foto salva com o código do aluno ─────────────
+  const exportarFotos = async () => {
+    const alunosComFoto = alunos.filter((a: any) => a.foto)
+    if (alunosComFoto.length === 0) {
+      alert('Nenhum aluno com foto cadastrada encontrado.')
+      return
+    }
+    let exportados = 0
+    for (const a of alunosComFoto as any[]) {
+      const nomeArquivo = (a.fotoNome as string | undefined) ||
+        `${(a.codigo || a.matricula || a.id).toString().trim()}.jpg`
+      try {
+        // A foto é base64 — converte para Blob e dispara download
+        const base64Data = a.foto.startsWith('data:') ? a.foto : `data:image/jpeg;base64,${a.foto}`
+        const res  = await fetch(base64Data)
+        const blob = await res.blob()
+        const url  = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href     = url
+        link.download = nomeArquivo
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+        exportados++
+        // Pequena pausa para não sobrecarregar o browser com muitos downloads simultâneos
+        await new Promise(r => setTimeout(r, 150))
+      } catch { /* ignora foto inválida */ }
+    }
+    logSystemAction('Acadêmico (Alunos)', 'Exportação', `Fotos exportadas: ${exportados} arquivo(s)`, {})
+    if (exportados > 0) {
+      alert(`✅ ${exportados} foto(s) exportada(s) com sucesso!\nCada arquivo foi nomeado com o código do sistema do aluno (ex: 215872.jpg).`)
+    }
+  }
+
+
   const [search, setSearch]         = useState('')
   const [filterSerie, setFilterSerie]   = useState('Todos')
   const [filterStatus, setFilterStatus] = useState('Todos')
@@ -63,6 +90,8 @@ export default function AlunosPage() {
   const [confirmId, setConfirmId]   = useState<string | null>(null)
   const [mounted, setMounted]       = useState(false)
   const [activeKpi, setActiveKpi]   = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => setMounted(true), [])
@@ -82,31 +111,37 @@ export default function AlunosPage() {
 
   const hasSearch = search.trim().length >= 3
 
-  const displayed = alunos.filter(a => {
-    const q = search.toLowerCase()
-    const matchCod = ((a as any).codigo || a.matricula || a.id).toLowerCase()
-    return (
-      (a.nome.toLowerCase().includes(q) || matchCod.includes(q) || a.turma.toLowerCase().includes(q)) &&
-      (filterSerie === 'Todos' || a.serie === filterSerie) &&
-      (filterStatus === 'Todos' || a.status === filterStatus)
-    )
-  })
+  const displayedBase = useMemo(() => {
+    return alunos.filter(a => {
+      const q = search.toLowerCase()
+      const matchCod = ((a as any).codigo || a.matricula || a.id).toLowerCase()
+      return (
+        (a.nome.toLowerCase().includes(q) || matchCod.includes(q) || a.turma.toLowerCase().includes(q)) &&
+        (filterSerie === 'Todos' || a.serie === filterSerie) &&
+        (filterStatus === 'Todos' || a.status === filterStatus)
+      )
+    })
+  }, [search, filterSerie, filterStatus, alunos])
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/alunos/${id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Erro ao deletar')
-    },
-    onSuccess: (_, deletedId) => {
-      queryClient.invalidateQueries({ queryKey: ['alunos'] })
-      const alunoDel = alunos.find((a: any) => a.id === deletedId)
-      logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
-    }
-  })
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, filterSerie, filterStatus])
+
+  const totalPages = Math.ceil(displayedBase.length / itemsPerPage)
+  
+  const displayed = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    return displayedBase.slice(startIndex, startIndex + itemsPerPage)
+  }, [displayedBase, currentPage])
 
   const handleDelete = () => {
-    if (confirmId) deleteMutation.mutate(confirmId)
-    setConfirmId(null)
+    if (confirmId) {
+       const deletedId = confirmId
+       setAlunosCtx((prev: any[]) => prev.filter((a: any) => a.id !== deletedId))
+       const alunoDel = alunos.find((a: any) => a.id === deletedId)
+       logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
+       setConfirmId(null)
+    }
   }
 
   // ── KPI data ───────────────────────────────────────────────────────────────
@@ -152,9 +187,15 @@ export default function AlunosPage() {
       <tr style={{ borderTop:'1px solid hsl(var(--border-subtle))' }}>
         <td>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div className="avatar" style={{ width:32, height:32, fontSize:11, background:`${rc}22`, color:rc, borderRadius:9, border:`2px solid ${rc}40`, flexShrink:0 }}>
-              {getInitials(a.nome)}
-            </div>
+            {a.foto ? (
+              <div style={{ width:32, height:32, overflow:'hidden', borderRadius:9, border:`2px solid ${rc}40`, flexShrink:0 }}>
+                <img src={a.foto} alt={a.nome} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              </div>
+            ) : (
+              <div className="avatar" style={{ width:32, height:32, fontSize:11, background:`${rc}22`, color:rc, borderRadius:9, border:`2px solid ${rc}40`, flexShrink:0 }}>
+                {getInitials(a.nome)}
+              </div>
+            )}
             <div>
               <div style={{ fontSize:13, fontWeight:700 }}>{a.nome}</div>
               {(fin || ped) ? (
@@ -191,8 +232,8 @@ export default function AlunosPage() {
         <td><span className={`badge ${a.risco_evasao==='alto'?'badge-danger':a.risco_evasao==='medio'?'badge-warning':'badge-success'}`} style={{ fontSize:10 }}>{a.risco_evasao==='alto'?'🔴 Alto':a.risco_evasao==='medio'?'🟡 Médio':'🟢 Baixo'}</span></td>
         <td>
           <div style={{ display:'flex', gap:3 }}>
-            <Link href={`/academico/alunos/ficha?id=${a.id}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha"><Eye size={11}/></button></Link>
-            <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${a.id}`)}><Pencil size={11}/></button>
+            <Link href={`/academico/alunos/ficha?id=${(a as any).codigo || a.matricula}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha"><Eye size={11}/></button></Link>
+            <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${(a as any).codigo || a.matricula}`)}><Pencil size={11}/></button>
             <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color:'#f87171' }} onClick={() => setConfirmId(a.id)}><Trash2 size={11}/></button>
           </div>
         </td>
@@ -211,7 +252,7 @@ export default function AlunosPage() {
           </p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
-          <button className="btn btn-secondary btn-sm"><Download size={13}/> Exportar</button>
+          <button className="btn btn-secondary btn-sm" onClick={exportarFotos}><Download size={13}/> Exportar Fotos</button>
           <button className="btn btn-secondary btn-sm" onClick={() => { setEditingId(null); setShowCadastro(true) }}>
             <UserPlus size={13}/> Cadastro Rápido
           </button>
@@ -374,7 +415,7 @@ export default function AlunosPage() {
                 <option key={s} value={s}>{s==='Todos'?'Todos':s==='matriculado'?'Matriculado':s==='em_cadastro'?'Em Cadastro':s==='transferido'?'Transferido':'Inativo'}</option>
               ))}
             </select>
-            <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{displayed.length} resultado{displayed.length!==1?'s':''}</span>
+            <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{displayedBase.length} resultado{displayedBase.length!==1?'s':''}</span>
           </div>
         )}
 
@@ -490,8 +531,8 @@ export default function AlunosPage() {
                       </td>
                       <td>
                         <div style={{ display:'flex', gap:4 }}>
-                          <Link href={`/academico/alunos/ficha?id=${aluno.id}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha 360°"><Eye size={12}/></button></Link>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${aluno.id}`)}><Pencil size={12}/></button>
+                          <Link href={`/academico/alunos/ficha?id=${(aluno as any).codigo || aluno.matricula}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha 360°"><Eye size={12}/></button></Link>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${(aluno as any).codigo || aluno.matricula}`)}><Pencil size={12}/></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color:'#f87171' }} onClick={() => setConfirmId(aluno.id)}><Trash2 size={12}/></button>
                         </div>
                       </td>
@@ -500,6 +541,18 @@ export default function AlunosPage() {
                 })}
               </tbody>
             </table>
+            {totalPages > 1 && (
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+                <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
+                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, displayedBase.length)} de {displayedBase.length} alunos
+                </span>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
+                  <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
+                  <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

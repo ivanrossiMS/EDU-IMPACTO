@@ -12,6 +12,12 @@ import {
 import { getInitials } from '@/lib/utils'
 
 interface Responsavel {
+  id?: string
+  codigo?: string
+  rfid?: string
+  rg?: string
+  profissao?: string
+  enderecoStr?: string
   nome: string
   telefone: string
   email: string
@@ -82,11 +88,23 @@ export default function ResponsaveisPage() {
         const parentesco = resp.parentesco
           || (resp.tipo === 'mae' ? 'Mãe' : resp.tipo === 'pai' ? 'Pai' : resp.tipo === 'legado' ? 'Responsável' : 'Outro')
 
+        let rfidAcesso = resp.rfid || ''
+        if (!rfidAcesso && (aluno as any).saude?.autorizados && Array.isArray((aluno as any).saude.autorizados)) {
+          const authFound = (aluno as any).saude.autorizados.find((a: any) => a.nome?.trim().toLowerCase() === nome.toLowerCase())
+          if (authFound && authFound.rfid) rfidAcesso = authFound.rfid
+        }
+
         if (!mapa[chave]) {
+          let endStr = ''
+          if (resp.endereco) {
+            endStr = [resp.endereco.logradouro, resp.endereco.numero, resp.endereco.bairro, resp.endereco.cidade].filter(Boolean).join(', ')
+          }
           mapa[chave] = {
+            id: resp.id, codigo: resp.codigo, rfid: rfidAcesso,
+            rg: resp.rg, profissao: resp.profissao, enderecoStr: endStr,
             nome, telefone: resp.celular || resp.telefone || '',
             email: resp.email || '',
-            cpf: cpfLimpo.length === 11 ? cpfLimpo : undefined,
+            cpf: cpfLimpo.length === 11 ? resp.cpf || cpfLimpo : undefined,
             parentesco, tipo: resp.tipo || 'outro',
             respPedagogico: !!resp.respPedagogico,
             respFinanceiro: !!resp.respFinanceiro,
@@ -96,6 +114,8 @@ export default function ResponsaveisPage() {
           if (!mapa[chave].nome) mapa[chave].nome = nome
           if (resp.respPedagogico) mapa[chave].respPedagogico = true
           if (resp.respFinanceiro) mapa[chave].respFinanceiro = true
+          if (resp.codigo && !mapa[chave].codigo) mapa[chave].codigo = resp.codigo
+          if (rfidAcesso && !mapa[chave].rfid) mapa[chave].rfid = rfidAcesso
         }
 
         const jaAdicionado = mapa[chave].filhos.some(f => f.id === aluno.id)
@@ -559,12 +579,17 @@ export default function ResponsaveisPage() {
             </div>
 
             <div className="card" style={{ padding:'16px', marginBottom:16, background:'hsl(var(--bg-elevated))' }}>
-              <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>Dados de Contato</div>
+              <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>Dados do Responsável</div>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {[
+                  { icon:<User size={14}/>, label:'ID do Responsável / Código', value: selecionado.codigo || selecionado.id || 'Não informado' },
+                  { icon:<Shield size={14}/>, label:'RFID / Acesso', value: selecionado.rfid || 'Não cadastrado' },
+                  { icon:<BookOpen size={14}/>, label:'CPF / RG', value: `${selecionado.cpf||'Não informado'} ${selecionado.rg ? `| RG: ${selecionado.rg}` : ''}` },
                   { icon:<Phone size={14}/>, label:'Telefone / WhatsApp', value:selecionado.telefone },
                   { icon:<Mail size={14}/>, label:'E-mail', value:selecionado.email||'Não informado' },
-                ].map(item => (
+                  { icon:<User size={14}/>, label:'Profissão', value: selecionado.profissao, hide: !selecionado.profissao },
+                  { icon:<User size={14}/>, label:'Endereço', value: selecionado.enderecoStr, hide: !selecionado.enderecoStr },
+                ].filter(i=>!i.hide).map(item => (
                   <div key={item.label} style={{ display:'flex', alignItems:'center', gap:12 }}>
                     <div style={{ color:'#60a5fa', flexShrink:0 }}>{item.icon}</div>
                     <div>

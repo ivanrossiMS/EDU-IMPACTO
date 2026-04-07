@@ -13,18 +13,34 @@ const BLANK: Omit<ConfigTipoOcorrencia, 'id' | 'createdAt'> = {
   codigo: '', descricao: '', gravidade: 'leve', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo',
 }
 
+const PADROES_OCORRENCIAS = [
+  { codigo: '1', descricao: 'Indisciplina em sala de aula', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
+  { codigo: '2', descricao: 'Atraso recorrente', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo' },
+  { codigo: '3', descricao: 'Bullying / Cyberbullying', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
+  { codigo: '4', descricao: 'Agressão física (Briga)', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo' },
+  { codigo: '5', descricao: 'Uso de celular não autorizado', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo' },
+  { codigo: '6', descricao: 'Desrespeito ao professor/funcionário', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
+  { codigo: '7', descricao: 'Dano ao patrimônio escolar', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
+  { codigo: '8', descricao: 'Evasão de aula / Matada', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 2, situacao: 'ativo' },
+  { codigo: '9', descricao: 'Linguagem inadequada', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 3, situacao: 'ativo' },
+  { codigo: '10', descricao: 'Porte de objetos proibidos', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo' },
+  { codigo: '11', descricao: 'Advertência Verbal', gravidade: 'leve', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
+  { codigo: '12', descricao: 'Advertência Escrita', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
+  { codigo: '13', descricao: 'Suspensão', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo' },
+] as const
+
 export default function TipoOcorrenciasPage() {
   const { cfgTiposOcorrencia, setCfgTiposOcorrencia } = useData()
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
 
-  // Gera código sequencial garantindo unicidade (OC001, OC002...)
+  // Gera código sequencial garantindo unicidade restritamente numérica
   const gerarCodigo = (): string => {
     const existentes = cfgTiposOcorrencia.map(t => t.codigo)
     let i = cfgTiposOcorrencia.length + 1
-    let cod = `OC${String(i).padStart(3, '0')}`
-    while (existentes.includes(cod)) { i++; cod = `OC${String(i).padStart(3, '0')}` }
+    let cod = String(i)
+    while (existentes.includes(cod)) { i++; cod = String(i) }
     return cod
   }
   const codigoPreview = editId ? form.codigo : gerarCodigo()
@@ -36,6 +52,23 @@ export default function TipoOcorrenciasPage() {
     setShowForm(true)
   }
   const handleDelete = (id: string) => setCfgTiposOcorrencia(prev => prev.filter(t => t.id !== id))
+  
+  const handleCarregarPadroes = () => {
+    setCfgTiposOcorrencia(prev => {
+      const existingCodes = new Set(prev.map(p => p.codigo))
+      const news = PADROES_OCORRENCIAS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+        ...p, id: newId('TO'), gravidade: p.gravidade as 'leve'|'media'|'grave', createdAt: new Date().toISOString()
+      }))
+      return [...prev, ...news]
+    })
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Tem certeza que deseja apagar TODOS os tipos de ocorrência?')) {
+      setCfgTiposOcorrencia([])
+    }
+  }
+
   const handleSave = () => {
     if (!form.descricao.trim()) return
     const codigo = editId ? form.codigo : gerarCodigo()
@@ -52,12 +85,20 @@ export default function TipoOcorrenciasPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Tipos de Ocorrências</h1>
           <p className="page-subtitle">Configure os tipos e gravidades para registro disciplinar</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Tipo</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+            <AlertTriangle size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Tipo</button>
+        </div>
       </div>
 
       {/* KPIs por gravidade */}

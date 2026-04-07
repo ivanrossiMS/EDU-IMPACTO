@@ -33,7 +33,7 @@ export default function ColaboradorPerfilPage() {
                <div style={{ fontSize: 15, fontWeight: 600 }}>{currentUser.nome}</div>
              </div>
              <div>
-               <div style={{ fontSize: 12, textTransform: 'uppercase', fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 4 }}>Matrícula / Documento</div>
+               <div style={{ fontSize: 12, textTransform: 'uppercase', fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 4 }}>Código / Documento</div>
                <div style={{ fontSize: 15, fontWeight: 600 }}>{docIdentificador}</div>
              </div>
              <div>

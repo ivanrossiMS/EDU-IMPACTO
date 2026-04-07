@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useMemo, useEffect } from 'react'
 import { useData, Lead, newId } from '@/lib/dataContext'
 import { formatCurrency, getInitials } from '@/lib/utils'
 import {
@@ -56,18 +55,7 @@ function ProgressBar({ current, total, color }: { current: number; total: number
 }
 
 export default function LeadsPage() {
-  const { setLeads } = useData()
-  const queryClient = useQueryClient()
-
-  const { data: leads = [] } = useQuery<any[]>({
-    queryKey: ['leads'],
-    queryFn: async () => {
-      const res = await fetch('/api/crm/leads')
-      if (!res.ok) throw new Error('Erro ao carregar leads')
-      return res.json()
-    },
-    staleTime: 30_000,
-  })
+  const { leads = [], setLeads } = useData()
   const [viewMode, setViewMode] = useState<'kanban' | 'lista'>('kanban')
   const [modal, setModal] = useState<'add' | 'edit' | 'view' | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -78,6 +66,8 @@ export default function LeadsPage() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [viewLead, setViewLead] = useState<Lead | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
 
   // Métricas
   const totalAtivo   = leads.filter(l => l.status !== 'perdido').length
@@ -91,13 +81,23 @@ export default function LeadsPage() {
     return COLUMNS.map(col => ({ ...col, count: leads.filter(l => l.status === col.id).length, pct: total > 0 ? Math.round((leads.filter(l => l.status === col.id).length / total) * 100) : 0 }))
   }, [leads])
 
-  // Leads filtrados
+  // Leads filtrados base
   const leadsFiltered = useMemo(() => leads.filter(l => {
     if (searchQ && !l.nome.toLowerCase().includes(searchQ.toLowerCase()) && !l.interesse.toLowerCase().includes(searchQ.toLowerCase()) && !l.email.toLowerCase().includes(searchQ.toLowerCase())) return false
     if (filtroOrigem && l.origem !== filtroOrigem) return false
     if (filtroStatus && l.status !== filtroStatus) return false
     return true
   }), [leads, searchQ, filtroOrigem, filtroStatus])
+
+  // Reset paginação ao buscar
+  useEffect(() => setCurrentPage(1), [searchQ, filtroOrigem, filtroStatus])
+
+  const totalPages = Math.ceil(leadsFiltered.length / itemsPerPage)
+  
+  const leadsLista = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return leadsFiltered.slice(start, start + itemsPerPage)
+  }, [leadsFiltered, currentPage])
 
   const hasFilter = !!(searchQ || filtroOrigem || filtroStatus)
 
@@ -111,18 +111,17 @@ export default function LeadsPage() {
     if (!form.nome.trim()) return
     const payload = { ...form }
     if (modal === 'add') {
-      await fetch('/api/crm/leads', { method: 'POST', body: JSON.stringify({...payload, id: ''}), headers: { 'Content-Type': 'application/json' } })
+      const novo = { ...payload, id: newId() }
+      setLeads((p: any[]) => [...p, novo])
     } else if (editingId) {
-      await fetch(`/api/crm/leads/${editingId}`, { method: 'PUT', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } })
+      setLeads((p: any[]) => p.map(l => l.id === editingId ? { ...l, ...payload } : l))
     }
-    queryClient.invalidateQueries({ queryKey: ['leads'] })
     closeModal()
   }
 
   const handleDelete = async () => {
     if (confirmId) {
-      await fetch(`/api/crm/leads/${confirmId}`, { method: 'DELETE' })
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      setLeads((p: any[]) => p.filter(l => l.id !== confirmId))
     }
     setConfirmId(null)
   }
@@ -131,8 +130,7 @@ export default function LeadsPage() {
     const idx = STATUS_ORDER.indexOf(lead.status as any)
     if (idx < STATUS_ORDER.length - 1) {
       const next = STATUS_ORDER[idx + 1]
-      await fetch(`/api/crm/leads/${lead.id}`, { method: 'PUT', body: JSON.stringify({ status: next }), headers: { 'Content-Type': 'application/json' } })
-      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      setLeads((p: any[]) => p.map(l => l.id === lead.id ? { ...l, status: next } : l))
     }
   }
 
@@ -330,7 +328,7 @@ export default function LeadsPage() {
               </tr>
             </thead>
             <tbody>
-              {leadsFiltered.map(lead => {
+              {leadsLista.map(lead => {
                 const col = COLUMNS.find(c => c.id === lead.status)!
                 return (
                   <tr key={lead.id}>
@@ -365,6 +363,18 @@ export default function LeadsPage() {
               })}
             </tbody>
           </table>
+          {totalPages > 1 && (
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
+                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, leadsFiltered.length)} de {leadsFiltered.length} leads
+              </span>
+              <div style={{ display:'flex', gap:8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
+                <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
+                <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -7,6 +7,7 @@ import { newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import TestDataSection from '@/components/configuracoes/TestDataSection'
 import BackupSection from '@/components/configuracoes/BackupSection'
+import ImportacaoDadosSection from '@/components/configuracoes/ImportacaoDadosSection'
 import { FormModal, ConfirmModal } from '@/components/ui/CrudModal'
 
 /* ─── Section definitions ─────────────────────────────────────── */
@@ -15,6 +16,7 @@ const CONFIG_SECTIONS = [
   { id: 'notificacoes',icon: '🔔', label: 'Notificações', desc: 'Email, push, SMS, WhatsApp' },
   { id: 'integracoes', icon: '🔌', label: 'Integrações & APIs', desc: 'Webhooks, sistemas externos' },
   { id: 'seguranca',   icon: '🔒', label: 'Segurança & LGPD', desc: 'Senha, 2FA, auditoria' },
+  { id: 'importacao',  icon: '📥', label: 'Importação de Dados', desc: 'CSV, XLSX, fotos e migração' },
   { id: 'ferramentas', icon: '🧪', label: 'Dados de Teste', desc: 'Inserir/excluir dados reais' },
   { id: 'backup',      icon: '💾', label: 'Backup & Exportação', desc: 'Exportar dados reais do sistema' },
 ]
@@ -357,6 +359,9 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
+
+          {/* ── IMPORTAÇÃO ── */}
+          {section === 'importacao' && <ImportacaoDadosSection />}
 
           {/* ── DADOS DE TESTE ── */}
           {section === 'ferramentas' && <TestDataSection />}

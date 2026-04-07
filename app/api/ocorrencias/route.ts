@@ -1,0 +1,57 @@
+import { NextResponse } from 'next/server'
+import { supabaseServer } from '@/lib/supabase'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const alunoId = searchParams.get('aluno_id')
+
+  let query = supabaseServer.from('ocorrencias').select('*').order('created_at', { ascending: false })
+  if (alunoId) query = query.eq('aluno_id', alunoId)
+
+  const { data, error } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json((data || []).map(row => ({ ...row, ...(row.dados || {}) })))
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    if (Array.isArray(body)) {
+      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      const rows = body.map(o => buildRow(o))
+      const { error } = await supabaseServer.from('ocorrencias').upsert(rows)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ ok: true, count: rows.length })
+    }
+    const row = buildRow(body)
+    const { data, error } = await supabaseServer.from('ocorrencias').upsert(row).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const { error } = await supabaseServer.from('ocorrencias').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
+}
+
+function buildRow(o: any) {
+  const { id, alunoId, tipoId, descricao, data, status, ...rest } = o
+  return {
+    id: id || `OC-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+    aluno_id: alunoId || '',
+    tipo_id: tipoId || '',
+    descricao: descricao || '',
+    data: data || new Date().toISOString().split('T')[0],
+    status: status || 'aberta',
+    dados: rest,
+  }
+}

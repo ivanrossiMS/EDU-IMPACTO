@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/lib/dataContext'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardList, ChevronDown, ChevronRight, Tag, Percent,
@@ -183,6 +183,7 @@ const ALL_NAV_GROUPS: NavGroup[] = [
           { label: 'Padrão de Pagamentos', href: '/configuracoes/financeiro/padrao-pagamento', icon: <DollarSign size={14} /> },
           { label: 'Plano de Contas', href: '/configuracoes/financeiro/plano-contas', icon: <FileText size={14} /> },
           { label: 'Tipos de Documentos', href: '/configuracoes/financeiro/tipo-documentos', icon: <FileText size={14} /> },
+          { label: 'Configuração da DRE', href: '/configuracoes/financeiro/dre-config', icon: <BarChart3 size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
         ],
       },
     ],
@@ -486,10 +487,7 @@ function NavGroupComp({
 ══════════════════════════════════════════ */
 export function Sidebar() {
   const { sidebarCollapsed: collapsed, toggleSidebar, activeUnit, setActiveUnit, activeModules, sidebarTheme, currentUserPerfil } = useApp()
-  const { data: mantenedores = [] } = useQuery<any[]>({
-    queryKey: ['mantenedores'],
-    queryFn: async () => { const r = await fetch('/api/configuracoes/mantenedores'); return r.json() }
-  })
+  const { mantenedores = [] } = useData()
   const [unitOpen, setUnitOpen] = useState(false)
   const pathname = usePathname()
 

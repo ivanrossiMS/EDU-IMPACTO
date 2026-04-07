@@ -1,18 +1,18 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useData, FornecedorCad, newId } from '@/lib/dataContext'
-import { Plus, Search, Trash2, Pencil, Check, Building2, X, Layers } from 'lucide-react'
+import { Plus, Search, Trash2, Pencil, Check, Building2, X, Layers, Upload, Download } from 'lucide-react'
 import { CepAddressFields } from '@/components/ui/CepInput'
+import * as XLSX from 'xlsx'
 
 const CATEGORIAS = ['Material Didático', 'Tecnologia', 'Limpeza', 'Alimentação', 'Manutenção', 'Serviços Gerais', 'Papelaria', 'Outros']
 const ESTADOS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
 
-const BLANK: Omit<FornecedorCad, 'id' | 'createdAt'> & { planoContasId?: string } = {
+const BLANK: Omit<FornecedorCad, 'id' | 'createdAt'> = {
   codigo: '', razaoSocial: '', nomeFantasia: '', cnpj: '', cpf: '', tipo: 'juridico',
   categoria: 'Outros', email: '', telefone: '', celular: '', cep: '', logradouro: '',
-  numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP', contato: '',
+  numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP', planoContasId: '',
   banco: '', agencia: '', conta: '', situacao: 'ativo', observacoes: '',
-  planoContasId: '',
 }
 
 export default function FornecedoresPage() {
@@ -24,6 +24,19 @@ export default function FornecedoresPage() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [form, setForm] = useState<typeof BLANK>(BLANK)
   const [abaForm, setAbaForm] = useState<'dados' | 'banco' | 'obs'>('dados')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const [categorias, setCategorias] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('edu-fornecedores-categorias')
+      return saved ? JSON.parse(saved) : CATEGORIAS
+    }
+    return CATEGORIAS
+  })
+
+  useEffect(() => {
+    localStorage.setItem('edu-fornecedores-categorias', JSON.stringify(categorias))
+  }, [categorias])
 
   // Plano de contas typeahead
   const [planoSearch, setPlanoSearch] = useState('')
@@ -33,6 +46,79 @@ export default function FornecedoresPage() {
     return cfgPlanoContas.filter(p => p.situacao === 'ativo' &&
       (p.descricao.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q))).slice(0, 8)
   }, [cfgPlanoContas, planoSearch])
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result
+      const wb = XLSX.read(bstr, { type: 'binary' })
+      const wsname = wb.SheetNames[0]
+      const ws = wb.Sheets[wsname]
+      const data = XLSX.utils.sheet_to_json<any>(ws)
+      
+      let randCount = 0
+      const novos: FornecedorCad[] = data.map((row: any) => ({
+        id: newId('FN'),
+        codigo: row.Codigo || row.codigo || `FOR-${Math.floor(Math.random() * 90000) + 10000 + (++randCount)}`,
+        razaoSocial: row.RazaoSocial || row['Razão Social'] || row.razaoSocial || '',
+        nomeFantasia: row.NomeFantasia || row['Nome Fantasia'] || row.nomeFantasia || '',
+        cnpj: row.CNPJ || row.cnpj || '',
+        cpf: row.CPF || row.cpf || '',
+        tipo: ((row.CNPJ || row.cnpj) ? 'juridico' : 'fisico') as "juridico" | "fisico",
+        categoria: row.Categoria || row.categoria || 'Outros',
+        email: row.Email || row.email || '',
+        telefone: String(row.Telefone || row.telefone || ''),
+        celular: String(row.Celular || row.celular || ''),
+        cep: String(row.CEP || row.cep || ''),
+        logradouro: row.Logradouro || row.logradouro || '',
+        numero: String(row.Numero || row.numero || ''),
+        complemento: row.Complemento || row.complemento || '',
+        bairro: row.Bairro || row.bairro || '',
+        cidade: row.Cidade || row.cidade || '',
+        uf: row.UF || row.uf || 'SP',
+        banco: String(row.Banco || row.banco || ''),
+        agencia: String(row.Agencia || row.agencia || ''),
+        conta: String(row.Conta || row.conta || ''),
+        situacao: 'ativo' as "ativo" | "inativo",
+        observacoes: row.Observacoes || row.observacoes || '',
+        createdAt: new Date().toISOString(),
+      })).filter(f => f.razaoSocial)
+
+      if (novos.length > 0) {
+        setFornecedoresCad(prev => [...prev, ...novos])
+        alert(`${novos.length} fornecedores importados com sucesso.`)
+      } else {
+        alert('Nenhum dado válido encontrado no arquivo.')
+      }
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
+  }
+
+  const exportarModelo = () => {
+    const headers = [[
+      'Razão Social', 'Nome Fantasia', 'CNPJ', 'CPF', 'Categoria',
+      'Email', 'Telefone', 'Celular', 'CEP', 'Logradouro', 'Numero',
+      'Complemento', 'Bairro', 'Cidade', 'UF', 'Plano de Contas',
+      'Banco', 'Agencia', 'Conta', 'Observacoes'
+    ]]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(headers)
+    
+    // Auto-size columns slightly
+    ws['!cols'] = headers[0].map(() => ({ wch: 15 }))
+    
+    XLSX.utils.book_append_sheet(wb, ws, 'Fornecedores')
+    XLSX.writeFile(wb, 'modelo_importacao_fornecedores.xlsx')
+  }
+
+  const handleDeleteAll = () => {
+    if (confirm('Atenção: Você está prestes a excluir TODOS os fornecedores. Essa ação não poderá ser desfeita. Deseja continuar?')) {
+      setFornecedoresCad([])
+    }
+  }
 
   const gerarCodFor = () => {
     const existentes = fornecedoresCad.map(f => f.codigo).filter(Boolean)
@@ -87,7 +173,13 @@ export default function FornecedoresPage() {
           <h1 className="page-title">Fornecedores</h1>
           <p className="page-subtitle">{fornecedoresCad.length} fornecedores cadastrados</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Fornecedor</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-secondary btn-sm" onClick={exportarModelo} title="Baixar Modelo de Planilha"><Download size={13} />Baixar Modelo</button>
+          <input type="file" accept=".xlsx, .xls" ref={fileRef} style={{ display: 'none' }} onChange={handleImport} />
+          <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()} title="Importar XLSX"><Upload size={13} />Importar XLSX</button>
+          {fornecedoresCad.length > 0 && <button className="btn btn-danger btn-sm" onClick={handleDeleteAll} title="Excluir Todos"><Trash2 size={13} />Excluir Todos</button>}
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Fornecedor</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
@@ -132,9 +224,11 @@ export default function FornecedoresPage() {
       ) : (
         <div className="table-container">
           <table>
-            <thead><tr><th>Código</th><th>Razão Social / Fantasia</th><th>CNPJ/CPF</th><th>Categoria</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Código</th><th>Razão Social / Fantasia</th><th>CNPJ/CPF</th><th>Categoria</th><th>Plano de Contas</th><th>Situação</th><th>Ações</th></tr></thead>
             <tbody>
-              {filtered.map(f => (
+              {filtered.map(f => {
+                const pc = cfgPlanoContas.find(p => p.id === (f as any).planoContasId)
+                return (
                 <tr key={f.id}>
                   <td><code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '1px 6px', borderRadius: 4 }}>{f.codigo}</code></td>
                   <td>
@@ -144,8 +238,8 @@ export default function FornecedoresPage() {
                   <td style={{ fontSize: 12 }}>{f.tipo === 'juridico' ? f.cnpj : f.cpf}</td>
                   <td><span className="badge badge-primary">{f.categoria}</span></td>
                   <td>
-                    <div style={{ fontSize: 12 }}>{f.email || '—'}</div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{f.telefone || f.celular}</div>
+                    <div style={{ fontSize: 12 }}>{pc?.descricao || '—'}</div>
+                    {pc && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(pc as any).codPlano}</div>}
                   </td>
                   <td>{f.situacao === 'ativo' ? <span className="badge badge-success">Ativo</span> : <span className="badge badge-neutral">Inativo</span>}</td>
                   <td>
@@ -155,7 +249,7 @@ export default function FornecedoresPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
@@ -187,9 +281,9 @@ export default function FornecedoresPage() {
                     <div><label className="form-label">Razão Social / Nome *</label><input className="form-input" value={form.razaoSocial} onChange={e => set('razaoSocial', e.target.value)} placeholder="Razão Social" /></div>
                     <div><label className="form-label">Nome Fantasia</label><input className="form-input" value={form.nomeFantasia} onChange={e => set('nomeFantasia', e.target.value)} /></div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.2fr 1fr', gap: 12, marginBottom: 12 }}>
                     <div><label className="form-label">{form.tipo === 'juridico' ? 'CNPJ' : 'CPF'}</label><input className="form-input" value={form.tipo === 'juridico' ? form.cnpj : form.cpf} onChange={e => set(form.tipo === 'juridico' ? 'cnpj' : 'cpf', maskCnpjCpf(e.target.value, form.tipo))} placeholder={form.tipo === 'juridico' ? '00.000.000/0001-00' : '000.000.000-00'} /></div>
-                    {/* Plano de Contas — typeahead, substitui Categoria */}
+                    {/* Plano de Contas — typeahead */}
                     <div style={{ position: 'relative' }}>
                       <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <Layers size={10} />Plano de Contas
@@ -223,16 +317,33 @@ export default function FornecedoresPage() {
                         </div>
                       )}
                     </div>
+                    {/* Categoria interativa */}
+                    <div>
+                      <label className="form-label">Categoria</label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <select className="form-input" style={{ flex: 1, paddingRight: 6 }} value={form.categoria} onChange={e => set('categoria', e.target.value)}>
+                          {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <button type="button" className="btn btn-secondary btn-icon" style={{ flexShrink: 0 }} onClick={() => {
+                          const nova = prompt('Nome da nova categoria:')
+                          if (nova?.trim() && !categorias.includes(nova.trim())) {
+                            setCategorias(prev => [...prev, nova.trim()])
+                            set('categoria', nova.trim())
+                          } else if (nova?.trim() && categorias.includes(nova.trim())) {
+                            set('categoria', nova.trim())
+                          }
+                        }} title="Adicionar Categoria"><Plus size={14} /></button>
+                      </div>
+                    </div>
                     <div><label className="form-label">Situação</label>
                       <select className="form-input" value={form.situacao} onChange={e => set('situacao', e.target.value)}>
                         <option value="ativo">Ativo</option><option value="inativo">Inativo</option>
                       </select>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                     <div><label className="form-label">E-mail</label><input className="form-input" value={form.email} onChange={e => set('email', e.target.value)} /></div>
                     <div><label className="form-label">Telefone</label><input className="form-input" value={form.telefone} onChange={e => set('telefone', e.target.value)} /></div>
-                    <div><label className="form-label">Contato (nome)</label><input className="form-input" value={form.contato} onChange={e => set('contato', e.target.value)} /></div>
                   </div>
                   <CepAddressFields
                     cep={form.cep}

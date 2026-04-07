@@ -1,6 +1,5 @@
 'use client'
 
-import { useQueryClient } from '@tanstack/react-query'
 
 import { useState, useMemo, useEffect } from 'react'
 import { useData, newId } from '@/lib/dataContext'
@@ -269,7 +268,7 @@ interface Props { open: boolean; onClose: () => void; editingId?: string | null 
 
 export default function CadastroAlunoModal({ open, onClose, editingId }: Props) {
   const { alunos, setAlunos, turmas, cfgPadroesPagamento, titulos, setTitulos } = useData()
-  const queryClient = useQueryClient()
+
   const [step, setStep] = useState(1)
 
   // ── PASSO 1: Dados do aluno ──────────────────────────────────────
@@ -277,7 +276,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
   const [dadosAluno, setDadosAluno] = useState({
     codigo: gerarCodigo(seq0),
     cpf: '', nome: '', idCenso: '',
-    rga: `${anoAtual}00${String(seq0).padStart(4, '0')}`,
+    rga: `${anoAtual}${gerarCodigo(seq0)}`,
     dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
     naturalidade: '', uf: 'SP', corRaca: '', outros: '',
   })
@@ -360,7 +359,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
     const seq = proximoSeqAluno(alunos)
     setDadosAluno({
       codigo: gerarCodigo(seq), cpf: '', nome: '', idCenso: '',
-      rga: `${anoAtual}00${String(seq).padStart(4, '0')}`,
+      rga: `${anoAtual}${gerarCodigo(seq)}`,
       dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
       naturalidade: '', uf: 'SP', corRaca: '', outros: '',
     })
@@ -451,8 +450,6 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(novoAluno)
-    }).then(() => {
-      queryClient.invalidateQueries({ queryKey: ['alunos'] })
     }).catch(console.error)
 
     onClose()

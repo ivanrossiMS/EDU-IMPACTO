@@ -2,13 +2,15 @@
 
 import { createContext, useContext, useCallback, useEffect } from 'react'
 import { useLocalStorage } from './useLocalStorage'
+import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
+import { useConfigDb, invalidateConfigCache } from './useConfigDb'
 
 // ─── Data version — bump to force-clear all stored data ───────────
-const DATA_VERSION = '12'
+const DATA_VERSION = '13'
 
 // ─── Types ────────────────────────────────────────────────────────
 export interface Aluno {
-  id: string; nome: string; matricula: string; turma: string; serie: string
+  id: string; nome: string; matricula: string; codigo?: string; turma: string; serie: string
   turno: string; status: string; email: string; cpf: string; dataNascimento: string
   responsavel: string; telefone: string; inadimplente: boolean
   risco_evasao: 'baixo' | 'medio' | 'alto'; media: number | null
@@ -90,6 +92,9 @@ export interface Titulo {
   retornoDescricao?: string
   htmlBoleto?: string
   eventos?: Array<{ id: string; data: string; tipo: string; descricao: string; payload?: string }>
+  
+  // NOVO: Integração DRE Executiva
+  centroCustoId?: string
 }
 
 
@@ -99,6 +104,10 @@ export interface ContaPagar {
   numeroDocumento?: string
   planoContasId?: string
   codigo?: string // Adicionado para consistência visual nas contas a pagar
+  
+  // NOVO: Centro de Custo Enxuto e Rateio Opcional
+  centroCustoId?: string
+  usaRateio?: boolean
 }
 
 export interface Mensagem {
@@ -444,15 +453,60 @@ export interface ConfigPadraoPagamento {
   createdAt: string
 }
 
+export type GrupoDRECodigo =
+  | 'RECEITA_BRUTA'
+  | 'DEDUCAO_RECEITA'
+  | 'RECEITA_LIQUIDA'
+  | 'CUSTO_SERVICO'
+  | 'LUCRO_BRUTO'
+  | 'DESP_ADMINISTRATIVA'
+  | 'DESP_COMERCIAL'
+  | 'RESULTADO_OPERACIONAL'
+  | 'RESULTADO_FINANCEIRO'
+  | 'RESULTADO_ANTES_IMPOSTOS'
+  | 'IMPOSTOS'
+  | 'LUCRO_LIQUIDO'
+  | 'INVESTIMENTOS'
+  | 'SEM_CLASSIFICACAO'
+
 export interface ConfigPlanoContas {
   id: string
   codPlano: string               // ex: '1', '1.1', '1.1.1'
   descricao: string
   tipo: 'analitico' | 'sintetico' | 'detalhe'
-  grupoConta: 'receitas' | 'despesas'
+  grupoConta: 'receitas' | 'despesas' | 'investimentos'
   parentId: string               // '' = raiz
   situacao: 'ativo' | 'inativo'
   createdAt: string
+  // ── Integração DRE ──────────────────────────────────────
+  grupoDRE?: GrupoDRECodigo      // qual grupo da DRE essa conta alimenta
+  exibirDRE?: boolean            // aparece no relatório DRE?
+  naturezaDRE?: 'credora' | 'devedora' | 'neutra' // como soma no cálculo
+  ordemDRE?: number              // posição dentro do grupo
+}
+
+export interface ConfigGrupoDRE {
+  id: string
+  codigo: GrupoDRECodigo
+  nome: string
+  nomeCurto?: string
+  tipo: 'receita' | 'deducao' | 'custo' | 'despesa' | 'resultado' | 'imposto' | 'informativo'
+  natureza: 'credora' | 'devedora' | 'calculado'
+  formula?: string               // ex: 'RECEITA_BRUTA - DEDUCAO_RECEITA'
+  ordem: number
+  exibir: boolean
+  nivel: 'grupo' | 'subtotal' | 'total'
+  corDestaque?: string
+  createdAt: string
+}
+
+export interface DREConfig {
+  id: string
+  regimeApuracao: 'caixa' | 'competencia'
+  exibirZerados: boolean
+  exibirContasInativas: boolean
+  periodosFechados: string[]     // YYYY-MM fechados
+  updatedAt: string
 }
 
 // ─── MOVIMENTAÇÕES FINANCEIRAS ─────────────────────────────────────
@@ -476,6 +530,8 @@ export interface MovimentacaoManual {
   dataEmissao: string
   compensadoBanco: boolean
   observacoes: string
+  centroCustoId?: string
+  centroCustoDesc?: string
   criadoEm: string
   editadoEm: string
   /** Origem automática — diferencia de lançamentos manuais */
@@ -494,6 +550,8 @@ export interface MovCaixaItem {
   planoContas?: string
   compensadoBanco?: string
   caixaId?: string
+  centroCustoId?: string
+  centroCustoDesc?: string
   /** Origem automática do lançamento (diferencia de lançamentos manuais) */
   origem?: 'baixa_aluno' | 'baixa_pagar' | 'baixa_receber' | 'manual'
   /** Referência ao documento de origem (ex: codBaixa, id da conta) */
@@ -536,7 +594,7 @@ export interface FornecedorCad {
   bairro: string
   cidade: string
   uf: string
-  contato: string
+  planoContasId?: string
   banco: string
   agencia: string
   conta: string
@@ -641,6 +699,220 @@ export interface SystemLog {
   detalhesDepois?: any
 }
 
+// ─── CENSO ESCOLAR ────────────────────────────────────────────────
+export interface CensoConfig {
+  anoCensitario: number
+  etapaAtiva: '1-matricula' | '2-situacao'
+  layoutVersion: string
+  responsavel: string
+  escopo: 'total' | 'parcial'
+  unidadeId?: string // Selecionada na UI
+  updatedAt: string
+}
+
+export type CensoPendenciaTipo = 'critica' | 'alta' | 'media' | 'baixa' | 'informativa'
+export type CensoPendenciaStatus = 'aberta' | 'em_tratamento' | 'corrigida' | 'ignorada' | 'reaberta'
+export type CensoPendenciaCategoria = 'aluno' | 'turma' | 'escola' | 'profissional'
+
+export interface CensoPendencia {
+  id: string
+  tipo: CensoPendenciaTipo
+  categoria: CensoPendenciaCategoria
+  nivel: number           // 1=obrigatoriedade, 2=consistência, 3=regra negócio
+  registroId: string
+  registroNome: string
+  campo: string
+  valorAtual: string
+  valorEsperado: string
+  descricao: string
+  sugestao: string
+  status: CensoPendenciaStatus
+  responsavel?: string
+  justificativaIgnore?: string
+  comentarios?: string[]
+  criadoEm: string
+  resolvidoEm?: string
+  revalidadoEm?: string
+  anoCensitario: number
+  etapa: string
+}
+
+export interface CensoExport {
+  id: string
+  anoCensitario: number
+  etapa: string
+  layoutVersion: string
+  dataGeracao: string
+  usuarioGerou: string
+  totalRegistros: number
+  totalAlunos: number
+  totalTurmas: number
+  totalProfissionais: number
+  hash: string
+  nomeArquivo: string
+  conteudo?: string     // base64 do arquivo gerado
+  status: 'gerado' | 'baixado' | 'enviado' | 'rejeitado'
+  pendenciasNaMomento: number
+  observacoes?: string
+}
+
+export interface CensoAuditLog {
+  id: string
+  dataHora: string
+  usuario: string
+  perfil: string
+  acao: string
+  modulo: string
+  tela?: string
+  registroId?: string
+  registroNome?: string
+  valorAnterior?: string
+  valorNovo?: string
+  justificativa?: string
+  ip?: string
+  anoCensitario?: number
+  etapa?: string
+}
+
+export interface CensoChecklistItem {
+  id: string
+  descricao: string
+  concluido: boolean
+  obrigatorio: boolean
+  ordem: number
+}
+
+export interface CensoOperacaoEnvio {
+  id: string
+  exportId: string
+  anoCensitario: number
+  etapa: string
+  dataOperacao: string
+  usuario: string
+  checklist: Record<string, boolean>
+  protocolo?: string
+  resultado: 'enviado' | 'rejeitado' | 'pendente' | 'aguardando' | 'enviado_com_alerta'
+  observacoes?: string
+  comprovante?: string
+  linkEducacenso?: string
+}
+
+export interface CensoAlunoData {
+  alunoId: string
+  sexo: '1' | '2'                    // 1=Masculino 2=Feminino (código INEP)
+  corRaca: '0'|'1'|'2'|'3'|'4'|'5'  // 0=NID 1=Branca 2=Preta 3=Parda 4=Amarela 5=Indígena
+  nacionalidade: '1'|'2'|'3'         // 1=Brasileira 2=Naturalizada 3=Estrangeira
+  naturalidadeUF: string              // UF de nascimento
+  naturalidadeMunicipio: string
+  deficiencia: boolean
+  tiposDeficiencia: string[]          // Ex: ['01','02'] → códigos INEP
+  tipoAtendimento: '1'|'2'|'3'|'4'|'5'|'6'  // 1=Regular 4=AEE 5=AEE+Regular
+  etapaModalidade: string             // Ex: 'EI','EF1','EF2','EM','EJA'
+  situacaoCenso: '1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'  // situação final Etapa 2
+  dataMatricula: string               // YYYY-MM-DD
+  tipoMatricula: '1'|'2'|'3'         // 1=Regular 2=Rematrícula 3=Novo
+  updatedAt: string
+}
+
+export interface CensoTurmaData {
+  turmaId: string
+  etapaModalidade: string             // Código INEP da etapa
+  codigoINEP: string                  // Código da turma no Educacenso
+  tipoAtendimento: '0'|'1'|'2'|'3'|'4'|'5'|'6'
+  tipoMediacaoDidatica: '1'|'2'|'3'  // 1=Presencial 2=Semipresencial 3=EAD
+  localizacaoDiferenciada: '0'|'1'|'2'|'3'  // 0=Não 1=Área de Assentamento etc.
+  updatedAt: string
+}
+
+export interface CensoProfissionalData {
+  funcionarioId: string
+  cpf: string
+  funcaoDocente: string               // Código da função INEP
+  escolaridade: '1'|'2'|'3'|'4'|'5'|'6'|'7'  // Nível INEP
+  turmasVinculadas: {
+    turmaId: string
+    turmaNome: string
+    disciplinaId: string
+    disciplinaNome: string
+    cargaHoraria: number
+  }[]
+  updatedAt: string
+}
+
+// ─── Tabelas de Referência INEP (exportadas para uso em toda a aplicação) ──
+export const INEP_ETAPAS: { codigo: string; nome: string; grupo: string }[] = [
+  { codigo: 'EI01', nome: 'Creche', grupo: 'Educação Infantil' },
+  { codigo: 'EI02', nome: 'Pré-Escola', grupo: 'Educação Infantil' },
+  { codigo: 'EF01', nome: '1º Ano EF', grupo: 'EF Anos Iniciais' },
+  { codigo: 'EF02', nome: '2º Ano EF', grupo: 'EF Anos Iniciais' },
+  { codigo: 'EF03', nome: '3º Ano EF', grupo: 'EF Anos Iniciais' },
+  { codigo: 'EF04', nome: '4º Ano EF', grupo: 'EF Anos Iniciais' },
+  { codigo: 'EF05', nome: '5º Ano EF', grupo: 'EF Anos Iniciais' },
+  { codigo: 'EF06', nome: '6º Ano EF', grupo: 'EF Anos Finais' },
+  { codigo: 'EF07', nome: '7º Ano EF', grupo: 'EF Anos Finais' },
+  { codigo: 'EF08', nome: '8º Ano EF', grupo: 'EF Anos Finais' },
+  { codigo: 'EF09', nome: '9º Ano EF', grupo: 'EF Anos Finais' },
+  { codigo: 'EM01', nome: '1ª Série EM', grupo: 'Ensino Médio' },
+  { codigo: 'EM02', nome: '2ª Série EM', grupo: 'Ensino Médio' },
+  { codigo: 'EM03', nome: '3ª Série EM', grupo: 'Ensino Médio' },
+  { codigo: 'EJA01', nome: 'EJA EF Fase Inicial', grupo: 'EJA' },
+  { codigo: 'EJA02', nome: 'EJA EF Fase Final', grupo: 'EJA' },
+  { codigo: 'EJA03', nome: 'EJA EM', grupo: 'EJA' },
+]
+
+export const INEP_SITUACOES_CENSO: { codigo: string; nome: string }[] = [
+  { codigo: '1', nome: 'Aprovado' },
+  { codigo: '2', nome: 'Reprovado' },
+  { codigo: '3', nome: 'Transferido' },
+  { codigo: '4', nome: 'Deixou de frequentar (Abandono)' },
+  { codigo: '5', nome: 'Falecido' },
+  { codigo: '6', nome: 'Aprovado pelo Conselho' },
+  { codigo: '7', nome: 'Reprovado por Falta' },
+  { codigo: '8', nome: 'Ainda matriculado' },
+  { codigo: '9', nome: 'Cursando (EJA)' },
+]
+
+export const INEP_FUNCOES_DOCENTES: { codigo: string; nome: string }[] = [
+  { codigo: '1', nome: 'Docente' },
+  { codigo: '2', nome: 'Docente – Atividade Complementar' },
+  { codigo: '3', nome: 'Docente – AEE' },
+  { codigo: '67', nome: 'Auxiliar / Assistente Educacional' },
+  { codigo: '68', nome: 'Profissional de Apoio Escolar' },
+]
+
+export const INEP_COR_RACA: { codigo: string; nome: string }[] = [
+  { codigo: '0', nome: 'Não declarado' },
+  { codigo: '1', nome: 'Branca' },
+  { codigo: '2', nome: 'Preta' },
+  { codigo: '3', nome: 'Parda' },
+  { codigo: '4', nome: 'Amarela' },
+  { codigo: '5', nome: 'Indígena' },
+]
+
+export const INEP_DEFICIENCIAS: { codigo: string; nome: string }[] = [
+  { codigo: '01', nome: 'Cegueira' },
+  { codigo: '02', nome: 'Baixa Visão' },
+  { codigo: '03', nome: 'Surdez' },
+  { codigo: '04', nome: 'Deficiência Auditiva' },
+  { codigo: '05', nome: 'Surdocegueira' },
+  { codigo: '06', nome: 'Deficiência Física' },
+  { codigo: '07', nome: 'Deficiência Intelectual' },
+  { codigo: '08', nome: 'Deficiência Múltipla' },
+  { codigo: '09', nome: 'Autismo Infantil (TEA)' },
+  { codigo: '10', nome: 'Síndrome de Asperger' },
+  { codigo: '11', nome: 'Síndrome de Rett' },
+  { codigo: '12', nome: 'Transtorno Desintegrativo da Infância' },
+  { codigo: '13', nome: 'Altas Habilidades / Superdotação' },
+]
+
+export const INEP_TIPO_ATENDIMENTO: { codigo: string; nome: string }[] = [
+  { codigo: '1', nome: 'Escolarização (Classe Comum)' },
+  { codigo: '2', nome: 'Escolarização (Classe Especial EE)' },
+  { codigo: '3', nome: 'Atividade Complementar' },
+  { codigo: '4', nome: 'AEE' },
+  { codigo: '5', nome: 'Escolarização e AEE na mesma escola' },
+  { codigo: '6', nome: 'Escolarização e AEE em escola diferente' },
+]
 
 // ─── localStorage keys ────────────────────────────────────────────
 const KEYS = {
@@ -683,6 +955,8 @@ const KEYS = {
   cfgPlanoContas: 'edu-cfg-plano-contas',
   cfgTiposDocumento: 'edu-cfg-tipos-documento',
   cfgConvenios: 'edu-cfg-convenios',
+  cfgGruposDRE: 'edu-cfg-grupos-dre',
+  dreConfig: 'edu-cfg-dre-config',
   // Operações
   cfgCalendarioLetivo: 'edu-cfg-calendario-letivo',
   movimentacoesManuais: 'edu-op-movimentacoes',
@@ -691,6 +965,16 @@ const KEYS = {
   advertencias: 'edu-rh-advertencias',
   adiantamentos: 'edu-rh-adiantamentos',
   systemLogs: 'edu-data-system-logs',
+  // Censo Escolar
+  censoConfig: 'edu-censo-config',
+  censoPendencias: 'edu-censo-pendencias',
+  censoExports: 'edu-censo-exports',
+  censoAuditLogs: 'edu-censo-audit-logs',
+  censoOperacoes: 'edu-censo-operacoes',
+  // Dados de Enriquecimento Censitário (camada separada do ERP)
+  censoAlunosData: 'edu-censo-alunos-data',
+  censoTurmasData: 'edu-censo-turmas-data',
+  censoProfsData: 'edu-censo-profs-data',
 }
 
 // ─── Padrões de Níveis de Ensino MEC ─────────────────────────────
@@ -714,6 +998,33 @@ const NIVEIS_DEFAULT: ConfigNivelEnsino[] = [
     { codigo: 'EJA01', nome: 'Fase I' }, { codigo: 'EJA02', nome: 'Fase II' }, { codigo: 'EJA03', nome: 'Fase III' },
   ]), createdAt: new Date().toISOString() },
 ]
+
+// ─── Grupos DRE Padrão ───────────────────────────────────────────
+const GRUPOS_DRE_DEFAULT: ConfigGrupoDRE[] = [
+  { id: 'GD01', codigo: 'RECEITA_BRUTA',          nome: 'Receita Bruta',                 nomeCurto: 'Rec. Bruta',     tipo: 'receita',     natureza: 'credora',   ordem: 1,  nivel: 'grupo',    exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
+  { id: 'GD02', codigo: 'DEDUCAO_RECEITA',         nome: 'Deduções da Receita',           nomeCurto: 'Deduções',       tipo: 'deducao',     natureza: 'devedora',  ordem: 2,  nivel: 'grupo',    exibir: true, corDestaque: '#f59e0b', createdAt: new Date().toISOString() },
+  { id: 'GD03', codigo: 'RECEITA_LIQUIDA',         nome: 'Receita Líquida',               nomeCurto: 'Rec. Líquida',   tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITA_BRUTA - DEDUCAO_RECEITA',          ordem: 3,  nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
+  { id: 'GD04', codigo: 'CUSTO_SERVICO',           nome: 'Custos dos Serviços Prestados', nomeCurto: 'Custos Diretos', tipo: 'custo',       natureza: 'devedora',  ordem: 4,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
+  { id: 'GD05', codigo: 'LUCRO_BRUTO',             nome: 'Lucro Bruto',                   nomeCurto: 'Lucro Bruto',    tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITA_LIQUIDA - CUSTO_SERVICO',           ordem: 5,  nivel: 'subtotal', exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
+  { id: 'GD06', codigo: 'DESP_ADMINISTRATIVA',     nome: 'Despesas Administrativas',      nomeCurto: 'Desp. Admin.',   tipo: 'despesa',     natureza: 'devedora',  ordem: 6,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
+  { id: 'GD07', codigo: 'DESP_COMERCIAL',          nome: 'Despesas Comerciais / Marketing', nomeCurto: 'Marketing',    tipo: 'despesa',     natureza: 'devedora',  ordem: 7,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
+  { id: 'GD08', codigo: 'RESULTADO_OPERACIONAL',   nome: 'Resultado Operacional',         nomeCurto: 'EBITDA',         tipo: 'resultado',   natureza: 'calculado', formula: 'LUCRO_BRUTO - DESP_ADMINISTRATIVA - DESP_COMERCIAL', ordem: 8, nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
+  { id: 'GD09', codigo: 'RESULTADO_FINANCEIRO',    nome: 'Resultado Financeiro',          nomeCurto: 'Res. Financeiro',tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITAS_FINANCEIRAS - DESPESAS_FINANCEIRAS', ordem: 9, nivel: 'grupo',    exibir: true, corDestaque: '#8b5cf6', createdAt: new Date().toISOString() },
+  { id: 'GD10', codigo: 'RESULTADO_ANTES_IMPOSTOS',nome: 'Resultado Antes dos Impostos',  nomeCurto: 'LAIR',           tipo: 'resultado',   natureza: 'calculado', formula: 'RESULTADO_OPERACIONAL + RESULTADO_FINANCEIRO', ordem: 10, nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
+  { id: 'GD11', codigo: 'IMPOSTOS',                nome: 'Impostos e Tributos',           nomeCurto: 'Impostos',       tipo: 'imposto',     natureza: 'devedora',  ordem: 11, nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
+  { id: 'GD12', codigo: 'LUCRO_LIQUIDO',           nome: 'Lucro Líquido do Exercício',    nomeCurto: 'Lucro Líquido',  tipo: 'resultado',   natureza: 'calculado', formula: 'RESULTADO_ANTES_IMPOSTOS - IMPOSTOS',         ordem: 12, nivel: 'total',    exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
+  { id: 'GD13', codigo: 'INVESTIMENTOS',           nome: 'Investimentos (Patrimônio)',    nomeCurto: 'Investimentos',  tipo: 'informativo', natureza: 'devedora',  ordem: 13, nivel: 'grupo',    exibir: true, corDestaque: '#f59e0b', createdAt: new Date().toISOString() },
+  { id: 'GD14', codigo: 'SEM_CLASSIFICACAO',       nome: 'Não Classificados (Legado)',    nomeCurto: 'Sem Classif.',   tipo: 'informativo', natureza: 'neutra',    ordem: 14, nivel: 'grupo',    exibir: true, corDestaque: '#6b7280', createdAt: new Date().toISOString() },
+] as unknown as ConfigGrupoDRE[]
+
+const DRE_CONFIG_DEFAULT: DREConfig = {
+  id: 'DRE_CFG_1',
+  regimeApuracao: 'caixa',
+  exibirZerados: false,
+  exibirContasInativas: false,
+  periodosFechados: [],
+  updatedAt: new Date().toISOString(),
+}
 
 // ─── Context interface ────────────────────────────────────────────
 type Setter<T> = (v: T | ((p: T) => T)) => void
@@ -820,6 +1131,8 @@ interface DataState {
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
+  cfgGruposDRE: ConfigGrupoDRE[]; setCfgGruposDRE: Setter<ConfigGrupoDRE[]>
+  dreConfig: DREConfig; setDreConfig: Setter<DREConfig>
   cfgCalendarioLetivo: ConfigCalendarioLetivo[]; setCfgCalendarioLetivo: Setter<ConfigCalendarioLetivo[]>
   // Operações Financeiras
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
@@ -831,6 +1144,17 @@ interface DataState {
   systemLogs: SystemLog[]; setSystemLogs: Setter<SystemLog[]>
   logSystemAction: (modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => void
   wipeAll: () => void
+  // Censo Escolar
+  censoConfig: CensoConfig; setCensoConfig: (v: CensoConfig) => void
+  censoPendencias: CensoPendencia[]; setCensoPendencias: Setter<CensoPendencia[]>
+  censoExports: CensoExport[]; setCensoExports: Setter<CensoExport[]>
+  censoAuditLogs: CensoAuditLog[]; setCensoAuditLogs: Setter<CensoAuditLog[]>
+  censoOperacoes: CensoOperacaoEnvio[]; setCensoOperacoes: Setter<CensoOperacaoEnvio[]>
+  logCensoAction: (acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => void
+  // Enriquecimento Censitário
+  censoAlunosData: CensoAlunoData[]; setCensoAlunosData: Setter<CensoAlunoData[]>
+  censoTurmasData: CensoTurmaData[]; setCensoTurmasData: Setter<CensoTurmaData[]>
+  censoProfsData: CensoProfissionalData[]; setCensoProfsData: Setter<CensoProfissionalData[]>
 }
 
 const DataContext = createContext<DataState>({} as DataState)
@@ -846,70 +1170,50 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Reload para forçar a re-leitura com dados limpos
       window.location.reload()
     }
-    
-    // Auto-Sincroniza alunos e turmas legados no LocalStorage com a nova API Mockada de React Query
-    const syncLegacy = async () => {
-      try {
-        const loc = JSON.parse(window.localStorage.getItem(KEYS.alunos) || '[]');
-        if (loc.length > 0) {
-          const res = await fetch('/api/alunos');
-          const serv = await res.json();
-          const serverIds = new Set(serv.map((s:any) => s.id));
-          loc.filter((a:any) => !serverIds.has(a.id)).forEach((a:any) => {
-            fetch('/api/alunos', { method:'POST', body:JSON.stringify(a) }).catch(()=>{})
-          })
-        }
-        const locT = JSON.parse(window.localStorage.getItem(KEYS.turmas) || '[]');
-        if (locT.length > 0) {
-          const resT = await fetch('/api/turmas');
-          const servT = await resT.json();
-          const serverIdsT = new Set(servT.map((s:any) => s.id));
-          locT.filter((t:any) => !serverIdsT.has(t.id)).forEach((t:any) => {
-            fetch('/api/turmas', { method:'POST', body:JSON.stringify(t) }).catch(()=>{})
-          })
-        }
-      } catch(e) {}
-    }
-    setTimeout(syncLegacy, 2000); // Roda 2 segundos após boot em bg
+    // Nota: sincronização automática removida — causava ressurgimento de registros deletados.
+    // O fluxo correto é: deletar do Supabase via API + limpar localStorage simultaneamente.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const [alunos, setAlunos] = useLocalStorage<Aluno[]>(KEYS.alunos, [])
-  const [turmas, setTurmas] = useLocalStorage<Turma[]>(KEYS.turmas, [])
-  const [funcionarios, setFuncionarios] = useLocalStorage<Funcionario[]>(KEYS.funcionarios, [])
-  const [leads, setLeads] = useLocalStorage<Lead[]>(KEYS.leads, [])
-  const [titulos, setTitulos] = useLocalStorage<Titulo[]>(KEYS.titulos, [])
-  const [contasPagar, setContasPagar] = useLocalStorage<ContaPagar[]>(KEYS.contasPagar, [])
-  const [agendamentos, setAgendamentos] = useLocalStorage<Agendamento[]>(KEYS.agendamentos, [])
-  const [comunicados, setComunicados] = useLocalStorage<Comunicado[]>(KEYS.comunicados, [])
-  const [tarefas, setTarefas] = useLocalStorage<Tarefa[]>(KEYS.tarefas, [])
-  const [mantenedores, setMantenedores] = useLocalStorage<Mantenedor[]>(KEYS.mantenedores, [])
+
+  // ── DADOS PRIMÁRIOS — persistidos no Supabase ──────────────────────
+  const [alunos, setAlunos] = useSupabaseArray<Aluno>('alunos')
+  const [turmas, setTurmas] = useSupabaseArray<Turma>('turmas')
+  const [funcionarios, setFuncionarios] = useSupabaseArray<Funcionario>('rh/funcionarios')
+  const [leads, setLeads] = useSupabaseArray<Lead>('leads')
+  const [titulos, setTitulos] = useSupabaseArray<Titulo>('titulos')
+  const [contasPagar, setContasPagar] = useSupabaseArray<ContaPagar>('contas-pagar')
+  const [agendamentos, setAgendamentos] = useSupabaseArray<Agendamento>('agendamentos')
+  const [comunicados, setComunicados] = useSupabaseArray<Comunicado>('comunicados')
+  const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
+  const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
   const [eventosAgenda, setEventosAgenda] = useLocalStorage<EventoAgenda[]>(KEYS.eventosAgenda, [])
   const [rotinaItems, setRotinaItems] = useLocalStorage<RotinaItem[]>(KEYS.rotinaItems, [])
   const [autorizacoes, setAutorizacoes] = useLocalStorage<AutorizacaoDigital[]>(KEYS.autorizacoes, [])
   const [momentos, setMomentos] = useLocalStorage<MomentoItem[]>(KEYS.momentos, [])
   const [enquetes, setEnquetes] = useLocalStorage<Enquete[]>(KEYS.enquetes, [])
-  const [ocorrencias, setOcorrencias] = useLocalStorage<Ocorrencia[]>(KEYS.ocorrencias, [])
+  const [ocorrencias, setOcorrencias] = useSupabaseArray<Ocorrencia>('ocorrencias')
   const [transferencias, setTransferencias] = useLocalStorage<Transferencia[]>(KEYS.transferencias, [])
-  const [frequencias, setFrequencias] = useLocalStorage<RegistroFrequencia[]>(KEYS.frequencias, [])
-  const [lancamentosNota, setLancamentosNota] = useLocalStorage<LancamentoNota[]>(KEYS.lancamentosNota, [])
+  const [frequencias, setFrequencias] = useSupabaseArray<RegistroFrequencia>('academico/frequencias')
+  const [lancamentosNota, setLancamentosNota] = useSupabaseArray<LancamentoNota>('academico/notas')
   // Config Pedagógico
-    const [cfgTurnos, setCfgTurnos] = useLocalStorage<ConfigTurno[]>(KEYS.cfgTurnos, TURNOS_DEFAULT)
-  const [cfgSituacaoAluno, setCfgSituacaoAluno] = useLocalStorage<ConfigSituacaoAluno[]>(KEYS.cfgSituacaoAluno, SITUACOES_DEFAULT)
-  const [cfgGruposAlunos, setCfgGruposAlunos] = useLocalStorage<ConfigGrupoAluno[]>(KEYS.cfgGruposAlunos, GRUPOS_ALUNOS_DEFAULT)
-  const [cfgDisciplinas, setCfgDisciplinas] = useLocalStorage<ConfigDisciplina[]>(KEYS.cfgDisciplinas, DISCIPLINAS_DEFAULT)
-  const [cfgNiveisEnsino, setCfgNiveisEnsino] = useLocalStorage<ConfigNivelEnsino[]>(KEYS.cfgNiveisEnsino, NIVEIS_DEFAULT)
-  const [cfgTiposOcorrencia, setCfgTiposOcorrencia] = useLocalStorage<ConfigTipoOcorrencia[]>(KEYS.cfgTiposOcorrencia, TIPOS_OCORRENCIA_DEFAULT)
-  const [cfgEsquemasAvaliacao, setCfgEsquemasAvaliacao] = useLocalStorage<ConfigEsquemaAvaliacao[]>(KEYS.cfgEsquemasAvaliacao, [])
-  // Config Financeiro
-  const [cfgCentrosCusto, setCfgCentrosCusto] = useLocalStorage<ConfigCentroCusto[]>(KEYS.cfgCentrosCusto, [])
-  const [cfgMetodosPagamento, setCfgMetodosPagamento] = useLocalStorage<MetodoPagamento[]>(KEYS.cfgMetodosPagamento, [])
-  const [cfgCartoes, setCfgCartoes] = useLocalStorage<ConfigCartao[]>(KEYS.cfgCartoes, [])
-  const [cfgEventos, setCfgEventos] = useLocalStorage<ConfigEvento[]>(KEYS.cfgEventos, [])
-  const [cfgGruposDesconto, setCfgGruposDesconto] = useLocalStorage<ConfigGrupoDesconto[]>(KEYS.cfgGruposDesconto, [])
-  const [cfgPadroesPagamento, setCfgPadroesPagamento] = useLocalStorage<ConfigPadraoPagamento[]>(KEYS.cfgPadroesPagamento, [])
-  const [cfgPlanoContas, setCfgPlanoContas] = useLocalStorage<ConfigPlanoContas[]>(KEYS.cfgPlanoContas, [])
-  const [cfgTiposDocumento, setCfgTiposDocumento] = useLocalStorage<ConfigTipoDocumento[]>(KEYS.cfgTiposDocumento, [])
+  // ── CONFIGURAÇÕES PEDAGÓGICAS — persistidas em Supabase (tabela configuracoes) ──
+  const { data: cfgTurnos, setData: setCfgTurnos } = useConfigDb<ConfigTurno>('cfgTurnos')
+  const { data: cfgSituacaoAluno, setData: setCfgSituacaoAluno } = useConfigDb<ConfigSituacaoAluno>('cfgSituacaoAluno')
+  const { data: cfgGruposAlunos, setData: setCfgGruposAlunos } = useConfigDb<ConfigGrupoAluno>('cfgGruposAlunos')
+  const { data: cfgDisciplinas, setData: setCfgDisciplinas } = useConfigDb<ConfigDisciplina>('cfgDisciplinas')
+  const { data: cfgNiveisEnsino, setData: setCfgNiveisEnsino } = useConfigDb<ConfigNivelEnsino>('cfgNiveisEnsino')
+  const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia')
+  const { data: cfgEsquemasAvaliacao, setData: setCfgEsquemasAvaliacao } = useConfigDb<ConfigEsquemaAvaliacao>('cfgEsquemasAvaliacao')
+  // ── CONFIGURAÇÕES FINANCEIRAS — persistidas em Supabase (tabela configuracoes) ──
+  const { data: cfgCentrosCusto, setData: setCfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto')
+  const { data: cfgMetodosPagamento, setData: setCfgMetodosPagamento } = useConfigDb<MetodoPagamento>('cfgMetodosPagamento')
+  const { data: cfgCartoes, setData: setCfgCartoes } = useConfigDb<ConfigCartao>('cfgCartoes')
+  const { data: cfgEventos, setData: setCfgEventos } = useConfigDb<ConfigEvento>('cfgEventos')
+  const { data: cfgGruposDesconto, setData: setCfgGruposDesconto } = useConfigDb<ConfigGrupoDesconto>('cfgGruposDesconto')
+  const { data: cfgPadroesPagamento, setData: setCfgPadroesPagamento } = useConfigDb<ConfigPadraoPagamento>('cfgPadroesPagamento')
+  const { data: cfgPlanoContas, setData: setCfgPlanoContas } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
+  const { data: cfgTiposDocumento, setData: setCfgTiposDocumento } = useConfigDb<ConfigTipoDocumento>('cfgTiposDocumento')
   const CONVENIO_ITAU_SEED: ConfigConvenio[] = [{
     id: 'CONV-ITAU-6492-34022',
     banco: '341', nomeBanco: 'Itaú',
@@ -927,19 +1231,61 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     ambiente: 'homologacao',
     createdAt: '2026-04-01T00:00:00.000Z',
   }]
-  const [cfgConvenios, setCfgConvenios] = useLocalStorage<ConfigConvenio[]>(KEYS.cfgConvenios, CONVENIO_ITAU_SEED)
+  const { data: cfgConvenios, setData: setCfgConvenios } = useConfigDb<ConfigConvenio>('cfgConvenios')
 
-  const [cfgCalendarioLetivo, setCfgCalendarioLetivo] = useLocalStorage<ConfigCalendarioLetivo[]>(KEYS.cfgCalendarioLetivo, [])
-  // Operações Financeiras
-  const [movimentacoesManuais, setMovimentacoesManuais] = useLocalStorage<MovimentacaoManual[]>(KEYS.movimentacoesManuais, [])
+  const { data: cfgCalendarioLetivo, setData: setCfgCalendarioLetivo } = useConfigDb<ConfigCalendarioLetivo>('cfgCalendarioLetivo')
+  const { data: cfgGruposDRE, setData: setCfgGruposDRE } = useConfigDb<ConfigGrupoDRE>('cfgGruposDRE')
+  const [dreConfig, setDreConfig] = useLocalStorage<DREConfig>(KEYS.dreConfig, DRE_CONFIG_DEFAULT)
+  // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
+  const [movimentacoesManuais, setMovimentacoesManuais] = useSupabaseArray<MovimentacaoManual>('financeiro/movimentacoes')
   const [caixasAbertos, setCaixasAbertos] = useLocalStorage<CaixaAberta[]>(KEYS.caixasAbertos, [])
-  const [fornecedoresCad, setFornecedoresCad] = useLocalStorage<FornecedorCad[]>(KEYS.fornecedoresCad, [])
+  const [fornecedoresCad, setFornecedoresCad] = useSupabaseArray<FornecedorCad>('fornecedores')
   const [advertencias, setAdvertencias] = useLocalStorage<Advertencia[]>(KEYS.advertencias, [])
   const [adiantamentos, setAdiantamentos] = useLocalStorage<Adiantamento[]>(KEYS.adiantamentos, ADIANTAMENTOS)
 
-  // System Logs Vazio para Produção
-  const LOGS_SEED: SystemLog[] = []
-  const [systemLogs, setSystemLogs] = useLocalStorage<SystemLog[]>(KEYS.systemLogs, LOGS_SEED)
+  // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
+  const [systemLogs, setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
+
+  // Censo Escolar
+  const CENSO_CONFIG_DEFAULT: CensoConfig = {
+    anoCensitario: new Date().getFullYear(),
+    etapaAtiva: '1-matricula',
+    layoutVersion: '2024',
+    responsavel: '',
+    escopo: 'total',
+    updatedAt: new Date().toISOString(),
+  }
+  const [censoConfig, setCensoConfigRaw] = useLocalStorage<CensoConfig>(KEYS.censoConfig, CENSO_CONFIG_DEFAULT)
+  const setCensoConfig = useCallback((v: CensoConfig) => setCensoConfigRaw(v), [setCensoConfigRaw])
+  const [censoPendencias, setCensoPendencias] = useLocalStorage<CensoPendencia[]>(KEYS.censoPendencias, [])
+  const [censoExports, setCensoExports] = useLocalStorage<CensoExport[]>(KEYS.censoExports, [])
+  const [censoAuditLogs, setCensoAuditLogs] = useLocalStorage<CensoAuditLog[]>(KEYS.censoAuditLogs, [])
+  const [censoOperacoes, setCensoOperacoes] = useLocalStorage<CensoOperacaoEnvio[]>(KEYS.censoOperacoes, [])
+  // Enriquecimento Censitário
+  const [censoAlunosData, setCensoAlunosData] = useLocalStorage<CensoAlunoData[]>(KEYS.censoAlunosData, [])
+  const [censoTurmasData, setCensoTurmasData] = useLocalStorage<CensoTurmaData[]>(KEYS.censoTurmasData, [])
+  const [censoProfsData, setCensoProfsData] = useLocalStorage<CensoProfissionalData[]>(KEYS.censoProfsData, [])
+
+  const logCensoAction = useCallback((acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => {
+    let userName = 'Admin Local'
+    let userPerfil = 'Administrador'
+    if (typeof window !== 'undefined') {
+      try {
+        const u = JSON.parse(window.localStorage.getItem('edu-current-user') || 'null')
+        if (u && u.nome) { userName = u.nome; userPerfil = u.perfil || 'Usuário' }
+      } catch (e) {}
+    }
+    const log: CensoAuditLog = {
+      id: `CENSO-LOG-${Date.now()}`,
+      dataHora: new Date().toISOString(),
+      usuario: userName,
+      perfil: userPerfil,
+      acao,
+      modulo,
+      ...payload,
+    }
+    setCensoAuditLogs(prev => [log, ...prev].slice(0, 500))
+  }, [setCensoAuditLogs])
 
   const logSystemAction = useCallback((modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => {
     let userName = 'Admin Local';
@@ -968,6 +1314,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ...payload
     }
     setSystemLogs(prev => [newLog, ...prev])
+    // Persist log to Supabase asynchronously (fire and forget)
+    fetch('/api/system-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([newLog]),
+    }).catch(() => { /* silently ignore log write errors */ })
   }, [setSystemLogs])
 
   const createTrackedSetter = useCallback(<T extends Record<string, any>>(
@@ -977,109 +1329,77 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   ): Setter<T[]> => {
     return (newVal: T[] | ((prev: T[]) => T[])) => {
       rawSetter(prevArray => {
-        const nextArray = typeof newVal === 'function' ? (newVal as any)(prevArray) : newVal;
-        if (Array.isArray(prevArray) && Array.isArray(nextArray) && prevArray !== nextArray) {
-          const newLogs: SystemLog[] = [];
-          const mapPrev = new Map(prevArray.map(i => [i.id || String(i), i]));
-          const mapNext = new Map(nextArray.map(i => [i.id || String(i), i]));
+        const nextArray = typeof newVal === 'function' ? (newVal as any)(prevArray) : newVal
+        // Skip expensive logging if arrays are same reference (optimistic update)
+        if (prevArray === nextArray) return nextArray
 
-          const sanitizeLogData = (data: any) => {
-            try {
-              return JSON.parse(JSON.stringify(data, (key, value) => {
-                if (typeof value === 'string' && value.startsWith('data:image')) return '[IMAGEM OMITIDA DO LOG]';
-                return value;
-              }));
-            } catch (e) { return { error: 'data_too_complex' }; }
-          };
+        // Lightweight batch log — fire-and-forget, does not block state update
+        if (Array.isArray(prevArray) && Array.isArray(nextArray)) {
+          // Defer log computation to next microtask to unblock render
+          Promise.resolve().then(() => {
+            const newLogs: SystemLog[] = []
+            const mapPrev = new Map(prevArray.map(i => [i.id || String(i), i]))
+            const mapNext = new Map(nextArray.map(i => [i.id || String(i), i]))
 
-          let userName = 'Admin Local';
-          let userPerfil = 'Administrador';
-          if (typeof window !== 'undefined') {
-            try {
-              const u = JSON.parse(window.localStorage.getItem('edu-current-user') || 'null');
-              if (u && u.nome) {
-                userName = u.nome;
-                userPerfil = u.perfil || 'Usuário';
-              }
-            } catch (e) {}
-          }
+            const sanitizeLogData = (data: any) => {
+              try {
+                return JSON.parse(JSON.stringify(data, (key, value) => {
+                  if (typeof value === 'string' && value.startsWith('data:image')) return '[IMAGEM OMITIDA]'
+                  return value
+                }))
+              } catch { return { error: 'data_too_complex' } }
+            }
 
-          for (const [id, nextItem] of mapNext.entries()) {
-            if (!id || typeof nextItem !== 'object') continue;
-            const prevItem = mapPrev.get(id);
-            const nomeRel = nextItem.nome || nextItem.titulo || nextItem.codigo || nextItem.descricao || nextItem.razaoSocial || `ID: ${id}`;
+            let userName = 'Admin Local'
+            let userPerfil = 'Administrador'
+            if (typeof window !== 'undefined') {
+              try {
+                const u = JSON.parse(window.localStorage.getItem('edu-current-user') || 'null')
+                if (u && u.nome) { userName = u.nome; userPerfil = u.perfil || 'Usuário' }
+              } catch {}
+            }
 
-            if (!prevItem) {
-              newLogs.push({
-                dataHora: new Date().toISOString(),
-                usuarioNome: userName,
-                perfil: userPerfil,
-                modulo,
-                acao: 'Cadastro',
-                descricao: `Novo registro salvo (${entidadeContexto})`,
-                status: 'sucesso',
-                origem: 'sistema',
-                registroId: String(id),
-                nomeRelacionado: nomeRel,
-                detalhesDepois: sanitizeLogData(nextItem),
-              } as SystemLog);
-            } else {
-              const strNext = JSON.stringify(nextItem);
-              const strPrev = JSON.stringify(prevItem);
-              if (strNext !== strPrev) {
-                newLogs.push({
-                  dataHora: new Date().toISOString(),
-                  usuarioNome: userName,
-                  perfil: userPerfil,
-                  modulo,
-                  acao: 'Edição',
-                  descricao: `Alteração de dados (${entidadeContexto})`,
-                  status: 'sucesso',
-                  origem: 'sistema',
-                  registroId: String(id),
-                  nomeRelacionado: nomeRel,
-                  detalhesAntes: sanitizeLogData(prevItem),
-                  detalhesDepois: sanitizeLogData(nextItem),
-                } as SystemLog);
+            for (const [id, nextItem] of mapNext.entries()) {
+              if (!id || typeof nextItem !== 'object') continue
+              const prevItem = mapPrev.get(id)
+              const nomeRel = nextItem.nome || nextItem.titulo || nextItem.codigo || nextItem.descricao || nextItem.razaoSocial || `ID: ${id}`
+              if (!prevItem) {
+                newLogs.push({ dataHora: new Date().toISOString(), usuarioNome: userName, perfil: userPerfil, modulo, acao: 'Cadastro', descricao: `Novo registro (${entidadeContexto})`, status: 'sucesso', origem: 'sistema', registroId: String(id), nomeRelacionado: nomeRel, detalhesDepois: sanitizeLogData(nextItem) } as SystemLog)
+              } else {
+                // Fast shallow check before JSON comparison
+                const hasChange = Object.keys(nextItem).some(k => nextItem[k] !== (prevItem as any)[k])
+                if (hasChange) {
+                  newLogs.push({ dataHora: new Date().toISOString(), usuarioNome: userName, perfil: userPerfil, modulo, acao: 'Edição', descricao: `Alteração (${entidadeContexto})`, status: 'sucesso', origem: 'sistema', registroId: String(id), nomeRelacionado: nomeRel, detalhesAntes: sanitizeLogData(prevItem), detalhesDepois: sanitizeLogData(nextItem) } as SystemLog)
+                }
               }
             }
-          }
 
-          for (const [id, prevItem] of mapPrev.entries()) {
-             if (!id || typeof prevItem !== 'object') continue;
-             if (!mapNext.has(id)) {
-               const nomeRel = prevItem.nome || prevItem.titulo || prevItem.codigo || prevItem.descricao || prevItem.razaoSocial || `ID: ${id}`;
-               newLogs.push({
-                  dataHora: new Date().toISOString(),
-                  usuarioNome: userName,
-                  perfil: userPerfil,
-                  modulo,
-                  acao: 'Exclusão',
-                  descricao: `Registro removido (${entidadeContexto})`,
-                  status: 'sucesso',
-                  origem: 'sistema',
-                  registroId: String(id),
-                  nomeRelacionado: nomeRel,
-                  detalhesAntes: sanitizeLogData(prevItem),
-               } as SystemLog);
-             }
-          }
+            for (const [id, prevItem] of mapPrev.entries()) {
+              if (!id || typeof prevItem !== 'object') continue
+              if (!mapNext.has(id)) {
+                const nomeRel = (prevItem as any).nome || (prevItem as any).titulo || (prevItem as any).codigo || `ID: ${id}`
+                newLogs.push({ dataHora: new Date().toISOString(), usuarioNome: userName, perfil: userPerfil, modulo, acao: 'Exclusão', descricao: `Removido (${entidadeContexto})`, status: 'sucesso', origem: 'sistema', registroId: String(id), nomeRelacionado: nomeRel, detalhesAntes: sanitizeLogData(prevItem) } as SystemLog)
+              }
+            }
 
-          if (newLogs.length > 0) {
-            setSystemLogs(prev => {
-              const timestamp = Date.now();
-              const withIds = newLogs.map((l, i) => ({ ...l, id: `LOG-${timestamp}-${i}` }));
-              const nextLogs = [...withIds, ...prev];
-              return nextLogs.slice(0, 300);
-            });
-          }
+            if (newLogs.length > 0) {
+              setSystemLogs(prev => {
+                const ts = Date.now()
+                const withIds = newLogs.map((l, i) => ({ ...l, id: `LOG-${ts}-${i}` }))
+                return [...withIds, ...prev].slice(0, 300)
+              })
+            }
+          })
         }
-        return nextArray;
-      });
-    };
-  }, [setSystemLogs]);
+
+        return nextArray
+      })
+    }
+  }, [setSystemLogs])
 
   const wipeAll = useCallback(() => {
+    invalidateAllCache()
+    invalidateConfigCache()
     setAlunos([]); setTurmas([]); setFuncionarios([]); setLeads([])
     setTitulos([]); setContasPagar([]); setAgendamentos([])
     setComunicados([]); setTarefas([]); setMantenedores([])
@@ -1089,8 +1409,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
     setCfgCentrosCusto([]); setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
+    setCfgGruposDRE(GRUPOS_DRE_DEFAULT); setDreConfig(DRE_CONFIG_DEFAULT)
     setMovimentacoesManuais([]); setCaixasAbertos([]); setFornecedoresCad([])
-    setAdvertencias([]); setAdiantamentos([]); setSystemLogs([]);
+    setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
+    setCensoPendencias([]); setCensoExports([]); setCensoAuditLogs([]); setCensoOperacoes([])
+    setCensoAlunosData([]); setCensoTurmasData([]); setCensoProfsData([])
   }, [])
 
   return (
@@ -1131,13 +1454,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       cfgTiposDocumento, setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
       cfgConvenios, setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
       cfgCalendarioLetivo, setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
+      cfgGruposDRE, setCfgGruposDRE: createTrackedSetter('Configurações', 'Grupos DRE', setCfgGruposDRE),
+      dreConfig, setDreConfig,
       movimentacoesManuais, setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
       caixasAbertos, setCaixasAbertos: createTrackedSetter('Financeiro', 'Caixas', setCaixasAbertos),
       fornecedoresCad, setFornecedoresCad: createTrackedSetter('Configurações', 'Fornecedores', setFornecedoresCad),
       advertencias, setAdvertencias: createTrackedSetter('RH', 'Advertências', setAdvertencias),
       adiantamentos, setAdiantamentos: createTrackedSetter('RH', 'Adiantamentos', setAdiantamentos),
       systemLogs, setSystemLogs, logSystemAction,
-      wipeAll
+      wipeAll,
+      // Censo Escolar
+      censoConfig, setCensoConfig,
+      censoPendencias, setCensoPendencias,
+      censoExports, setCensoExports,
+      censoAuditLogs, setCensoAuditLogs,
+      censoOperacoes, setCensoOperacoes,
+      logCensoAction,
+      // Enriquecimento Censitário
+      censoAlunosData, setCensoAlunosData,
+      censoTurmasData, setCensoTurmasData,
+      censoProfsData, setCensoProfsData,
     }}>
       {children}
     </DataContext.Provider>
@@ -1147,5 +1483,5 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 export function useData() { return useContext(DataContext) }
 
 export function newId(prefix = 'ID'): string {
-  return `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`
+  return `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 10).toUpperCase()}`
 }

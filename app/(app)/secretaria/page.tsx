@@ -26,7 +26,7 @@ const ARQUIVO_CATS = [
   { key: 'prontuarios', label: 'Prontuários Alunos', icon: '🎓', color: '#3b82f6',
     getFiles: (alunos: any[]) => alunos.map(a => ({ nome: `Prontuário - ${a.nome}`, tipo: 'PDF', data: '2025', size: '245 KB' })) },
   { key: 'contratos',   label: 'Contratos',           icon: '📝', color: '#8b5cf6',
-    getFiles: (alunos: any[]) => alunos.map(a => ({ nome: `Contrato Matrícula - ${a.nome}`, tipo: 'PDF', data: '2025', size: '122 KB' })) },
+    getFiles: (alunos: any[]) => alunos.map(a => ({ nome: `Contrato Código - ${a.nome}`, tipo: 'PDF', data: '2025', size: '122 KB' })) },
   { key: 'funcionarios', label: 'Docs. Funcionários', icon: '👤', color: '#10b981',
     getFiles: (_: any[], func: any[]) => func.map(f => ({ nome: `Admissão - ${f.nome}`, tipo: 'PDF', data: '2025', size: '98 KB' })) },
   { key: 'atas',        label: 'Atas Conselho',        icon: '📋', color: '#f59e0b',
@@ -349,7 +349,7 @@ export default function SecretariaPage() {
               <select className="form-input"><option>Presencial</option><option>E-mail</option><option>WhatsApp</option></select>
             </div>
             <div style={{ gridColumn: '1/-1' }}><label className="form-label">Finalidade (opcional)</label>
-              <input className="form-input" placeholder="Ex: Abertura de conta, Matrícula em outra escola, Bolsa..." />
+              <input className="form-input" placeholder="Ex: Abertura de conta, Código em outra escola, Bolsa..." />
             </div>
           </div>
 
@@ -362,7 +362,7 @@ export default function SecretariaPage() {
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12 }}>{getInitials(a.nome)}</div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma} · Mat: {a.matricula || '—'}</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma} · Cód: {a.codigo || a.matricula || '—'}</div>
                 </div>
               </div>
             )

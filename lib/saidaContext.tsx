@@ -149,9 +149,21 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   const [guardians, setGuardians] = useState<Guardian[]>(() => load(LS.guardians, []))
   const [rfidMap, setRfidMap] = useState<GuardianRFID[]>(() => load(LS.rfid, []))
   const [studentGuardians, setStudentGuardians] = useState<StudentGuardian[]>(() => load(LS.studentGuardians, []))
-  const [activeCalls, setActiveCalls] = useState<PickupCall[]>(() =>
-    load<PickupCall[]>(LS.calls, []).filter(c => c.status !== 'confirmed' && c.status !== 'cancelled')
-  )
+  const getTodayStr = useCallback(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }, [])
+
+  const [activeCalls, setActiveCalls] = useState<PickupCall[]>(() => {
+    const list = load<PickupCall[]>(LS.calls, [])
+    const d = new Date()
+    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return list.filter(c => {
+      const cd = new Date(c.calledAt)
+      const callStr = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`
+      return callStr === todayStr
+    })
+  })
   const [logs, setLogs] = useState<SaidaLog[]>(() => load<SaidaLog[]>(LS.logs, []).slice(0, 500))
   const [config, setConfig] = useState<SaidaConfig>(() => ({ ...DEFAULT_CONFIG, ...load(LS.config, {}) }))
 
@@ -167,21 +179,17 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
 
   // ── Zerar lista diariamente à 00:00 ────────────────────────────────────────
   useEffect(() => {
-    const checkDailyReset = () => {
-      const d = new Date()
-      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      const lastClear = load<string>('edu-saida-last-clear-date', '')
-      if (lastClear !== todayStr) {
-        setActiveCalls([]) // Zera a lista
-        save('edu-saida-last-clear-date', todayStr)
-      }
+    const filterTodayOnly = () => {
+      const todayStr = getTodayStr()
+      setActiveCalls(prev => prev.filter(c => {
+        const cd = new Date(c.calledAt)
+        const callStr = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`
+        return callStr === todayStr
+      }))
     }
-    // Checa ao carregar
-    checkDailyReset()
-    // Checa a cada minuto (para o caso de a tela ficar aberta na virada)
-    const interval = setInterval(checkDailyReset, 60000)
+    const interval = setInterval(filterTodayOnly, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [getTodayStr])
 
   // ── Listen for remote updates (Monitor TV) ────────────────────────────────
   useEffect(() => {

@@ -212,7 +212,7 @@ export default function AdiantamentosPage() {
                         <div>
                           <div style={{ fontWeight: 600, color: 'hsl(var(--text-primary))' }}>{item.funcionarioNome}</div>
                           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                            Mat. {item.matricula} • {item.cargo}
+                            Cód. {item.matricula} • {item.cargo}
                           </div>
                         </div>
                       </div>

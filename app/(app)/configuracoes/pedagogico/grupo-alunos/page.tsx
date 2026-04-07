@@ -7,6 +7,17 @@ const BLANK: Omit<ConfigGrupoAluno, 'id' | 'createdAt'> = {
   codigo: '', nome: '', descricao: '', situacao: 'ativo',
 }
 
+const PADROES_GRUPOS = [
+  { codigo: '1', nome: 'Alunos Regulares', descricao: 'Alunos pagantes convencionais.', situacao: 'ativo' },
+  { codigo: '2', nome: 'Bolsistas 100%', descricao: 'Turmas/Grupos com isenção integral de mensalidade.', situacao: 'ativo' },
+  { codigo: '3', nome: 'Bolsistas 50%', descricao: 'Turmas/Grupos com bolsa parcial de desempenho ou social.', situacao: 'ativo' },
+  { codigo: '4', nome: 'Bolsa Esportes', descricao: 'Benefício por produtividade/atuação esportiva.', situacao: 'ativo' },
+  { codigo: '5', nome: 'Filhos de Funcionários', descricao: 'Isenções ou descontos atrelados à equipe escolar.', situacao: 'ativo' },
+  { codigo: '6', nome: 'Desconto Irmãos', descricao: 'Grupo com mais de uma matrícula ativa.', situacao: 'ativo' },
+  { codigo: '7', nome: 'Convênios', descricao: 'Alunos atrelados a tabelas fixas B2B.', situacao: 'ativo' },
+  { codigo: '8', nome: 'PCD / Inclusão', descricao: 'Necessidades especiais e suporte adicional (Laudados).', situacao: 'ativo' },
+] as const
+
 export default function GrupoAlunosPage() {
   const { cfgGruposAlunos, setCfgGruposAlunos } = useData()
   const [search, setSearch] = useState('')
@@ -25,6 +36,22 @@ export default function GrupoAlunosPage() {
   const openEdit = (g: ConfigGrupoAluno) => { setEditId(g.id); setForm({ codigo: g.codigo, nome: g.nome, descricao: g.descricao, situacao: g.situacao }); setShowForm(true) }
   const handleDelete = (id: string) => setCfgGruposAlunos(prev => prev.filter(g => g.id !== id))
 
+  const handleCarregarPadroes = () => {
+    setCfgGruposAlunos(prev => {
+      const existingCodes = new Set(prev.map(p => p.codigo))
+      const news = PADROES_GRUPOS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+        ...p, id: newId('GPA'), createdAt: new Date().toISOString()
+      }))
+      return [...prev, ...news]
+    })
+  }
+
+  const handleClearAll = () => {
+    if (confirm('Tem certeza que deseja apagar TODOS os grupos de alunos? Isso removerá as categorias de todos os grupos atuais.')) {
+      setCfgGruposAlunos([])
+    }
+  }
+
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
     if (editId) {
@@ -35,28 +62,22 @@ export default function GrupoAlunosPage() {
     setShowForm(false)
   }
 
-  const handleCarregarPadroes = () => {
-    const padroes: ConfigGrupoAluno[] = [
-      { id: newId('GA')+'-1', codigo: 'REG', nome: 'Alunos Regulares', descricao: 'Alunos pagantes convencionais.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-2', codigo: 'B100', nome: 'Bolsistas 100%', descricao: 'Turmas/Grupos com isenção integral de mensalidade.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-3', codigo: 'B50', nome: 'Bolsistas 50%', descricao: 'Turmas/Grupos com bolsa parcial de desempenho ou social.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-4', codigo: 'ESP', nome: 'Bolsa Atleta / Esportes', descricao: 'Benefício por produtividade/atuação esportiva.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-5', codigo: 'FUNC', nome: 'Filhos de Funcionários', descricao: 'Isenções ou descontos atrelados à equipe escolar.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-6', codigo: 'IRM', nome: 'Desconto Irmãos', descricao: 'Grupo de fidelização com mais de uma matrícula ativa.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-7', codigo: 'CONV', nome: 'Convênios (Sindicatos/Parceiros)', descricao: 'Alunos atrelados a tabelas fixas B2B.', situacao: 'ativo', createdAt: new Date().toISOString() },
-      { id: newId('GA')+'-8', codigo: 'AEE', nome: 'Atendimento Especializado (AEE)', descricao: 'Necessidades especiais e suporte adicional (Laudados).', situacao: 'ativo', createdAt: new Date().toISOString() },
-    ]
-    setCfgGruposAlunos(padroes)
-  }
-
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Grupos de Alunos</h1>
           <p className="page-subtitle">Padrões editáveis para agrupamentos (Bolsistas, Reforço, Esportes, etc.)</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Grupo</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost btn-sm" onClick={handleClearAll} style={{ color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fca5a5' }}>
+            <Trash2 size={13} /> Limpar Tudo
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleCarregarPadroes} style={{ background: 'linear-gradient(135deg, #1e3a8a, #3b82f6)', color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+            <Users2 size={13} /> Carregar Padrões
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} /> Novo Grupo</button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>

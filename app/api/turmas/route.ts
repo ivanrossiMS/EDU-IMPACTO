@@ -22,27 +22,38 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { id, codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, ...rest } = body
 
-    const row = {
-      id: id || `T${Date.now()}`,
-      codigo: codigo || '',
-      nome,
-      serie: serie || '',
-      turno: turno || '',
-      professor: professor || '',
-      sala: sala || '',
-      capacidade: capacidade || 30,
-      matriculados: matriculados || 0,
-      unidade: unidade || '',
-      ano: ano || new Date().getFullYear(),
-      dados: rest,
+    if (Array.isArray(body)) {
+      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      const rows = body.map(t => buildRow(t))
+      const { error } = await supabaseServer.from('turmas').upsert(rows)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ ok: true, count: rows.length })
     }
 
+    const row = buildRow(body)
     const { data, error } = await supabaseServer.from('turmas').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+function buildRow(body: any) {
+  const { id, codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, ...rest } = body
+  return {
+    id: id || `T${Date.now()}`,
+    codigo: codigo || '',
+    nome,
+    serie: serie || '',
+    turno: turno || '',
+    professor: professor || '',
+    sala: sala || '',
+    capacidade: capacidade || 30,
+    matriculados: matriculados || 0,
+    unidade: unidade || '',
+    ano: ano || new Date().getFullYear(),
+    dados: rest,
   }
 }

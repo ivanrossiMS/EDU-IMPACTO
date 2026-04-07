@@ -1,4 +1,5 @@
 'use client'
+import { useConfigDb } from '@/lib/useConfigDb'
 import { useData, ConfigPlanoContas, newId } from '@/lib/dataContext'
 import { useState, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx'
@@ -6,6 +7,7 @@ import { Plus, Edit2, Trash2, Check, ChevronRight, ChevronDown, FileText, Search
 
 const BLANK: Omit<ConfigPlanoContas, 'id' | 'createdAt'> = {
   codPlano: '', descricao: '', tipo: 'analitico', grupoConta: 'receitas', parentId: '', situacao: 'ativo',
+  grupoDRE: undefined, exibirDRE: true, naturezaDRE: undefined, ordemDRE: undefined,
 }
 
 const TIPO_CFG = {
@@ -17,6 +19,7 @@ const TIPO_CFG = {
 const GRUPO_CFG = {
   receitas: { color: '#10b981', emoji: '📈' },
   despesas: { color: '#ef4444', emoji: '📉' },
+  investimentos: { color: '#3b82f6', emoji: '🪙' },
 }
 
 interface PlanoNode extends ConfigPlanoContas { children: PlanoNode[] }
@@ -56,9 +59,10 @@ function SkeletonNode({ node, depth }: { node: PlanoNode; depth: number }) {
 }
 
 /* ─── Table row (recursive) ───────────────────────────────────── */
-function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle }: {
+function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle, gruposDRE = [] }: {
   node: PlanoNode; depth: number; onEdit: (n: ConfigPlanoContas) => void
   onDelete: (id: string) => void; expanded: Set<string>; onToggle: (id: string) => void
+  gruposDRE?: import('@/lib/dataContext').ConfigGrupoDRE[]
 }) {
   const tc = TIPO_CFG[node.tipo]
   const gc = GRUPO_CFG[node.grupoConta]
@@ -83,7 +87,7 @@ function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle }: {
           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${tc.color}20`, color: tc.color, fontWeight: 700 }}>{tc.label}</span>
         </td>
         <td style={{ textAlign: 'center' }}>
-          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${gc.color}20`, color: gc.color, fontWeight: 700 }}>{gc.emoji} {node.grupoConta === 'receitas' ? 'Receitas' : 'Despesas'}</span>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, background: `${gc.color}20`, color: gc.color, fontWeight: 700 }}>{gc.emoji} {node.grupoConta.charAt(0).toUpperCase() + node.grupoConta.slice(1)}</span>
         </td>
         <td style={{ textAlign: 'center' }}>
           <span className={`badge ${node.situacao === 'ativo' ? 'badge-success' : 'badge-neutral'}`}>{node.situacao === 'ativo' ? '✓' : '✗'}</span>
@@ -96,7 +100,7 @@ function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle }: {
         </td>
       </tr>
       {isExpanded && node.children.map(child => (
-        <PlanoRow key={child.id} node={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} expanded={expanded} onToggle={onToggle} />
+        <PlanoRow key={child.id} node={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} expanded={expanded} onToggle={onToggle} gruposDRE={gruposDRE} />
       ))}
     </>
   )
@@ -104,15 +108,19 @@ function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle }: {
 
 /* ─── Main page ───────────────────────────────────────────────── */
 export default function PlanoContasPage() {
-  const { cfgPlanoContas, setCfgPlanoContas } = useData()
+  // ✅ Usa useConfigDb para persistência real no Supabase
+  const { data: cfgPlanoContas, setData: setCfgPlanoContas, loading } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
+  const { cfgGruposDRE } = useData()
+
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [search, setSearch] = useState('')
-  const [filtroGrupo, setFiltroGrupo] = useState<'todos' | 'receitas' | 'despesas'>('todos')
+  const [filtroGrupo, setFiltroGrupo] = useState<'todos' | 'receitas' | 'despesas' | 'investimentos'>('todos')
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'analitico' | 'sintetico' | 'detalhe'>('todos')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [showSkeleton, setShowSkeleton] = useState(false)
+  const [saving, setSaving] = useState(false)
   // Import XLSX
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importErrors, setImportErrors] = useState<string[]>([])
@@ -122,8 +130,6 @@ export default function PlanoContasPage() {
   const toggleExpand = (id: string) => setExpanded(prev => {
     const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
   })
-  const expandAll = () => setExpanded(new Set(cfgPlanoContas.map(p => p.id)))
-  const collapseAll = () => setExpanded(new Set())
 
   const filtered = useMemo(() => {
     let list = cfgPlanoContas
@@ -148,7 +154,12 @@ export default function PlanoContasPage() {
   }
   const openEdit = (p: ConfigPlanoContas) => {
     setEditId(p.id)
-    setForm({ codPlano: p.codPlano, descricao: p.descricao, tipo: p.tipo, grupoConta: p.grupoConta, parentId: p.parentId, situacao: p.situacao })
+    setForm({
+      codPlano: p.codPlano, descricao: p.descricao, tipo: p.tipo,
+      grupoConta: p.grupoConta, parentId: p.parentId, situacao: p.situacao,
+      grupoDRE: p.grupoDRE, exibirDRE: p.exibirDRE ?? true,
+      naturezaDRE: p.naturezaDRE, ordemDRE: p.ordemDRE,
+    })
     setShowForm(true)
   }
   const handleDelete = (id: string) => {
@@ -158,6 +169,9 @@ export default function PlanoContasPage() {
   }
   const handleSave = () => {
     if (!form.codPlano.trim() || !form.descricao.trim()) return
+    const exists = cfgPlanoContas.some(p => p.codPlano === form.codPlano && p.id !== editId)
+    if (exists) { alert('Já existe uma conta cadastrada com este Código do Plano.'); return }
+    setSaving(true)
     if (editId) {
       setCfgPlanoContas(prev => prev.map(p => p.id === editId ? { ...p, ...form } : p))
     } else {
@@ -165,38 +179,86 @@ export default function PlanoContasPage() {
       setCfgPlanoContas(prev => [...prev, novo])
     }
     setShowForm(false)
+    setTimeout(() => setSaving(false), 600)
+  }
+  const handleExcluirTudo = () => {
+    if (cfgPlanoContas.length === 0) { alert('Nenhuma conta cadastrada.'); return }
+    if (!confirm(`Tem certeza absoluta que deseja EXCLUIR TODAS as ${cfgPlanoContas.length} contas do Plano de Contas?\n\nEsta ação pode desorganizar lançamentos, relatórios e a DRE.`)) return
+    const confirmTexto = prompt('Digite "EXCLUIR TUDO" para confirmar a exclusão:')
+    if (confirmTexto !== 'EXCLUIR TUDO') { alert('Operação cancelada por segurança.'); return }
+    setCfgPlanoContas([])
   }
 
   const sinteticos = cfgPlanoContas.filter(p => p.tipo === 'sintetico' || p.tipo === 'analitico')
   const totalReceitas = cfgPlanoContas.filter(p => p.grupoConta === 'receitas').length
   const totalDespesas = cfgPlanoContas.filter(p => p.grupoConta === 'despesas').length
 
-  // ── Gera próximo código disponível ──────────────────────────────
-  const gerarProximoCod = (existentes: ConfigPlanoContas[]): string => {
-    const tops = existentes.filter(p => !p.parentId).map(p => parseInt(p.codPlano) || 0)
-    const max = tops.length > 0 ? Math.max(...tops) : 0
-    return String(max + 1)
-  }
-
-  // ── Download do template XLSX ────────────────────────────────────
+  // ── Download do template XLSX (inclui campos DRE) ─────────────────
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new()
-    const header = [['Codigo (auto)', 'Descricao', 'Tipo', 'Grupo']]
+
+    // ── Aba principal: Modelo de importação ──────────────────────────
+    const header = [[
+      'Codigo', 'Descricao', 'Tipo', 'Grupo', 'Situacao', 'Conta pai (hierarquia)',
+      'GrupoDRE', 'NaturezaDRE', 'OrdemDRE', 'ExibirDRE',
+    ]]
     const examples = [
-      ['', 'Receitas Operacionais', 'sintetico', 'receitas'],
-      ['', 'Mensalidades', 'analitico', 'receitas'],
-      ['', 'Taxas e Servicos', 'analitico', 'receitas'],
-      ['', 'Despesas Operacionais', 'sintetico', 'despesas'],
-      ['', 'Folha de Pagamento', 'analitico', 'despesas'],
+      ['00',       'RECEITAS',                   'sintetico', 'receitas',  'ativo', '',      '1. Receita Bruta',  'credora',  1,  'sim'],
+      ['00.01',    'Mensalidade Escolar',         'sintetico', 'receitas',  'ativo', '00',    '1. Receita Bruta',  'credora',  2,  'sim'],
+      ['00.01.01', 'Mensalidade Ed. Infantil',    'analitico', 'receitas',  'ativo', '00.01', '1. Receita Bruta',  'credora',  3,  'sim'],
+      ['00.01.02', 'Mensalidade Ens. Fund. I',    'analitico', 'receitas',  'ativo', '00.01', '1. Receita Bruta',  'credora',  4,  'sim'],
+      ['00.02',    'Material Didático',           'sintetico', 'receitas',  'ativo', '00',    '1. Receita Bruta',  'credora',  5,  'sim'],
+      ['01',       'DESPESAS',                   'sintetico', 'despesas',  'ativo', '',      '3. Custos dos Serviços Prestados', 'devedora', 10, 'sim'],
+      ['01.01',    'Pessoal e Encargos',          'sintetico', 'despesas',  'ativo', '01',    '3. Custos dos Serviços Prestados', 'devedora', 11, 'sim'],
+      ['01.01.01', 'Salários e Ordenados',        'analitico', 'despesas',  'ativo', '01.01', '3. Custos dos Serviços Prestados', 'devedora', 12, 'sim'],
+      ['01.02',    'Serviços de Terceiros',       'sintetico', 'despesas',  'ativo', '01',    '4. Despesas Administrativas',   'devedora', 13, 'sim'],
+      ['02',       'INVESTIMENTOS',              'sintetico', 'investimentos', 'ativo', '', '7. Investimentos (Patrimônio)', 'neutra', 20, 'nao'],
     ]
     const ws = XLSX.utils.aoa_to_sheet([...header, ...examples])
-    // Larguras das colunas
-    ws['!cols'] = [{ wch: 16 }, { wch: 40 }, { wch: 16 }, { wch: 14 }]
-    XLSX.utils.book_append_sheet(wb, ws, 'Plano de Contas')
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 36 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 22 },
+      { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
+    ]
+    XLSX.utils.book_append_sheet(wb, ws, 'Modelo')
+
+    // ── Aba legenda ──────────────────────────────────────────────────
+    const legenda = [
+      ['Campo',          'Valores aceitos',                                          'Obrigatório'],
+      ['Codigo',         'Texto livre, ex: 1, 1.1, 1.1.1',                          'Sim'],
+      ['Descricao',      'Texto livre',                                              'Sim'],
+      ['Tipo',           'sintetico | analitico | detalhe',                          'Sim'],
+      ['Grupo',          'receitas | despesas | investimentos',                      'Sim'],
+      ['Situacao',       'ativo | inativo',                                          'Não (padrão: ativo)'],
+      ['Conta pai',      'Código da conta pai ou vazio para raiz',                   'Não'],
+      ['GrupoDRE',       'Ex: 1. Receita Bruta, 2. Deduções da Receita, 3. Custos dos Serviços Prestados, 4. Despesas Administrativas, 5. Despesas Comerciais/ Marketing, 6. Impostos e Tributos, 7. Investimentos (Patrimônio), 8. Não Classificados (Legado)', 'Não'],
+      ['NaturezaDRE',    'credora | devedora | neutra',                              'Não'],
+      ['OrdemDRE',       'Número inteiro para ordenação na DRE',                     'Não'],
+      ['ExibirDRE',      'sim | nao  (ou  true | false)',                            'Não (padrão: sim)'],
+    ]
+    const wsLeg = XLSX.utils.aoa_to_sheet(legenda)
+    wsLeg['!cols'] = [{ wch: 18 }, { wch: 52 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, wsLeg, 'Legenda dos campos')
+
     XLSX.writeFile(wb, 'template_plano_contas.xlsx')
   }
 
-  // ── Importar XLSX ────────────────────────────────────────────────
+  // ── Exportar dados XLSX ──────────────────────────────────────────
+  const exportarPlano = () => {
+    const wb = XLSX.utils.book_new()
+    const header = [['Codigo', 'Descricao', 'Tipo', 'Grupo', 'Situacao', 'Conta pai (hierarquia)']]
+    const sorted = [...cfgPlanoContas].sort((a, b) => a.codPlano.localeCompare(b.codPlano, undefined, { numeric: true }))
+    const getParentCode = (parentId?: string) => {
+      const p = cfgPlanoContas.find(x => x.id === parentId)
+      return p ? p.codPlano : ''
+    }
+    const rows = sorted.map(p => [p.codPlano, p.descricao, p.tipo, p.grupoConta, p.situacao, getParentCode(p.parentId)])
+    const ws = XLSX.utils.aoa_to_sheet([...header, ...rows])
+    ws['!cols'] = [{ wch: 16 }, { wch: 40 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 22 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'Plano de Contas')
+    XLSX.writeFile(wb, 'MEU_Plano_de_Contas.xlsx')
+  }
+
+  // ── Importar XLSX — grava direto no Supabase via setCfgPlanoContas ──
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -215,50 +277,109 @@ export default function PlanoContasPage() {
         const erros: string[] = []
         const novas: ConfigPlanoContas[] = []
         const TIPOS_VALIDOS = ['analitico', 'sintetico', 'detalhe']
-        const GRUPOS_VALIDOS = ['receitas', 'despesas']
+        const GRUPOS_VALIDOS = ['receitas', 'despesas', 'investimentos']
+        const NATUREZAS_VALIDAS = ['credora', 'devedora', 'neutra']
 
-        // Pula linha de cabeçalho (linha 0)
+          const MAPA_DRE: Record<string, string> = {
+          'receita bruta': 'RECEITA_BRUTA',
+          'deduções da receita': 'DEDUCAO_RECEITA',
+          'deducoes da receita': 'DEDUCAO_RECEITA',
+          'custos dos serviços prestados': 'CUSTO_SERVICO',
+          'custos dos servicos prestados': 'CUSTO_SERVICO',
+          'despesas administrativas': 'DESP_ADMINISTRATIVA',
+          'despesas adminitrativas': 'DESP_ADMINISTRATIVA', // aceita typo comum
+          'despesas comerciais/ marketing': 'DESP_COMERCIAL',
+          'despesas comerciais / marketing': 'DESP_COMERCIAL',
+          'impostos e tributos': 'IMPOSTOS',
+          'investimentos (patrimônio)': 'INVESTIMENTOS',
+          'investimentos (patrimonio)': 'INVESTIMENTOS',
+          'não classificados (legado)': 'SEM_CLASSIFICACAO',
+          'nao classificados (legado)': 'SEM_CLASSIFICACAO',
+        }
+
         rows.slice(1).forEach((row, i) => {
-          const lnum = i + 2 // linha no xlsx (1-indexed + header)
-          const descricao = String(row[1] || '').trim()
-          const tipoRaw = String(row[2] || '').trim().toLowerCase()
-          const grupoRaw = String(row[3] || '').trim().toLowerCase()
+          const lnum = i + 2
+          const codigoRaw    = String(row[0] || '').trim()
+          const descricao    = String(row[1] || '').trim()
+          const tipoRaw      = String(row[2] || '').trim().toLowerCase()
+          const grupoRaw     = String(row[3] || '').trim().toLowerCase()
+          const situacaoRaw  = String(row[4] || 'ativo').trim().toLowerCase()
+          const contaPaiRaw  = String(row[5] || '').trim()
+          
+          // ── Campos DRE (colunas 6–9) ────────────────────────────────
+          const grupoDREraw  = String(row[6] || '').trim()
+          // Limpa números e prefixos (ex: "1. Receita Bruta" -> "receita bruta")
+          const cleanGrupoDRE = grupoDREraw.replace(/^\d+\.\s*/, '').toLowerCase()
+          const grupoDRE     = grupoDREraw ? (MAPA_DRE[cleanGrupoDRE] || grupoDREraw) : undefined
+          const naturezaRaw  = String(row[7] || '').trim().toLowerCase() || undefined
+          const ordemRaw     = row[8] !== undefined && row[8] !== '' ? parseInt(String(row[8])) : undefined
+          const exibirRaw    = String(row[9] || 'sim').trim().toLowerCase()
 
+          if (!codigoRaw) { erros.push(`Linha ${lnum}: código vazio — ignorada`); return }
           if (!descricao) { erros.push(`Linha ${lnum}: descrição vazia — ignorada`); return }
           if (!TIPOS_VALIDOS.includes(tipoRaw)) { erros.push(`Linha ${lnum}: tipo "${tipoRaw}" inválido. Use: analitico, sintetico ou detalhe`); return }
-          if (!GRUPOS_VALIDOS.includes(grupoRaw)) { erros.push(`Linha ${lnum}: grupo "${grupoRaw}" inválido. Use: receitas ou despesas`); return }
+          if (!GRUPOS_VALIDOS.includes(grupoRaw)) { erros.push(`Linha ${lnum}: grupo "${grupoRaw}" inválido. Use: receitas, despesas ou investimentos`); return }
+          if (!['ativo', 'inativo'].includes(situacaoRaw)) { erros.push(`Linha ${lnum}: situação "${situacaoRaw}" inválida. Use: ativo ou inativo`); return }
+          if (naturezaRaw && !NATUREZAS_VALIDAS.includes(naturezaRaw)) {
+            erros.push(`Linha ${lnum}: NaturezaDRE "${naturezaRaw}" inválida. Use: credora, devedora ou neutra`); return
+          }
+
+          if (cfgPlanoContas.some(p => p.codPlano === codigoRaw) || novas.some(n => n.codPlano === codigoRaw)) {
+            erros.push(`Linha ${lnum}: código "${codigoRaw}" já existe — ignorada`); return
+          }
 
           novas.push({
             id: newId('PC'),
-            codPlano: '',    // será calculado abaixo
+            codPlano:    codigoRaw,
             descricao,
-            tipo: tipoRaw as ConfigPlanoContas['tipo'],
-            grupoConta: grupoRaw as 'receitas' | 'despesas',
-            parentId: '',    // sempre raiz
-            situacao: 'ativo',
-            createdAt: new Date().toISOString(),
-          })
+            tipo:        tipoRaw as ConfigPlanoContas['tipo'],
+            grupoConta:  grupoRaw as 'receitas' | 'despesas' | 'investimentos',
+            parentId:    '',
+            situacao:    situacaoRaw as 'ativo' | 'inativo',
+            createdAt:   new Date().toISOString(),
+            // ── DRE fields ────────────────────────────────────────────
+            grupoDRE:    grupoDRE as any,
+            naturezaDRE: naturezaRaw as any,
+            ordemDRE:    Number.isNaN(ordemRaw as any) ? undefined : ordemRaw,
+            exibirDRE:   !['nao', 'false', '0', 'não'].includes(exibirRaw),
+            // temp field for hierarchy resolution
+            _contaPaiRaw: contaPaiRaw,
+          } as any)
         })
 
-        // Gera códigos sequenciais evitando conflitos
-        setCfgPlanoContas(prev => {
-          const todas = [...prev]
-          novas.forEach(nova => {
-            const cod = gerarProximoCod(todas)
-            nova.codPlano = cod
-            todas.push(nova)
+        if (novas.length > 0) {
+          // ✅ setCfgPlanoContas agora persiste no Supabase automaticamente
+          setCfgPlanoContas(prev => {
+            const todas = [...prev, ...novas]
+            // Resolve hierarquia (parentId) pela 2ª passagem
+            novas.forEach(nova => {
+              const tempNova = nova as any
+              const rawPai = tempNova._contaPaiRaw
+              delete tempNova._contaPaiRaw
+
+              let parentCode = ''
+              if (rawPai) {
+                parentCode = rawPai
+              } else {
+                const parts = nova.codPlano.split('.')
+                if (parts.length > 1) { parts.pop(); parentCode = parts.join('.') }
+              }
+              if (parentCode) {
+                const parentObj = todas.find(p => p.codPlano === parentCode)
+                if (parentObj) nova.parentId = parentObj.id
+              }
+            })
+            return todas.sort((a, b) => a.codPlano.localeCompare(b.codPlano, undefined, { numeric: true }))
           })
-          return todas
-        })
+        }
 
         setImportErrors(erros)
         setImportSuccess(novas.length)
         setShowImportResult(true)
-      } catch (err) {
+      } catch {
         setImportErrors(['Erro ao ler o arquivo. Certifique-se de enviar um arquivo .xlsx válido.'])
         setShowImportResult(true)
       }
-      // Reset input para permitir re-upload do mesmo arquivo
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
     reader.readAsArrayBuffer(file)
@@ -284,18 +405,22 @@ export default function PlanoContasPage() {
                 <div style={{ padding: '32px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Nenhuma conta ativa cadastrada</div>
               ) : (
                 <>
-                  {/* Receitas */}
                   {skeletonTree.filter(n => n.grupoConta === 'receitas').length > 0 && (
                     <div style={{ marginBottom: 8 }}>
                       <div style={{ padding: '6px 24px', fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📈 Receitas</div>
                       {skeletonTree.filter(n => n.grupoConta === 'receitas').map(n => <SkeletonNode key={n.id} node={n} depth={0} />)}
                     </div>
                   )}
-                  {/* Despesas */}
                   {skeletonTree.filter(n => n.grupoConta === 'despesas').length > 0 && (
-                    <div>
+                    <div style={{ marginBottom: 8 }}>
                       <div style={{ padding: '6px 24px', fontSize: 11, fontWeight: 800, color: '#ef4444', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📉 Despesas</div>
                       {skeletonTree.filter(n => n.grupoConta === 'despesas').map(n => <SkeletonNode key={n.id} node={n} depth={0} />)}
+                    </div>
+                  )}
+                  {skeletonTree.filter(n => n.grupoConta === 'investimentos').length > 0 && (
+                    <div>
+                      <div style={{ padding: '6px 24px', fontSize: 11, fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🪙 Investimentos</div>
+                      {skeletonTree.filter(n => n.grupoConta === 'investimentos').map(n => <SkeletonNode key={n.id} node={n} depth={0} />)}
                     </div>
                   )}
                 </>
@@ -308,20 +433,36 @@ export default function PlanoContasPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Plano de Contas</h1>
-          <p className="page-subtitle">Hierarquia contábil de receitas e despesas</p>
+          <p className="page-subtitle">
+            Hierarquia contábil de receitas e despesas
+            {!loading && <> — {cfgPlanoContas.length} conta{cfgPlanoContas.length !== 1 ? 's' : ''} · <span style={{ color: '#10b981', fontSize: 12 }}>✓ Banco de dados</span></>}
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={downloadTemplate}>
+          <button className="btn btn-secondary btn-sm" onClick={downloadTemplate} disabled={loading}>
             <Download size={13} />Template XLSX
           </button>
-          <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <button className="btn btn-secondary btn-sm" onClick={exportarPlano} disabled={loading || cfgPlanoContas.length === 0}>
+            <Download size={13} />Exportar XLSX
+          </button>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 5, opacity: loading ? 0.6 : 1 }}>
             <Upload size={13} />Importar XLSX
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} disabled={loading} />
           </label>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowSkeleton(true)}><Eye size={13} />Ver Esqueleto</button>
-          <button className="btn btn-secondary btn-sm" onClick={expandAll}>Expandir tudo</button>
-          <button className="btn btn-secondary btn-sm" onClick={collapseAll}>Recolher</button>
-          <button className="btn btn-primary btn-sm" onClick={() => openNew()}><Plus size={13} />Nova Conta</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowSkeleton(true)} disabled={loading}><Eye size={13} />Ver Esqueleto</button>
+          <div style={{ width: 1, height: 20, background: 'hsl(var(--border-subtle))' }} />
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ color: '#ef4444' }}
+            onClick={handleExcluirTudo}
+            disabled={loading || cfgPlanoContas.length === 0}
+            title="Excluir todas as contas do plano"
+          >
+            <Trash2 size={13} />Excluir Tudo
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => openNew()} disabled={loading || saving}>
+            <Plus size={13} />{saving ? 'Salvando…' : 'Nova Conta'}
+          </button>
         </div>
       </div>
 
@@ -332,7 +473,7 @@ export default function PlanoContasPage() {
           <div style={{ flex: 1 }}>
             {importSuccess > 0 && (
               <div style={{ fontSize: 13, fontWeight: 700, color: '#10b981', marginBottom: importErrors.length > 0 ? 6 : 0 }}>
-                ✅ {importSuccess} conta{importSuccess !== 1 ? 's' : ''} importada{importSuccess !== 1 ? 's' : ''} com sucesso
+                ✅ {importSuccess} conta{importSuccess !== 1 ? 's' : ''} importada{importSuccess !== 1 ? 's' : ''} com sucesso e salva{importSuccess !== 1 ? 's' : ''} no banco
               </div>
             )}
             {importErrors.length > 0 && (
@@ -351,10 +492,10 @@ export default function PlanoContasPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total', value: cfgPlanoContas.length, color: '#3b82f6' },
-          { label: 'Receitas', value: totalReceitas, color: '#10b981' },
-          { label: 'Despesas', value: totalDespesas, color: '#ef4444' },
-          { label: 'Ativos', value: cfgPlanoContas.filter(p => p.situacao === 'ativo').length, color: '#8b5cf6' },
+          { label: 'Total', value: loading ? '…' : cfgPlanoContas.length, color: '#3b82f6' },
+          { label: 'Receitas', value: loading ? '…' : totalReceitas, color: '#10b981' },
+          { label: 'Despesas', value: loading ? '…' : totalDespesas, color: '#ef4444' },
+          { label: 'Investimentos', value: loading ? '…' : cfgPlanoContas.filter(p => p.grupoConta === 'investimentos').length, color: '#3b82f6' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div style={{ fontSize: 28, fontWeight: 800, color: k.color, fontFamily: 'Outfit, sans-serif' }}>{k.value}</div>
@@ -363,27 +504,36 @@ export default function PlanoContasPage() {
         ))}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+          ↻ Carregando plano de contas do banco de dados…
+        </div>
+      )}
+
       {/* Filtros */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" style={{ paddingLeft: 30 }} placeholder="Buscar conta ou código..." value={search} onChange={e => setSearch(e.target.value)} />
+      {!loading && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+            <input className="form-input" style={{ paddingLeft: 30 }} placeholder="Buscar conta ou código..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          <div className="tab-list">
+            {(['todos', 'receitas', 'despesas', 'investimentos'] as const).map(g => (
+              <button key={g} className={`tab-trigger ${filtroGrupo === g ? 'active' : ''}`} onClick={() => setFiltroGrupo(g)}>
+                {g === 'todos' ? 'Todos' : g === 'receitas' ? '📈 Receitas' : g === 'despesas' ? '📉 Despesas' : '🪙 Investimentos'}
+              </button>
+            ))}
+          </div>
+          <div className="tab-list">
+            {(['todos', 'sintetico', 'analitico', 'detalhe'] as const).map(t => (
+              <button key={t} className={`tab-trigger ${filtroTipo === t ? 'active' : ''}`} onClick={() => setFiltroTipo(t)}>
+                {t === 'todos' ? 'Todos tipos' : TIPO_CFG[t].label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="tab-list">
-          {(['todos', 'receitas', 'despesas'] as const).map(g => (
-            <button key={g} className={`tab-trigger ${filtroGrupo === g ? 'active' : ''}`} onClick={() => setFiltroGrupo(g)}>
-              {g === 'todos' ? 'Todos' : g === 'receitas' ? '📈 Receitas' : '📉 Despesas'}
-            </button>
-          ))}
-        </div>
-        <div className="tab-list">
-          {(['todos', 'sintetico', 'analitico', 'detalhe'] as const).map(t => (
-            <button key={t} className={`tab-trigger ${filtroTipo === t ? 'active' : ''}`} onClick={() => setFiltroTipo(t)}>
-              {t === 'todos' ? 'Todos tipos' : TIPO_CFG[t].label}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Formulário */}
       {showForm && (
@@ -409,9 +559,10 @@ export default function PlanoContasPage() {
             </div>
             <div>
               <label className="form-label">Grupo</label>
-              <select className="form-input" value={form.grupoConta} onChange={e => setForm(p => ({ ...p, grupoConta: e.target.value as 'receitas' | 'despesas' }))}>
+              <select className="form-input" value={form.grupoConta} onChange={e => setForm(p => ({ ...p, grupoConta: e.target.value as 'receitas' | 'despesas' | 'investimentos' }))}>
                 <option value="receitas">📈 Receitas</option>
                 <option value="despesas">📉 Despesas</option>
+                <option value="investimentos">🪙 Investimentos</option>
               </select>
             </div>
             <div>
@@ -429,6 +580,50 @@ export default function PlanoContasPage() {
               </select>
             </div>
           </div>
+          {/* ── Seção DRE ─────────────────────────────────────────── */}
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>🎯 Classificação na DRE Gerencial</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 130px auto', gap: 12 }}>
+              <div>
+                <label className="form-label">Grupo da DRE</label>
+                <select className="form-input" value={form.grupoDRE || ''}
+                  onChange={e => setForm(p => ({ ...p, grupoDRE: e.target.value as any || undefined }))}>
+                  <option value="">— Sem vínculo DRE —</option>
+                  {cfgGruposDRE.filter(g => g.natureza !== 'calculado').sort((a, b) => a.ordem - b.ordem).map(g => (
+                    <option key={g.id} value={g.codigo}>{g.ordem}. {g.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Natureza DRE</label>
+                <select className="form-input" value={form.naturezaDRE || ''}
+                  onChange={e => setForm(p => ({ ...p, naturezaDRE: e.target.value as any || undefined }))}>
+                  <option value="">— Auto (pelo grupo) —</option>
+                  <option value="credora">Credora (soma positiva)</option>
+                  <option value="devedora">Devedora (reduz resultado)</option>
+                  <option value="neutra">Neutra (informativa)</option>
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Ordem DRE</label>
+                <input className="form-input" type="number" min={0} placeholder="Auto"
+                  value={form.ordemDRE ?? ''}
+                  onChange={e => setForm(p => ({ ...p, ordemDRE: e.target.value ? parseInt(e.target.value) : undefined }))} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 2 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.exibirDRE ?? true}
+                    onChange={e => setForm(p => ({ ...p, exibirDRE: e.target.checked }))} />
+                  Exibir na DRE
+                </label>
+              </div>
+            </div>
+            {!form.grupoDRE && form.tipo === 'analitico' && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <AlertCircle size={11} /> Conta analítica sem grupo DRE — lançamentos irão para &quot;Não Classificados&quot;
+              </div>
+            )}
+          </div>
           <div style={{ marginTop: 8, display: 'flex', gap: 16, alignItems: 'center' }}>
             {Object.entries(TIPO_CFG).map(([k, tc]) => (
               <span key={k} style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
@@ -438,23 +633,28 @@ export default function PlanoContasPage() {
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 14, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn btn-primary btn-sm" onClick={handleSave}><Check size={13} />{editId ? 'Salvar' : 'Criar Conta'}</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+              <Check size={13} />{saving ? 'Salvando no banco…' : editId ? 'Salvar' : 'Criar Conta'}
+            </button>
           </div>
         </div>
       )}
 
       {/* Tabela */}
-      {cfgPlanoContas.length === 0 ? (
+      {!loading && cfgPlanoContas.length === 0 ? (
         <div className="card" style={{ padding: '56px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Plano de contas vazio</div>
           <div style={{ fontSize: 13, marginBottom: 20 }}>Comece criando os grupos principais de Receitas e Despesas.</div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-            <button className="btn btn-success" onClick={() => { openNew(); }}><Plus size={14} />Criar grupo Receitas</button>
-            <button className="btn btn-danger" onClick={() => { openNew(); }}><Plus size={14} />Criar grupo Despesas</button>
+            <button className="btn btn-secondary" onClick={() => openNew()}><Plus size={14} />Criar primeira conta</button>
+            <label className="btn btn-primary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Upload size={14} />Importar XLSX
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleImport} />
+            </label>
           </div>
         </div>
-      ) : (
+      ) : !loading && (
         <div className="table-container">
           <table>
             <thead>
@@ -470,11 +670,11 @@ export default function PlanoContasPage() {
             <tbody>
               {search ? (
                 filtered.sort((a, b) => a.codPlano.localeCompare(b.codPlano, undefined, { numeric: true })).map(p => (
-                  <PlanoRow key={p.id} node={{ ...p, children: [] }} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} />
+                  <PlanoRow key={p.id} node={{ ...p, children: [] }} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} gruposDRE={cfgGruposDRE} />
                 ))
               ) : (
                 tree.map(node => (
-                  <PlanoRow key={node.id} node={node} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} />
+                  <PlanoRow key={node.id} node={node} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} gruposDRE={cfgGruposDRE} />
                 ))
               )}
             </tbody>
@@ -482,6 +682,9 @@ export default function PlanoContasPage() {
           {search && filtered.length === 0 && (
             <div style={{ padding: '24px', textAlign: 'center', fontSize: 13, color: 'hsl(var(--text-muted))' }}>Nenhuma conta encontrada</div>
           )}
+          <div style={{ padding: '10px 16px', borderTop: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+            {cfgPlanoContas.length} conta{cfgPlanoContas.length !== 1 ? 's' : ''} cadastrada{cfgPlanoContas.length !== 1 ? 's' : ''} · <span style={{ color: '#10b981' }}>✓ Dados salvos no banco de dados</span>
+          </div>
         </div>
       )}
     </div>

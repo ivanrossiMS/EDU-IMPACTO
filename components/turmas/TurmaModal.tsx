@@ -1,17 +1,16 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+
 import { useData, Turma, newId } from '@/lib/dataContext'
 import {
   X, Check, Users, BookOpen, Clock, DollarSign, Settings,
   Plus, Trash2, Search, UserPlus, AlertCircle, ChevronDown
 } from 'lucide-react'
 
-const SEGMENTOS = ['EI', 'EF1', 'EF2', 'EM', 'EJA']
-const TURNOS = ['Manha', 'Tarde', 'Noite', 'Integral']
 const DIAS = ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado']
 const SEG_COLORS: Record<string, string> = {
+  '1': '#ec4899', '2': '#3b82f6', '3': '#8b5cf6', '4': '#10b981', '5': '#f59e0b',
   EI: '#10b981', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#f59e0b', EJA: '#ec4899',
 }
 const ANOATUAL = new Date().getFullYear()
@@ -62,8 +61,26 @@ interface Props {
 }
 
 export default function TurmaModal({ open, onClose, editingId }: Props) {
-  const { turmas, setTurmas, alunos, setAlunos, cfgDisciplinas, funcionarios, cfgPadroesPagamento, mantenedores, logSystemAction } = useData()
-  const queryClient = useQueryClient()
+  const { turmas, setTurmas, alunos, setAlunos, cfgDisciplinas, funcionarios, cfgPadroesPagamento, mantenedores, cfgNiveisEnsino, cfgTurnos, logSystemAction } = useData()
+
+  // Mapear segmentos do ERP
+  const SEGMENTOS = useMemo(() => {
+    if (!cfgNiveisEnsino || cfgNiveisEnsino.length === 0) return [
+      { codigo: 'EI', nome: 'Educação Infantil' }, 
+      { codigo: 'EF1', nome: 'Ensino F. I' }, 
+      { codigo: 'EF2', nome: 'Ensino F. II' }, 
+      { codigo: 'EM', nome: 'Ensino Médio' }, 
+      { codigo: 'EJA', nome: 'EJA' }
+    ]
+    return cfgNiveisEnsino.filter(n => n.situacao === 'ativo').map(n => ({ codigo: n.codigo, nome: n.nome }))
+  }, [cfgNiveisEnsino])
+
+  // Mapear turnos do ERP
+  const TURNOS = useMemo(() => {
+    if (!cfgTurnos || cfgTurnos.length === 0) return ['Manha', 'Tarde', 'Noite', 'Integral']
+    return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
+  }, [cfgTurnos])
+
 
   // Unidades reais cadastradas no sistema
   const unidadesList = mantenedores.flatMap(m => m.unidades ?? []).map(u => u.nomeFantasia || u.razaoSocial).filter(Boolean)
@@ -193,14 +210,12 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
         : t
       ))
       fetch(`/api/turmas/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: editingId}) })
-        .then(() => queryClient.invalidateQueries({ queryKey: ['turmas'] }))
         .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Edição', `Atualização da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     } else {
       const nid = newId('T')
       setTurmas(prev => [...prev, { ...payload, id: nid }])
       fetch(`/api/turmas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: nid}) })
-        .then(() => queryClient.invalidateQueries({ queryKey: ['turmas'] }))
         .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Cadastro', `Criação da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     }
@@ -331,22 +346,16 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
                 </div>
                 {/* Segmento — menor */}
                 <div>
-                  <label className="form-label">Segmento *</label>
-                  <select className="form-input" value={form.serie} onChange={e => {
-                    const serie = e.target.value
-                    setForm(p => ({ ...p, serie, codigo: p.nome ? gerarCodigoTurma(serie, p.turno) : '' }))
-                  }}>
-                    {SEGMENTOS.map(s => <option key={s} value={s}>{s}</option>)}
+                  <label className="form-label" style={{ fontSize: 10 }}>SEGMENTO *</label>
+                  <select className="form-input" value={form.serie} onChange={e => set('serie', e.target.value)}>
+                    {SEGMENTOS.map((s: any) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
                   </select>
                 </div>
                 {/* Turno — menor */}
                 <div>
-                  <label className="form-label">Turno *</label>
-                  <select className="form-input" value={form.turno} onChange={e => {
-                    const turno = e.target.value
-                    setForm(p => ({ ...p, turno, codigo: p.nome ? gerarCodigoTurma(p.serie, turno) : '' }))
-                  }}>
-                    {TURNOS.map(t => <option key={t} value={t}>{t}</option>)}
+                  <label className="form-label" style={{ fontSize: 10 }}>TURNO *</label>
+                  <select className="form-input" value={form.turno} onChange={e => set('turno', e.target.value)}>
+                    {TURNOS.map((t: string) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
@@ -354,19 +363,11 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
                   <label className="form-label">Unidade</label>
-                  {unidadesList.length > 0 ? (
-                    <select className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)}>
-                      <option value="">Selecionar unidade</option>
-                      {unidadesList.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  ) : (
-                    <input
-                      className="form-input"
-                      value={form.unidade}
-                      onChange={e => set('unidade', e.target.value)}
-                      placeholder="Nome da unidade..."
-                    />
-                  )}
+                  <select className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)}>
+                    <option value="">{unidadesList.length > 0 ? 'Selecionar unidade' : 'Nenhuma unidade cadastrada...'}</option>
+                    {unidadesList.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  {unidadesList.length === 0 && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 4, fontWeight: 600 }}>Cadastre no menu Configurações &rarr; Multi-Unidades</div>}
                 </div>
                 <div>
                   <label className="form-label">Sala</label>

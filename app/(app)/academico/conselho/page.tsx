@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { getInitials } from '@/lib/utils'
+import { useData } from '@/lib/dataContext'
 import { ArrowLeft, ChevronRight, Save, CheckCircle, Brain, FileText, AlertTriangle, TrendingUp, TrendingDown, Users, BookOpen, Star, Download } from 'lucide-react'
 
 const SEG_COLORS: Record<string,string> = { EI:'#10b981', EF1:'#3b82f6', EF2:'#8b5cf6', EM:'#f59e0b', EJA:'#ec4899' }
@@ -27,20 +27,8 @@ function getMediaColor(m: number) { return m >= 6 ? '#10b981' : m >= 5 ? '#f59e0
 type Aba = 'quadro' | 'deliberacoes' | 'ata'
 
 export default function ConselhoPage() {
-  const { data: alunos = [], isLoading: loadAl } = useQuery<any[]>({
-    queryKey: ['alunos'], queryFn: async () => { const r = await fetch('/api/alunos'); return r.json() }
-  })
-  const { data: turmas = [], isLoading: loadTur } = useQuery<any[]>({
-    queryKey: ['turmas'], queryFn: async () => { const r = await fetch('/api/turmas'); return r.json() }
-  })
-  const { data: lancamentosNota = [], isLoading: loadNota } = useQuery<any[]>({
-    queryKey: ['lancamentosNota'], queryFn: async () => { const r = await fetch('/api/academico/lancamentos'); return r.json() }
-  })
-  const { data: frequencias = [], isLoading: loadFreq } = useQuery<any[]>({
-    queryKey: ['frequencias'], queryFn: async () => { const r = await fetch('/api/academico/frequencias'); return r.json() }
-  })
-
-  const isLoading = loadAl || loadTur || loadNota || loadFreq
+  const { alunos = [], turmas = [], lancamentosNota = [], frequencias = [] } = useData()
+  const isLoading = false
 
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
   const [aba, setAba] = useState<Aba>('quadro')

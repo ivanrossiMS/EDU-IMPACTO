@@ -2,7 +2,7 @@
 
 import { useApp } from '@/lib/context'
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/lib/dataContext'
 import { Bell, Search, Brain, ChevronDown, Menu, Settings, LogOut, User, Sun, Moon, Command, X, DollarSign, Users, FileText, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -45,16 +45,7 @@ export function Topbar() {
   const { sidebarCollapsed, toggleSidebar, theme, setTheme, currentUserPerfil, setCurrentUserPerfil, currentUser, setCurrentUser } = useApp()
   const router = useRouter()
   
-  const { data: ocorrencias = [] } = useQuery<any[]>({
-    queryKey: ['ocorrencias'], queryFn: async () => { const r = await fetch('/api/academico/ocorrencias'); return r.json() }
-  })
-  const { data: titulos = [] } = useQuery<any[]>({
-    queryKey: ['titulos'], queryFn: async () => { const r = await fetch('/api/financeiro/titulos'); return r.json() }
-  })
-  const { data: tarefas = [] } = useQuery<any[]>({
-    queryKey: ['tarefas'], queryFn: async () => { const r = await fetch('/api/tarefas'); return r.json() }
-  })
-
+  const { ocorrencias = [], titulos = [], tarefas = [] } = useData()
   // Dados do usuário logado — fallback seguro
   const displayNome = currentUser?.nome ?? 'Usuário'
   const displayCargo = currentUser?.cargo ?? currentUserPerfil
