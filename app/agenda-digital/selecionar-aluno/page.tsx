@@ -27,7 +27,10 @@ export default function SelecionarAluno() {
     }
   }, [currentUser, alunos, router])
 
-  let meusAlunos = alunos.filter(a => a.status === 'matriculado' || a.status === 'ativo')
+  let meusAlunos = (alunos || []).filter(a => {
+    const s = a.status?.toLowerCase()
+    return s === 'matriculado' || s === 'ativo' || s === 'em_cadastro' || s === 'pendente'
+  })
 
   if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
     const nomeBusca = (currentUser.nome || '').toLowerCase().trim()
@@ -36,6 +39,9 @@ export default function SelecionarAluno() {
     meusAlunos = meusAlunos.filter(a => {
       if (a.responsavel && a.responsavel.toLowerCase().trim() === nomeBusca) return true
       if (a.emailResponsavel && emailBusca && a.emailResponsavel.toLowerCase().trim() === emailBusca) return true
+      if ((a as any).email_responsavel && emailBusca && (a as any).email_responsavel.toLowerCase().trim() === emailBusca) return true
+      if ((a as any).dados?.emailResponsavel && emailBusca && (a as any).dados.emailResponsavel.toLowerCase().trim() === emailBusca) return true
+      if ((a as any).dados?.email_responsavel && emailBusca && (a as any).dados.email_responsavel.toLowerCase().trim() === emailBusca) return true
       if (a.responsavelFinanceiro && a.responsavelFinanceiro.toLowerCase().trim() === nomeBusca) return true
       if (a.responsavelPedagogico && a.responsavelPedagogico.toLowerCase().trim() === nomeBusca) return true
 
@@ -45,7 +51,8 @@ export default function SelecionarAluno() {
         return respArr.some(r => 
           (r.nome && r.nome.toLowerCase().trim() === nomeBusca) ||
           (r.email && emailBusca && r.email.toLowerCase().trim() === emailBusca) ||
-          (r.emailResponsavel && emailBusca && r.emailResponsavel.toLowerCase().trim() === emailBusca)
+          (r.emailResponsavel && emailBusca && r.emailResponsavel.toLowerCase().trim() === emailBusca) ||
+          (r.email_responsavel && emailBusca && r.email_responsavel.toLowerCase().trim() === emailBusca)
         )
       }
 

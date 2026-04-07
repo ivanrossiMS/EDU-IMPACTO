@@ -19,7 +19,7 @@ export default function AgendaDigitalIndex() {
     } else {
       if (currentUser?.cargo === 'Aluno') {
         const nomeLower = (currentUser.nome || '').toLowerCase().trim()
-        const myAluno = alunos.find(a => 
+        const myAluno = (alunos || []).find(a => 
           (a.nome || '').toLowerCase().trim() === nomeLower || 
           (currentUser.id && currentUser.id.includes(String(a.id)))
         )

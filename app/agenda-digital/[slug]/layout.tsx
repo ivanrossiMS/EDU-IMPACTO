@@ -148,12 +148,15 @@ export default function AgendaDigitalFamilyLayout({
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
   // Find the student
-  const aluno = alunos.find(a => a.id === resolvedParams.slug) || alunos[0]
+  const aluno = (alunos || []).find(a => a.id === resolvedParams.slug) || (alunos || [])[0]
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const router = useRouter()
 
   // Real fetching of family's linked students
-  let meusAlunos = alunos.filter(a => a.status === 'matriculado' || a.status === 'ativo')
+  let meusAlunos = (alunos || []).filter(a => {
+    const s = a.status?.toLowerCase()
+    return s === 'matriculado' || s === 'ativo' || s === 'em_cadastro' || s === 'pendente'
+  })
 
   if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
     const nomeBusca = (currentUser.nome || '').toLowerCase().trim()

@@ -1,5 +1,6 @@
 'use client'
 
+import { SaidaProvider } from '@/lib/saidaContext'
 import { AgendaDigitalProvider, useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { DataProvider } from '@/lib/dataContext'
 import { FormulariosProvider } from '@/lib/formulariosContext'
@@ -15,11 +16,13 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
     <DataProvider>
       <FormulariosProvider>
         <RelatoriosProvider>
-          <AgendaDigitalProvider>
-            <AgendaDigitalLayoutInner>
-              {children}
-            </AgendaDigitalLayoutInner>
-          </AgendaDigitalProvider>
+          <SaidaProvider>
+            <AgendaDigitalProvider>
+              <AgendaDigitalLayoutInner>
+                {children}
+              </AgendaDigitalLayoutInner>
+            </AgendaDigitalProvider>
+          </SaidaProvider>
         </RelatoriosProvider>
       </FormulariosProvider>
     </DataProvider>
