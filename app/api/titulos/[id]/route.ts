@@ -3,20 +3,22 @@ import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const { data, error } = await supabaseServer.from('titulos').select('*').eq('id', params.id).single()
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  const { data, error } = await supabaseServer.from('titulos').select('*').eq('id', id).single()
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
   return NextResponse.json({ ...data, ...(data.dados || {}) })
 }
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id: paramId } = await context.params
   try {
     const body = await request.json()
     const { id, aluno, responsavel, descricao, valor, vencimento, pagamento,
       status, metodo, parcela, eventoId, eventoDescricao, centroCustoId, ...rest } = body
 
     const row = {
-      id: params.id,
+      id: paramId,
       aluno: aluno || '', responsavel: responsavel || '',
       descricao: descricao || '', valor: Number(valor) || 0,
       vencimento: vencimento || '', pagamento: pagamento || null,
@@ -33,8 +35,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { error } = await supabaseServer.from('titulos').delete().eq('id', params.id)
+export async function DELETE(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  const { error } = await supabaseServer.from('titulos').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }
