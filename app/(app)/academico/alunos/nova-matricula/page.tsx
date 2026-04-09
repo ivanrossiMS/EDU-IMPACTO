@@ -3080,23 +3080,29 @@ export default function NovaMatriculaPage() {
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
                           <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(245,158,11,0.1)',color:'#d97706',border:'1px solid rgba(245,158,11,0.2)',fontWeight:800}}>- R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}</span>
                         </td>
-                        {/* col 7: Juros */}
+                        {/* col 7: Juros / Multa — merged */}
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
+                          <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                            <div style={{display:'flex',alignItems:'center',gap:4}}>
+                              <span style={{fontSize:9,color:'#eab308',fontWeight:800}}>J</span>
+                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
+                            </div>
+                            <div style={{display:'flex',alignItems:'center',gap:4}}>
+                              <span style={{fontSize:9,color:'#eab308',fontWeight:800}}>M</span>
+                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
+                            </div>
+                          </div>
                         </td>
-                        {/* col 8: Multa */}
-                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
-                        </td>
-                        {/* col 9: Total a Pagar */}
+                        {/* col 8: Total a Pagar */}
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:13,borderTop:'2px solid hsl(var(--border-subtle))'}}>
                           <span style={{padding:'6px 10px',borderRadius:6,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.2)',fontWeight:900}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>{
                             const j = p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros;
                             const m = p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa;
-                            return s + (p.status==='pago' ? p.valorFinal : +(p.valor-(p.desconto||0)+j+m));
+                            const desc = calcJurosMulta(p).descAplicado;
+                            return s + (p.status==='pago' ? p.valorFinal : +(p.valor-desc+j+m));
                           },0))}</span>
                         </td>
-                        {/* col 10+11+12: Pagamento + Ação + Dt.Emissão — vazio */}
+                        {/* col 9+10+11: Pagamento + Ação + Dt.Emissão — vazio */}
                         <td colSpan={3} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                       </tr>
                     </tfoot>
