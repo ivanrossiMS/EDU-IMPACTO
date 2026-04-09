@@ -2628,11 +2628,12 @@ export default function NovaMatriculaPage() {
                 <Btn full icon="➕" label="Inserir Evento" color="#8b5cf6" onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}/>
                 <Btn full icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{
                   const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';
-                  const sn=se
-                    ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&(p as any).evento===se).map(p=>p.num)
-                    :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago').map(p=>p.num);
-                  if(sn.length===0){ void dlg.alert('Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
-                  setDescLote({tipo:'%',valor:'',deParcela:sn.length?String(Math.min(...sn)):'1',ateParcela:sn.length?String(Math.max(...sn)):'1',eventoId:se,parcelasEvento:sn});
+                  const pendentes=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento');
+                  const lista=se
+                    ?pendentes.filter(p=>(p as any).evento===se)
+                    :pendentes;
+                  if(lista.length===0){ void dlg.alert('Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
+                  setDescLote({tipo:'%',valor:'',deParcela:'1',ateParcela:String(lista.length),eventoId:se,parcelasEvento:lista.map(p=>p.num)});
                   setModalDesconto(true);
                 }}/>
               </Row>
@@ -3442,100 +3443,179 @@ export default function NovaMatriculaPage() {
       </div>)}
 
       {/* MODAL DESCONTO */}
-      {modalDesconto&&(<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:4000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-        <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:520,border:'1px solid hsl(var(--border-subtle))',boxShadow:'0 40px 120px rgba(0,0,0,0.8)'}}>
-          <div style={{padding:'18px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg,rgba(245,158,11,0.1),rgba(251,191,36,0.04))'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:40,height:40,borderRadius:10,background:'rgba(245,158,11,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🏷️</div><div><div style={{fontWeight:800,fontSize:15}}>Aplicar Desconto em Lote</div><div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Filtre por evento e intervalo de parcelas</div></div></div>
-            <button className="btn btn-ghost btn-icon" onClick={()=>setModalDesconto(false)}><X size={18}/></button>
-          </div>
-          <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
-            {/* Seleção do Evento */}
-            <div>
-              <label className="form-label" style={{fontSize:11,marginBottom:6,display:'block'}}>Evento (filtro de parcelas)</label>
-              <select className="form-input" value={descLote.eventoId||''} onChange={e=>{
-                  const ev=e.target.value
-                  const nums=parcelas.filter(p=>(p as any).evento===ev||!ev).map(p=>p.num)
-                  setDescLote(d=>({...d,eventoId:ev,parcelasEvento:nums,deParcela:nums.length?String(Math.min(...nums)):'1',ateParcela:nums.length?String(Math.max(...nums)):String(parcelas.length)}))
-                }}
-                style={{fontWeight:600}}>
-                <option value="">— Todos os eventos —</option>
-                {[...new Set(parcelas.map(p=>(p as any).evento).filter(Boolean))].map((ev:any)=>(
-                  <option key={ev} value={ev}>{ev}</option>
+      {modalDesconto&&(()=>{
+        // Parcelas pendentes (vencidas e a vencer) — excluindo pagas, canceladas, isentas
+        const pendentes = parcelas.filter(p=>p.status!=='pago'&&p.status!=='cancelado'&&p.status!=='isento')
+        // Eventos únicos presentes nas pendentes
+        const evNomes = [...new Set(pendentes.map(p=>(p as any).evento).filter(Boolean))]
+        // Parcelas do evento selecionado (pendentes, ordenadas por vencimento)
+        const parcsDoEvento = descLote.eventoId
+          ? pendentes.filter(p=>(p as any).evento===descLote.eventoId).sort((a,b)=>{
+              const da=new Date((a.vencimento||'').split('/').reverse().join('-')+'T12:00')
+              const db=new Date((b.vencimento||'').split('/').reverse().join('-')+'T12:00')
+              return da.getTime()-db.getTime()
+            })
+          : []
+        // Turma do evento selecionado
+        const tNmSel = parcsDoEvento.map(p=>(p as any).turmaNome || turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n) || ''
+        // Parcs afetadas pelo filtro De/Até (usando índice interno do evento)
+        const deIdx = parseInt(descLote.deParcela||'1')-1
+        const ateIdx = parseInt(descLote.ateParcela||'9999')-1
+        const afetadas = descLote.eventoId
+          ? parcsDoEvento.filter((_,i)=>i>=deIdx&&i<=ateIdx)
+          : pendentes.filter((_,i)=>i>=deIdx&&i<=ateIdx)
+        const totalDesc = afetadas.reduce((s,p)=>{
+          const v=parseMoeda(descLote.valor||'0')
+          return s+(descLote.tipo==='%'?+(p.valor*v/100).toFixed(2):v)
+        },0)
+
+        const handleChangeEvento = (ev:string) => {
+          const ps = pendentes.filter(p=>(p as any).evento===ev||!ev)
+            .sort((a,b)=>{
+              const da=new Date((a.vencimento||'').split('/').reverse().join('-')+'T12:00')
+              const db=new Date((b.vencimento||'').split('/').reverse().join('-')+'T12:00')
+              return da.getTime()-db.getTime()
+            })
+          setDescLote(d=>({...d,eventoId:ev,parcelasEvento:ps.map(x=>x.num),deParcela:'1',ateParcela:String(ps.length||1)}))
+        }
+
+        return(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:4000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:520,border:'1px solid hsl(var(--border-subtle))',boxShadow:'0 40px 120px rgba(0,0,0,0.8)'}}>
+            {/* Header */}
+            <div style={{padding:'18px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg,rgba(245,158,11,0.1),rgba(251,191,36,0.04))'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:40,height:40,borderRadius:10,background:'rgba(245,158,11,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🏷️</div>
+                <div>
+                  <div style={{fontWeight:800,fontSize:15}}>Aplicar Desconto em Lote</div>
+                  <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Filtre por evento e intervalo de parcelas</div>
+                </div>
+              </div>
+              <button className="btn btn-ghost btn-icon" onClick={()=>setModalDesconto(false)}><X size={18}/></button>
+            </div>
+
+            <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
+              {/* Evento */}
+              <div>
+                <label className="form-label" style={{fontSize:11,marginBottom:6,display:'block',letterSpacing:.5}}>EVENTO (FILTRO DE PARCELAS)</label>
+                <select className="form-input" value={descLote.eventoId||''} onChange={e=>handleChangeEvento(e.target.value)} style={{fontWeight:600}}>
+                  <option value="">— Todos os eventos —</option>
+                  {evNomes.map((ev:any)=>{
+                    const tNm = pendentes.filter(p=>(p as any).evento===ev).map(p=>(p as any).turmaNome||turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n)||''
+                    return <option key={ev} value={ev}>{ev}{tNm?` — ${tNm}`:''}</option>
+                  })}
+                </select>
+                {descLote.eventoId&&(
+                  <div style={{marginTop:6,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    {tNmSel&&<span style={{padding:'2px 10px',borderRadius:20,background:'rgba(129,140,248,0.12)',border:'1px solid rgba(129,140,248,0.3)',color:'#818cf8',fontWeight:700,fontSize:10}}>🎓 {tNmSel}</span>}
+                    <span style={{fontSize:11,color:'hsl(var(--text-muted))'}}>
+                      {parcsDoEvento.length} parcela{parcsDoEvento.length!==1?'s':''} pendente{parcsDoEvento.length!==1?'s':''}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Manter Desconto toggle */}
+              <div style={{padding:'12px 16px',background:'rgba(16,185,129,0.04)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:10}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:13}}>Manter Desconto</div>
+                    <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>Mesmo após o vencimento da parcela, o desconto será mantido.</div>
+                  </div>
+                  <button type="button" onClick={()=>setDescLote(d=>({...d,manterDesconto:!(d as any).manterDesconto}))}
+                    style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
+                      background:(descLote as any).manterDesconto?'#10b981':'hsl(var(--border-subtle))',
+                      position:'relative',transition:'background 0.2s',flexShrink:0}}>
+                    <div style={{position:'absolute',top:2,left:(descLote as any).manterDesconto?'calc(100% - 22px)':2,width:20,height:20,borderRadius:10,background:'white',transition:'left 0.2s',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tipo desconto */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {([{k:'%',l:'Percentual (%)',s:'Proporcional ao valor'},{k:'R$',l:'Valor Fixo (R$)',s:'Mesmo valor por parcela'}] as any[]).map((t:any)=>(
+                  <button key={t.k} type="button" onClick={()=>setDescLote(d=>({...d,tipo:t.k}))} style={{padding:'12px',borderRadius:10,cursor:'pointer',textAlign:'left',border:'2px solid',borderColor:descLote.tipo===t.k?'#f59e0b':'hsl(var(--border-subtle))',background:descLote.tipo===t.k?'rgba(245,158,11,0.08)':'transparent'}}>
+                    <div style={{fontWeight:700,fontSize:13,color:descLote.tipo===t.k?'#f59e0b':'hsl(var(--text-base))'}}>{descLote.tipo===t.k&&'✓ '}{t.l}</div>
+                    <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>{t.s}</div>
+                  </button>
                 ))}
-              </select>
-              {descLote.eventoId&&(()=>{
-                const evParcelas=parcelas.filter(p=>(p as any).evento===descLote.eventoId&&p.status!=='pago'&&p.num>=parseInt(descLote.deParcela||'1')&&p.num<=parseInt(descLote.ateParcela||'9999'))
-                return evParcelas.length>0&&(
-                  <div style={{marginTop:6,padding:'6px 12px',background:'rgba(245,158,11,0.08)',borderRadius:8,fontSize:11,color:'hsl(var(--text-muted))'}}>
-                    <strong style={{color:'#f59e0b'}}>{evParcelas.length} parcelas</strong> deste evento serão afetadas (de {evParcelas.length?1:0} até {evParcelas.length})
+              </div>
+
+              {/* Valor */}
+              <F label={`Valor do Desconto (${descLote.tipo})`}>
+                <input className="form-input" value={descLote.valor} onChange={e=>{
+                  if(descLote.tipo==='R$'){
+                    const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'';
+                    setDescLote(d=>({...d,valor:nv}))
+                  } else {
+                    setDescLote(d=>({...d,valor:e.target.value}))
+                  }
+                }} placeholder={descLote.tipo==='%'?'Ex: 10':'0,00'}/>
+              </F>
+
+              {/* Seletores de parcela — por índice interno do evento */}
+              {(()=>{
+                const lista = descLote.eventoId ? parcsDoEvento : pendentes.sort((a,b)=>{
+                  const da=new Date((a.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                  const db=new Date((b.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                  return da.getTime()-db.getTime()
+                })
+                if(lista.length===0) return null
+                return(
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    <F label="Da Parcela">
+                      <select className="form-input" value={descLote.deParcela} onChange={e=>setDescLote(d=>({...d,deParcela:e.target.value}))}>
+                        {lista.map((p,i)=>(
+                          <option key={p.num} value={String(i+1)}>{i+1}ª Parcela — {p.vencimento?formatDate(p.vencimento):'—'}</option>
+                        ))}
+                      </select>
+                    </F>
+                    <F label="Até a Parcela">
+                      <select className="form-input" value={descLote.ateParcela} onChange={e=>setDescLote(d=>({...d,ateParcela:e.target.value}))}>
+                        {lista.map((p,i)=>(
+                          <option key={p.num} value={String(i+1)}>{i+1}ª Parcela — {p.vencimento?formatDate(p.vencimento):'—'}</option>
+                        ))}
+                      </select>
+                    </F>
                   </div>
                 )
               })()}
-            </div>
-            {/* Manter Desconto toggle */}
-            <div style={{padding:'12px 16px',background:'rgba(16,185,129,0.04)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:10}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:13}}>Manter Desconto</div>
-                  <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>Mesmo após o vencimento da parcela, o desconto será mantido.</div>
+
+              {/* Preview total */}
+              {descLote.valor&&afetadas.length>0&&(
+                <div style={{padding:'12px 16px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div style={{fontSize:12,color:'hsl(var(--text-muted))'}}>
+                    <strong style={{color:'hsl(var(--text-base))'}}>{afetadas.length} parcela{afetadas.length!==1?'s':''}</strong> serão afetadas
+                  </div>
+                  <div>
+                    <span style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Total de desconto: </span>
+                    <strong style={{color:'#f59e0b',fontFamily:'monospace',fontSize:14}}>R$ {fmtMoeda(totalDesc)}</strong>
+                  </div>
                 </div>
-                <button type="button" onClick={()=>setDescLote(d=>({...d,manterDesconto:!(d as any).manterDesconto}))}
-                  style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
-                    background:(descLote as any).manterDesconto?'#10b981':'hsl(var(--border-subtle))',
-                    position:'relative',transition:'background 0.2s',flexShrink:0}}>
-                  <div style={{position:'absolute',top:2,left:(descLote as any).manterDesconto?'calc(100% - 22px)':2,width:20,height:20,borderRadius:10,background:'white',transition:'left 0.2s',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/>
-                </button>
-              </div>
+              )}
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              {([{k:'%',l:'Percentual (%)',s:'Proporcional ao valor'},{k:'R$',l:'Valor Fixo (R$)',s:'Mesmo valor por parcela'}] as any[]).map((t:any)=>(
-                <button key={t.k} type="button" onClick={()=>setDescLote(d=>({...d,tipo:t.k}))} style={{padding:'12px',borderRadius:10,cursor:'pointer',textAlign:'left',border:'2px solid',borderColor:descLote.tipo===t.k?'#f59e0b':'hsl(var(--border-subtle))',background:descLote.tipo===t.k?'rgba(245,158,11,0.08)':'transparent'}}>
-                  <div style={{fontWeight:700,fontSize:13,color:descLote.tipo===t.k?'#f59e0b':'hsl(var(--text-base))'}}>{descLote.tipo===t.k&&'✓ '}{t.l}</div>
-                  <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>{t.s}</div>
-                </button>
-              ))}
+
+            <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'flex-end',gap:10,background:'hsl(var(--bg-elevated))'}}>
+              <button className="btn btn-secondary" onClick={()=>setModalDesconto(false)}>Cancelar</button>
+              <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#f59e0b,#d97706)'}} disabled={!descLote.valor||afetadas.length===0} onClick={()=>{
+                const v=parseMoeda(descLote.valor)
+                const lista = descLote.eventoId ? parcsDoEvento : pendentes.sort((a,b)=>{
+                  const da=new Date((a.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                  const db=new Date((b.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                  return da.getTime()-db.getTime()
+                })
+                const numsAfetados = lista.filter((_,i)=>i>=deIdx&&i<=ateIdx).map(p=>p.num)
+                setParcelas(prev=>prev.map(p=>{
+                  if(!numsAfetados.includes(p.num)||p.status==='pago'||p.status==='cancelado') return p
+                  const d=descLote.tipo==='%'?+(p.valor*v/100).toFixed(2):v
+                  return{...p,desconto:d,valorFinal:Math.max(0,+(p.valor-d).toFixed(2)),manterDesconto:(descLote as any).manterDesconto||false,descTipo:descLote.tipo,descRaw:v}
+                }))
+                setModalDesconto(false)
+              }}><Check size={14}/> Aplicar Desconto</button>
             </div>
-            <F label={`Valor do Desconto (${descLote.tipo})`}><input className="form-input" value={descLote.valor} onChange={e=>setDescLote(d=>({...d,valor:e.target.value}))} placeholder={descLote.tipo==='%'?'Ex: 10':'Ex: 50,00'}/></F>
-            {descLote.eventoId&&(<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <F label="Da Parcela (deste evento)"><select className="form-input" value={descLote.deParcela} onChange={e=>setDescLote(d=>({...d,deParcela:e.target.value}))}>
-                {parcelas.filter(p=>(p as any).evento===descLote.eventoId).map((p,i)=><option key={p.num} value={p.num}>{i+1}ª Parcela ({p.vencimento ? formatDate(p.vencimento) : '—'})</option>)}
-              </select></F>
-              <F label="Até a Parcela"><select className="form-input" value={descLote.ateParcela} onChange={e=>setDescLote(d=>({...d,ateParcela:e.target.value}))}>
-                {parcelas.filter(p=>(p as any).evento===descLote.eventoId).map((p,i)=><option key={p.num} value={p.num}>{i+1}ª Parcela ({p.vencimento ? formatDate(p.vencimento) : '—'})</option>)}
-              </select></F>
-            </div>)}
-            {!descLote.eventoId&&(
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                <F label="Da Parcela"><select className="form-input" value={descLote.deParcela} onChange={e=>setDescLote(d=>({...d,deParcela:e.target.value}))}>{parcelas.map(p=><option key={p.num} value={p.num}>#{p.num} — {(p as any).evento} ({p.vencimento ? formatDate(p.vencimento) : '—'})</option>)}</select></F>
-                <F label="Até a Parcela"><select className="form-input" value={descLote.ateParcela} onChange={e=>setDescLote(d=>({...d,ateParcela:e.target.value}))}>{parcelas.map(p=><option key={p.num} value={p.num}>#{p.num} — {(p as any).evento} ({p.vencimento ? formatDate(p.vencimento) : '—'})</option>)}</select></F>
-              </div>
-            )}
-            {descLote.valor&&<div style={{padding:'10px 14px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:10,fontSize:12}}>
-              Desconto total estimado: <strong style={{color:'#f59e0b'}}>R$ {fmtMoeda(
-                parcelas.filter(p=>{
-                  const evOk=descLote.eventoId?(p as any).evento===descLote.eventoId:true;
-                  const nmOk=p.num>=parseInt(descLote.deParcela||'1')&&p.num<=parseInt(descLote.ateParcela||'9999');
-                  return evOk&&nmOk&&p.status!=='pago';
-                }).reduce((s,p)=>{const v=parseMoeda(descLote.valor);return s+(descLote.tipo==='%'?+(p.valor*v/100).toFixed(2):v)},0)
-              )}</strong>
-            </div>}
-          </div>
-          <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'flex-end',gap:10,background:'hsl(var(--bg-elevated))'}}>
-            <button className="btn btn-secondary" onClick={()=>setModalDesconto(false)}>Cancelar</button>
-            <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#f59e0b,#d97706)'}} disabled={!descLote.valor} onClick={()=>{
-              const v=parseMoeda(descLote.valor)
-              setParcelas(prev=>prev.map(p=>{
-                const matchesEv = descLote.eventoId ? ((p as any).evento===descLote.eventoId) : true;
-                const matchesNum = p.num >= parseInt(descLote.deParcela||'1') && p.num <= parseInt(descLote.ateParcela||'9999');
-                if(!matchesEv || !matchesNum || p.status==='pago') return p
-                const d=descLote.tipo==='%'?+(p.valor*v/100).toFixed(2):v
-                return{...p,desconto:d,valorFinal:Math.max(0,+(p.valor-d).toFixed(2)),manterDesconto:(descLote as any).manterDesconto||false,descTipo:descLote.tipo,descRaw:v}
-              }))
-              setModalDesconto(false)
-            }}><Check size={14}/> Aplicar Desconto</button>
           </div>
         </div>
-      </div>)}
+      )})()}
 
       {/* MODAL MUDAR VENCIMENTO */}
       {modalVcto&&(<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:4000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
