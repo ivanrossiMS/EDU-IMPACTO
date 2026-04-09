@@ -33,12 +33,26 @@ export default function ADAdminAjustes() {
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setAdConfig(localConfig)
     if (localBanner !== undefined) {
       setBannerUrl(localBanner)
     }
-    adAlert('Configurações salvas com sucesso no sistema global!', 'Sucesso')
+
+    // Push to global settings DB
+    try {
+      await fetch('/api/configuracoes', {
+         method: 'POST', body: JSON.stringify({ chave: 'ad_config', valor: localConfig })
+      })
+      if (localBanner) {
+         await fetch('/api/configuracoes', {
+            method: 'POST', body: JSON.stringify({ chave: 'ad_banner', valor: localBanner })
+         })
+      }
+      adAlert('Configurações e banner salvos com sucesso no sistema global para todos os usuários!', 'Sucesso')
+    } catch(e) {
+      adAlert('Salvo localmente, mas houve erro ao publicar na nuvem global.', 'Atenção')
+    }
   }
 
   const updatePerm = (key: keyof typeof localConfig.permissoes, val: boolean) => {

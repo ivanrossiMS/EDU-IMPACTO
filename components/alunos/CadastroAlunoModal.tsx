@@ -15,7 +15,7 @@ const gerarCodigo = (seq: number) => String(seq).padStart(6, '0')
 
 // Retorna o próximo seq do aluno sem repetir mesmo que haja exclusões
 const proximoSeqAluno = (alunos: any[]): number => {
-  if (alunos.length === 0) return 1
+  if (!alunos || alunos.length === 0) return 1
   const nums = alunos
     .map(a => parseInt(a._dadosAluno?.codigo || '0', 10))
     .filter(n => !isNaN(n) && n > 0)
@@ -25,10 +25,12 @@ const proximoSeqAluno = (alunos: any[]): number => {
 // Gera código de responsável único verificando todos já cadastrados
 const gerarCodigoRespUnico = (alunos: any[]): string => {
   const existentes = new Set<string>()
-  alunos.forEach(a => {
-    const resps: any[] = a._responsaveis || []
-    resps.forEach(r => { if (r.codigo) existentes.add(r.codigo) })
-  })
+  if (alunos && Array.isArray(alunos)) {
+    alunos.forEach(a => {
+      const resps: any[] = a._responsaveis || []
+      resps.forEach(r => { if (r.codigo) existentes.add(r.codigo) })
+    })
+  }
   let code: string
   do { code = gerarCodigo(Math.floor(Math.random() * 999999)) }
   while (existentes.has(code))

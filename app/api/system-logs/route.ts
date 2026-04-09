@@ -48,13 +48,19 @@ export async function POST(request: Request) {
       origem: l.origem || 'sistema',
       registro_id: l.registroId || null,
       nome_relacionado: l.nomeRelacionado || null,
-      detalhes_antes: l.detalhesAntes || null,
-      detalhes_depois: l.detalhesDepois || null,
+      detalhes_antes: l.detalhesAntes,
+      detalhes_depois: l.detalhesDepois,
     }))
     const { error } = await supabaseServer.from('system_logs').upsert(rows)
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) {
+      console.error('[API system-logs] Upsert error:', error)
+      try { require('fs').writeFileSync('sys-logs-error.txt', JSON.stringify(error, null, 2)) } catch(e){}
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     return NextResponse.json({ ok: true, count: rows.length })
   } catch (e: any) {
+    console.error('[API system-logs] Unknown Catch error:', e.message)
+    try { require('fs').writeFileSync('sys-logs-error.txt', String(e.stack || e.message)) } catch(err){}
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }

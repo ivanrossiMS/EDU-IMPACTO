@@ -6,10 +6,12 @@ import { DataProvider } from '@/lib/dataContext'
 import { FormulariosProvider } from '@/lib/formulariosContext'
 import { RelatoriosProvider } from '@/lib/relatoriosContext'
 import { useApp } from '@/lib/context'
+import { useData } from '@/lib/dataContext'
 import { BookHeart, LogOut, Search, Bell } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { getInitials } from '@/lib/utils'
+import { useEffect, useState } from 'react'
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -31,8 +33,36 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const { bannerUrl } = useAgendaDigital()
-  const { currentUser } = useApp()
+  const { currentUser, hydrated } = useApp()
+  const { perfis } = useData()
+  const router = useRouter()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+
+  // Block access if profile doesn't have '/agenda-digital' permission
+  if (hydrated && currentUser && !isFamily) {
+    const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
+    const userPerms = userPerfilObj?.permissoes || []
+    if (!userPerms.includes('/agenda-digital')) {
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
+          textAlign: 'center', gap: 16,
+        }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.9)" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <p style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(239,68,68,0.7)', textTransform: 'uppercase' }}>ERRO 403 · ACESSO RESTRITO</p>
+          <h1 style={{ fontSize: 32, fontWeight: 200, color: 'white', margin: 0 }}>Acesso Negado</h1>
+          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', maxWidth: 400, margin: 0 }}>A Agenda Digital foi restrita para o seu perfil. Consulte o Diretor Geral.</p>
+          <button onClick={() => router.push('/dashboard')} style={{ marginTop: 16, padding: '12px 28px', background: 'rgba(59,130,246,0.9)', border: 'none', borderRadius: 10, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+            ← Voltar ao Hub
+          </button>
+        </div>
+      )
+    }
+  }
 
   return (
         <div className="agenda-digital-wrapper" style={{ 

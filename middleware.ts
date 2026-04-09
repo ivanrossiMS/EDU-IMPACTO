@@ -35,7 +35,7 @@ export async function middleware(request: NextRequest) {
   if (path === '/login' || path === '/') {
     let dest = '/dashboard';
     if (payload.perfil === 'Família' || payload.cargo === 'Aluno' || payload.cargo === 'Responsável') dest = '/agenda-digital';
-    if (payload.perfil === 'Professor') dest = '/professor';
+    if (payload.perfil === 'Professor') dest = '/dashboard';
     
     return NextResponse.redirect(new URL(dest, request.url));
   }

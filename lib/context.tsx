@@ -62,6 +62,8 @@ interface AppState {
   // Logged-in user completo
   currentUser: CurrentUser | null
   setCurrentUser: (user: CurrentUser | null) => void
+  // Whether localStorage has been read (prevents false 'Diretor Geral' default)
+  hydrated: boolean
 }
 
 const AppContext = createContext<AppState>({
@@ -81,6 +83,7 @@ const AppContext = createContext<AppState>({
   setCurrentUserPerfil: () => {},
   currentUser: null,
   setCurrentUser: () => {},
+  hydrated: false,
 })
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -168,6 +171,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       activeModules, setModuleActive,
       currentUserPerfil, setCurrentUserPerfil,
       currentUser, setCurrentUser,
+      hydrated,
     }}>
       {children}
     </AppContext.Provider>

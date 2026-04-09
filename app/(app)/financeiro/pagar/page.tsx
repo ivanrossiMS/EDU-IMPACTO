@@ -693,7 +693,15 @@ export default function ContasPagarPage() {
                     style={{ padding: '13px 20px', cursor: 'pointer', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 14 }}
                     onMouseEnter={el => (el.currentTarget.style.background = 'hsl(var(--bg-elevated))')}
                     onMouseLeave={el => (el.currentTarget.style.background = 'transparent')}>
-                    <code style={{ fontSize: 11, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '2px 7px', borderRadius: 4, fontWeight: 700, flexShrink: 0 }}>{(p as any).codPlano || 'S/C'}</code>
+                    <code style={{ 
+                      fontSize: 11, 
+                      background: p.grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : p.grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'rgba(96,165,250,0.12)', 
+                      color: p.grupoConta === 'receitas' ? '#10b981' : p.grupoConta === 'despesas' ? '#ef4444' : '#60a5fa', 
+                      padding: '2px 7px', 
+                      borderRadius: 4, 
+                      fontWeight: 700, 
+                      flexShrink: 0 
+                    }}>{(p as any).codPlano || 'S/C'}</code>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: 13 }}>{p.descricao}</div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{p.grupoConta} · {p.situacao}</div>
@@ -803,10 +811,19 @@ export default function ContasPagarPage() {
                 </label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1, padding: '9px 14px', background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, fontSize: 13, color: planoContasId ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {planoContasId ? (
-                      <><code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{(cfgPlanoContas.find(p => p.id === planoContasId) as any)?.codPlano || ''}</code>
-                      <span style={{ fontWeight: 600 }}>{cfgPlanoContas.find(p => p.id === planoContasId)?.descricao}</span></>
-                    ) : <span>Nenhuma conta selecionada</span>}
+                    {planoContasId ? (() => {
+                      const sel = cfgPlanoContas.find(p => p.id === planoContasId);
+                      return (
+                        <><code style={{ 
+                          fontSize: 10, 
+                          background: sel?.grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : sel?.grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'rgba(96,165,250,0.12)', 
+                          color: sel?.grupoConta === 'receitas' ? '#10b981' : sel?.grupoConta === 'despesas' ? '#ef4444' : '#60a5fa', 
+                          padding: '1px 5px', 
+                          borderRadius: 3 
+                        }}>{(sel as any)?.codPlano || ''}</code>
+                        <span style={{ fontWeight: 600 }}>{sel?.descricao}</span></>
+                      );
+                    })() : <span>Nenhuma conta selecionada</span>}
                   </div>
                   <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap', fontSize: 12 }}
                     onClick={() => { setPlanoModalSearch(''); setShowPlanoModal('form') }}>

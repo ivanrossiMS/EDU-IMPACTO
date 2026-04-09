@@ -53,7 +53,7 @@ function gerarParcelas(
 const fmtCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default function PadraoPagamentoPage() {
-  const { cfgPadroesPagamento, setCfgPadroesPagamento } = useData()
+  const { data: cfgPadroesPagamento, setData: setCfgPadroesPagamento } = useConfigDb<ConfigPadraoPagamento>('cfgPadroesPagamento')
   const { data: cfgEventos } = useConfigDb<ConfigEvento>('cfgEventos')
 
   // Form state

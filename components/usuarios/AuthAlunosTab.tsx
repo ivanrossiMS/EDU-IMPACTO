@@ -63,7 +63,7 @@ export function AuthAlunosTab() {
   }
 
   // Derived list: academic students merged with auth state
-  const displayed = alunos.map(aluno => {
+  const displayed = (alunos || []).map(aluno => {
     const authRecord = authUsers.find(u => u.academic_id === aluno.id && u.user_type === 'student')
     
     // Virtual record automatically linking the user to FAMILIA and ATIVO
@@ -195,8 +195,8 @@ export function AuthAlunosTab() {
                         </div>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
-                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <Shield size={9} /> Perfil: FAMILIA
+                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Alunos</span>
                           </div>
                         </div>
                       </div>

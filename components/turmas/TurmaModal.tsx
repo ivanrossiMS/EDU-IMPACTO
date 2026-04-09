@@ -61,7 +61,15 @@ interface Props {
 }
 
 export default function TurmaModal({ open, onClose, editingId }: Props) {
-  const { turmas, setTurmas, alunos, setAlunos, cfgDisciplinas, funcionarios, cfgPadroesPagamento, mantenedores, cfgNiveisEnsino, cfgTurnos, logSystemAction } = useData()
+  const { turmas: _turmas, setTurmas, alunos: _alunos, setAlunos, cfgDisciplinas: _cfgDisc, funcionarios: _funcs, cfgPadroesPagamento: _cfgPadroes, mantenedores: _mantenedores, cfgNiveisEnsino: _cfgNiveis, cfgTurnos: _cfgTurnos, logSystemAction } = useData()
+  const turmas        = Array.isArray(_turmas)      ? _turmas      : []
+  const alunos        = Array.isArray(_alunos)      ? _alunos      : []
+  const cfgDisciplinas= Array.isArray(_cfgDisc)     ? _cfgDisc     : []
+  const funcionarios  = Array.isArray(_funcs)       ? _funcs       : []
+  const cfgPadroesPagamento = Array.isArray(_cfgPadroes) ? _cfgPadroes : []
+  const mantenedores  = Array.isArray(_mantenedores)? _mantenedores: []
+  const cfgNiveisEnsino = Array.isArray(_cfgNiveis) ? _cfgNiveis   : []
+  const cfgTurnos     = Array.isArray(_cfgTurnos)   ? _cfgTurnos   : []
 
   // Mapear segmentos do ERP
   const SEGMENTOS = useMemo(() => {
@@ -77,7 +85,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
 
   // Mapear turnos do ERP
   const TURNOS = useMemo(() => {
-    if (!cfgTurnos || cfgTurnos.length === 0) return ['Manha', 'Tarde', 'Noite', 'Integral']
+    if (!cfgTurnos || cfgTurnos.length === 0) return ['Matutino', 'Vespertino', 'Noturno', 'Integral']
     return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
   }, [cfgTurnos])
 
@@ -97,7 +105,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   const editing = editingId ? turmas.find(t => t.id === editingId) : null
 
   const [form, setForm] = useState<Omit<Turma, 'id'>>({
-    codigo: '', nome: '', serie: 'EF1', turno: 'Manha', professor: '',
+    codigo: '', nome: '', serie: 'EF1', turno: '', professor: '',
     sala: '', capacidade: 35, matriculados: 0,
     unidade: '', ano: ANOATUAL,
   })
@@ -112,7 +120,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
       const ids = (editing as any).padraoPagamentoIds || ((editing as any).padraoPagamentoId ? [(editing as any).padraoPagamentoId] : [])
       setPadraoPagamentoIds(ids)
     } else {
-      setForm({ codigo: '', nome: '', serie: 'EF1', turno: 'Manha', professor: '', sala: '', capacidade: 35, matriculados: 0, unidade: '', ano: ANOATUAL })
+      setForm({ codigo: '', nome: '', serie: 'EF1', turno: TURNOS[0] ?? 'Matutino', professor: '', sala: '', capacidade: 35, matriculados: 0, unidade: '', ano: ANOATUAL })
       setDisciplinas([]); setHorarios([])
       setPadraoPagamentoIds([])
     }
@@ -261,7 +269,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
                 {editingId ? `Editar Turma — ${editing?.nome}` : (form.nome || 'Nova Turma')}
               </div>
               <div style={{ fontSize: 12, color: textMuted, marginTop: 2 }}>
-                {form.serie} • {form.turno} • {form.unidade} • Ano {form.ano}
+                {SEGMENTOS.find((s: any) => s.codigo === form.serie)?.nome ?? form.serie} • {form.turno} • {form.unidade} • Ano {form.ano}
               </div>
             </div>
           </div>
@@ -768,7 +776,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
               }}>
                 <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: segColor, flexShrink: 0 }} />
                 <strong style={{ color: segColor, fontWeight: 800 }}>{form.nome}</strong>
-                <span style={{ color: textMuted }}>· {form.serie} · {form.turno} · {form.ano}</span>
+                <span style={{ color: textMuted }}>· {SEGMENTOS.find((s: any) => s.codigo === form.serie)?.nome ?? form.serie} · {form.turno} · {form.ano}</span>
               </span>
             )}
           </div>

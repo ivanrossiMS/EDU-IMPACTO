@@ -2,6 +2,7 @@
 
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
+import { RouteGuard } from '@/components/layout/RouteGuard'
 import { useApp } from '@/lib/context'
 import { DataProvider } from '@/lib/dataContext'
 import { useEffect, useState } from 'react'
@@ -45,7 +46,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       if (p === 'Professor') {
          if (!pathname.startsWith('/professor') && !pathname.startsWith('/academico') && !pathname.startsWith('/dashboard') && !pathname.startsWith('/agenda-digital')) {
-            router.replace('/professor')
+            router.replace('/dashboard')
             return
          }
       }
@@ -84,9 +85,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
           <Topbar />
-          <main className="page-content">
-            {children}
-          </main>
+          <RouteGuard>
+            <main className="page-content">
+              {children}
+            </main>
+          </RouteGuard>
         </div>
       </div>
     </DataProvider>

@@ -38,14 +38,14 @@ export default function FornecedoresPage() {
     localStorage.setItem('edu-fornecedores-categorias', JSON.stringify(categorias))
   }, [categorias])
 
-  // Plano de contas typeahead
-  const [planoSearch, setPlanoSearch] = useState('')
-  const [showPlanoDrop, setShowPlanoDrop] = useState(false)
+  // Plano de contas modal
+  const [modalPlanoSearch, setModalPlanoSearch] = useState('')
+  const [showPlanoModal, setShowPlanoModal] = useState(false)
   const planosFiltrados = useMemo(() => {
-    const q = planoSearch.toLowerCase()
-    return cfgPlanoContas.filter(p => p.situacao === 'ativo' &&
-      (p.descricao.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q))).slice(0, 8)
-  }, [cfgPlanoContas, planoSearch])
+    const q = modalPlanoSearch.toLowerCase()
+    return (cfgPlanoContas || []).filter(p => p.situacao === 'ativo' &&
+      (p.descricao?.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q)))
+  }, [cfgPlanoContas, modalPlanoSearch])
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -121,7 +121,7 @@ export default function FornecedoresPage() {
   }
 
   const gerarCodFor = () => {
-    const existentes = fornecedoresCad.map(f => f.codigo).filter(Boolean)
+    const existentes = (fornecedoresCad || []).map(f => f.codigo).filter(Boolean)
     let cod: string
     do { cod = `FOR-${Math.floor(Math.random() * 90000) + 10000}` } while (existentes.includes(cod))
     return cod
@@ -144,16 +144,15 @@ export default function FornecedoresPage() {
     }
   }
 
-  const filtered = useMemo(() => fornecedoresCad.filter(f =>
+  const filtered = useMemo(() => (fornecedoresCad || []).filter(f =>
     (filterSit === 'Todos' || f.situacao === filterSit) &&
-    (!search || f.razaoSocial.toLowerCase().includes(search.toLowerCase()) || f.nomeFantasia.toLowerCase().includes(search.toLowerCase()) || f.cnpj.includes(search))
+    (!search || f.razaoSocial?.toLowerCase().includes(search.toLowerCase()) || f.nomeFantasia?.toLowerCase().includes(search.toLowerCase()) || f.cnpj?.includes(search))
   ), [fornecedoresCad, filterSit, search])
 
-  const openNew = () => { setForm({ ...BLANK, codigo: gerarCodFor() }); setPlanoSearch(''); setEditId(null); setShowForm(true); setAbaForm('dados') }
+  const openNew = () => { setForm({ ...BLANK, codigo: gerarCodFor() }); setModalPlanoSearch(''); setEditId(null); setShowForm(true); setAbaForm('dados') }
   const openEdit = (f: FornecedorCad) => {
     const { id, createdAt, ...rest } = f
-    const pc = cfgPlanoContas.find(p => p.id === (rest as any).planoContasId)
-    setPlanoSearch(pc ? `${(pc as any).codPlano || ''} — ${pc.descricao}` : '')
+    setModalPlanoSearch('')
     setForm({ ...rest, planoContasId: (rest as any).planoContasId || '' } as any); setEditId(id); setShowForm(true); setAbaForm('dados')
   }
   const handleSave = () => {
@@ -171,23 +170,23 @@ export default function FornecedoresPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Fornecedores</h1>
-          <p className="page-subtitle">{fornecedoresCad.length} fornecedores cadastrados</p>
+          <p className="page-subtitle">{(fornecedoresCad || []).length} fornecedores cadastrados</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary btn-sm" onClick={exportarModelo} title="Baixar Modelo de Planilha"><Download size={13} />Baixar Modelo</button>
           <input type="file" accept=".xlsx, .xls" ref={fileRef} style={{ display: 'none' }} onChange={handleImport} />
           <button className="btn btn-secondary btn-sm" onClick={() => fileRef.current?.click()} title="Importar XLSX"><Upload size={13} />Importar XLSX</button>
-          {fornecedoresCad.length > 0 && <button className="btn btn-danger btn-sm" onClick={handleDeleteAll} title="Excluir Todos"><Trash2 size={13} />Excluir Todos</button>}
+          {(fornecedoresCad || []).length > 0 && <button className="btn btn-danger btn-sm" onClick={handleDeleteAll} title="Excluir Todos"><Trash2 size={13} />Excluir Todos</button>}
           <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Novo Fornecedor</button>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total', value: fornecedoresCad.length, color: '#3b82f6', icon: '🏢' },
-          { label: 'Ativos', value: fornecedoresCad.filter(f => f.situacao === 'ativo').length, color: '#10b981', icon: '✅' },
-          { label: 'Categorias', value: new Set(fornecedoresCad.map(f => f.categoria)).size, color: '#8b5cf6', icon: '🗂️' },
-          { label: 'Cpntas a Pagar', value: contasPagar.length, color: '#f59e0b', icon: '💸' },
+          { label: 'Total', value: (fornecedoresCad || []).length, color: '#3b82f6', icon: '🏢' },
+          { label: 'Ativos', value: (fornecedoresCad || []).filter(f => f.situacao === 'ativo').length, color: '#10b981', icon: '✅' },
+          { label: 'Categorias', value: new Set((fornecedoresCad || []).map(f => f.categoria)).size, color: '#8b5cf6', icon: '🗂️' },
+          { label: 'Cpntas a Pagar', value: (contasPagar || []).length, color: '#f59e0b', icon: '💸' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
@@ -214,7 +213,7 @@ export default function FornecedoresPage() {
         </div>
       </div>
 
-      {fornecedoresCad.length === 0 ? (
+      {(fornecedoresCad || []).length === 0 ? (
         <div style={{ padding: '64px', textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 14, color: 'hsl(var(--text-muted))' }}>
           <Building2 size={52} style={{ opacity: 0.08, marginBottom: 16 }} /><br />
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Nenhum fornecedor cadastrado</div>
@@ -227,10 +226,20 @@ export default function FornecedoresPage() {
             <thead><tr><th>Código</th><th>Razão Social / Fantasia</th><th>CNPJ/CPF</th><th>Categoria</th><th>Plano de Contas</th><th>Situação</th><th>Ações</th></tr></thead>
             <tbody>
               {filtered.map(f => {
-                const pc = cfgPlanoContas.find(p => p.id === (f as any).planoContasId)
+                const pc = (cfgPlanoContas || []).find(p => p.id === (f as any).planoContasId)
                 return (
                 <tr key={f.id}>
-                  <td><code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '1px 6px', borderRadius: 4 }}>{f.codigo}</code></td>
+                  <td>
+                    <code style={{ 
+                      fontSize: 11, 
+                      background: (pc as any)?.grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : (pc as any)?.grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'hsl(var(--bg-overlay))', 
+                      color: (pc as any)?.grupoConta === 'receitas' ? '#10b981' : (pc as any)?.grupoConta === 'despesas' ? '#ef4444' : 'inherit', 
+                      padding: '1px 6px', 
+                      borderRadius: 4 
+                    }}>
+                      {f.codigo}
+                    </code>
+                  </td>
                   <td>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{f.razaoSocial}</div>
                     {f.nomeFantasia && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{f.nomeFantasia}</div>}
@@ -239,7 +248,14 @@ export default function FornecedoresPage() {
                   <td><span className="badge badge-primary">{f.categoria}</span></td>
                   <td>
                     <div style={{ fontSize: 12 }}>{pc?.descricao || '—'}</div>
-                    {pc && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(pc as any).codPlano}</div>}
+                    {pc && (
+                      <div style={{ 
+                        fontSize: 11, 
+                        color: (pc as any).grupoConta === 'receitas' ? '#10b981' : (pc as any).grupoConta === 'despesas' ? '#ef4444' : 'hsl(var(--text-muted))' 
+                      }}>
+                        {(pc as any).codPlano}
+                      </div>
+                    )}
                   </td>
                   <td>{f.situacao === 'ativo' ? <span className="badge badge-success">Ativo</span> : <span className="badge badge-neutral">Inativo</span>}</td>
                   <td>
@@ -283,37 +299,60 @@ export default function FornecedoresPage() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr 1.2fr 1fr', gap: 12, marginBottom: 12 }}>
                     <div><label className="form-label">{form.tipo === 'juridico' ? 'CNPJ' : 'CPF'}</label><input className="form-input" value={form.tipo === 'juridico' ? form.cnpj : form.cpf} onChange={e => set(form.tipo === 'juridico' ? 'cnpj' : 'cpf', maskCnpjCpf(e.target.value, form.tipo))} placeholder={form.tipo === 'juridico' ? '00.000.000/0001-00' : '000.000.000-00'} /></div>
-                    {/* Plano de Contas — typeahead */}
+                    {/* Plano de Contas — Modal de seleçao */}
                     <div style={{ position: 'relative' }}>
                       <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <Layers size={10} />Plano de Contas
-                        {(form as any).planoContasId && <span style={{ fontSize: 10, color: '#10b981', fontWeight: 600 }}>✓</span>}
+                        {(form as any).planoContasId && <button type="button" onClick={() => set('planoContasId', '')} style={{ background:'none', border:'none', cursor:'pointer', color:'#f87171', padding:0, margin:0, display:'flex' }} title="Remover plano"><X size={10}/></button>}
                       </label>
-                      <div style={{ position: 'relative' }}>
-                        <Search size={11} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-                        <input
-                          className="form-input"
-                          style={{ paddingLeft: 28 }}
-                          value={planoSearch}
-                          onChange={e => { setPlanoSearch(e.target.value); setShowPlanoDrop(true); if (!e.target.value) set('planoContasId', '') }}
-                          onFocus={() => setShowPlanoDrop(true)}
-                          onBlur={() => setTimeout(() => setShowPlanoDrop(false), 150)}
-                          placeholder="Buscar conta..."
-                        />
-                        {planoSearch && <button type="button" onClick={() => { setPlanoSearch(''); set('planoContasId', '') }} style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}><X size={11} /></button>}
+                      <div
+                        className="form-input"
+                        style={{ height: 38, display: 'flex', alignItems: 'center', cursor: 'pointer', padding: '0 12px' }}
+                        onClick={() => { setShowPlanoModal(true); setModalPlanoSearch(''); }}
+                      >
+                        {(() => {
+                           const pcSel = (cfgPlanoContas || []).find(p => p.id === (form as any).planoContasId)
+                           if (pcSel) {
+                             return <span style={{ fontSize: 13, color: 'hsl(var(--text-default))' }}>{`${(pcSel as any).codPlano || ''} — ${pcSel.descricao}`}</span>
+                           }
+                           return <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Selecionar plano...</span>
+                        })()}
                       </div>
-                      {showPlanoDrop && planosFiltrados.length > 0 && (
-                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', marginTop: 4 }}>
-                          {planosFiltrados.map(p => (
-                            <div key={p.id}
-                              onMouseDown={() => { set('planoContasId', p.id); setPlanoSearch(`${(p as any).codPlano || ''} — ${p.descricao}`); setShowPlanoDrop(false) }}
-                              style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 12, borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 7 }}
-                              onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
-                              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              <code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{(p as any).codPlano || 'S/C'}</code>
-                              <span style={{ fontWeight: 600 }}>{p.descricao}</span>
+                      
+                      {showPlanoModal && (
+                        <div style={{ position: 'fixed', inset: 0, zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }} onMouseDown={(e) => e.stopPropagation()}>
+                          <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 12, padding: 24, width: '100%', maxWidth: 500, boxShadow: '0 10px 40px rgba(0,0,0,0.4)', border: '1px solid hsl(var(--border-subtle))' }}>
+                            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                               <span>Selecione o Plano de Contas</span>
+                               <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={() => setShowPlanoModal(false)}><X size={16}/></button>
                             </div>
-                          ))}
+                            
+                            <div style={{ position: 'relative', marginBottom: 16 }}>
+                              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                              <input autoFocus className="form-input" placeholder="Buscar por código ou descrição..." style={{ paddingLeft: 34 }} value={modalPlanoSearch} onChange={e => setModalPlanoSearch(e.target.value)} />
+                            </div>
+
+                            <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                              {planosFiltrados.length === 0 ? (
+                                <div style={{ padding: 30, textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>Nenhuma conta encontrada.</div>
+                              ) : planosFiltrados.map(p => (
+                                <div key={p.id}
+                                  onMouseDown={() => { set('planoContasId', p.id); setShowPlanoModal(false); }}
+                                  style={{ padding: '12px 16px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 12 }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                  <code style={{ 
+                                    fontSize: 11, 
+                                    background: (p as any).grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : (p as any).grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'rgba(96,165,250,0.12)', 
+                                    color: (p as any).grupoConta === 'receitas' ? '#10b981' : (p as any).grupoConta === 'despesas' ? '#ef4444' : '#60a5fa', 
+                                    padding: '2px 6px', 
+                                    borderRadius: 4 
+                                  }}>{(p as any).codPlano || 'S/C'}</code>
+                                  <span style={{ fontWeight: 600 }}>{p.descricao}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>

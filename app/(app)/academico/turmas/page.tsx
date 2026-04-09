@@ -27,7 +27,10 @@ function OccupancyRing({ pct, color }: { pct: number; color: string }) {
 }
 
 export default function TurmasPage() {
-  const { alunos, cfgTurnos, cfgNiveisEnsino, logSystemAction, turmas = [], setTurmas } = useData()
+  const { alunos: _alunos, cfgTurnos: _cfgTurnos, cfgNiveisEnsino: _cfgNiveis, logSystemAction, turmas = [], setTurmas } = useData()
+  const alunos = Array.isArray(_alunos) ? _alunos : []
+  const cfgTurnos = Array.isArray(_cfgTurnos) ? _cfgTurnos : []
+  const cfgNiveisEnsino = Array.isArray(_cfgNiveis) ? _cfgNiveis : []
   const isLoading = false
 
   const [view, setView] = useState<'grid' | 'lista'>('grid')
@@ -54,7 +57,7 @@ export default function TurmasPage() {
   }, [cfgNiveisEnsino])
 
   const TURNOS = useMemo(() => {
-    if (!cfgTurnos || cfgTurnos.length === 0) return ['Manha', 'Tarde', 'Noite', 'Integral']
+    if (!cfgTurnos || cfgTurnos.length === 0) return ['Matutino', 'Vespertino', 'Noturno', 'Integral']
     return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
   }, [cfgTurnos])
 

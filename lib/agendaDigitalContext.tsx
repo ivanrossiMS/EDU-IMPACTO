@@ -92,25 +92,53 @@ export function AgendaDigitalProvider({ children }: { children: React.ReactNode 
   const [momentosFeed, setMomentosFeed] = useState<ADMomento[]>(MOCK_MOMENTOS)
 
   useEffect(() => {
-    try {
-      const storedChats = localStorage.getItem('ad_chats_v3')
-      if (storedChats) setChatsList(JSON.parse(storedChats))
-      const storedMsgs = localStorage.getItem('ad_messages_v3')
-      if (storedMsgs) setMessages(JSON.parse(storedMsgs))
-      const storedMomentos = localStorage.getItem('ad_momentos_v3')
-      if (storedMomentos) setMomentosFeed(JSON.parse(storedMomentos))
-      const storedComunicados = localStorage.getItem('ad_comunicados_v3')
-      if (storedComunicados) setComunicadosState(JSON.parse(storedComunicados))
-      const storedBanner = localStorage.getItem('ad_banner')
-      if (storedBanner) setBannerUrlState(storedBanner)
-      else setBannerUrlState('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000')
-      
-      const storedConfig = localStorage.getItem('ad_config')
-      if (storedConfig) setAdConfig(JSON.parse(storedConfig))
-    } catch (e) {
-      console.error(e)
+    const loadData = async () => {
+      try {
+        const storedChats = localStorage.getItem('ad_chats_v3')
+        if (storedChats) setChatsList(JSON.parse(storedChats))
+        const storedMsgs = localStorage.getItem('ad_messages_v3')
+        if (storedMsgs) setMessages(JSON.parse(storedMsgs))
+        const storedMomentos = localStorage.getItem('ad_momentos_v3')
+        if (storedMomentos) setMomentosFeed(JSON.parse(storedMomentos))
+        const storedComunicados = localStorage.getItem('ad_comunicados_v3')
+        if (storedComunicados) setComunicadosState(JSON.parse(storedComunicados))
+
+        // Tenta buscar configurações Globais do Servidor
+        try {
+          const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config')
+          if (res.ok) {
+            const db = await res.json()
+            if (db.ad_banner) {
+              setBannerUrlState(db.ad_banner)
+              localStorage.setItem('ad_banner', db.ad_banner)
+            } else {
+              const storedBanner = localStorage.getItem('ad_banner')
+              if (storedBanner) setBannerUrlState(storedBanner)
+              else setBannerUrlState('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000')
+            }
+            if (db.ad_config) {
+              setAdConfig(db.ad_config)
+              localStorage.setItem('ad_config', JSON.stringify(db.ad_config))
+            } else {
+              const storedConfig = localStorage.getItem('ad_config')
+              if (storedConfig) setAdConfig(JSON.parse(storedConfig))
+            }
+          }
+        } catch(e) {
+          // Fallback offline
+          const storedBanner = localStorage.getItem('ad_banner')
+          if (storedBanner) setBannerUrlState(storedBanner)
+          else setBannerUrlState('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000')
+          
+          const storedConfig = localStorage.getItem('ad_config')
+          if (storedConfig) setAdConfig(JSON.parse(storedConfig))
+        }
+      } catch (e) {
+        console.error(e)
+      }
+      setIsLoaded(true)
     }
-    setIsLoaded(true)
+    loadData()
   }, [])
 
   useEffect(() => {

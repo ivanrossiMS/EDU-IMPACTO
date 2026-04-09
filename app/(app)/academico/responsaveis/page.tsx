@@ -64,7 +64,7 @@ export default function ResponsaveisPage() {
   const responsaveis = useMemo<Responsavel[]>(() => {
     const mapa: Record<string, Responsavel> = {}
 
-    alunos.forEach(aluno => {
+    ;(alunos || []).forEach(aluno => {
       const respsArray: any[] = Array.isArray((aluno as any).responsaveis)
         ? (aluno as any).responsaveis : []
 
@@ -191,7 +191,7 @@ export default function ResponsaveisPage() {
 
   const KPIS: KpiItem[] = [
     // Linha 1 – status
-    { id:'total',    label:'Total Responsáveis',  value:totalResp,     sub:`${alunos.length} aluno(s) vinculado(s)`, color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)',  Icon:Users,          trend:null,                       clickable:true,         row:1 },
+    { id:'total',    label:'Total Responsáveis',  value:totalResp,     sub:`${(alunos || []).length} aluno(s) vinculado(s)`, color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)',  Icon:Users,          trend:null,                       clickable:true,         row:1 },
     { id:'inadimpl', label:'Com Inadimplência',   value:inadimplentes, sub:totalResp?`${((inadimplentes/totalResp)*100).toFixed(1)}% do total`:'—',                color:'#ef4444', bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.2)',   Icon:Wallet,         trend:inadimplentes>0?'danger':'ok', clickable:inadimplentes>0, row:1 },
     { id:'risco',    label:'Filhos em Risco',     value:comRisco,      sub:'família(s) com alertas',                 color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.2)', Icon:AlertTriangle,  trend:comRisco>0?'warn':'ok',     clickable:comRisco>0,   row:1 },
     { id:'freq',     label:'Freq. Crítica (<75%)',value:freqCrit,      sub:'responsável(is) afetados',               color:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.2)',  Icon:TrendingDown,   trend:freqCrit>0?'warn':'ok',     clickable:freqCrit>0,   row:1 },
@@ -363,7 +363,7 @@ export default function ResponsaveisPage() {
         <div>
           <h1 className="page-title">Responsáveis</h1>
           <p className="page-subtitle" suppressHydrationWarning>
-            {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? alunos.length : '—'} aluno(s) vinculado(s)
+            {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? (alunos || []).length : '—'} aluno(s) vinculado(s)
           </p>
         </div>
         <div style={{ display:'flex', gap:10 }}>
@@ -450,7 +450,7 @@ export default function ResponsaveisPage() {
       {/* ── Results ── */}
       <div suppressHydrationWarning>
         {!mounted ? null : !hasSearch ? (
-          alunos.length === 0 ? (
+          (alunos || []).length === 0 ? (
             <div className="card" style={{ padding:'48px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
               <Users size={44} style={{ margin:'0 auto 14px', opacity:0.2 }}/>
               <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>Nenhum aluno cadastrado</div>
@@ -462,7 +462,7 @@ export default function ResponsaveisPage() {
               <div style={{ fontSize:36, marginBottom:12 }}>🔎</div>
               <div style={{ fontWeight:600, marginBottom:4 }}>Use a busca acima para localizar responsáveis</div>
               <div style={{ fontSize:12 }}>
-                Você tem {responsaveis.length} responsável{responsaveis.length !== 1 ? 'is' : ''} e {alunos.length} aluno{alunos.length !== 1 ? 's' : ''} cadastrado{alunos.length !== 1 ? 's' : ''}
+                Você tem {responsaveis.length} responsável{responsaveis.length !== 1 ? 'is' : ''} e {(alunos || []).length} aluno{(alunos || []).length !== 1 ? 's' : ''} cadastrado{(alunos || []).length !== 1 ? 's' : ''}
               </div>
             </div>
           )

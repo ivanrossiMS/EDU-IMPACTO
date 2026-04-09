@@ -76,14 +76,20 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
     setForm(p => ({ ...p, planoContasId: id, planoContasDesc: pl ? `${pl.codPlano} - ${pl.descricao}` : '' }))
   }
 
-  // Modal seleção Plano de Contas — sem filtro por grupo, mostra todos ativos
+  // Modal seleção Plano de Contas — filtrado por grupoConta
   const [showPlanoMov, setShowPlanoMov] = useState(false)
   const [planoMovSearch, setPlanoMovSearch] = useState('')
   const planosFiltered = useMemo(() => {
     const q = planoMovSearch.toLowerCase()
-    return planosContas.filter(p =>
-      !q || p.descricao.toLowerCase().includes(q) || (p.codPlano || '').toLowerCase().includes(q))
-  }, [planosContas, planoMovSearch])
+    return planosContas.filter(p => {
+      // Filtrar pelo tipo (receitas / despesas)
+      const isTipoValido = form.tipo === 'receita' ? p.grupoConta === 'receitas' : p.grupoConta === 'despesas';
+      if (!isTipoValido) return false;
+
+      // Filtrar por texto
+      return !q || p.descricao.toLowerCase().includes(q) || (p.codPlano || '').toLowerCase().includes(q)
+    })
+  }, [planosContas, planoMovSearch, form.tipo])
 
   if (!open) return null
 
@@ -109,7 +115,7 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
           {/* Tipo de movimento */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
             {(['receita', 'despesa'] as const).map(t => (
-              <button key={t} onClick={() => set('tipo', t)}
+              <button key={t} onClick={() => { if (form.tipo !== t) setForm(p => ({ ...p, tipo: t, planoContasId: '', planoContasDesc: '' })) }}
                 style={{ padding: '14px', borderRadius: 10, border: `2px solid ${form.tipo === t ? (t === 'receita' ? '#10b981' : '#ef4444') : 'hsl(var(--border-subtle))'}`, background: form.tipo === t ? `${t === 'receita' ? '#10b981' : '#ef4444'}10` : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
                 {t === 'receita' ? <ArrowUpCircle size={18} style={{ color: '#10b981' }} /> : <ArrowDownCircle size={18} style={{ color: '#ef4444' }} />}
                 <span style={{ fontWeight: 700, fontSize: 14, color: form.tipo === t ? (t === 'receita' ? '#10b981' : '#ef4444') : 'hsl(var(--text-muted))' }}>
@@ -212,10 +218,19 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
               </label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1, padding: '9px 14px', background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, fontSize: 13, color: form.planoContasId ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {form.planoContasId ? (
-                    <><code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{planosContas.find(p => p.id === form.planoContasId)?.codPlano || ''}</code>
-                    <span style={{ fontWeight: 600 }}>{planosContas.find(p => p.id === form.planoContasId)?.descricao}</span></>
-                  ) : <span>Nenhuma conta selecionada</span>}
+                    {form.planoContasId ? (() => {
+                      const sel = planosContas.find(p => p.id === form.planoContasId);
+                      return (
+                        <><code style={{ 
+                          fontSize: 10, 
+                          background: sel?.grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : sel?.grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'rgba(96,165,250,0.12)', 
+                          color: sel?.grupoConta === 'receitas' ? '#10b981' : sel?.grupoConta === 'despesas' ? '#ef4444' : '#60a5fa', 
+                          padding: '1px 5px', 
+                          borderRadius: 3 
+                        }}>{sel?.codPlano || ''}</code>
+                        <span style={{ fontWeight: 600 }}>{sel?.descricao}</span></>
+                      );
+                    })() : <span>Nenhuma conta selecionada</span>}
                 </div>
                 <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap', fontSize: 12, padding: '0 12px' }}
                   onClick={() => { setPlanoMovSearch(''); setShowPlanoMov(true) }}>
@@ -264,7 +279,13 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
                         style={{ padding: '11px 16px', cursor: 'pointer', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 10 }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-elevated))')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                        <code style={{ fontSize: 10, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', padding: '1px 5px', borderRadius: 3 }}>{p.codPlano || 'S/C'}</code>
+                        <code style={{ 
+                          fontSize: 10, 
+                          background: p.grupoConta === 'receitas' ? 'rgba(16,185,129,0.12)' : p.grupoConta === 'despesas' ? 'rgba(239,68,68,0.12)' : 'rgba(96,165,250,0.12)', 
+                          color: p.grupoConta === 'receitas' ? '#10b981' : p.grupoConta === 'despesas' ? '#ef4444' : '#60a5fa', 
+                          padding: '1px 5px', 
+                          borderRadius: 3 
+                        }}>{p.codPlano || 'S/C'}</code>
                         <span style={{ fontWeight: 600, fontSize: 13 }}>{p.descricao}</span>
                         <Check size={12} style={{ marginLeft: 'auto', opacity: form.planoContasId === p.id ? 1 : 0, color: '#3b82f6' }} />
                       </div>

@@ -24,30 +24,38 @@ export function AuthResponsaveisTab() {
     
     alunos.forEach(aluno => {
       // Extractor helper
-      const addGuardian = (g: any) => {
+      const addGuardian = (g: any, types: string[]) => {
         if (!g.nome) return
         const key = g.email || g.cpf || g.nome // fallback to name
         if (!gMap.has(key)) {
-          gMap.set(key, { ...g, key, alunos: [aluno] })
+          gMap.set(key, { ...g, key, alunos: [aluno], tipos: new Set(types.length ? types : ['Outro']) })
         } else {
           const ex = gMap.get(key)
-          ex.alunos.push(aluno)
+          // avoid duplicating the same student for a guardian
+          if (!ex.alunos.find((a: any) => a.id === aluno.id)) {
+            ex.alunos.push(aluno)
+          }
+          types.forEach(t => ex.tipos.add(t))
         }
       }
 
       // Check _responsaveis (new format)
       if ((aluno as any)._responsaveis && Array.isArray((aluno as any)._responsaveis)) {
-        (aluno as any)._responsaveis.forEach((r: any) => addGuardian(r))
+        (aluno as any)._responsaveis.forEach((r: any) => addGuardian(r, [r.tipo || 'Outro']))
       } 
       // Check responsaveis (legacy format)
       else if ((aluno as any).responsaveis && Array.isArray((aluno as any).responsaveis)) {
-        (aluno as any).responsaveis.forEach((r: any) => addGuardian({
-          nome: r.nome,
-          cpf: r.cpf,
-          email: r.email,
-          celular: r.telefone, // mapping
-          tipo: r.respFinanceiro ? 'Financeiro' : r.respPedagogico ? 'Pedagógico' : 'Outro'
-        }))
+        (aluno as any).responsaveis.forEach((r: any) => {
+          let tps = [];
+          if (r.respFinanceiro) tps.push('Financeiro');
+          if (r.respPedagogico) tps.push('Pedagógico');
+          addGuardian({
+            nome: r.nome,
+            cpf: r.cpf,
+            email: r.email,
+            celular: r.telefone // mapping
+          }, tps.length ? tps : ['Outro'])
+        })
       } 
       // Fallback flat fields
       else if (aluno.responsavel) {
@@ -55,9 +63,8 @@ export function AuthResponsaveisTab() {
           nome: aluno.responsavel,
           cpf: (aluno as any).cpf_responsavel || (aluno as any).cpfResponsavel || '',
           email: (aluno as any).email_responsavel || (aluno as any).emailResponsavel || '',
-          celular: (aluno as any).celular_responsavel || (aluno as any).telResponsavel || '',
-          tipo: 'Responsável principal'
-        })
+          celular: (aluno as any).celular_responsavel || (aluno as any).telResponsavel || ''
+        }, ['Responsável principal'])
       }
     })
 
@@ -245,8 +252,10 @@ export function AuthResponsaveisTab() {
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700 }}>{g.nome}</div>
                           <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> FAMILIA</span>
-                            <span style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{g.tipo || 'Outro'}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Responsáveis</span>
+                            {Array.from(g.tipos || [g.tipo || 'Outro']).map((t: any) => (
+                              <span key={t} style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{t}</span>
+                            ))}
                           </div>
                         </div>
                       </div>

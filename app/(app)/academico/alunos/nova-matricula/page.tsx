@@ -434,7 +434,7 @@ const STEPS = [
 export default function NovaMatriculaPage() {
   const genCodigo = () => String(Math.floor(100000 + Math.random() * 900000))
   const router = useRouter()
-  const { alunos, setAlunos, titulos, setTitulos, turmas, cfgPadroesPagamento, cfgGruposDesconto, cfgEventos, cfgMetodosPagamento, cfgCartoes, cfgConvenios, setCfgConvenios, cfgSituacaoAluno, cfgTurnos, cfgGruposAlunos, caixasAbertos, setCaixasAbertos, movimentacoesManuais, setMovimentacoesManuais, logSystemAction } = useData()
+  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], caixasAbertos = [], setCaixasAbertos, movimentacoesManuais = [], setMovimentacoesManuais, logSystemAction } = useData() || {}
   // Formas de pagamento dinâmicas com fallback
   const FORMAS_FALLBACK = ['PIX','Boleto','Dinheiro','Cartão de Crédito','Cartão de Débito','Débito Automático','Transferência','Cheque','Bolsa Integral']
   const FORMAS = cfgMetodosPagamento.filter((m: any) => m.situacao === 'ativo').length > 0
@@ -448,7 +448,7 @@ export default function NovaMatriculaPage() {
   const searchParams = useSearchParams()
   const editId = searchParams.get('edit')  // ID do aluno a editar (vindo de /alunos)
 
-  const sourceAlunos = alunos
+  const sourceAlunos = alunos || []
   const alunoEditando = editId ? sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) ?? null : null
   const [step, setStep] = useState(0)
   const [salvando, setSalvando] = useState(false)
@@ -462,6 +462,26 @@ export default function NovaMatriculaPage() {
   const [mapeamentos, setMapeamentos] = useState<any[]>([])
   const [docsSelected, setDocsSelected] = useState<Set<string>>(new Set())
   const [gerandoDoc, setGerandoDoc] = useState<string|null>(null)
+
+  // Função utilitária global para calcular juros e multa
+  const calcAtraso = useCallback((p: any, dataPagtoStr?: string) => {
+    if (p.status === 'pago' || p.status === 'isento') return { juros: p.juros || 0, multa: p.multa || 0, dias: 0 }
+    if (!p.vencimento) return { juros: 0, multa: 0, dias: 0 }
+    
+    const dataAlvo = dataPagtoStr ? new Date(dataPagtoStr + 'T12:00:00') : new Date()
+    dataAlvo.setHours(0, 0, 0, 0)
+    
+    const [d, m, a] = p.vencimento.split('/')
+    if (!d || !m || !a) return { juros: 0, multa: 0, dias: 0 }
+    const dv = new Date(`${a}-${m}-${d}T12:00:00`)
+    dv.setHours(0, 0, 0, 0)
+    
+    const dias = Math.max(0, Math.floor((dataAlvo.getTime() - dv.getTime()) / 86400000))
+    if (dias <= 0) return { juros: p.juros || 0, multa: p.multa || 0, dias: 0 }
+    
+    return { juros: +(p.valor * 0.00033 * dias).toFixed(2), multa: +(p.valor * 0.02).toFixed(2), dias }
+  }, [])
+
 
   useEffect(() => {
     try {
@@ -888,18 +908,20 @@ export default function NovaMatriculaPage() {
   const [modalBaixaRespConfirm, setModalBaixaRespConfirm] = useState(false)
   const [baixaRespForm, setBaixaRespForm] = useState({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'rf1',forma:'PIX',valor:'',cartao:null}],obs:'',comprovante:'',caixaId:''})
   const [modalBaixaLote, setModalBaixaLote] = useState(false)
-  const [baixaLoteForm, setBaixaLoteForm] = useState({dataPagto: new Date().toISOString().split('T')[0], formaPagto:'PIX', comprovante:'', obs:'', juros:'0', multa:'0', desconto:'0', codPreview:''})
+  const [baixaLoteParcelas, setBaixaLoteParcelas] = useState<any[]>([])
+  const [baixaLoteForm, setBaixaLoteForm] = useState({dataPagto: new Date().toISOString().split('T')[0], formaPagto:'PIX', comprovante:'', obs:'', codPreview:''})
   const [baixaLoteMultiFormas, setBaixaLoteMultiFormas] = useState<{id:string;forma:string;valor:string;cartao:any}[]>([{id:'f1',forma:'PIX',valor:'',cartao:null}])
   const [modalCartao, setModalCartao] = useState(false)
   const [cartaoFormIdx, setCartaoFormIdx] = useState(0)
-  const [cartaoCtx, setCartaoCtx] = useState<'baixa'|'baixaResp'>('baixa')
+  const [cartaoCtx, setCartaoCtx] = useState<'baixa'|'baixaResp'|'baixaLote'>('baixa')
   const [cartaoForm, setCartaoForm] = useState({bandeira:'Visa',numero:'',nome:'',validade:'',parcelas:'1',autorizacao:''})
   const [parcelasSelected, setParcelasSelected] = useState<number[]>([])
   const [descLote, setDescLote] = useState<{tipo:'%'|'R$';valor:string;deParcela:string;ateParcela:string;eventoId?:string;parcelasEvento?:number[]}>({tipo:'%',valor:'',deParcela:'1',ateParcela:'1',eventoId:'',parcelasEvento:[]})
   const [vctoForm, setVctoForm] = useState({deParcela:'1',ateParcela:'1',novoDia:'',eventoFiltro:''})
-  const [eventoForm, setEventoForm] = useState({turmaId:'',eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX' as 'diaX'|'30dias',diaVcto:'5',valor:'',descTipo:'%' as '%'|'R$',descValor:'',manterDesconto:false})
+  const [eventoForm, setEventoForm] = useState({turmaId:'',turmaNome:'',eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX' as 'diaX'|'30dias',diaVcto:'5',valor:'',tipoValor:'total' as 'total'|'parcela',descTipo:'%' as '%'|'R$',descValor:'',manterDesconto:false})
   const [obsFinForm, setObsFinForm] = useState({parcelas:[] as number[], obs:'' })
   const [alterarValorForm, setAlterarValorForm] = useState({parcelas:[] as number[], eventoFiltro:'', novoValor:'', motivo:''})
+  const [turmaResumoId, setTurmaResumoId] = useState<string>('auto')
   const [parcelasExcluidas, setParcelasExcluidas] = useState<any[]>([])
   const [modalItensExcluidos, setModalItensExcluidos] = useState(false)
   const [modalConsultaBaixa, setModalConsultaBaixa] = useState(false)
@@ -952,16 +974,67 @@ export default function NovaMatriculaPage() {
     if (str.includes(',')) return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
     return parseFloat(str) || 0;
   }
-  // Calcula juros (0,033%/dia) e multa (2% fixo máx) para parcelas vencidas - inclusive retroativas
-  const calcAtraso = (parc:any, dataPagto?:string) => {
-    if(!parc?.vencimento) return {juros:0,multa:0,dias:0}
-    const dv=new Date(parc.vencimento.split('/').reverse().join('-')+'T12:00')
-    const dp=dataPagto?new Date(dataPagto+'T12:00'):new Date();dp.setHours(12,0,0,0)
-    const dias=Math.max(0,Math.floor((dp.getTime()-dv.getTime())/86400000))
-    if(dias<=0) return {juros:0,multa:0,dias:0}
-    const multa=+(parc.valor*0.02).toFixed(2)
-    const juros=+(parc.valor*0.00033*dias).toFixed(2)
-    return {juros,multa,dias}
+
+  const getEventoDisp = (p: any) => {
+    if (p.eventoId) {
+      const ev = cfgEventos.find((e:any) => e.id === p.eventoId);
+      if (ev?.descricao) return ev.descricao;
+    }
+    return p.evento || 'Mensalidade';
+  };
+
+  // 🛡️ MOTOR FINANCEIRO CENTRAL
+  // Substitui calcAtraso e calcJurosMulta resolvendo anomalias de recálculo retroativo e desconto vitalício
+  const getResumoFinanceiro = (parc: any, dataRef?: string) => {
+    const isManual = !!(parc as any).isManual;
+    const vBruto = parseFloat(parc.valor) || 0;
+    
+    if (parc.status === 'pago' || parc.status === 'isento') {
+      return { 
+        juros: parc.juros||0, 
+        multa: parc.multa||0, 
+        dias: 0,
+        desconto: parc.desconto||0,
+        vFinal: parc.valorFinal||vBruto
+      }
+    }
+
+    if (!parc?.vencimento) return { juros: 0, multa: 0, dias: 0, desconto: parc.desconto||0, vFinal: parc.valorFinal||vBruto }
+
+    const dv = new Date(parc.vencimento.split('/').reverse().join('-') + 'T12:00')
+    const dp = dataRef ? new Date(dataRef + 'T12:00') : new Date(); dp.setHours(12, 0, 0, 0)
+    const dias = Math.max(0, Math.floor((dp.getTime() - dv.getTime()) / 86400000))
+
+    if (isManual) {
+      return {
+        juros: parc.juros || 0,
+        multa: parc.multa || 0,
+        dias,
+        desconto: parc.desconto || 0,
+        vFinal: Math.max(0, +(vBruto - (parc.desconto||0) + (parc.juros||0) + (parc.multa||0)).toFixed(2))
+      };
+    }
+
+    let mJuros = 0;
+    let mMulta = 0;
+    let mDesc = parc.desconto || 0;
+
+    if (dias > 0) {
+      mJuros = +(vBruto * 0.00033 * dias).toFixed(2);
+      mMulta = +(vBruto * 0.02).toFixed(2);
+      // Remove o desconto por quebra contratual (vcto. perdido), salvo se houver abono perpétuo (manterDesconto)
+      if (!(parc as any).manterDesconto) {
+        mDesc = 0;
+      }
+    }
+
+    return {
+      juros: mJuros,
+      multa: mMulta,
+      dias,
+      desconto: mDesc,
+      vFinal: Math.max(0, +(vBruto - mDesc + mJuros + mMulta).toFixed(2))
+    }
   }
 
   const gerarParcelas = (): any[] => {
@@ -971,9 +1044,16 @@ export default function NovaMatriculaPage() {
     if (!valor || !total) return []
     const ano = parseInt(mat.anoLetivo) || new Date().getFullYear()
     const padrao = cfgPadroesPagamento.find(p=>p.id===fin.padraoId)
-    const nomeEvento = padrao?.nome || 'Mensalidade'
-    const novoEventoId = newId('EV')
-
+    const evtId = (padrao as any)?.eventoId || padrao?.parcelas?.[0]?.eventoId
+    const evtData = evtId ? cfgEventos.find((e:any) => e.id === evtId) : null
+    
+    const tAssociada = turmas.find(t=>t.id === mat.turmaId)?.nome || ''
+    const baseEvName = evtData?.descricao || (padrao as any)?.eventoDescricao || padrao?.parcelas?.[0]?.eventoDescricao || 'Mensalidade'
+    
+    // Devolve para apenas Mensalidade, sem sufixo no evento, o turmaNome já é armazenado.
+    const nomeEvento = baseEvName
+    const baseEvId = evtId || newId('EV')
+    const novoEventoId = mat.turmaId ? `${baseEvId}_${mat.turmaId}` : baseEvId
     // ── Calcula desconto por parcela ──────────────────────────────────────────
     const descontoValorRaw = parseFloat(((fin as any).descontoValor||'0').replace(',','.')) || 0
     const descontoTipo = (fin as any).descontoTipo || 'R$'
@@ -996,6 +1076,7 @@ export default function NovaMatriculaPage() {
         valor, desconto: descontoPorParcela, valorFinal,
         status:'pendente', obs:'', editando:false,
         evento:nomeEvento, eventoId:novoEventoId,
+        turmaId: mat.turmaId || undefined, turmaNome: tAssociada || undefined,
         codigo: String(Math.floor(100000 + Math.random() * 900000)),
         selected: true
       })
@@ -1250,12 +1331,19 @@ export default function NovaMatriculaPage() {
       if (alterarValorForm.parcelas.includes(p.num)) {
         const t = (p as any).descTipo, r = (p as any).descRaw;
         const d = (t === '%' && r) ? +(nv * r / 100).toFixed(2) : p.desconto;
+        
+        let newObs = p.obs || '';
+        if (alterarValorForm.motivo) {
+          const mText = `[Alt. Valor p/ ${fmtMoeda(nv)}]: ${alterarValorForm.motivo}`;
+          newObs = newObs ? `${newObs} | ${mText}` : mText;
+        }
+
         return {
           ...p,
           valor: nv,
           desconto: d,
           valorFinal: Math.max(0, nv - d),
-          obs: alterarValorForm.motivo ? (p.obs ? p.obs + ' | ' + alterarValorForm.motivo : alterarValorForm.motivo) : p.obs
+          obs: newObs
         };
       }
       return p;
@@ -1509,6 +1597,19 @@ export default function NovaMatriculaPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
+
+  // Salva automaticamente após edições explícitas (ex: modal de histórico)
+  const autoSaveMountedRef = useRef(false)
+  useEffect(() => {
+    if (!autoSaveMountedRef.current) {
+      autoSaveMountedRef.current = true; return
+    }
+    const temNomeAluno = (nomeAlunoRef.current || '').trim().length >= 1
+    const temNomeResp = todosRespRef.current.some(r => (r.nome || '').trim().length >= 1)
+    if (temNomeAluno || temNomeResp) {
+      autoSalvarRef.current()
+    }
+  }, [historico, parcelas])
 
   // Todos os responsáveis já cadastrados no sistema (para busca)
   const allResps: Resp[] = useMemo(() => {
@@ -1967,7 +2068,7 @@ export default function NovaMatriculaPage() {
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
               <thead>
                 <tr style={{background:'hsl(var(--bg-elevated))'}}>
-                  {['Ano','Curso / Turma','Serie','Situacao','Data Matr.','Padrao Pgt.','Nr. Contrato','Grupo','Data Result.','Turno','Resp. Fin.',''].map(h=>(
+                  {['Ano','Curso / Turma','Segmento','Situacao','Data Matr.','Padrao Pgt.','Nr. Contrato','Grupo','Data Result.','Turno','Resp. Fin.',''].map(h=>(
                     <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))',borderBottom:'2px solid rgba(148,163,184,0.25)',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
@@ -1975,16 +2076,29 @@ export default function NovaMatriculaPage() {
               <tbody>
                 {historico.map((h,i)=>{
                   const turmaH = turmas.find(t=>t.id===h.turmaId)
+                  const fallbackSeg = [{codigo:'EI',nome:'Educação Infantil'},{codigo:'EF1',nome:'Ensino F. I'},{codigo:'EF2',nome:'Ensino F. II'},{codigo:'EM',nome:'Ensino Médio'},{codigo:'EJA',nome:'EJA'},{codigo:'1',nome:'Educação Infantil'},{codigo:'2',nome:'Ensino Fundamental I'},{codigo:'3',nome:'Ensino Fundamental II'},{codigo:'4',nome:'Ensino Médio'}]
+                  const nivelEnsino = turmaH ? (cfgNiveisEnsino.find((n: any) => n.codigo === turmaH.serie) || fallbackSeg.find(s => s.codigo === String(turmaH.serie))) : null
+                  const segmentoNome = nivelEnsino?.nome || turmaH?.serie || '—'
                   const padraoH = cfgPadroesPagamento.find(p=>p.id===h.padraoId)
                   const respH = todosResp.find(r=>r.id===h.respFinanceiroId)
-                  const ativa = h.situacao==='Cursando'
+                  
+                  // Verifica se a situação é considerada Matrícula Ativa no config
+                  const sitMatch = cfgSituacaoAluno.find((s: any) => s.nome === h.situacao || s.codigo === h.situacao)
+                  const ativa = sitMatch ? (sitMatch.matriculaAtiva ?? false) : (h.situacao === 'Cursando' || h.situacao === 'Prog. Continuada')
+                  
+                  const bgRow = ativa ? 'rgba(16,185,129,0.08)' : 'rgba(245,158,11,0.08)'
+                  const bgRowHover = ativa ? 'rgba(16,185,129,0.14)' : 'rgba(245,158,11,0.14)'
+                  const txtColor = ativa ? '#10b981' : '#d97706'
+
                   return (
-                    <tr key={h.id} style={{borderBottom:'1px solid rgba(148,163,184,0.25)',background:ativa?'rgba(99,102,241,0.04)':'transparent'}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLTableRowElement).style.background='hsl(var(--bg-elevated))'}
-                      onMouseLeave={e=>(e.currentTarget as HTMLTableRowElement).style.background=ativa?'rgba(99,102,241,0.04)':'transparent'}>
-                      <td style={{padding:'8px 12px',fontWeight:700,color:ativa?'#a78bfa':'hsl(var(--text-base))'}}>{h.ano}</td>
+                    <tr key={h.id} style={{borderBottom:'1px solid rgba(148,163,184,0.25)',background:bgRow,transition:'all 0.2s',borderLeft:`3px solid ${txtColor}`}}
+                      onMouseEnter={e=>(e.currentTarget as HTMLTableRowElement).style.background=bgRowHover}
+                      onMouseLeave={e=>(e.currentTarget as HTMLTableRowElement).style.background=bgRow}>
+                      <td style={{padding:'8px 12px',fontWeight:700,color:txtColor}}>{h.ano}</td>
                       <td style={{padding:'8px 12px',fontWeight:600}}>{turmaH?.nome||'—'}</td>
-                      <td style={{padding:'8px 12px'}}><span className="badge badge-primary">{turmaH?.serie||'—'}</span></td>
+                      <td style={{padding:'8px 12px'}}>
+                        <span className="badge badge-primary">{segmentoNome}</span>
+                      </td>
                       <td style={{padding:'8px 12px'}}>
                         <span style={{fontSize:11,padding:'2px 8px',borderRadius:20,fontWeight:700,
                           background:h.situacao==='Cursando'?'rgba(99,102,241,0.12)':h.situacao==='Aprovado'||h.situacao==='Concluido'?'rgba(16,185,129,0.1)':h.situacao.startsWith('Reprovado')||h.situacao==='Desistente'?'rgba(239,68,68,0.1)':'rgba(245,158,11,0.1)',
@@ -2193,7 +2307,16 @@ export default function NovaMatriculaPage() {
                     💳 Configuracao de Parcelas
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
-                    <F label="Valor Mens. (R$)"><input className="form-input" style={{fontSize:12}} value={fin.valorMensalidade} onChange={e=>setFin(f=>({...f,valorMensalidade:e.target.value}))} placeholder="0,00"/></F>
+                    <F label="Valor Mens. (R$)">
+                      <input className="form-input" style={{fontSize:12}} 
+                        value={fin.valorMensalidade} 
+                        onChange={e=>{
+                          const raw = e.target.value.replace(/\D/g, '')
+                          setFin(f=>({...f,valorMensalidade:raw?fmtMoeda(parseInt(raw)/100):''}))
+                        }} 
+                        placeholder="0,00"
+                      />
+                    </F>
                     <F label="Dia Vencimento"><select className="form-input" style={{fontSize:12}} value={fin.diaVencimento} onChange={e=>setFin(f=>({...f,diaVencimento:e.target.value}))}><option value="">Dia</option>{['1','5','7','10','15','20','25'].map(d=><option key={d}>{d}</option>)}</select></F>
                     <F label="Total Parcelas"><input className="form-input" style={{fontSize:12}} value={fin.totalParcelas} onChange={e=>setFin(f=>({...f,totalParcelas:e.target.value}))} placeholder="12"/></F>
                   </div>
@@ -2232,7 +2355,16 @@ export default function NovaMatriculaPage() {
                       />
                     </F>
                   </div>
-
+                  
+                  {/* Manter Desconto Toggle */}
+                  <div style={{marginBottom:18,display:'flex',justifyContent:'flex-end'}}>
+                    <button type="button" onClick={()=>setFin((f:any)=>({...f, manterDesconto: !f.manterDesconto}))}
+                      style={{padding:'6px 14px',borderRadius:20,border:((fin as any).manterDesconto?'1px solid rgba(16,185,129,0.3)':'1px solid rgba(248,113,113,0.3)'),
+                      background:((fin as any).manterDesconto?'rgba(16,185,129,0.1)':'rgba(248,113,113,0.1)'),
+                      color:((fin as any).manterDesconto?'#10b981':'#f87171'),fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6, transition:'all 0.2s'}}>
+                      {(fin as any).manterDesconto?<><Check size={13}/> Mantém Desconto se houver atraso</>:<><X size={13}/> Perde Desconto se houver atraso</>}
+                    </button>
+                  </div>
 
                   {/* Preview das parcelas a serem geradas */}
                   {parcelasPreview.length === 0 ? (
@@ -2327,26 +2459,27 @@ export default function NovaMatriculaPage() {
       {/* ══ PREMIUM FINANCIAL HEADER ══ */}
       <div style={{
         padding: '20px 28px',
-        background: 'linear-gradient(135deg, hsl(var(--bg-elevated)) 0%, rgba(99, 102, 241, 0.06) 50%, rgba(139, 92, 246, 0.08) 100%)',
-        borderBottom: '2px solid rgba(99,102,241,0.5)',
+        background: 'linear-gradient(135deg, #09090b 0%, #171723 50%, #1e1b4b 100%)',
+        borderBottom: '2px solid rgba(129, 140, 248, 0.5)',
         borderTop: '1px solid rgba(255,255,255,0.05)',
         display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        boxShadow: '0 8px 24px -8px rgba(99, 102, 241, 0.15), inset 0 1px 0 rgba(255,255,255,0.1)',
+        boxShadow: '0 8px 32px rgba(9, 9, 11, 0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
         position: 'relative', overflow: 'hidden', zIndex: 10
       }}>
-        <div style={{ position: 'absolute', top: -40, right: '10%', width: 200, height: 200, background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)', filter: 'blur(30px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: -40, right: '10%', width: 300, height: 300, background: 'radial-gradient(circle, rgba(139,92,246,0.25) 0%, transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: -60, left: '5%', width: 250, height: 250, background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' }} />
         
-        <div style={{width:52,height:52,borderRadius:14,background:aluno.foto?'transparent':'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid rgba(99,102,241,0.3)',boxShadow:'0 0 0 4px rgba(99,102,241,0.08),0 8px 16px rgba(99,102,241,0.2)'}}>
-          {aluno.foto?<img src={aluno.foto} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:20,color:'#fff'}}>👤</span>}
+        <div style={{width:54,height:54,borderRadius:14,background:aluno.foto?'transparent':'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0,border:'2px solid rgba(255,255,255,0.15)',boxShadow:'0 0 0 4px rgba(255,255,255,0.05),0 8px 16px rgba(0,0,0,0.4)', zIndex: 1}}>
+          {aluno.foto?<img src={aluno.foto} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:24,color:'#fff'}}>👤</span>}
         </div>
         <div style={{flex:'0 0 auto', zIndex: 1}}>
-          <div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Financeiro · Cód. <span style={{color:'#818cf8',fontFamily:'monospace',fontWeight:900, background: 'rgba(99,102,241,0.1)', padding:'2px 6px', borderRadius:4}}>{codigoAluno}</span></div>
-          <div style={{fontWeight:900,fontSize:17,letterSpacing:-.5,color:'hsl(var(--text-base))',lineHeight:1}}>{aluno.nome||'—'}</div>
+          <div style={{fontSize:10,color:'rgba(255,255,255,0.6)',fontWeight:800,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Financeiro · Cód. <span style={{color:'#a5b4fc',fontFamily:'monospace',fontWeight:900, background: 'rgba(255,255,255,0.1)', padding:'2px 6px', borderRadius:4}}>{codigoAluno}</span></div>
+          <div style={{fontWeight:900,fontSize:17,letterSpacing:-.5,color:'#ffffff',lineHeight:1}}>{aluno.nome||'—'}</div>
         </div>
-        <div style={{width:1,height:36,background:'rgba(148, 163, 184, 0.2)',flexShrink:0, margin: '0 4px', zIndex: 1}}/>
+        <div style={{width:1,height:36,background:'rgba(255,255,255,0.15)',flexShrink:0, margin: '0 4px', zIndex: 1}}/>
         <div style={{flex:'0 0 auto', zIndex: 1}}>
-          <div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:800,letterSpacing:.8,textTransform:'uppercase',marginBottom:4}}>Resp. Financeiro</div>
-          <div style={{fontWeight:800,fontSize:13,color:'#818cf8'}}>{todosResp.find(r=>r.respFinanceiro)?.nome||'—'}</div>
+          <div style={{fontSize:10,color:'rgba(255,255,255,0.6)',fontWeight:800,letterSpacing:.8,textTransform:'uppercase',marginBottom:4}}>Resp. Financeiro</div>
+          <div style={{fontWeight:800,fontSize:13,color:'#c7d2fe'}}>{todosResp.find(r=>r.respFinanceiro)?.nome||'—'}</div>
         </div>
         <div style={{marginLeft:'auto',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap', zIndex: 1}}>
           {/* Botão de Observação Financeira — sempre visível */}
@@ -2372,57 +2505,6 @@ export default function NovaMatriculaPage() {
         </div>
       </div>
 
-      {/* ══ KPI CARDS ══ */}
-      {parcelas.length>0&&(()=>{
-        const valid=parcelas.filter(p=>p.status!=='cancelado')
-        const kpis=[
-          {l:'Total Bruto',  v:valid.reduce((s,p)=>s+p.valor,0),                              vc:'#1e293b', lc:'#64748b', icon:'🪙'},
-          {l:'Descontos',    v:valid.reduce((s,p)=>s+p.desconto,0),                            vc:'#d97706', lc:'#d97706', icon:'🏷️'},
-          {l:'Total Líquido',v:valid.reduce((s,p)=>s+p.valorFinal,0),                         vc:'#10b981', lc:'#10b981', icon:'✅'},
-          {l:'Recebido',     v:valid.filter(p=>p.status==='pago').reduce((s,p)=>s+p.valorFinal,0), vc:'#6366f1', lc:'#6366f1', icon:'💳'},
-        ]
-        return(
-          <div style={{
-            display:'grid',gridTemplateColumns:'repeat(4,1fr)',
-            gap:14,padding:'14px 20px',
-            background:'hsl(var(--bg-base))',
-            borderBottom:'1px solid hsl(var(--border-subtle))',
-          }}>
-            {kpis.map(k=>(
-              <div key={k.l} style={{
-                padding:'16px 20px',
-                background:'hsl(var(--bg-elevated))',
-                borderRadius:16,
-                border:'1px solid hsl(var(--border-subtle))',
-                boxShadow:'0 2px 8px rgba(0,0,0,0.06),0 0 0 0px transparent',
-                display:'flex',flexDirection:'column',gap:10,
-                transition:'box-shadow 0.2s,transform 0.15s',
-                cursor:'default',
-              }}
-              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.boxShadow='0 6px 20px rgba(0,0,0,0.1)';(e.currentTarget as HTMLElement).style.transform='translateY(-1px)'}}
-              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.boxShadow='0 2px 8px rgba(0,0,0,0.06)';(e.currentTarget as HTMLElement).style.transform='translateY(0)'}}
-              >
-                {/* Icon + Label row */}
-                <div style={{display:'flex',alignItems:'center',gap:7}}>
-                  <span style={{fontSize:15,lineHeight:1}}>{k.icon}</span>
-                  <span style={{
-                    fontSize:10,fontWeight:800,color:k.lc,
-                    letterSpacing:.8,textTransform:'uppercase',
-                  }}>{k.l}</span>
-                </div>
-                {/* Value */}
-                <div style={{
-                  fontFamily:'Inter,sans-serif',fontWeight:900,
-                  fontSize:22,color:k.vc,letterSpacing:-.8,lineHeight:1,
-                }}>
-                  R$ {fmtMoeda(k.v)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
-
       {/* ══ ACTION TOOLBAR ══ */}
       {(()=>{
         const selCount=parcelasSelected.length
@@ -2432,16 +2514,16 @@ export default function NovaMatriculaPage() {
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 10,
             padding: '16px',
-            background: `linear-gradient(180deg, hsl(var(--bg-elevated)) 0%, rgba(255,255,255,0.01) 100%)`,
-            border: '1px solid hsl(var(--border-subtle))',
+            background: `linear-gradient(180deg, ${color}1A 0%, rgba(0,0,0,0.1) 100%)`,
+            border: `1px solid ${color}30`,
             borderTop: `2px solid ${color}`,
             borderRadius: '16px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.05)',
+            boxShadow: `0 8px 32px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05)`,
             position: 'relative', overflow: 'hidden'
           }}>
-            <div style={{ position: 'absolute', top: -30, right: -30, width: 80, height: 80, background: color, filter: 'blur(40px)', opacity: 0.1, pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', top: -30, right: -30, width: 80, height: 80, background: color, filter: 'blur(40px)', opacity: 0.2, pointerEvents: 'none' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <span style={{ fontSize: 13, background: `${color}15`, padding: '4px', borderRadius: 6 }}>{icon}</span>
+              <span style={{ fontSize: 13, background: `${color}20`, padding: '4px', borderRadius: 6 }}>{icon}</span>
               <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-base))', letterSpacing: '0.04em', textTransform: 'uppercase' }}>{title}</span>
             </div>
             {children}
@@ -2495,10 +2577,31 @@ export default function NovaMatriculaPage() {
                     const p=parcelas.find(x=>x.num===parcelasSelected[0])
                     if(p&&p.status!=='pago'){const{juros,multa}=calcAtraso(p);const t=+(p.valorFinal+juros+multa).toFixed(2);setParcelaAtiva({...p});const c='BX'+String(p.num).padStart(3,'0')+String(Date.now()).slice(-6);const cxDef=caixasAbertos.filter((c:any)=>!c.fechado).sort((a:any,b:any)=>b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id??'';setBaixaForm({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:fmtMoeda(t),cartao:null}],juros:juros>0?fmtMoeda(juros):'0',multa:multa>0?fmtMoeda(multa):'0',desconto:fmtMoeda(p.desconto||0),obs:'',comprovante:'',codPreview:c,caixaId:cxDef});setModalBaixarParcela(true)}
                   } else {
-                    const sp=parcelas.filter(x=>parcelasSelected.includes(x.num)&&x.status!=='pago');const sj=sp.reduce((s,p)=>s+calcAtraso(p).juros,0);const sm=sp.reduce((s,p)=>s+calcAtraso(p).multa,0);const sd=sp.reduce((s,p)=>s+(p.desconto||0),0);const tl=sp.reduce((s,p)=>s+p.valorFinal,0)+sj+sm;const c='BX'+String(Date.now()).slice(-6)+String(Math.floor(Math.random()*100)).padStart(2,'0')+'LL';setBaixaLoteForm({dataPagto:new Date().toISOString().split('T')[0],formaPagto:'PIX',comprovante:'',obs:'',juros:sj>0?fmtMoeda(sj):'0',multa:sm>0?fmtMoeda(sm):'0',desconto:fmtMoeda(sd),codPreview:c});setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:fmtMoeda(tl),cartao:null}]);setModalBaixaLote(true)
+                    const sp=parcelas.filter(x=>parcelasSelected.includes(x.num)&&x.status!=='pago');
+                    const dpTarget=new Date().toISOString().split('T')[0];
+                    const loteParcs=sp.map(p=>{ const atr=calcAtraso(p, dpTarget); 
+                      const eparcs = (p as any).evento ? parcelas.filter((x:any)=>x.status!=='cancelado'&&(x as any).evento===(p as any).evento) : null
+                      const pDen = p.totalParcelas || (eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length)
+                      const evtIndex = p.numParcela || (eparcs && eparcs.length > 0 ? eparcs.findIndex(x => x.num === p.num) + 1 : p.num)
+                      const tNome = (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId))?.nome || p.turma || mat.turma || ''
+                      return {...p, loteJuros:fmtMoeda(atr.juros), loteMulta:fmtMoeda(atr.multa), loteDesc:fmtMoeda(p.desconto||0), loteDias:atr.dias, pDen, evtIndex, tNome}; 
+                    });
+                    const tl=loteParcs.reduce((s,p)=>s+Math.max(0, p.valor-parseMoeda(p.loteDesc)+parseMoeda(p.loteJuros)+parseMoeda(p.loteMulta)),0);
+                    const c='BX'+String(Date.now()).slice(-6)+String(Math.floor(Math.random()*100)).padStart(2,'0')+'LL';
+                    setBaixaLoteParcelas(loteParcs);
+                    setBaixaLoteForm({dataPagto:dpTarget,formaPagto:'PIX',comprovante:'',obs:'',codPreview:c});
+                    setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:fmtMoeda(tl),cartao:null}]);
+                    setModalBaixaLote(true)
                   }
                 }}/>
-                <Btn full icon="✏️" label="Editar" color="#6366f1" disabled={selCount!==1} onClick={()=>{const p=parcelas.find(x=>x.num===parcelasSelected[0]);if(p){setParcelaAtiva({...p});setModalEditarParcela(true)}}}/>
+                <Btn full icon="✏️" label="Editar" color="#6366f1" disabled={selCount!==1} onClick={()=>{
+                  const rawP=parcelas.find(x=>x.num===parcelasSelected[0]);
+                  if(rawP){
+                    const { juros, multa, dias } = calcAtraso(rawP, new Date().toISOString().split('T')[0]);
+                    setParcelaAtiva({...rawP, juros: rawP.juros || juros, multa: rawP.multa || multa, diasAtr: Math.max(0, dias)});
+                    setModalEditarParcela(true)
+                  }
+                }}/>
               </Row>
               <Row>
                 <Btn full icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>setModalBaixaResp(true)}/>
@@ -2581,43 +2684,74 @@ export default function NovaMatriculaPage() {
           const selCount=parcelasSelected.length
           const FILTROS=[
             {k:'todos',l:'Todos',n:valid.length,c:'#6366f1',bg:'rgba(99,102,241,0.1)'},
-            {k:'pendente',l:'A Vencer / Vencidos',n:pendentes.length,c:ven.length>0?'#ef4444':'#6366f1',bg:ven.length>0?'rgba(239,68,68,0.08)':'rgba(99,102,241,0.1)'},
-            {k:'pago',l:'Pago',n:pag.length,c:'#10b981',bg:'rgba(16,185,129,0.08)'},
+            {k:'pendente',l:'A Vencer / Vencidos',n:pendentes.length,c:ven.length>0?'#ef4444':'#f59e0b',bg:ven.length>0?'rgba(239,68,68,0.15)':'rgba(245,158,11,0.15)'},
+            {k:'pago',l:'Pago',n:pag.length,c:'#10b981',bg:'rgba(16,185,129,0.12)'},
           ]
           return (
             <>
               {/* Barra de Filtros */}
-              <div style={{padding:'10px 20px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',gap:6,alignItems:'center',background:'hsl(var(--bg-elevated))',flexWrap:'wrap'}}>
-                <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:11,color:'hsl(var(--text-muted))',fontWeight:600,padding:'4px 8px',borderRadius:6,border:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-base))'}}>
-                  <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:13,height:13,accentColor:'#6366f1'}}/>
+              <div style={{padding:'16px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',gap:16,alignItems:'center',background:'hsl(var(--bg-elevated))',flexWrap:'wrap'}}>
+                
+                <label style={{
+                  display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'hsl(var(--text-base))',
+                  fontWeight:800,padding:'10px 16px',borderRadius:12,
+                  border: allSel ? '2px solid #6366f1' : '2px solid hsl(var(--border-subtle))',
+                  background: allSel ? 'rgba(99,102,241,0.08)' : 'hsl(var(--bg-base))',
+                  transition:'all 0.2s', boxShadow: allSel ? '0 4px 12px rgba(99,102,241,0.15)' : '0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                  <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:16,height:16,accentColor:'#6366f1'}}/>
                   Sel. Todos
                 </label>
-                <div style={{width:1,height:20,background:'hsl(var(--border-subtle))'}}/>
-                <div style={{display:'flex',gap:2,padding:'2px',background:'rgba(0,0,0,0.03)',borderRadius:10,border:'1px solid hsl(var(--border-subtle))'}}>
+                
+                <div style={{width:2,height:32,borderLeft:'2px dashed hsl(var(--border-subtle))', margin:'0 4px'}}/>
+                
+                <div style={{display:'flex',gap:12, flexWrap:'wrap'}}>
                   {FILTROS.map(f=>(
                     <button key={f.k} type="button" onClick={()=>setFin(ff=>({...ff,_filtro:f.k}))}
-                      style={{padding:'4px 12px',borderRadius:8,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
-                        background:filtroAtual===f.k?f.bg:'transparent',
-                        color:filtroAtual===f.k?f.c:'hsl(var(--text-muted))',
-                        transition:'all 0.15s',boxShadow:filtroAtual===f.k?'0 1px 3px rgba(0,0,0,0.07)':'none',
+                      style={{
+                        padding:'10px 20px',borderRadius:12,fontSize:13,fontWeight:800,cursor:'pointer',
+                        display:'flex', alignItems:'center', gap: 8,
+                        border: filtroAtual===f.k ? `2px solid ${f.c}` : '2px solid transparent',
+                        background: filtroAtual===f.k ? f.bg : 'hsl(var(--bg-base))',
+                        color: filtroAtual===f.k ? f.c : 'hsl(var(--text-secondary))',
+                        transition:'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: filtroAtual===f.k ? `0 4px 16px ${f.c}30` : '0 2px 6px rgba(0,0,0,0.04)',
+                        transform: filtroAtual===f.k ? 'translateY(-2px)' : 'translateY(0)'
                       }}>
-                      {f.l}<span style={{opacity:.6,marginLeft:4,fontSize:9}}>({f.n})</span>
+                      {f.l}
+                      <span style={{
+                        background: filtroAtual===f.k ? f.c : 'hsl(var(--bg-overlay))', 
+                        color: filtroAtual===f.k ? '#fff' : 'hsl(var(--text-muted))',
+                        padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:900,
+                        boxShadow: filtroAtual===f.k ? `0 2px 8px ${f.c}50` : 'none'
+                      }}>{f.n}</span>
                     </button>
                   ))}
                 </div>
+                
                 <div style={{flex:1}}/>
                 {selCount>0&&(
                   <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 12px',borderRadius:20,background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.18)'}}>
                     <span style={{fontSize:11,fontWeight:800,color:'#818cf8',fontFamily:'monospace'}}>Σ R$ {fmtMoeda(parcelas.filter(p=>parcelasSelected.includes(p.num)).reduce((s,p)=>s+p.valorFinal,0))}</span>
                     {parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')&&(
-                      <button type="button" style={{fontSize:10,padding:'2px 8px',borderRadius:6,border:'1px solid rgba(16,185,129,0.25)',background:'rgba(16,185,129,0.07)',color:'#10b981',cursor:'pointer',fontWeight:700}} onClick={()=>{const pg=parcelas.find(p=>parcelasSelected.includes(p.num)&&p.status==='pago');if(pg){setParcelaAtiva(pg);setModalRecibo(true)}}}>🧾 Recibo</button>
+                      <button type="button" style={{fontSize:10,padding:'2px 8px',borderRadius:6,border:'1px solid rgba(16,185,129,0.25)',background:'rgba(16,185,129,0.07)',color:'#10b981',cursor:'pointer',fontWeight:700}} onClick={()=>{const pg=parcelas.find(p=>parcelasSelected.includes(p.num)&&p.status==='pago');if(pg){setParcelaAtiva(pg);setModalRecibo(true)}}}>📄 Recibo</button>
                     )}
-                    <button type="button" style={{border:'none',background:'none',color:'#f87171',cursor:'pointer',fontSize:13,lineHeight:1,padding:0}} onClick={()=>setParcelasSelected([])}>×</button>
+                    <button type="button" style={{border:'none',background:'none',color:'#f87171',cursor:'pointer',fontSize:13,lineHeight:1,padding:0}} onClick={()=>setParcelasSelected([])}>✖</button>
                   </div>
                 )}
-                <button type="button" style={{fontSize:11,padding:'6px 16px',borderRadius:20,border:'none',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',cursor:'pointer',fontWeight:700,boxShadow:'0 2px 8px rgba(99,102,241,0.35)',display:'flex',alignItems:'center',gap:5}}
+                
+                <button type="button" 
+                  style={{
+                    fontSize:13,padding:'10px 24px',borderRadius:12,border:'none',
+                    background:'linear-gradient(135deg,#6366f1,#8b5cf6)',color:'#fff',
+                    cursor:'pointer',fontWeight:800,boxShadow:'0 4px 16px rgba(99,102,241,0.4)',
+                    display:'flex',alignItems:'center',gap:8, transition:'all 0.2s',
+                    textTransform:'uppercase', letterSpacing:'0.03em'
+                  }}
+                  onMouseEnter={e=>{const el=e.currentTarget as HTMLElement;el.style.transform='translateY(-2px)';el.style.boxShadow='0 8px 24px rgba(99,102,241,0.5)'}}
+                  onMouseLeave={e=>{const el=e.currentTarget as HTMLElement;el.style.transform='none';el.style.boxShadow='0 4px 16px rgba(99,102,241,0.4)'}}
                   onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}>
-                  + Adicionar Evento
+                  <span style={{fontSize:18,lineHeight:1}}>+</span> Lançar Evento
                 </button>
               </div>
 
@@ -2634,26 +2768,26 @@ export default function NovaMatriculaPage() {
                 </div>
               ):(
                 <div style={{flex:1,overflowX:'auto',overflowY:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:13,minWidth:860,fontFamily:"'Inter',sans-serif"}}>
+                  <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12,fontFamily:"'Inter',sans-serif"}}>
                     <thead style={{position:'sticky',top:0,zIndex:10}}>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
-                        <th style={{padding:'11px 14px',width:40,borderBottom:'2px solid hsl(var(--border-subtle))',textAlign:'center',borderRight:'1px solid hsl(var(--border-subtle))'}}>
+                        <th style={{padding:'8px 6px',width:40,borderBottom:'2px solid hsl(var(--border-subtle))',textAlign:'center',borderRight:'1px solid hsl(var(--border-subtle))'}}>
                           <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                         </th>
                         {[
-                          {l:'Parc.',w:64,center:true},
+                          {l:'Parc.',w:50,center:true},
                           {l:'Evento / Competência'},
-                          {l:'Vencimento',w:108},
-                          {l:'Valor Bruto',w:112,r:true},
-                          {l:'Desconto',w:100,r:true},
-                          {l:'Juros',w:85,r:true},
-                          {l:'Multa',w:85,r:true},
-                          {l:'Total a Pagar',w:124,r:true},
-                          {l:'Pagamento',w:104},
-                          {l:'Ação',w:100,center:true},
-                          {l:'Dt. Emissão',w:120,center:true},
+                          {l:'Vencimento',w:95},
+                          {l:'Valor Bruto',w:95,r:true},
+                          {l:'Desconto',w:85,r:true},
+                          {l:'Juros',w:70,r:true},
+                          {l:'Multa',w:70,r:true},
+                          {l:'Total a Pagar',w:105,r:true},
+                          {l:'Pagamento',w:90},
+                          {l:'Ação',w:86,center:true},
+                          {l:'Dt. Emissão',w:95,center:true},
                         ].map((h:any,hi:number)=>(
-                          <th key={hi} style={{padding:'12px 16px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.8,textTransform:'uppercase',fontFamily:"'Inter',sans-serif"}}>{h.l}</th>
+                          <th key={hi} style={{padding:'10px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.8,textTransform:'uppercase',fontFamily:"'Inter',sans-serif"}}>{h.l}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2672,9 +2806,15 @@ export default function NovaMatriculaPage() {
                         const totalP=p.status==='pago'?p.valorFinal:+(p.valor-(p.desconto||0)+jEx+mEx).toFixed(2)
                         const rowBg=sel?'rgba(99,102,241,0.055)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
                         const eid=(p as any).eventoId
-                        const eparcs=eid?[...pFilt].filter(x=>(x as any).eventoId===eid).sort((a,b)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()):null
-                        const pNum=eparcs?eparcs.findIndex(x=>x.num===p.num)+1:rowIdx+1
-                        const pDen=eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length
+                        const savedNum=(p as any).numParcela
+                        const savedTotal=(p as any).totalParcelas
+                        // Prioridade: campo salvo numParcela (índice dentro do evento)
+                        // Fallback: calcular via eventoId no array filtrado (compatibilidade com parcelas antigas)
+                        const eparcs=(!savedNum && eid)?[...pFilt].filter(x=>(x as any).eventoId===eid).sort((a,b)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()):null
+                        const pNum=savedNum||(eparcs?eparcs.findIndex(x=>x.num===p.num)+1:rowIdx+1)
+                        const pDen=savedTotal||(eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length)
+                        const tNome=(p as any).turmaNome||(turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId)) as any)?.nome||''
+
                         return(
                           <tr key={p.num}
                             style={{background:rowBg,transition:'background 0.1s',cursor:'pointer',borderLeft:sel?'3px solid #6366f1':'3px solid transparent'}}
@@ -2682,28 +2822,42 @@ export default function NovaMatriculaPage() {
                             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=rowBg}}
                             onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
                           >
-                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',borderRight:'1px solid rgba(148,163,184,0.08)'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',borderRight:'1px solid rgba(148,163,184,0.08)'}} onClick={e=>e.stopPropagation()}>
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                             </td>
-                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                              <div style={{width:36,height:36,borderRadius:9,background:sBg,border:'1.5px solid '+sColor+'28',display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
-                                <span style={{fontSize:12,fontWeight:900,color:sColor,lineHeight:1}}>{pNum}</span>
-                                <span style={{fontSize:8,color:sColor,opacity:.55}}>/{pDen}</span>
+
+                            {/* Nº da parcela + badge turma acima */}
+                            {/* Nº da parcela — limpo */}
+                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{width:38,height:38,borderRadius:10,background:sBg,border:'1.5px solid '+sColor+'30',display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+                                <span style={{fontSize:13,fontWeight:900,color:sColor,lineHeight:1}}>{pNum}</span>
+                                <span style={{fontSize:8,color:sColor,opacity:.5}}>/{pDen}</span>
                               </div>
-                              {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:2,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
+                              {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:3,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
                             </td>
-                            <td style={{padding:'11px 14px',maxWidth:200,borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                              <div style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(p as any).evento||'Mensalidade'}</div>
+
+                            {/* Evento + competência + badge turma + badge status */}
+                            <td style={{padding:'8px 6px',maxWidth:220,borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                              <div style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{getEventoDisp(p)}</div>
                               <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>{p.competencia}</div>
-                              <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,padding:'2px 7px',borderRadius:20,fontWeight:700,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25',marginTop:4}}>{sLabel}</span>
+                              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}}>
+                                {tNome&&(
+                                  <span title={tNome} style={{
+                                    display:'inline-flex',alignItems:'center',fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:20,
+                                    background:'rgba(99,102,241,0.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,0.22)',
+                                    whiteSpace:'nowrap',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',lineHeight:'14px'
+                                  }}>🎓 {tNome}</span>
+                                )}
+                                <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'2px 7px',borderRadius:20,fontWeight:800,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25',lineHeight:'14px'}}>{sLabel}</span>
+                              </div>
                             </td>
-                            <td style={{padding:'12px 14px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:isV||isH?800:600,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
                               {isV&&atr.dias>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
                             </td>
-                            <td style={{padding:'12px 14px',textAlign:'right',fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>R$ {fmtMoeda(p.valor)}</td>
-                            <td style={{padding:'12px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',textAlign:'right',fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>R$ {fmtMoeda(p.valor)}</td>
+                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:'#d97706',fontWeight:700}}>- R$ {fmtMoeda(p.desconto)}</span>
@@ -2711,23 +2865,23 @@ export default function NovaMatriculaPage() {
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
                             </td>
-                            <td style={{padding:'12px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:jEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:jEx>0?700:400}}>{jEx>0?'R$ '+fmtMoeda(jEx):'—'}</span>
                             </td>
-                            <td style={{padding:'12px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:mEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:mEx>0?700:400}}>{mEx>0?'R$ '+fmtMoeda(mEx):'—'}</span>
                             </td>
-                            <td style={{padding:'12px 14px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:14,fontWeight:900,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>R$ {fmtMoeda(totalP)}</div>
                               {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:600,marginTop:2}}>c/ encargos</div>}
                             </td>
-                            <td style={{padding:'12px 14px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'hsl(var(--text-muted))'}}>
                                 {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
                               </span>
                             </td>
 
-                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
                               {(()=>{
                                 // Verifica se já tem boleto emitido no DataContext para esta parcela
                                 const tituloEmitido = titulos.find(t =>
@@ -2757,13 +2911,19 @@ export default function NovaMatriculaPage() {
                                         🖨️ Imprimir
                                       </button>
                                     ) : (
-                                      <span style={{fontSize:10,color:'hsl(var(--text-muted))',fontStyle:'italic'}}>Sem boleto</span>
+                                      <span style={{fontSize:10,color:'hsl(var(--text-muted))',fontStyle:'italic',display:'flex',alignItems:'center'}}>Sem boleto</span>
                                     )}
+                                    <button type="button"
+                                      title={(p.obs||(p as any).obsFin) ? "Editar observação da parcela" : "Adicionar observação à parcela"}
+                                      style={{fontSize:10,padding:'4px 8px',borderRadius:8,border:'1px solid rgba(139,92,246,0.4)',background:(p.obs||(p as any).obsFin)?'rgba(139,92,246,0.15)':'transparent',color:'#8b5cf6',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:4,transition:'all .2s'}}
+                                      onClick={e=>{e.stopPropagation();setObsFinForm({parcelas:[p.num],obs:(p as any).obsFin||p.obs||''});setModalObsFin(true)}}>
+                                      {(p.obs||(p as any).obsFin) ? '📝 Ver Obs' : '📝 +Obs'}
+                                    </button>
                                   </div>
                                 )
                               })()}
                             </td>
-                            <td style={{padding:'11px 14px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
                               {(()=>{
                                 const emissao=(p as any).criadoEm||(p as any).dataEmissao
                                 const dtStr=emissao
@@ -2792,24 +2952,40 @@ export default function NovaMatriculaPage() {
                     <tfoot>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
                         {/* col 1+2: checkbox + Parc. */}
-                        <td colSpan={2} style={{padding:'10px 14px',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}
+                        <td colSpan={2} style={{padding:'8px 6px',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'hsl(var(--bg-overlay))',border:'1px solid hsl(var(--border-subtle))'}}>Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}</span>
                         </td>
                         {/* col 3: Evento */}
-                        <td style={{padding:'10px 14px',fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          A Vencer: <strong style={{color:'#6366f1'}}>{aV.length}</strong>
-                          {ven.length>0&&<> · Vencido: <strong style={{color:'#ef4444'}}>{ven.length}</strong></>}
+                        <td style={{padding:'8px 6px',fontSize:11,borderTop:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',marginRight:6, fontWeight:800}}>A Vencer: {aV.length}</span>
+                          {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:6,background:'rgba(239,68,68,0.1)',color:'#ef4444', fontWeight:800}}>Vencido: {ven.length}</span>}
                         </td>
                         {/* col 4: Vencimento — vazio */}
                         <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                         {/* col 5: Valor Bruto */}
-                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:700,fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}</td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,0.2)',fontWeight:800}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}</span>
+                        </td>
                         {/* col 6: Desconto */}
-                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:700,fontSize:12,color:'#d97706',borderTop:'2px solid hsl(var(--border-subtle))'}}>- R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.desconto,0))}</td>
-                        {/* col 7+8: Juros + Multa — vazio */}
-                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(245,158,11,0.1)',color:'#d97706',border:'1px solid rgba(245,158,11,0.2)',fontWeight:800}}>- R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}</span>
+                        </td>
+                        {/* col 7: Juros */}
+                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
+                        </td>
+                        {/* col 8: Multa */}
+                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
+                        </td>
                         {/* col 9: Total a Pagar */}
-                        <td style={{padding:'10px 14px',textAlign:'right',fontFamily:'monospace',fontWeight:900,fontSize:14,color:'#10b981',borderTop:'2px solid hsl(var(--border-subtle))'}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valorFinal+((p as any).juros||0)+((p as any).multa||0),0))}</td>
+                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:13,borderTop:'2px solid hsl(var(--border-subtle))'}}>
+                          <span style={{padding:'6px 10px',borderRadius:6,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.2)',fontWeight:900}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>{
+                            const j = p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros;
+                            const m = p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa;
+                            return s + (p.status==='pago' ? p.valorFinal : +(p.valor-(p.desconto||0)+j+m));
+                          },0))}</span>
+                        </td>
                         {/* col 10+11+12: Pagamento + Ação + Dt.Emissão — vazio */}
                         <td colSpan={3} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                       </tr>
@@ -2818,26 +2994,6 @@ export default function NovaMatriculaPage() {
                 </div>
               )}
 
-              {/* BARRA STATUS INFERIOR */}
-              <div style={{padding:'10px 20px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',alignItems:'center',justifyContent:'space-between',background:'hsl(var(--bg-elevated))',fontSize:11,flexWrap:'wrap',gap:8}}>
-                <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',gap:0}}>
-                  {[
-                    {l:'A Vencer',v:parcelas.filter(p=>p.status!=='pago'&&p.status!=='cancelado').reduce((s,p)=>s+p.valorFinal,0),isV:true,c:'#6366f1'},
-                    {l:'Recebido',v:parcelas.filter(p=>p.status==='pago').reduce((s,p)=>s+p.valorFinal,0),isV:true,c:'#10b981'},
-                    {l:'Parcelas',n:parcelas.filter(p=>p.status!=='cancelado').length,isV:false,c:'hsl(var(--text-base))'},
-                    {l:'Canceladas',n:parcelas.filter(p=>p.status==='cancelado').length,isV:false,c:'#f87171'},
-                  ].map((item,i)=>(
-                    <div key={item.l} style={{display:'flex',alignItems:'center'}}>
-                      {i>0&&<span style={{width:1,height:14,background:'hsl(var(--border-subtle))',display:'inline-block',margin:'0 14px'}}/>}
-                      <span style={{color:'hsl(var(--text-muted))'}}>{item.l}: </span>
-                      <strong style={{color:item.c,fontFamily:(item as any).isV?'monospace':'inherit'}}>
-                        {(item as any).isV?('R$ '+fmtMoeda((item as any).v)):(item as any).n}
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-
-              </div>
             </>
           )
         })()}
@@ -3085,7 +3241,7 @@ export default function NovaMatriculaPage() {
                       <div className="custom-scrollbar" style={{textAlign:'right',maxHeight:160,overflowY:'auto',paddingRight:6}}>
                         {pagas.map((p,idx)=>(
                           <div key={p.num} style={{marginBottom:idx===pagas.length-1?0:6}}>
-                            <div style={{fontWeight:800,lineHeight:1.2}}>{(p as any).evento||'Mensalidade'}</div>
+                            <div style={{fontWeight:800,lineHeight:1.2}}>{getEventoDisp(p)}</div>
                             <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Parc. {String(p.num).padStart(2,'0')} — <strong style={{color:'hsl(var(--text-base))'}}>R$ {fmtMoeda(p.valorFinal)}</strong></div>
                           </div>
                         ))}
@@ -3170,7 +3326,7 @@ export default function NovaMatriculaPage() {
                 return excl.map((p,i)=>(
                   <div key={i} style={{padding:'10px 16px',borderRadius:12,background:'rgba(239,68,68,0.04)',border:'1px solid rgba(239,68,68,0.15)',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <div>
-                      <div style={{fontWeight:700,fontSize:12}}>{(p as any).evento||'Mensalidade'} — Parcela {p.num}</div>
+                      <div style={{fontWeight:700,fontSize:12}}>{getEventoDisp(p)} — Parcela {p.num}</div>
                       <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Vcto: {p.vencimento ? formatDate(p.vencimento) : '—'} · R$ {fmtMoeda(p.valorFinal)} · Excluído em {(p as any).dataExclusao}</div>
                       {(p as any).motivoExclusao&&<div style={{fontSize:10,marginTop:3,color:'#f87171',fontStyle:'italic'}}>Motivo: {(p as any).motivoExclusao}</div>}
                     </div>
@@ -3213,7 +3369,28 @@ export default function NovaMatriculaPage() {
                 const codigasBaixaPaga = parcelas
                   .filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago'&&p.codBaixa)
                   .map(p=>p.codBaixa as string)
-                setParcelas(prev=>prev.map(p=>parcelasSelected.includes(p.num)?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:excluirMotivo}:p))
+                setParcelas(prev=>{
+                  let next = prev.map(p=>parcelasSelected.includes(p.num)?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:excluirMotivo}:p);
+                  const eventosAfetados = new Set<string>();
+                  parcelasSelected.forEach(n => {
+                    const p = next.find(x => x.num === n);
+                    if (p && p.eventoId) eventosAfetados.add(p.eventoId);
+                  });
+                  
+                  eventosAfetados.forEach(eId => {
+                    const ativas = next.filter(p=>p.eventoId===eId&&p.status!=='cancelado').sort((a,b)=>a.num-b.num);
+                    const total = ativas.length;
+                    
+                    ativas.forEach((aP, idx) => {
+                       const nextIdx = next.findIndex(x => x.num === aP.num);
+                       if (nextIdx > -1) {
+                         next[nextIdx] = { ...next[nextIdx], numParcela: idx + 1, totalParcelas: total };
+                       }
+                    });
+                  });
+                  
+                  return next;
+                })
                 if(codigasBaixaPaga.length>0){
                   setMovimentacoesManuais((prev:any)=>prev.filter((m:any)=>!codigasBaixaPaga.includes(m.referenciaId)))
                 }
@@ -3251,7 +3428,7 @@ export default function NovaMatriculaPage() {
                 <div style={{display:'flex',flexDirection:'column',gap:6}}>
                   {pagas.map(p=>(
                     <div key={p.num} style={{padding:'8px 14px',borderRadius:10,background:'rgba(249,115,22,0.04)',border:'1px solid rgba(249,115,22,0.15)',display:'flex',justifyContent:'space-between',fontSize:12}}>
-                      <span><strong>{(p as any).evento||'Mensalidade'}</strong> · Parcela {p.num} · Vcto {p.vencimento ? formatDate(p.vencimento) : '—'}</span>
+                      <span><strong>{getEventoDisp(p)}</strong> · Parcela {p.num} · Vcto {p.vencimento ? formatDate(p.vencimento) : '—'}</span>
                       <span style={{color:'#10b981',fontFamily:'monospace',fontWeight:700}}>R$ {fmtMoeda(p.valorFinal)}</span>
                     </div>
                   ))}
@@ -3488,8 +3665,15 @@ export default function NovaMatriculaPage() {
                 </div>
               )
             })()}
-            <F label="Novo Valor por Parcela (R$)"><input className="form-input" value={alterarValorForm.novoValor} onChange={e=>setAlterarValorForm(f=>({...f,novoValor:e.target.value}))} placeholder="0,00"/></F>
-            <F label="Motivo da Alteração"><input className="form-input" value={alterarValorForm.motivo} onChange={e=>setAlterarValorForm(f=>({...f,motivo:e.target.value}))} placeholder="Ex: Reajuste contratual"/></F>
+            <F label="Novo Valor por Parcela (R$)">
+              <input className="form-input" value={alterarValorForm.novoValor} onChange={e=>{
+                const vStr = e.target.value.replace(/\D/g, '');
+                if (!vStr) { setAlterarValorForm(f=>({...f,novoValor:''})); return; }
+                const num = (parseInt(vStr, 10) / 100).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                setAlterarValorForm(f=>({...f,novoValor:num}));
+              }} placeholder="0,00" style={{fontFamily:"'JetBrains Mono', monospace", fontSize:16, fontWeight:800, color:'#10b981'}}/>
+            </F>
+            <F label="Motivo da Alteração"><input className="form-input" value={alterarValorForm.motivo} onChange={e=>setAlterarValorForm(f=>({...f,motivo:e.target.value}))} placeholder="Ex: Acordo entre partes, erro no lançamento..."/></F>
             {/* Parcelas com checkboxes individuais */}
             {(()=>{
               const listaParc=alterarValorForm.eventoFiltro
@@ -3522,7 +3706,7 @@ export default function NovaMatriculaPage() {
                           </div>
                           <div style={{display:'flex',flex:1,justifyContent:'space-between',alignItems:'center'}}>
                             <div>
-                              <span style={{fontWeight:600,fontSize:12,textTransform:'capitalize'}}>{(p as any).evento||'Mensalidade'}</span>
+                              <span style={{fontWeight:600,fontSize:12,textTransform:'capitalize'}}>{getEventoDisp(p)}</span>
                               <span style={{fontSize:10,color:'hsl(var(--text-muted))',marginLeft:8}}>Vcto: {p.vencimento ? formatDate(p.vencimento) : '—'}</span>
                               {p.status==='pago'&&<span style={{fontSize:9,marginLeft:6,padding:'1px 6px',borderRadius:20,background:'rgba(16,185,129,0.12)',color:'#10b981',fontWeight:700}}>Pago</span>}
                             </div>
@@ -3538,7 +3722,15 @@ export default function NovaMatriculaPage() {
                                   return `R$ ${fmtMoeda(p.valorFinal)}`;
                                 })()}
                               </div>
-                              {alterarValorForm.novoValor&&isChecked&&<div style={{fontSize:9,color:'hsl(var(--text-muted))'}}>era R$ {fmtMoeda(p.valorFinal)}</div>}
+                              {alterarValorForm.novoValor&&isChecked ? (
+                                <div style={{fontSize:9,color:'hsl(var(--text-muted))'}}>
+                                  Bruto: R$ {alterarValorForm.novoValor} <span style={{opacity:0.6}}>(era R$ {fmtMoeda(p.valor)})</span>
+                                </div>
+                              ) : (
+                                <div style={{fontSize:9,color:'hsl(var(--text-muted))',opacity:0.6}}>
+                                  Bruto: R$ {fmtMoeda(p.valor)}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -3553,7 +3745,7 @@ export default function NovaMatriculaPage() {
               {/* Footer Actions */}
               <div style={{padding:'20px 24px',borderTop:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-elevated))',display:'flex',justifyContent:'flex-end',gap:12,borderBottomLeftRadius:20,borderBottomRightRadius:20}}>
                 <button type="button" className="btn btn-secondary" onClick={()=>setModalAlterarValor(false)}>Cancelar</button>
-                <button type="button" className="btn btn-primary" style={{background:'linear-gradient(to right,#a78bfa,#8b5cf6)',border:'none'}} disabled={!alterarValorForm.novoValor||parcelasSelected.length===0} onClick={handleAplicarAlteracaoValor}>Aplicar R$ {alterarValorForm.novoValor||'0,00'}</button>
+                <button type="button" className="btn btn-primary" style={{background:'linear-gradient(to right,#a78bfa,#8b5cf6)',border:'none'}} disabled={!alterarValorForm.novoValor||alterarValorForm.parcelas.length===0} onClick={handleAplicarAlteracaoValor}>Aplicar R$ {alterarValorForm.novoValor||'0,00'}</button>
               </div>
             </div>
           </div>
@@ -3576,7 +3768,7 @@ export default function NovaMatriculaPage() {
       {/* ══════════════ MODAL EVENTO FINANCEIRO (GENERICO) ══════════════ */}
       {modalEventoFin&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:5000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:580,maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 30px 100px rgba(0,0,0,0.6)',border:'1px solid rgba(16,185,129,0.2)'}}>
+          <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:580,maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 30px 100px rgba(0,0,0,0.6)',border:'1px solid rgba(16,185,129,0.2)',position:'relative'}}>
             <div style={{padding:'20px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(to right,rgba(16,185,129,0.05),transparent)'}}>
               <div style={{display:'flex',alignItems:'center',gap:14}}>
                 <div style={{width:44,height:44,borderRadius:12,background:'rgba(16,185,129,0.15)',border:'2px solid rgba(16,185,129,0.3)',display:'flex',alignItems:'center',justifyContent:'center',color:'#10b981'}}>
@@ -3589,108 +3781,165 @@ export default function NovaMatriculaPage() {
               </div>
               <button className="btn btn-ghost btn-icon" onClick={()=>setModalEventoFin(false)}><X size={18}/></button>
             </div>
-            <div style={{padding:24,overflowY:'auto',display:'flex',flexDirection:'column',gap:16}}>
-              
-              {/* Manter Desconto toggle */}
-              <div style={{padding:'12px 16px',background:'rgba(16,185,129,0.04)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:10}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:13}}>Manter Desconto</div>
-                    <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>Mesmo após o vencimento da parcela, o desconto será mantido.</div>
+            <div style={{padding:24,overflowY:'auto',display:'flex',flexDirection:'column',gap:24, background:'linear-gradient(to bottom, rgba(16,185,129,0.02), transparent)'}}>
+
+
+              <div style={{display:'flex',flexDirection:'column',gap:24}}>
+                
+                {/* BLOCO 1: IDENTIFICAÇÃO DO EVENTO */}
+                <div style={{background:'hsl(var(--bg-elevated))', padding:20, borderRadius:16, border:'1px solid hsl(var(--border-subtle))', boxShadow:'0 4px 24px rgba(0,0,0,0.04)', display:'flex', flexDirection:'column', gap:16, position:'relative'}}>
+                  <div style={{position:'absolute', top:0, left:0, width:4, height:'100%', background:'#10b981', borderTopLeftRadius:16, borderBottomLeftRadius:16}} />
+                  <div style={{fontSize:12,fontWeight:800,color:'#10b981',textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>Identificação</div>
+                  
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+                    <F label="Turma do Evento">
+                      <select
+                        className="form-input"
+                        value={eventoForm.turmaId}
+                        onChange={e=>{
+                          const t=turmas.find((x:any)=>x.id===e.target.value)
+                          setEventoForm(f=>({...f,turmaId:e.target.value,turmaNome:(t as any)?.nome||''}))
+                        }}
+                        style={{fontWeight:600}}
+                      >
+                        <option value="">— Selecionar turma —</option>
+                        {turmas.map((t:any)=>(
+                          <option key={t.id} value={t.id}>{t.nome}{t.turno?' · '+t.turno:''}</option>
+                        ))}
+                      </select>
+                    </F>
+
+                    <div style={{position:'relative'}}>
+                      <label className="form-label">Evento</label>
+                      <div className="form-input" style={{display:'flex', alignItems:'center', cursor:'pointer', height: 40}} onClick={()=>setEventoForm((f:any)=>({...f, _showEventoModal: true}))}>
+                        {eventoForm.eventoNome || <span style={{color:'hsl(var(--text-muted))'}}>Ex: Material Didático...</span>}
+                      </div>
+                      {/* EventSelecionar Dropdown internal */}
+                      {(eventoForm as any)._showEventoModal && (
+                        <div style={{position:'absolute', top:'100%', left:0, right:-10, marginTop:6, background:'hsl(var(--bg-base))', zIndex:100, borderRadius:12, display:'flex', flexDirection:'column', padding:12, border:'1px solid hsl(var(--border-strong))', boxShadow:'0 10px 40px rgba(0,0,0,0.2)'}}>
+                          <div style={{display:'flex', gap:8, marginBottom:10}}>
+                            <input type="text" className="form-input" placeholder="Buscar evento..." autoFocus onChange={e => {
+                              document.querySelectorAll('.evento-item-novo').forEach(el => {
+                                const v = (el.textContent||'').toLowerCase();
+                                (el as HTMLElement).style.display = v.includes(e.target.value.toLowerCase()) ? 'block' : 'none';
+                              })
+                            }} />
+                          </div>
+                          <div style={{maxHeight:220, overflowY:'auto', display:'flex', flexDirection:'column', gap:6}}>
+                            {cfgEventos.filter(ev=>ev.situacao==='ativo').map(ev=> (
+                              <button key={ev.id} className="evento-item-novo" type="button" style={{textAlign:'left', padding: '10px 12px', background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))', borderRadius:8, cursor:'pointer'}}
+                                onClick={()=>setEventoForm((f:any)=>({...f, eventoNome: ev.descricao, eventoId: ev.id, _showEventoModal: false}))}>
+                                <div style={{fontFamily:'monospace', fontSize:10, color:'#10b981', marginBottom:2}}>{ev.codigo}</div>
+                                <div style={{fontWeight:600, fontSize:13}}>{ev.descricao}</div>
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{marginTop: 10, display:'flex', justifyContent:'flex-end'}}>
+                            <button type="button" className="btn btn-secondary" style={{padding:'6px 12px', fontSize:12, minHeight:30}} onClick={()=>setEventoForm((f:any)=>({...f, _showEventoModal: false}))}>Cancelar</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <button type="button" onClick={()=>setEventoForm(f=>({...f,manterDesconto:!f.manterDesconto}))}
-                    style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
-                      background:eventoForm.manterDesconto?'#10b981':'hsl(var(--border-subtle))',
-                      position:'relative',transition:'background 0.2s',flexShrink:0}}>
-                    <div style={{position:'absolute',top:2,left:eventoForm.manterDesconto?'calc(100% - 22px)':2,width:20,height:20,borderRadius:10,background:'white',transition:'left 0.2s',boxShadow:'0 1px 4px rgba(0,0,0,0.3)'}}/>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tipo de Vencimento */}
-              <div>
-                <label className="form-label">Tipo de Vencimento</label>
-                <div style={{display:'flex',gap:10}}>
-                  {([{v:'diaX',l:'Todo dia X do mês',s:'Parcelas vencem no mesmo dia de cada mês'},{v:'30dias',l:'A cada 30 dias corridos',s:'Intervalo fixo de 30 dias entre parcelas'}] as const).map(opt=>(
-                    <button key={opt.v} type="button" onClick={()=>setEventoForm(f=>({...f,tipoVencimento:opt.v}))}
-                      style={{flex:1,padding:'10px',textAlign:'left',borderRadius:10,background:eventoForm.tipoVencimento===opt.v?'rgba(167,139,250,0.1)':'hsl(var(--bg-overlay))',border:`1px solid ${eventoForm.tipoVencimento===opt.v?'#a78bfa':'hsl(var(--border-subtle))'}`,cursor:'pointer',transition:'all 0.2s'}}>
-                      <div style={{fontWeight:700,fontSize:13,color:eventoForm.tipoVencimento===opt.v?'#a78bfa':'hsl(var(--text-base))'}}>{opt.l}</div>
-                      <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>{opt.s}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              
-              <F label="Evento">
-                <input className="form-input" value={eventoForm.eventoNome} list="eventos-fin-list"
-                  onChange={e=>{
-                    const nome=e.target.value
-                    const match=cfgEventos.find(ev=>ev.descricao===nome||ev.codigo===nome)
-                    setEventoForm(f=>({...f,eventoNome:nome,eventoId:match?.id||''}))
-                  }}
-                  placeholder="Ex: Material Didático"
-                />
-                <datalist id="eventos-fin-list">
-                  {cfgEventos.map(ev=><option key={ev.id} value={ev.descricao}/>)}
-                </datalist>
-              </F>
-
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
-                <F label="Primeiro Vencimento"><input className="form-input" type="date" value={eventoForm.vencimentoInicial} onChange={e=>setEventoForm(f=>({...f,vencimentoInicial:e.target.value}))}/></F>
-                {eventoForm.tipoVencimento==='diaX'&&(
-                  <F label="Todo dia">
-                    <input className="form-input" type="number" min="1" max="31" value={eventoForm.diaVcto} onChange={e=>setEventoForm(f=>({...f,diaVcto:e.target.value}))} placeholder="Ex: 5"/>
+                  <F label="Observação da Parcela (opcional)">
+                    <input className="form-input" value={(eventoForm as any).obs||''} onChange={e=>setEventoForm(f=>({...f,obs:e.target.value}))} placeholder="Anotações, referências, detalhes do acordo..."/>
                   </F>
-                )}
-                <F label="Parcelas (de / até)">
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <input
-                      className="form-input"
-                      type="number" min="1" max="120"
-                      value={eventoForm.parcelaInicial}
-                      onChange={e=>{
-                        const ini=Math.max(1,parseInt(e.target.value)||1)
-                        const fim=Math.max(ini,parseInt(eventoForm.parcelaFinal)||ini)
-                        setEventoForm(f=>({...f,parcelaInicial:String(ini),parcelaFinal:String(fim)}))
-                      }}
-                      style={{width:'100%',textAlign:'center',fontWeight:700}}
-                      title="Parcela inicial"
-                      placeholder="1"
-                    />
-                    <span style={{color:'hsl(var(--text-muted))',fontSize:14,flexShrink:0}}>→</span>
-                    <input
-                      className="form-input"
-                      type="number" min={eventoForm.parcelaInicial||'1'} max="120"
-                      value={eventoForm.parcelaFinal}
-                      onChange={e=>{
-                        const fim=Math.max(parseInt(eventoForm.parcelaInicial)||1,parseInt(e.target.value)||1)
-                        setEventoForm(f=>({...f,parcelaFinal:String(fim)}))
-                      }}
-                      style={{width:'100%',textAlign:'center',fontWeight:700}}
-                      title="Parcela final"
-                      placeholder="1"
-                    />
+                </div>
+
+                {/* BLOCO 2: VALORES E DESCONTOS */}
+                <div style={{background:'hsl(var(--bg-elevated))', padding:20, borderRadius:16, border:'1px solid hsl(var(--border-subtle))', boxShadow:'0 4px 24px rgba(0,0,0,0.04)', display:'flex', flexDirection:'column', gap:16, position:'relative', overflow:'hidden'}}>
+                  <div style={{position:'absolute', top:0, left:0, width:4, height:'100%', background:'#6366f1'}} />
+                  <div style={{fontSize:12,fontWeight:800,color:'#6366f1',textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>Composição de Valor</div>
+                  
+                  <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:16}}>
+                    <F label="">
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:6,height:22}}>
+                        <span style={{fontSize:11,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase'}}>Valor (R$)</span>
+                        <div style={{display:'flex',background:'hsl(var(--bg-base))',borderRadius:6,border:'1px solid hsl(var(--border-subtle))',overflow:'hidden',boxShadow:'inset 0 1px 3px rgba(0,0,0,0.05)'}}>
+                          <button type="button" onClick={()=>setEventoForm(f=>({...f,tipoValor:'total'}))} style={{fontSize:9,fontWeight:800,padding:'4px 10px',background:(eventoForm as any).tipoValor==='total'?'#6366f1':'transparent',color:(eventoForm as any).tipoValor==='total'?'#fff':'hsl(var(--text-muted))',border:'none',cursor:'pointer',outline:'none',transition:'all .2s'}}>TOTAL</button>
+                          <button type="button" onClick={()=>setEventoForm(f=>({...f,tipoValor:'parcela'}))} style={{fontSize:9,fontWeight:800,padding:'4px 10px',borderLeft:'1px solid hsl(var(--border-subtle))',background:(eventoForm as any).tipoValor==='parcela'?'#6366f1':'transparent',color:(eventoForm as any).tipoValor==='parcela'?'#fff':'hsl(var(--text-muted))',borderTop:'none',borderRight:'none',borderBottom:'none',cursor:'pointer',outline:'none',transition:'all .2s'}}>PARCELA</button>
+                        </div>
+                      </div>
+                      <input className="form-input" value={eventoForm.valor} onChange={e=>setEventoForm(f=>({...f,valor:e.target.value}))} placeholder="0,00" style={{fontFamily:"'JetBrains Mono', monospace", fontSize:15, fontWeight:700}}/>
+                    </F>
+                    <F label="Tipo Desc.">
+                      <div style={{display:'flex',borderRadius:8,overflow:'hidden',border:'1px solid hsl(var(--border-subtle))',height:42,boxShadow:'inset 0 1px 3px rgba(0,0,0,0.05)'}}>
+                        {(['%','R$'] as const).map(t=><button key={t} type="button" style={{flex:1,fontSize:13,fontWeight:800,cursor:'pointer',border:'none',background:eventoForm.descTipo===t?'#6366f1':'hsl(var(--bg-base))',color:eventoForm.descTipo===t?'#fff':'hsl(var(--text-muted))',transition:'all .2s'}} onClick={()=>setEventoForm(f=>({...f,descTipo:t}))}>{t}</button>)}
+                      </div>
+                    </F>
+                    <F label={`Desconto (${eventoForm.descTipo})`}>
+                      <input className="form-input" value={eventoForm.descValor} onChange={e=>setEventoForm(f=>({...f,descValor:e.target.value}))} placeholder={eventoForm.descTipo==='%'?'Ex: 10':'Ex: 20,00'} style={{fontFamily:"'JetBrains Mono', monospace", fontSize:15, fontWeight:700, color:'#10b981'}}/>
+                    </F>
                   </div>
-                  {(()=>{const ini=parseInt(eventoForm.parcelaInicial)||1;const fim=parseInt(eventoForm.parcelaFinal)||1;const qtd=fim-ini+1;return qtd>1&&<div style={{fontSize:10,color:'#10b981',marginTop:3,fontWeight:600}}>{qtd} parcelas · {ini}/{fim}</div>})()}
-                </F>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12}}>
-                <F label="Valor Total (R$)"><input className="form-input" value={eventoForm.valor} onChange={e=>setEventoForm(f=>({...f,valor:e.target.value}))} placeholder="0,00"/></F>
-                <F label="Tipo Desc.">
-                  <div style={{display:'flex',borderRadius:6,overflow:'hidden',border:'1px solid hsl(var(--border-subtle))',height:38}}>
-                    {(['%','R$'] as const).map(t=><button key={t} type="button" style={{flex:1,fontSize:12,fontWeight:700,cursor:'pointer',border:'none',background:eventoForm.descTipo===t?'#10b981':'hsl(var(--bg-overlay))',color:eventoForm.descTipo===t?'#fff':'hsl(var(--text-muted))'}} onClick={()=>setEventoForm(f=>({...f,descTipo:t}))}>{t}</button>)}
+
+                  {/* Manter Desconto (Agregado em Valores) */}
+                  <div style={{background:'linear-gradient(135deg, rgba(236,72,153,0.05), rgba(79,70,229,0.05))', padding:'16px 20px', borderRadius:12, border:'1px solid rgba(236,72,153,0.15)', marginTop:4}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <div style={{paddingRight:20}}>
+                        <div style={{fontWeight:800,fontSize:13,color:'#db2777'}}>Manter Desconto</div>
+                        <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:4,lineHeight:1.4}}>Ao ativar, o sistema preservará o valor do desconto independentemente de atrasos.</div>
+                      </div>
+                      <button type="button" onClick={()=>setEventoForm(f=>({...f,manterDesconto:!f.manterDesconto}))}
+                        style={{width:48,height:26,borderRadius:13,border:'none',cursor:'pointer',
+                          background:eventoForm.manterDesconto?'#db2777':'hsl(var(--border-subtle))',
+                          position:'relative',transition:'background 0.3s cubic-bezier(0.4, 0, 0.2, 1)',flexShrink:0,boxShadow:'inset 0 2px 4px rgba(0,0,0,0.1)'}}>
+                        <div style={{position:'absolute',top:2,left:eventoForm.manterDesconto?'calc(100% - 24px)':2,width:22,height:22,borderRadius:11,background:'white',transition:'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}}/>
+                      </button>
+                    </div>
                   </div>
-                </F>
-                <F label={`Desconto (${eventoForm.descTipo})`}><input className="form-input" value={eventoForm.descValor} onChange={e=>setEventoForm(f=>({...f,descValor:e.target.value}))} placeholder={eventoForm.descTipo==='%'?'Ex: 10':'Ex: 20,00'}/></F>
+                </div>
+
+                {/* BLOCO 3: VENCIMENTO E RECORRÊNCIA */}
+                <div style={{background:'hsl(var(--bg-elevated))', padding:20, borderRadius:16, border:'1px solid hsl(var(--border-subtle))', boxShadow:'0 4px 24px rgba(0,0,0,0.04)', display:'flex', flexDirection:'column', gap:16, position:'relative', overflow:'hidden'}}>
+                  <div style={{position:'absolute', top:0, left:0, width:4, height:'100%', background:'#f59e0b'}} />
+                  <div style={{fontSize:12,fontWeight:800,color:'#f59e0b',textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>Agendamento Financeiro</div>
+
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:16}}>
+                    <F label="Primeiro Vencimento">
+                      <input className="form-input" type="date" value={eventoForm.vencimentoInicial} onChange={e=>setEventoForm(f=>({...f,vencimentoInicial:e.target.value}))} style={{fontWeight:700}}/>
+                    </F>
+                    {eventoForm.tipoVencimento==='diaX'&&(
+                      <F label="Todo dia">
+                        <input className="form-input" type="number" min="1" max="31" value={eventoForm.diaVcto} onChange={e=>setEventoForm(f=>({...f,diaVcto:e.target.value}))} placeholder="Ex: 5" style={{fontFamily:"'JetBrains Mono', monospace", fontWeight:700}}/>
+                      </F>
+                    )}
+                    <F label="Total de Parcelas">
+                      <input
+                        className="form-input"
+                        type="number" min="1" max="120"
+                        value={eventoForm.parcelaFinal}
+                        onChange={e=>{
+                          const qtd=Math.max(1,parseInt(e.target.value)||1)
+                          setEventoForm(f=>({...f,parcelaInicial:'1',parcelaFinal:String(qtd)}))
+                        }}
+                        style={{textAlign:'center',fontFamily:"'JetBrains Mono', monospace", fontWeight:800, fontSize:15}}
+                        placeholder="Ex: 10"
+                      />
+                    </F>
+                  </div>
+                  
+                  {/* Tipo de Vencimento */}
+                  <div style={{background:'hsl(var(--bg-base))',padding:'16px',borderRadius:12,border:'1px solid hsl(var(--border-subtle))',boxShadow:'inset 0 2px 10px rgba(0,0,0,0.02)'}}>
+                    <label style={{fontSize:11,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase',marginBottom:12,display:'block'}}>Padrão de Recorrência</label>
+                    <div style={{display:'flex',gap:12}}>
+                      {([{v:'diaX',l:'Todo dia X do mês',s:'Vencimentos ancorados ao mês subsequente'},{v:'30dias',l:'A cada 30 dias corridos',s:'Intervalo fixo exato a cada 30 dias'}] as const).map(opt=>(
+                        <button key={opt.v} type="button" onClick={()=>setEventoForm(f=>({...f,tipoVencimento:opt.v}))}
+                          style={{flex:1,padding:'14px',textAlign:'left',borderRadius:10,background:eventoForm.tipoVencimento===opt.v?'rgba(245,158,11,0.08)':'hsl(var(--bg-elevated))',border:`2px solid ${eventoForm.tipoVencimento===opt.v?'#f59e0b':'transparent'}`,boxShadow:eventoForm.tipoVencimento===opt.v?'0 4px 14px rgba(245,158,11,0.15)':'0 2px 8px rgba(0,0,0,0.05)',cursor:'pointer',transition:'all 0.2s',transform:eventoForm.tipoVencimento===opt.v?'translateY(-2px)':'none'}}>
+                          <div style={{fontWeight:800,fontSize:14,color:eventoForm.tipoVencimento===opt.v?'#d97706':'hsl(var(--text-base))'}}>{opt.l}</div>
+                          <div style={{fontSize:11,color:eventoForm.tipoVencimento===opt.v?'#b45309':'hsl(var(--text-muted))',marginTop:4,lineHeight:1.3}}>{opt.s}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             {eventoForm.valor&&eventoForm.parcelaFinal&&eventoForm.vencimentoInicial&&(()=>{
               const ev=cfgEventos.find(e=>e.id===eventoForm.eventoId)
-              const parIni=Math.max(1,parseInt(eventoForm.parcelaInicial)||1)
-              const parFim=Math.max(parIni,parseInt(eventoForm.parcelaFinal)||parIni)
-              const qtd=parFim-parIni+1
-              const valTotal=parseMoeda(eventoForm.valor)
-              const valBase=+(valTotal/qtd).toFixed(2)
-              const diff=+(valTotal - (valBase*qtd)).toFixed(2)
+              // Preview: sempre começa em 1, vai até qtd (independente de outros eventos)
+              const qtd=Math.max(1,parseInt(eventoForm.parcelaFinal)||1)
+              const valInput=parseMoeda(eventoForm.valor)
+              let valTotal=valInput, valBase=+(valInput/qtd).toFixed(2), diff=+(valInput - (valBase*qtd)).toFixed(2)
+              if ((eventoForm as any).tipoValor==='parcela') { valBase=valInput; valTotal=valInput*qtd; diff=0; }
               const dv=parseMoeda(eventoForm.descValor)
               const desc=eventoForm.descValor?(eventoForm.descTipo==='%'?+(valBase*dv/100).toFixed(2):dv):0
               const sd=new Date(eventoForm.vencimentoInicial+'T12:00')
@@ -3698,16 +3947,17 @@ export default function NovaMatriculaPage() {
                 if(eventoForm.tipoVencimento==='30dias'){const d=new Date(sd);d.setDate(d.getDate()+i*30);return d}
                 else{const d=new Date(sd);d.setMonth(d.getMonth()+i);if(eventoForm.diaVcto&&i>0)d.setDate(parseInt(eventoForm.diaVcto));return d}
               }
-              const prevs=Array.from({length:Math.min(qtd,6)},(_,i)=>({n:parIni+i,v:calcData(i).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),valP:+(valBase+(i===0?diff:0)).toFixed(2)}))
+              // n = índice interno do evento (1..qtd)
+              const prevs=Array.from({length:Math.min(qtd,6)},(_,i)=>({n:i+1,v:calcData(i).toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),valP:+(valBase+(i===0?diff:0)).toFixed(2)}))
               const totalVlrF=Array.from({length:qtd},(_,i)=>Math.max(0,+(valBase+(i===0?diff:0)).toFixed(2)-desc)).reduce((a,b)=>a+b,0)
               return(<div style={{padding:'14px 16px',background:'rgba(16,185,129,0.06)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:12}}>
                 <div style={{fontWeight:700,fontSize:13,color:'#34d399',marginBottom:10,display:'flex',justifyContent:'space-between'}}>
-                  <span>{ev?.descricao||'Evento'} · {qtd} parcela(s) <span style={{fontSize:11,color:'hsl(var(--text-muted))',fontWeight:400}}>({parIni}/{parFim})</span></span>
+                  <span>{ev?.descricao||eventoForm.eventoNome||'Evento'} · {qtd} parcela(s) <span style={{fontSize:11,color:'hsl(var(--text-muted))',fontWeight:400}}>(1 a {qtd})</span></span>
                   {desc>0&&<span style={{fontSize:12,color:'#f59e0b'}}>Desc.: R$ {fmtMoeda(desc)}/mês</span>}
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4}}>
                   {prevs.map(pv=><div key={pv.n} style={{display:'flex',justifyContent:'space-between',padding:'5px 8px',background:'rgba(16,185,129,0.06)',borderRadius:6,fontSize:12}}>
-                    <span style={{color:'hsl(var(--text-muted))'}}><strong style={{color:'#818cf8',fontFamily:'monospace'}}>{pv.n}/{parFim}</strong> — <strong style={{color:'hsl(var(--text-secondary))'}}>{pv.v}</strong></span>
+                    <span style={{color:'hsl(var(--text-muted))'}}><strong style={{color:'#818cf8',fontFamily:'monospace'}}>{pv.n}/{qtd}</strong> — <strong style={{color:'hsl(var(--text-secondary))'}}>{pv.v}</strong></span>
                     <span style={{fontFamily:'monospace',fontWeight:800,color:'#34d399'}}>R$ {fmtMoeda(Math.max(0,pv.valP-desc))}</span>
                   </div>)}
                   {qtd>6&&<div style={{fontSize:11,color:'hsl(var(--text-muted))',padding:'4px 8px'}}>...e mais {qtd-6} parcela(s)</div>}
@@ -3720,49 +3970,81 @@ export default function NovaMatriculaPage() {
             <button className="btn btn-secondary" onClick={()=>setModalEventoFin(false)}>Cancelar</button>
             <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#10b981,#059669)'}} disabled={!eventoForm.valor||!eventoForm.parcelaFinal||!eventoForm.vencimentoInicial||(!eventoForm.eventoId&&!eventoForm.eventoNome.trim())} onClick={()=>{
               const ev=cfgEventos.find(e=>e.id===eventoForm.eventoId)
-              const parIni=Math.max(1,parseInt(eventoForm.parcelaInicial)||1)
-              const parFim=Math.max(parIni,parseInt(eventoForm.parcelaFinal)||parIni)
-              const qtd=parFim-parIni+1
-              const valTotal=parseMoeda(eventoForm.valor)
-              const valBase=+(valTotal/qtd).toFixed(2)
-              const diff=+(valTotal - (valBase*qtd)).toFixed(2)
+              // Quantidade de parcelas DESTE evento (sempre começa em 1 — independente de outros eventos)
+              const qtd=Math.max(1,parseInt(eventoForm.parcelaFinal)||1)
+              const valInput=parseMoeda(eventoForm.valor)
+              let valTotal=valInput, valBase=+(valInput/qtd).toFixed(2), diff=+(valInput - (valBase*qtd)).toFixed(2)
+              if ((eventoForm as any).tipoValor==='parcela') { valBase=valInput; valTotal=valInput*qtd; diff=0; }
               const dv=parseMoeda(eventoForm.descValor)
               const desc=eventoForm.descValor?(eventoForm.descTipo==='%'?+(valBase*dv/100).toFixed(2):dv):0
-              
-              const sd=new Date(eventoForm.vencimentoInicial+'T12:00'),maxN=parcelas.length>0?Math.max(...parcelas.map(p=>p.num)):0
+
+              const sd=new Date(eventoForm.vencimentoInicial+'T12:00')
+              // ID único para este lançamento — nome do evento não é a chave, o ID é
               const alunoEventoId = newId('EV')
+              const nomeEvento = ev?.descricao||eventoForm.eventoNome||'Evento'
               const calcData=(i:number)=>{
                 if(eventoForm.tipoVencimento==='30dias'){const d=new Date(sd);d.setDate(d.getDate()+i*30);return d}
                 else{const d=new Date(sd);d.setMonth(d.getMonth()+i);if(eventoForm.diaVcto&&i>0)d.setDate(parseInt(eventoForm.diaVcto));return d}
               }
               const dataLancamento = new Date().toISOString()
+              // Cada parcela: numParcela vai de 1..qtd (específico deste evento)
+              // totalParcelas é sempre qtd (deste evento)
               const novas=Array.from({length:qtd},(_,i)=>{
                 const d=calcData(i);
                 const valP=+(valBase+(i===0?diff:0)).toFixed(2);
                 const vlrFP=Math.max(0,valP-desc);
-                return{num:maxN+i+1,competencia:d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),vencimento:d.toLocaleDateString('pt-BR'),valor:valP,desconto:desc,valorFinal:vlrFP,status:'pendente' as const,obs:'',editando:false,evento:ev?.descricao||eventoForm.eventoNome||'Evento',eventoId:alunoEventoId,numParcela:parIni+i,totalParcelas:parFim,codigo:String(Math.floor(100000+Math.random()*900000)),manterDesconto:eventoForm.manterDesconto,descTipo:eventoForm.descValor?eventoForm.descTipo:undefined,descRaw:dv,dataLancamento}
+                  return{
+                  // num temporário; será substituído ao ordenar — use numParcela para exibição
+                  num: 0,
+                  competencia:d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),
+                  vencimento:d.toLocaleDateString('pt-BR'),
+                  valor:valP,desconto:desc,valorFinal:vlrFP,
+                  status:'pendente' as const,obs:(eventoForm as any).obs||'',editando:false,
+                  evento:nomeEvento,
+                  eventoId:alunoEventoId,   // <— ID único: evento com mesmo nome = ID diferente
+                  numParcela:i+1,           // <— sempre 1..N dentro deste evento
+                  totalParcelas:qtd,        // <— total deste evento
+                  turmaId:eventoForm.turmaId||undefined,    // <— turma específica deste evento
+                  turmaNome:eventoForm.turmaNome||(turmas.find((t:any)=>t.id===eventoForm.turmaId) as any)?.nome||undefined,
+                  codigo:String(Math.floor(100000+Math.random()*900000)),
+                  manterDesconto:eventoForm.manterDesconto,
+                  descTipo:eventoForm.descValor?eventoForm.descTipo:undefined,
+                  descRaw:dv,
+                  dataLancamento
+                }
               })
+              // Ordenar todas as parcelas por data e reatribuir num global (só para ordenação interna)
               const todasOrdenadas=[...parcelas,...novas].sort((a,b)=>{
-                const pa=new Date(a.vencimento.split('/').reverse().join('-')+'T12:00'),pb=new Date(b.vencimento.split('/').reverse().join('-')+'T12:00');return pa.getTime()-pb.getTime()
-              }).map((p,i)=>({...p,num:i+1}))
+                const pa=new Date(a.vencimento.split('/').reverse().join('-')+'T12:00')
+                const pb=new Date(b.vencimento.split('/').reverse().join('-')+'T12:00')
+                // Desempate: parcelas do mesmo vencimento → agrupa por eventoId
+                if(pa.getTime()===pb.getTime()) return ((a as any).eventoId||'').localeCompare((b as any).eventoId||'')
+                return pa.getTime()-pb.getTime()
+              }).map((p,i)=>({...p,num:i+1}))  // num = índice global de ordenação apenas
               setParcelas(todasOrdenadas);setParcelasConfirmadas(false);setModalEventoFin(false)
-              setEventoForm({turmaId:mat.turmaId,eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX',diaVcto:'5',valor:'',descTipo:'%',descValor:'',manterDesconto:false})
-            }}><Check size={14}/> Inserir {(Math.max(parseInt(eventoForm.parcelaFinal)||1,parseInt(eventoForm.parcelaInicial)||1)-(parseInt(eventoForm.parcelaInicial)||1)+1)} Lançamento(s)</button>
+              setEventoForm({turmaId:mat.turmaId,turmaNome:'',eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX',diaVcto:'5',valor:'',descTipo:'%',descValor:'',manterDesconto:false,obs:''})
+            }}><Check size={14}/> Inserir {Math.max(1,parseInt(eventoForm.parcelaFinal)||1)} Lançamento(s)</button>
           </div>
         </div>
       </div>)}
 
       {/* ══════════════ MODAL EDITAR PARCELA ══════════════ */}
-      {modalEditarParcela&&parcelaAtiva&&(
+      {modalEditarParcela&&parcelaAtiva&&(()=>{
+        const eid = parcelaAtiva.eventoId;
+        const pd = (dStr: string) => { const [d,m,a] = (dStr||'').split('/'); return new Date(`${a||0}-${m||0}-${d||0}T12:00:00`); };
+        const eparcs = (!parcelaAtiva.numParcela && eid) ? [...parcelas].filter((x:any)=>x.status!=='cancelado' && x.eventoId===eid).sort((a:any,b:any)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()) : null;
+        const evtIndex = parcelaAtiva.numParcela || (eparcs ? eparcs.findIndex((x:any)=>x.num===parcelaAtiva.num) + 1 : 1);
+        const pDen = parcelaAtiva.totalParcelas || (eparcs ? eparcs.length : 1);
+        return(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:5000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:580,maxHeight:'92vh',overflowY:'auto',border:'1px solid hsl(var(--border-subtle))',boxShadow:'0 40px 120px rgba(0,0,0,0.8)'}}>            
             {/* Header */}
             <div style={{padding:'18px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',background:'linear-gradient(135deg,rgba(99,102,241,0.1),rgba(139,92,246,0.04))'}}>
               <div style={{display:'flex',alignItems:'center',gap:14}}>
                 {/* Badge numero */}
-                <div style={{width:48,height:48,borderRadius:12,background:'rgba(99,102,241,0.15)',border:'2px solid rgba(99,102,241,0.3)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                <div style={{width:64,height:48,borderRadius:12,background:'rgba(99,102,241,0.15)',border:'2px solid rgba(99,102,241,0.3)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
                   <div style={{fontSize:9,color:'#818cf8',fontWeight:700,letterSpacing:1}}>PARC.</div>
-                  <div style={{fontFamily:'monospace',fontWeight:900,fontSize:17,color:'#818cf8'}}>{String(parcelaAtiva.num).padStart(2,'0')}</div>
+                  <div style={{fontFamily:'monospace',fontWeight:900,fontSize:15,color:'#818cf8'}}>{String(evtIndex).padStart(2,'0')}/{String(pDen).padStart(2,'0')}</div>
                 </div>
                 <div>
                   <div style={{fontWeight:800,fontSize:15}}>Editar Parcela</div>
@@ -3780,36 +4062,62 @@ export default function NovaMatriculaPage() {
             </div>
             {/* Body */}
             <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
+
               {/* Resumo atual */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,padding:'12px 16px',background:'hsl(var(--bg-elevated))',borderRadius:12,border:'1px solid hsl(var(--border-subtle))'}}>
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600,marginBottom:3}}>Nº PARCELA</div><div style={{fontFamily:'monospace',fontWeight:900,fontSize:16,color:'#818cf8'}}>{String(parcelaAtiva.num).padStart(2,'0')}</div></div>
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600,marginBottom:3}}>VALOR BRUTO</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14}}>R$ {fmtMoeda(parcelaAtiva.valor)}</div></div>
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600,marginBottom:3}}>DESCONTO</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#f59e0b'}}>R$ {fmtMoeda(parcelaAtiva.desconto)}</div></div>
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600,marginBottom:3}}>VALOR FINAL</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#34d399'}}>R$ {fmtMoeda(parcelaAtiva.valorFinal)}</div></div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(6, 1fr)',gap:8,padding:'16px',background:'hsl(var(--bg-elevated))',borderRadius:12,border:'1px solid hsl(var(--border-subtle))'}}>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>PARCELA</div><div style={{fontFamily:'monospace',fontWeight:900,fontSize:14,color:'#818cf8',whiteSpace:'nowrap'}}>{String(evtIndex).padStart(2,'0')}/{String(pDen).padStart(2,'0')}</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>BRUTO (R$)</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,whiteSpace:'nowrap'}}>{fmtMoeda(parcelaAtiva.valor)}</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>DESC. (R$)</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#f59e0b',whiteSpace:'nowrap'}}>{fmtMoeda(parcelaAtiva.desconto)}</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>JUROS (R$)</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#ef4444',whiteSpace:'nowrap'}}>{fmtMoeda(parcelaAtiva.juros||0)}</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>MULTA (R$)</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#ef4444',whiteSpace:'nowrap'}}>{fmtMoeda(parcelaAtiva.multa||0)}</div></div>
+                <div style={{textAlign:'center'}}><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,marginBottom:4,whiteSpace:'nowrap'}}>FINAL (R$)</div><div style={{fontFamily:'monospace',fontWeight:800,fontSize:14,color:'#34d399',whiteSpace:'nowrap'}}>{fmtMoeda(parcelaAtiva.valorFinal + (parcelaAtiva.juros||0) + (parcelaAtiva.multa||0))}</div></div>
               </div>
-              {/* Evento: digitável com sugestões */}
-              <div style={{position:'relative'}}>
-                <label className="form-label">Evento / Competência</label>
-                <input className="form-input" value={parcelaAtiva.evento||''}
-                  onChange={e=>setParcelaAtiva((a:any)=>({...a,evento:e.target.value}))}
-                  placeholder="Digite ou selecione um evento..."
-                  list="eventos-list-editar"
-                />
-                <datalist id="eventos-list-editar">
-                  {cfgEventos.filter(ev=>ev.situacao==='ativo').map(ev=>(
-                    <option key={ev.id} value={ev.descricao}>{ev.codigo} — {ev.descricao}</option>
-                  ))}
-                </datalist>
+              {/* Evento e Vencimento */}
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div style={{position:'relative'}}>
+                  <label className="form-label">Evento / Competência</label>
+                  <div className="form-input" style={{display:'flex', alignItems:'center', cursor:'pointer', height: 40}} onClick={()=>setParcelaAtiva((a:any)=>({...a, _showEventoModal: true}))}>
+                    {parcelaAtiva.evento || <span style={{color:'hsl(var(--text-muted))'}}>Selecionar o evento...</span>}
+                  </div>
+                  {/* EventSelecionar Dropdown internal */}
+                  {parcelaAtiva._showEventoModal && (
+                    <div style={{position:'absolute', top:'100%', left:0, right:-10, marginTop:6, background:'hsl(var(--bg-base))', zIndex:100, borderRadius:12, display:'flex', flexDirection:'column', padding:12, border:'1px solid hsl(var(--border-strong))', boxShadow:'0 10px 40px rgba(0,0,0,0.2)'}}>
+                      <div style={{display:'flex', gap:8, marginBottom:10}}>
+                        <input type="text" className="form-input" placeholder="Buscar evento..." autoFocus onChange={e => {
+                          document.querySelectorAll('.evento-item-drop').forEach(el => {
+                            const v = (el.textContent||'').toLowerCase();
+                            (el as HTMLElement).style.display = v.includes(e.target.value.toLowerCase()) ? 'block' : 'none';
+                          })
+                        }} />
+                      </div>
+                      <div style={{maxHeight:220, overflowY:'auto', display:'flex', flexDirection:'column', gap:6}}>
+                        {cfgEventos.filter(ev=>ev.situacao==='ativo').map(ev=> (
+                          <button key={ev.id} className="evento-item-drop" type="button" style={{textAlign:'left', padding: '10px 12px', background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))', borderRadius:8, cursor:'pointer'}}
+                            onClick={()=>setParcelaAtiva((a:any)=>({...a, evento: ev.descricao, _showEventoModal: false}))}>
+                            <div style={{fontFamily:'monospace', fontSize:10, color:'#6366f1', marginBottom:2}}>{ev.codigo}</div>
+                            <div style={{fontWeight:600, fontSize:13}}>{ev.descricao}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{marginTop: 10, display:'flex', justifyContent:'flex-end'}}>
+                        <button type="button" className="btn btn-secondary" style={{padding:'6px 12px', fontSize:12, minHeight:30}} onClick={()=>setParcelaAtiva((a:any)=>({...a, _showEventoModal: false}))}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <F label="Data de Vencimento">
+                  <input className="form-input" type="date" value={parcelaAtiva.vencimento.split('/').reverse().join('-')} onChange={e=>{
+                    const iso = e.target.value;
+                    const brDate = iso.split('-').reverse().join('/');
+                    setParcelaAtiva((a:any)=>({...a,vencimento:brDate}))
+                  }}/>
+                </F>
               </div>
-              {/* Vencimento */}
-              <F label="Data de Vencimento">
-                <input className="form-input" value={parcelaAtiva.vencimento} onChange={e=>setParcelaAtiva((a:any)=>({...a,vencimento:e.target.value}))} placeholder="DD/MM/AAAA"/>
-              </F>
               {/* Valores */}
               <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12}}>
                 <F label="Valor Principal (R$)">
-                  <input className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.valor)} onChange={e=>{
-                    const v=parseMoeda(e.target.value)
+                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.valor} onChange={e=>{
+                    const v=parseFloat(e.target.value)||0
                     setParcelaAtiva((a:any)=>{
                       const t=a.descTipo||'R$', raw=a.descRaw??a.desconto;
                       const d=t==='%' ? +(v*raw/100).toFixed(2) : raw;
@@ -3829,8 +4137,8 @@ export default function NovaMatriculaPage() {
                   </div>
                 </F>
                 <F label={`Desconto (${parcelaAtiva.descTipo||'R$'})`}>
-                  <input className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.descRaw??parcelaAtiva.desconto)} onChange={e=>{
-                    const raw=parseMoeda(e.target.value)
+                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.descRaw??parcelaAtiva.desconto} onChange={e=>{
+                    const raw=parseFloat(e.target.value)||0
                     setParcelaAtiva((a:any)=>{
                       const t=a.descTipo||'R$';
                       const d=t==='%' ? +(a.valor*raw/100).toFixed(2) : raw;
@@ -3841,12 +4149,25 @@ export default function NovaMatriculaPage() {
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                 <F label="Juros (R$)">
-                  <input className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.juros||0)} onChange={e=>setParcelaAtiva((a:any)=>({...a,juros:parseMoeda(e.target.value)}))}/>
+                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.juros??''} onChange={e=>setParcelaAtiva((a:any)=>({...a,juros:parseFloat(e.target.value)||0}))}/>
                 </F>
                 <F label="Multa (R$)">
-                  <input className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.multa||0)} onChange={e=>setParcelaAtiva((a:any)=>({...a,multa:parseMoeda(e.target.value)}))}/>
+                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.multa??''} onChange={e=>setParcelaAtiva((a:any)=>({...a,multa:parseFloat(e.target.value)||0}))}/>
                 </F>
               </div>
+              <F label="Manter Desconto">
+                <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:'rgba(236,72,153,0.05)',borderRadius:10,border:'1px solid rgba(236,72,153,0.15)'}}>
+                  <button type="button" onClick={()=>setParcelaAtiva((a:any)=>({...a,manterDesconto:!a.manterDesconto}))}
+                    style={{width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',
+                      background:parcelaAtiva.manterDesconto?'#db2777':'hsl(var(--border-subtle))',
+                      position:'relative',transition:'background 0.3s cubic-bezier(0.4, 0, 0.2, 1)',flexShrink:0,boxShadow:'inset 0 2px 4px rgba(0,0,0,0.1)'}}>
+                    <div style={{position:'absolute',top:2,left:parcelaAtiva.manterDesconto?'calc(100% - 22px)':2,width:20,height:20,borderRadius:10,background:'white',transition:'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}}/>
+                  </button>
+                  <label style={{fontSize:12,color:'hsl(var(--text-muted))',lineHeight:1.4}}>
+                    <strong style={{color:'#db2777'}}>Ao ativar</strong>, o sistema preservará o valor do desconto independentemente de atrasos.
+                  </label>
+                </div>
+              </F>
               <F label="Observação Financeira">
 <textarea className="form-input" rows={2} value={parcelaAtiva.obs||''} onChange={e=>setParcelaAtiva((a:any)=>({...a,obs:e.target.value}))} placeholder="Anotações sobre esta parcela..."/>
               </F>
@@ -3875,10 +4196,17 @@ export default function NovaMatriculaPage() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ══════════════ MODAL BAIXAR PARCELA ══════════════ */}
       {modalBaixarParcela&&parcelaAtiva&&(()=>{
+        const eid = parcelaAtiva.eventoId;
+        const pd = (dStr: string) => { const [d,m,a] = (dStr||'').split('/'); return new Date(`${a||0}-${m||0}-${d||0}T12:00:00`); };
+        const eparcs = (!parcelaAtiva.numParcela && eid) ? [...parcelas].filter((x:any)=>x.status!=='cancelado' && x.eventoId===eid).sort((a:any,b:any)=>pd(a.vencimento).getTime()-pd(b.vencimento).getTime()) : null;
+        const evtIndex = parcelaAtiva.numParcela || (eparcs ? eparcs.findIndex((x:any)=>x.num===parcelaAtiva.num) + 1 : 1);
+        const pDen = parcelaAtiva.totalParcelas || (eparcs ? eparcs.length : 1);
+
         const jurosFin = parseMoeda(baixaForm.juros)
         const multaFin = parseMoeda(baixaForm.multa)
         const descNow  = parseMoeda(baixaForm.desconto||String(parcelaAtiva.desconto||'0'))
@@ -3911,9 +4239,9 @@ export default function NovaMatriculaPage() {
                     <div style={{width:52,height:52,borderRadius:14,background:'rgba(99,102,241,0.15)',border:'2px solid rgba(99,102,241,0.3)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                       <div style={{fontSize:9,color:'#818cf8',fontWeight:700,letterSpacing:1}}>PARC.</div>
                       <div style={{fontFamily:'monospace',fontWeight:900,fontSize:18,color:'#818cf8',lineHeight:1}}>
-                        {String((parcelaAtiva as any).numParcela || parcelaAtiva.num).padStart(2,'0')}
+                        {String(evtIndex).padStart(2,'0')}
                       </div>
-                      {(parcelaAtiva as any).totalParcelas&&<div style={{fontSize:8,color:'rgba(129,140,248,0.7)',fontFamily:'monospace'}}>de {(parcelaAtiva as any).totalParcelas}</div>}
+                      <div style={{fontSize:8,color:'rgba(129,140,248,0.7)',fontFamily:'monospace'}}>de {String(pDen).padStart(2,'0')}</div>
                     </div>
                     <div>
                       <div style={{fontWeight:800,fontSize:14,color:'hsl(var(--text-base))',textTransform:'capitalize'}}>{(parcelaAtiva as any).evento||parcelaAtiva.competencia}</div>
@@ -3938,15 +4266,7 @@ export default function NovaMatriculaPage() {
                   <div style={{fontSize:12}}><strong style={{color:'#ef4444'}}>Vencida há {diasAtr} dia(s)</strong> — Multa 2% e Juros 0,033%/dia calculados automaticamente. Ajuste se necessário.</div>
                 </div>
               )}
-              {/* Resumo */}
-              <div style={{padding:'12px 24px',background:'hsl(var(--bg-elevated))',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
-                  <div><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700}}>VENCIMENTO</div><div style={{fontFamily:'monospace',fontSize:12,fontWeight:700,color:diasAtr>0?'#ef4444':'#f59e0b'}}>{parcelaAtiva.vencimento ? formatDate(parcelaAtiva.vencimento) : '—'}</div></div>
-                  <div><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700}}>VALOR ORIG.</div><div style={{fontFamily:'monospace',fontSize:12,fontWeight:700}}>R$ {fmtMoeda(parcelaAtiva.valor)}</div></div>
-                  <div><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700}}>DESCONTO</div><div style={{fontFamily:'monospace',fontSize:12,fontWeight:700,color:'#f59e0b'}}>R$ {fmtMoeda(descNow)}</div></div>
-                  <div><div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700}}>TOTAL A PAGAR</div><div style={{fontFamily:'monospace',fontSize:14,fontWeight:800,color:'#10b981'}}>R$ {fmtMoeda(totalReceber)}</div></div>
-                </div>
-              </div>
+
               <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
                 {/* Caixa — seleção obrigatória */}
                 {(()=>{
@@ -4136,7 +4456,7 @@ export default function NovaMatriculaPage() {
 
       {/* ══════════════ MODAL DADOS CARTÃO ══════════════ */}
       {modalCartao&&(()=>{
-        const cartaoSrcForma=cartaoCtx==='baixaResp'?baixaRespForm.formasPagto[cartaoFormIdx]:baixaForm.formasPagto[cartaoFormIdx]
+        const cartaoSrcForma=cartaoCtx==='baixaResp'?baixaRespForm.formasPagto[cartaoFormIdx]:cartaoCtx==='baixaLote'?baixaLoteMultiFormas[cartaoFormIdx]:baixaForm.formasPagto[cartaoFormIdx]
         if(!cartaoSrcForma) return null
         return(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:7000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -4260,7 +4580,7 @@ export default function NovaMatriculaPage() {
                     <tfoot>
                       <tr style={{background:'rgba(99,102,241,0.05)',borderTop:'2px solid hsl(var(--border-subtle))'}}>
                         <td colSpan={4} style={{padding:'7px 10px',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))'}}>Total · {(cartaoForm as any).parcelasGeradas.length} parcela(s)</td>
-                        <td style={{padding:'7px 10px',fontFamily:'monospace',fontWeight:900,color:'#818cf8',fontSize:12}}>R$ {fmtMoeda(parseMoeda(baixaForm.formasPagto[cartaoFormIdx]?.valor||'0'))}</td>
+                        <td style={{padding:'7px 10px',fontFamily:'monospace',fontWeight:900,color:'#818cf8',fontSize:12}}>R$ {fmtMoeda(parseMoeda(cartaoSrcForma?.valor||'0'))}</td>
                         <td/>
                       </tr>
                     </tfoot>
@@ -4276,6 +4596,8 @@ export default function NovaMatriculaPage() {
                 onClick={()=>{
                   if(cartaoCtx==='baixaResp'){
                     setBaixaRespForm((f:any)=>({...f,formasPagto:f.formasPagto.map((x:any,i:number)=>i===cartaoFormIdx?{...x,cartao:{...cartaoForm}}:x)}))
+                  } else if (cartaoCtx==='baixaLote') {
+                    setBaixaLoteMultiFormas((ff:any)=>ff.map((x:any,i:number)=>i===cartaoFormIdx?{...x,cartao:{...cartaoForm}}:x))
                   } else {
                     setBaixaForm((ff:any)=>({...ff,formasPagto:ff.formasPagto.map((x:any,i:number)=>i===cartaoFormIdx?{...x,cartao:{...cartaoForm}}:x)}))
                   }
@@ -4290,14 +4612,12 @@ export default function NovaMatriculaPage() {
 
       {/* ══════════════ MODAL BAIXA EM LOTE ══════════════ */}
       {modalBaixaLote&&(()=>{
-        const selecionadas=parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status!=='pago')
-        const df=parseMoeda(baixaLoteForm.desconto); const jf=parseMoeda(baixaLoteForm.juros); const mf=parseMoeda(baixaLoteForm.multa)
-        const brutoTotal = selecionadas.reduce((s,p)=>s+p.valor,0)
-        const totalGeral = Math.max(0, brutoTotal - df + jf + mf)
-        const selecionadasComAcr=selecionadas.map(p=>{
-          const {juros,multa,dias}=calcAtraso(p, baixaLoteForm.dataPagto)
-          return{...(p as any),jurosCalc:juros,multaCalc:multa,diasAtr:dias,totalP:+(p.valorFinal+juros+multa).toFixed(2)}
-        })
+        const brutoTotal = baixaLoteParcelas.reduce((s,p)=>s+p.valor,0)
+        const totalJuros = baixaLoteParcelas.reduce((s,p)=>s+parseMoeda(p.loteJuros||'0'),0)
+        const totalMulta = baixaLoteParcelas.reduce((s,p)=>s+parseMoeda(p.loteMulta||'0'),0)
+        const totalDesc = baixaLoteParcelas.reduce((s,p)=>s+parseMoeda(p.loteDesc||'0'),0)
+        const totalGeral = Math.max(0, brutoTotal - totalDesc + totalJuros + totalMulta)
+        
         const totalFormasLt=baixaLoteMultiFormas.reduce((s:number,f:any)=>s+parseMoeda(f.valor||'0'),0)
         const saldoLt=+(totalGeral-totalFormasLt).toFixed(2)
         const addFormaLt=()=>setBaixaLoteMultiFormas((ff:any)=>[...ff,{id:String(Date.now()),forma:'Dinheiro',valor:saldoLt>0?fmtMoeda(saldoLt):'',cartao:null}])
@@ -4306,18 +4626,46 @@ export default function NovaMatriculaPage() {
             setBaixaLoteMultiFormas((prev:any) => [{...prev[0], valor:fmtMoeda(vf)}])
           }
         }
+        
+        const updatePrc = (num: number, field: string, value: string) => {
+            setBaixaLoteParcelas(prev => {
+                const arr = prev.map(p => p.num === num ? {...p, [field]: value} : p);
+                const ntGeral = arr.reduce((acc, p) => acc + Math.max(0, p.valor - parseMoeda(p.loteDesc||'0') + parseMoeda(p.loteJuros||'0') + parseMoeda(p.loteMulta||'0')), 0);
+                syncSingleFormValue(ntGeral);
+                return arr;
+            });
+        }
+
         return(
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:5500,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-            <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:720,maxHeight:'94vh',overflowY:'auto',display:'flex',flexDirection:'column',border:'1px solid rgba(16,185,129,0.3)',boxShadow:'0 40px 120px rgba(0,0,0,0.9)'}}>
-              <div style={{padding:'18px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,background:'linear-gradient(135deg,rgba(16,185,129,0.1),rgba(52,211,153,0.04))'}}>
+            <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:840,maxHeight:'96vh',overflowY:'auto',display:'flex',flexDirection:'column',border:'1px solid rgba(16,185,129,0.3)',boxShadow:'0 40px 120px rgba(0,0,0,0.9)'}}>
+              <div style={{padding:'16px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,background:'linear-gradient(135deg,rgba(16,185,129,0.1),rgba(52,211,153,0.04))'}}>
                 <div style={{display:'flex',alignItems:'center',gap:12}}>
                   <div style={{width:48,height:48,borderRadius:12,background:'rgba(16,185,129,0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22}}>💳</div>
                   <div>
                     <div style={{fontWeight:800,fontSize:15}}>Registrar Pagamento em Lote</div>
-                    <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>{selecionadas.length} parcela(s) selecionada(s)</div>
+                    <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>{baixaLoteParcelas.length} parcela(s) selecionada(s)</div>
                   </div>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:24}}>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:.5,marginBottom:4}}>DATA DO PAGAMENTO</div>
+                    <input type="date" style={{background:'transparent',border:'1px solid hsl(var(--border-subtle))',borderRadius:6,padding:'4px 8px',fontSize:13,fontFamily:'monospace',color:'hsl(var(--text-base))',fontWeight:700}} value={baixaLoteForm.dataPagto} 
+                      onChange={e=>{
+                         const nd = e.target.value;
+                         setBaixaLoteForm(f=>({...f,dataPagto:nd}));
+                         setBaixaLoteParcelas(prev => {
+                             const arr = prev.map(p => {
+                               const atr = calcAtraso(p, nd);
+                               return {...p, loteJuros:fmtMoeda(atr.juros), loteMulta:fmtMoeda(atr.multa), loteDias:atr.dias};
+                             });
+                             const ntGeral = arr.reduce((acc, p) => acc + Math.max(0, p.valor - parseMoeda(p.loteDesc||'0') + parseMoeda(p.loteJuros||'0') + parseMoeda(p.loteMulta||'0')), 0);
+                             syncSingleFormValue(ntGeral);
+                             return arr;
+                         });
+                      }} />
+                  </div>
+                  <div style={{width:1,height:38,background:'hsl(var(--border-subtle))'}}></div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:.5}}>TOTAL A PAGAR</div>
                     <div style={{fontFamily:'monospace',fontWeight:900,fontSize:22,color:'#10b981'}}>R$ {fmtMoeda(totalGeral)}</div>
@@ -4325,59 +4673,65 @@ export default function NovaMatriculaPage() {
                   <button className="btn btn-ghost btn-icon" onClick={()=>setModalBaixaLote(false)}><X size={18}/></button>
                 </div>
               </div>
-              <div style={{background:'hsl(var(--bg-elevated))',borderBottom:'1px solid hsl(var(--border-subtle))',maxHeight:140,overflowY:'auto'}}>
-                {selecionadasComAcr.map((p:any)=>(
-                  <div key={p.num} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 24px',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{width:34,height:34,borderRadius:8,background:'rgba(16,185,129,0.12)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                        <span style={{fontSize:9,color:'#10b981',fontWeight:700}}>PARC</span>
-                        <span style={{fontFamily:'monospace',fontWeight:900,fontSize:12,color:'#10b981',lineHeight:1}}>{String(p.num).padStart(2,'0')}</span>
-                      </div>
-                      <div>
-                        <div style={{fontWeight:700,fontSize:12,textTransform:'capitalize'}}>{(p as any).evento||'Mensalidade'}</div>
-                        <div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>Vcto: <span style={{color:p.diasAtr>0?'#f87171':'inherit'}}>{p.vencimento ? formatDate(p.vencimento) : '—'}</span>{p.diasAtr>0&&<span style={{marginLeft:6,fontSize:9,padding:'1px 6px',borderRadius:20,background:'rgba(239,68,68,0.12)',color:'#f87171',fontWeight:700}}>{p.diasAtr}d atraso</span>}</div>
-                      </div>
-                    </div>
-                    <div style={{textAlign:'right',flexShrink:0}}>
-                      <div style={{fontFamily:'monospace',fontWeight:800,fontSize:13,color:(p.jurosCalc+p.multaCalc)>0?'#ef4444':'#10b981'}}>R$ {fmtMoeda(p.totalP)}</div>
-                      {(p.jurosCalc+p.multaCalc)>0&&<div style={{fontSize:9,color:'#f87171'}}>+R$ {fmtMoeda(p.jurosCalc+p.multaCalc)} encargos</div>}
-                        <div style={{fontSize:9,color:'hsl(var(--text-muted))'}}>Bruto R$ {fmtMoeda(p.valor)}</div>
-                    </div>
-                  </div>
-                ))}
+              <div style={{background:'hsl(var(--bg-elevated))',borderBottom:'1px solid hsl(var(--border-subtle))',flex:1,overflowY:'auto',padding:'12px 24px',minHeight:140}}>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead>
+                    <tr style={{textAlign:'left',fontSize:10,color:'hsl(var(--text-muted))'}}>
+                      <th style={{paddingBottom:8,fontWeight:700}}>Parcela / Evento</th>
+                      <th style={{paddingBottom:8,fontWeight:700}}>Bruto (R$)</th>
+                      <th style={{paddingBottom:8,fontWeight:700,width:80}}>Desc. (R$)</th>
+                      <th style={{paddingBottom:8,fontWeight:700,width:80}}>Multa (R$)</th>
+                      <th style={{paddingBottom:8,fontWeight:700,width:80}}>Juros (R$)</th>
+                      <th style={{paddingBottom:8,fontWeight:700,textAlign:'right'}}>Líquido (R$)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {baixaLoteParcelas.map((p:any)=>(
+                      <tr key={p.num} style={{borderTop:'1px solid hsl(var(--border-subtle))'}}>
+                        <td style={{padding:'8px 0'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <div style={{width:32,height:32,borderRadius:6,background:'rgba(16,185,129,0.1)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                              <span style={{fontFamily:'monospace',fontWeight:800,fontSize:12,color:'#10b981'}}>{String(p.evtIndex||1).padStart(2,'0')}</span>
+                            </div>
+                            <div>
+                               <div style={{fontSize:11,fontWeight:700}}>{getEventoDisp(p)} <span style={{fontSize:9,color:'hsl(var(--text-muted))',fontWeight:500,border:'1px solid hsl(var(--border-subtle))',borderRadius:4,padding:'0 4px'}}>{p.tNome}</span></div>
+                               <div style={{fontSize:9,color:'hsl(var(--text-muted))'}}>Vcto: <span style={{color:p.loteDias>0?'#ef4444':'inherit'}}>{p.vencimento?formatDate(p.vencimento):'—'}</span> {p.loteDias>0&&<span style={{background:'rgba(239,68,68,0.1)',color:'#ef4444',padding:'1px 4px',borderRadius:4,fontWeight:700,marginLeft:6}}>{p.loteDias}d</span>}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{fontFamily:'monospace',fontSize:12,fontWeight:700,color:'hsl(var(--text-muted))'}}>
+                          {fmtMoeda(p.valor)}
+                        </td>
+                        <td style={{padding:'8px 4px'}}>
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#f59e0b'}} value={p.loteDesc} onChange={e=>updatePrc(p.num,'loteDesc',e.target.value)} />
+                        </td>
+                        <td style={{padding:'8px 4px'}}>
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteMulta} onChange={e=>updatePrc(p.num,'loteMulta',e.target.value)} />
+                        </td>
+                        <td style={{padding:'8px 4px'}}>
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteJuros} onChange={e=>updatePrc(p.num,'loteJuros',e.target.value)} />
+                        </td>
+                        <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:800,fontSize:13,color:'#10b981',paddingRight:8}}>
+                          R$ {fmtMoeda(Math.max(0, p.valor - parseMoeda(p.loteDesc||'0') + parseMoeda(p.loteMulta||'0') + parseMoeda(p.loteJuros||'0')))}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
-                <div style={{padding:'12px',background:'rgba(245,158,11,0.05)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8}}>
-                  <span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>⚠️ Atenção:</span> <span style={{fontSize:11,color:'hsl(var(--text-secondary))'}}>A edição dos campos abaixo substituirá os cálculos individuais das parcelas.</span>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'110px 1fr 1fr 1fr',gap:10}}>
-                  <F label="Data do Pagamento">
-                    <input className="form-input" type="date" value={baixaLoteForm.dataPagto}
-                      onChange={e=>{
-                        const nd=e.target.value
-                        setBaixaLoteForm(f=>({...f,dataPagto:nd}))
-                        const sJ=selecionadas.reduce((s,p)=>s+calcAtraso(p,nd).juros,0)
-                        const sM=selecionadas.reduce((s,p)=>s+calcAtraso(p,nd).multa,0)
-                        setBaixaLoteForm(f=>({...f,juros:sJ>0?fmtMoeda(sJ):'0',multa:sM>0?fmtMoeda(sM):'0'}))
-                        const newTotal=Math.max(0, brutoTotal - parseMoeda(baixaLoteForm.desconto) + sJ + sM)
-                        syncSingleFormValue(newTotal)
-                      }}/>
-                  </F>
-                  <F label="Multa (Total)"><input className="form-input" value={baixaLoteForm.multa}
-                    onChange={e=>{setBaixaLoteForm(f=>({...f,multa:e.target.value}));syncSingleFormValue(Math.max(0,brutoTotal-df+jf+parseMoeda(e.target.value)))}}/></F>
-                  <F label="Juros (Total)"><input className="form-input" value={baixaLoteForm.juros}
-                    onChange={e=>{setBaixaLoteForm(f=>({...f,juros:e.target.value}));syncSingleFormValue(Math.max(0,brutoTotal-df+parseMoeda(e.target.value)+mf))}}/></F>
-                  <F label="Desconto (R$) Lote"><input className="form-input" value={baixaLoteForm.desconto}
-                    onChange={e=>{setBaixaLoteForm(f=>({...f,desconto:e.target.value}));syncSingleFormValue(Math.max(0,brutoTotal-parseMoeda(e.target.value)+jf+mf))}}/></F>
-                </div>
                 <div style={{padding:'14px 16px',background:'hsl(var(--bg-elevated))',border:'1px solid hsl(var(--border-subtle))',borderRadius:12}}>
                   <div style={{fontWeight:700,fontSize:12,marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                     <span style={{}}>💳 Formas de Pagamento</span>
                     <button type="button" onClick={()=>{
-                      setBaixaLoteForm(f=>({...f,juros:'0',multa:'0'}));
-                      syncSingleFormValue(Math.max(0,brutoTotal-df));
+                      setBaixaLoteParcelas(prev => {
+                          const arr = prev.map(p => ({...p, loteJuros:'0', loteMulta:'0'}));
+                          const ntGeral = arr.reduce((acc, p) => acc + Math.max(0, p.valor - parseMoeda(p.loteDesc||'0')), 0);
+                          syncSingleFormValue(ntGeral);
+                          return arr;
+                      });
                     }}
-                      style={{fontSize:10,padding:'4px 12px',borderRadius:20,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.08)',color:'#ef4444',cursor:'pointer',fontWeight:800}}>Zerar Acréscimos</button>
+                      style={{fontSize:10,padding:'4px 12px',borderRadius:20,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.08)',color:'#ef4444',cursor:'pointer',fontWeight:800}}>Zerar Todos os Acréscimos</button>
                   </div>
                   {baixaLoteMultiFormas.map((item:any,idx:number)=>(
                     <div key={item.id} style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
@@ -4390,7 +4744,7 @@ export default function NovaMatriculaPage() {
                       />
                       {(item.forma.includes('Cartão')||item.forma.includes('Crédito')||item.forma.includes('Débito'))&&(
                         <button type="button" style={{padding:'0 10px',height:36,fontSize:11,background:'hsl(var(--bg-base))',border:'1px solid hsl(var(--border-subtle))',borderRadius:6,cursor:'pointer',color:'#818cf8',fontWeight:700,display:'flex',alignItems:'center',gap:4}}
-                          onClick={()=>{setCartaoFormIdx(idx);setModalCartao(true)}}>
+                          onClick={()=>{setCartaoFormIdx(idx);setCartaoCtx('baixaLote');setCartaoForm(item.cartao||{bandeira:'Visa',numero:'',nome:'',validade:'',parcelas:'1',autorizacao:''});setModalCartao(true)}}>
                           {item.cartao?.numero ? `Final ${item.cartao.numero}` : '+ Dados Cartão'}
                         </button>
                       )}
@@ -4417,11 +4771,11 @@ export default function NovaMatriculaPage() {
                 )}
                 <div style={{padding:'14px 16px',background:'rgba(16,185,129,0.08)',border:'2px solid rgba(16,185,129,0.25)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <div>
-                    <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Totalizador Lote ({selecionadas.length} parcelas)</div>
+                    <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Totalizador Otimizado ({baixaLoteParcelas.length} parcelas)</div>
                     <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:2}}>Cód. Lote: <span style={{fontFamily:'monospace',color:'#34d399',fontWeight:700}}>{baixaLoteForm.codPreview||'BX000000LL'}</span></div>
                   </div>
                   <div style={{textAlign:'right',marginRight:16}}>
-                    <div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>Valor: <strong style={{color:'hsl(var(--text-base))'}}>R$ {fmtMoeda(brutoTotal)}</strong> <span style={{color:'#f59e0b',marginLeft:4}}>(-) Desc: R$ {fmtMoeda(df)}</span> <span style={{color:'#f87171',marginLeft:4}}>(+) Acr: R$ {fmtMoeda(jf+mf)}</span></div>
+                    <div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>Valor: <strong style={{color:'hsl(var(--text-base))'}}>R$ {fmtMoeda(brutoTotal)}</strong> <span style={{color:'#f59e0b',marginLeft:4}}>(-) Desc: R$ {fmtMoeda(totalDesc)}</span> <span style={{color:'#f87171',marginLeft:4}}>(+) Acr: R$ {fmtMoeda(totalJuros+totalMulta)}</span></div>
                   </div>
                   <div style={{fontFamily:'monospace',fontWeight:900,fontSize:24,color:'#10b981'}}>R$ {fmtMoeda(totalGeral)}</div>
                 </div>
@@ -4433,22 +4787,24 @@ export default function NovaMatriculaPage() {
               <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',gap:10,background:'hsl(var(--bg-elevated))'}}>
                 <button className="btn btn-secondary" onClick={()=>setModalBaixaLote(false)}>Cancelar</button>
                 <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#10b981,#059669)',fontWeight:800,padding:'12px 24px',fontSize:14,borderRadius:12}}
-                  disabled={!baixaLoteForm.dataPagto||selecionadas.length===0||Math.abs(saldoLt)>0.01}
+                  disabled={!baixaLoteForm.dataPagto||baixaLoteParcelas.length===0||Math.abs(saldoLt)>0.01}
                   onClick={()=>{
                     const codPrv=baixaLoteForm.codPreview||('BX'+String(Date.now()).slice(-6)+'LL')
                     const formaStr=baixaLoteMultiFormas.map((f:any)=>f.forma).join('+')
-                    const nums=selecionadas.map(p=>p.num)
-                    const descProp=df/brutoTotal; const jurosProp=jf/brutoTotal; const multaProp=mf/brutoTotal
+                    const nums=baixaLoteParcelas.map(p=>p.num)
+                    
                     setParcelas(prev=>prev.map(p=>{
                       if(!nums.includes(p.num)||p.status==='pago') return p
-                      const jp=+(p.valor*jurosProp).toFixed(2); const mp=+(p.valor*multaProp).toFixed(2); const dp=+(p.valor*descProp).toFixed(2)
-                      const vf=Math.max(0,p.valor-dp+jp+mp)
+                      const lP = baixaLoteParcelas.find(x => x.num === p.num);
+                      if (!lP) return p;
+                      const jp=parseMoeda(lP.loteJuros); const mp=parseMoeda(lP.loteMulta); const dp=parseMoeda(lP.loteDesc);
+                      const vf=Math.max(0, p.valor-dp+jp+mp)
                       return{...p,status:'pago',dtPagto:baixaLoteForm.dataPagto,formaPagto:formaStr,comprovante:baixaLoteForm.comprovante,codBaixa:codPrv,juros:jp,multa:mp,desconto:dp,valorFinal:vf,formasPagto:baixaLoteMultiFormas}
                     }))
                     setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:'',cartao:null}])
                     setParcelasSelected([])
                     setModalBaixaLote(false)
-                  }}>Confirmar Baixa Multiple R$ {fmtMoeda(totalGeral)}</button>
+                  }}>Confirmar Baixa Múltipla R$ {fmtMoeda(totalGeral)}</button>
               </div>
             </div>
           </div>
@@ -4469,17 +4825,47 @@ export default function NovaMatriculaPage() {
             return r.nome&&respFin?.nome&&r.nome.trim().toLowerCase()===respFin.nome.trim().toLowerCase()
           })
         })
+        
         // Parcelas do aluno atual (em edição)
         const parcelasProprioAluno=parcelas
           .filter(p=>p.status!=='pago'&&p.status!=='cancelado')
-          .map(p=>({...(p as any),alunoNome:aluno.nome||'Aluno Atual',alunoId:'__novo__',alunoAvatar:(aluno.nome||'A')[0].toUpperCase()}))
+          .map(p=>{
+            const calc = calcAtraso(p)
+            return {
+              ...(p as any),
+              alunoNome:aluno.nome||'Aluno Atual',
+              alunoId:'__novo__',
+              alunoAvatar:(aluno.nome||'A')[0].toUpperCase(),
+              turmaShow: (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId))?.nome || p.turma || mat.turma || '',
+              jurosCalc: calc.juros,
+              multaCalc: calc.multa,
+              diasAtr: calc.dias,
+              totalP: +( (p.valorFinal||p.valor||0) + calc.juros + calc.multa ).toFixed(2)
+            }
+          })
+          
         // Parcelas dos outros alunos do mesmo responsável
         const parcelasOutros=outrosAlunos.flatMap((a:any)=>
           (a.parcelas||[])
             .filter((p:any)=>p.status!=='pago'&&p.status!=='cancelado')
-            .map((p:any)=>({...p,alunoNome:a.nome,alunoId:a.id||a.cpf||a.nome,alunoAvatar:(a.nome||'A')[0].toUpperCase()}))
+            .map((p:any)=>{
+               const calc = calcAtraso(p)
+               const matAt = a.dadosMatricula || {}
+               return {
+                 ...p,
+                 alunoNome:a.nome,
+                 alunoId:a.id||a.cpf||a.nome,
+                 alunoAvatar:(a.nome||'A')[0].toUpperCase(),
+                 turmaShow: p.turmaNome || turmas.find((t:any)=>t.id===(p.turmaId||matAt.turmaId))?.nome || p.turma || a.turma || matAt.turma || '',
+                 jurosCalc: calc.juros,
+                 multaCalc: calc.multa,
+                 diasAtr: calc.dias,
+                 totalP: +( (p.valorFinal||p.valor||0) + calc.juros + calc.multa ).toFixed(2)
+               }
+            })
         )
         const todasParcelas=[...parcelasProprioAluno,...parcelasOutros]
+        
         // Grupos por aluno para renderização agrupada
         const grupos:{id:string;nome:string;avatar:string;parcelas:any[]}[]=[]
         for(const p of todasParcelas){
@@ -4487,13 +4873,14 @@ export default function NovaMatriculaPage() {
           if(!g){g={id:p.alunoId,nome:p.alunoNome,avatar:p.alunoAvatar,parcelas:[]};grupos.push(g)}
           g.parcelas.push(p)
         }
+        
         const selResp=baixaRespParcelas
-        const totalSel=selResp.reduce((s:number,p:any)=>s+(p.valorFinal||p.valor||0),0)
+        const totalSel=selResp.reduce((s:number,p:any)=>{
+           const tp = p.totalP || p.valorFinal || p.valor || 0
+           return s + tp
+        }, 0)
         const allSel=selResp.length===todasParcelas.length&&todasParcelas.length>0
-        const hoje=new Date();hoje.setHours(12,0,0,0)
-        const getDias=(venc:string)=>{
-          const [d,m,a]=venc.split('/');const dv=new Date(+a,+m-1,+d,12);return Math.max(0,Math.floor((hoje.getTime()-dv.getTime())/86400000))
-        }
+        
         const toggleParcela=(p:any)=>{
           const isSel=selResp.some((s:any)=>s.alunoId===p.alunoId&&s.num===p.num)
           setBaixaRespParcelas(isSel?selResp.filter((s:any)=>!(s.alunoId===p.alunoId&&s.num===p.num)):[...selResp,p])
@@ -4548,9 +4935,9 @@ export default function NovaMatriculaPage() {
                   Selecionar todas ({todasParcelas.length})
                 </label>
                 <div style={{display:'flex',gap:12,fontSize:11,color:'hsl(var(--text-muted))'}}>
-                  <span>🔴 Vencidas: <strong style={{color:'#ef4444'}}>{todasParcelas.filter(p=>{try{const [d,m,a]=p.vencimento.split('/');return new Date(+a,+m-1,+d,12)<hoje}catch{return false}}).length}</strong></span>
-                  <span>🟡 A vencer: <strong style={{color:'#f59e0b'}}>{todasParcelas.filter(p=>{try{const [d,m,a]=p.vencimento.split('/');return new Date(+a,+m-1,+d,12)>=hoje}catch{return false}}).length}</strong></span>
-                  <span>💰 Total geral: <strong style={{color:'#10b981',fontFamily:"'JetBrains Mono',monospace"}}>R$ {fmtMoeda(todasParcelas.reduce((s,p:any)=>s+(p.valorFinal||p.valor||0),0))}</strong></span>
+                  <span>🔴 Vencidas: <strong style={{color:'#ef4444'}}>{todasParcelas.filter(p=>p.diasAtr>0).length}</strong></span>
+                  <span>🟡 A vencer: <strong style={{color:'#f59e0b'}}>{todasParcelas.filter(p=>p.diasAtr<=0).length}</strong></span>
+                  <span>💰 Total geral: <strong style={{color:'#10b981',fontFamily:"'JetBrains Mono',monospace"}}>R$ {fmtMoeda(todasParcelas.reduce((s,p:any)=>s+(p.totalP||p.valorFinal||p.valor||0),0))}</strong></span>
                 </div>
               </div>
 
@@ -4565,8 +4952,8 @@ export default function NovaMatriculaPage() {
                 ):(
                   grupos.map(g=>{
                     const gSel=g.parcelas.filter(p=>selResp.some((s:any)=>s.alunoId===p.alunoId&&s.num===p.num))
-                    const gTotal=g.parcelas.reduce((s,p:any)=>s+(p.valorFinal||p.valor||0),0)
-                    const gSelTotal=gSel.reduce((s:number,p:any)=>s+(p.valorFinal||p.valor||0),0)
+                    const gTotal=g.parcelas.reduce((s,p:any)=>s+(p.totalP||p.valorFinal||p.valor||0),0)
+                    const gSelTotal=gSel.reduce((s:number,p:any)=>s+(p.totalP||p.valorFinal||p.valor||0),0)
                     const allGrupSel=g.parcelas.length>0&&gSel.length===g.parcelas.length
                     return(
                       <div key={g.id} style={{borderBottom:'2px solid hsl(var(--border-subtle))'}}>
@@ -4591,8 +4978,10 @@ export default function NovaMatriculaPage() {
                         {/* Linhas de parcelas */}
                         {g.parcelas.map((p:any,i:number)=>{
                           const isSel=selResp.some((s:any)=>s.alunoId===p.alunoId&&s.num===p.num)
-                          const dias=getDias(p.vencimento||'')
-                          const isVenc=dias>0
+                          const isVenc=p.diasAtr>0
+                          const eparcs = p.evento ? g.parcelas.filter((x:any)=>x.evento===p.evento) : null
+                          const pDen = p.totalParcelas || (eparcs?eparcs.length:g.parcelas.length)
+                          const evtIndex = p.numParcela || (eparcs && eparcs.length > 0 ? eparcs.findIndex((x:any) => x.num === p.num) + 1 : p.num)
                           return(
                             <div key={i}
                               onClick={()=>toggleParcela(p)}
@@ -4606,38 +4995,53 @@ export default function NovaMatriculaPage() {
                               </div>
                               {/* Nº parcela */}
                               <div style={{width:44,flexShrink:0}}>
-                                <div style={{width:34,height:34,borderRadius:8,background:isSel?'rgba(99,102,241,0.18)':'rgba(99,102,241,0.08)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'JetBrains Mono',monospace",fontWeight:900,fontSize:12,color:isSel?'#818cf8':'hsl(var(--text-muted))',border:`1px solid ${isSel?'rgba(99,102,241,0.35)':'transparent'}`}}>
-                                  {String(p.num).padStart(2,'0')}
+                                <div style={{width:36,height:36,borderRadius:8,background:isSel?'rgba(99,102,241,0.18)':'rgba(99,102,241,0.08)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:"'JetBrains Mono',monospace",color:isSel?'#818cf8':'hsl(var(--text-muted))',border:`1px solid ${isSel?'rgba(99,102,241,0.35)':'transparent'}`}}>
+                                  <span style={{fontSize:13,fontWeight:900,lineHeight:1}}>{String(evtIndex).padStart(2,'0')}</span>
+                                  <span style={{fontSize:8,opacity:0.6,fontWeight:600}}>/{String(pDen).padStart(2,'0')}</span>
                                 </div>
                               </div>
-                              {/* Evento + competência */}
+                              {/* Evento + competência + turma */}
                               <div style={{flex:'0 0 200px'}}>
-                                <div style={{fontWeight:700,fontSize:12}}>{p.evento||'Mensalidade'}</div>
-                                <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>{p.competencia||'—'}</div>
+                                <div style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-base))'}}>{p.evento||'Mensalidade'}</div>
+                                <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:2,display:'flex',gap:6,alignItems:'center'}}>
+                                  <span>{p.competencia||'—'}</span>
+                                  {p.turmaShow && <span style={{padding:'2px 6px',background:'hsl(var(--bg-base))',border:'1px solid hsl(var(--border-subtle))',borderRadius:4,fontSize:9}}>{p.turmaShow}</span>}
+                                </div>
                               </div>
                               {/* Vencimento */}
                               <div style={{flex:'0 0 110px'}}>
                                 <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:12,fontWeight:isVenc?800:600,color:isVenc?'#ef4444':'hsl(var(--text-base))'}}>{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
                                 {isVenc?(
                                   <div style={{fontSize:9,marginTop:2,padding:'1px 6px',borderRadius:20,background:'rgba(239,68,68,0.12)',color:'#ef4444',fontWeight:700,display:'inline-block'}}>
-                                    ⚠ {dias}d atraso
+                                    ⚠ {p.diasAtr}d atraso
                                   </div>
                                 ):(
                                   <div style={{fontSize:9,marginTop:2,color:'hsl(var(--text-muted))'}}>a vencer</div>
                                 )}
                               </div>
-                              {/* Desconto */}
-                              <div style={{flex:'0 0 80px',textAlign:'right'}}>
-                                {(p.desconto||0)>0?(
-                                  <div style={{fontSize:11,color:'#10b981',fontWeight:700}}>-R$ {fmtMoeda(p.desconto||0)}</div>
-                                ):<div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>—</div>}
+                              {/* Desconto & Acréscimos (Juros/Multa) */}
+                              <div style={{flex:'0 0 130px',display:'flex',gap:16,justifyContent:'flex-end'}}>
+                                {/* Desconto */}
+                                <div style={{textAlign:'right'}}>
+                                  <div style={{fontSize:9,color:'hsl(var(--text-muted))',marginBottom:2}}>Desc.</div>
+                                  {(p.desconto||0)>0?(
+                                    <div style={{fontSize:11,color:'#10b981',fontWeight:700}}>-{fmtMoeda(p.desconto||0)}</div>
+                                  ):<div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>—</div>}
+                                </div>
+                                {/* Acréscimos */}
+                                <div style={{textAlign:'right'}}>
+                                  <div style={{fontSize:9,color:'hsl(var(--text-muted))',marginBottom:2}}>Juros/Mul.</div>
+                                  {(p.jurosCalc||0)>0 || (p.multaCalc||0)>0?(
+                                    <div style={{fontSize:11,color:'#ef4444',fontWeight:700}}>+{fmtMoeda((p.jurosCalc||0)+(p.multaCalc||0))}</div>
+                                  ):<div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>—</div>}
+                                </div>
                               </div>
-                              {/* Valor */}
+                              {/* Valor Final */}
                               <div style={{flex:'0 0 120px',textAlign:'right'}}>
                                 <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:800,fontSize:14,color:isSel?'#818cf8':'hsl(var(--text-base))'}}>
-                                  R$ {fmtMoeda(p.valorFinal||p.valor||0)}
+                                  R$ {fmtMoeda(p.totalP||p.valorFinal||p.valor||0)}
                                 </div>
-                                {p.valorFinal&&p.valorFinal!==p.valor&&(
+                                {(p.jurosCalc>0 || (p.desconto||0)>0) && (
                                   <div style={{fontSize:9,color:'hsl(var(--text-muted))',textDecoration:'line-through'}}>R$ {fmtMoeda(p.valor||0)}</div>
                                 )}
                               </div>
@@ -4866,7 +5270,7 @@ export default function NovaMatriculaPage() {
                     setParcelas(prev=>prev.map(p=>{
                       const foundSel=selResp.find((s:any)=>s.alunoId==='__novo__'&&s.num===p.num)
                       if(!foundSel||p.status==='pago') return p
-                      return{...p,status:'pago',dtPagto:baixaRespForm.dataPagto,formaPagto:formaStr,comprovante:baixaRespForm.comprovante,obs:baixaRespForm.obs,codBaixa,formasPagto:baixaRespForm.formasPagto,baixaPorResponsavel:true,nomeResponsavel:nomeResp,parcelasVinculadas}
+                      return{...p,status:'pago',dtPagto:baixaRespForm.dataPagto,formaPagto:formaStr,comprovante:baixaRespForm.comprovante,obs:baixaRespForm.obs,codBaixa,formasPagto:baixaRespForm.formasPagto,baixaPorResponsavel:true,nomeResponsavel:nomeResp,parcelasVinculadas,juros:foundSel.jurosCalc||0,multa:foundSel.multaCalc||0,valorFinal:foundSel.totalP||p.valorFinal}
                     }))
                     // Atualiza parcelas dos outros alunos
                     if(selResp.some((s:any)=>s.alunoId!=='__novo__')){
@@ -4875,8 +5279,9 @@ export default function NovaMatriculaPage() {
                         const parcsA=selResp.filter((s:any)=>s.alunoId===alunoKey)
                         if(parcsA.length===0) return a
                         return{...a,parcelas:(a.parcelas||[]).map((p:any)=>{
-                          if(parcsA.some((s:any)=>s.num===p.num&&s.alunoId===alunoKey)&&p.status!=='pago')
-                            return{...p,status:'pago',dtPagto:baixaRespForm.dataPagto,formaPagto:formaStr,comprovante:baixaRespForm.comprovante,obs:baixaRespForm.obs,codBaixa,formasPagto:baixaRespForm.formasPagto,baixaPorResponsavel:true,nomeResponsavel:nomeResp,parcelasVinculadas}
+                          const selA = parcsA.find((s:any)=>s.num===p.num&&s.alunoId===alunoKey)
+                          if(selA&&p.status!=='pago')
+                            return{...p,status:'pago',dtPagto:baixaRespForm.dataPagto,formaPagto:formaStr,comprovante:baixaRespForm.comprovante,obs:baixaRespForm.obs,codBaixa,formasPagto:baixaRespForm.formasPagto,baixaPorResponsavel:true,nomeResponsavel:nomeResp,parcelasVinculadas,juros:selA.jurosCalc||0,multa:selA.multaCalc||0,valorFinal:selA.totalP||p.valorFinal}
                           return p
                         })}
                       }))

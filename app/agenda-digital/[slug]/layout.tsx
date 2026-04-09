@@ -138,7 +138,7 @@ export default function AgendaDigitalFamilyLayout({
   params 
 }: { 
   children: React.ReactNode, 
-  params: Promise<{ slug: string }> | { slug: string }
+  params: Promise<{ slug: string }>
 }) {
   const { alunos, turmas } = useData()
   const { currentUser, setCurrentUser } = useApp()

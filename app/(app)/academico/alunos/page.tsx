@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useConfigDb } from '@/lib/useConfigDb'
 
 const riskColor = (r: string) =>
   r === 'alto' ? '#ef4444' : r === 'medio' ? '#f59e0b' : '#10b981'
@@ -43,9 +44,39 @@ function getResp(a: any): { fin: string; ped: string } {
 
 export default function AlunosPage() {
   const router = useRouter()
-  const { logSystemAction, alunos = [], setAlunos: setAlunosCtx } = useData()
+  const { logSystemAction, alunos = [], setAlunos: setAlunosCtx, turmas = [], cfgNiveisEnsino = [] } = useData()
+  const { data: cfgNiveisEnsinoDb } = useConfigDb<any>('cfgNiveisEnsino')
   const isLoading = false
 
+  const getSegmentoNome = (idOrCod: string | number | undefined) => {
+    if (!idOrCod) return '—'
+    const str = String(idOrCod)
+    const niveis = cfgNiveisEnsino.length > 0 ? cfgNiveisEnsino : (cfgNiveisEnsinoDb || [])
+    const found = niveis.find((n: any) => String(n.id) === str || String(n.codigo) === str || String(n.nome) === str)
+    if (found) return found.nome
+    const map: any = { 'EI': 'Educação Infantil', 'EF1': 'Ensino F. I', 'EF2': 'Ensino F. II', 'EM': 'Ensino Médio', 'EJA': 'EJA', '1': 'Educação Infantil', '2': 'Ensino F. I', '3': 'Ensino F. II', '4': 'Ensino Médio' }
+    return map[str] || str
+  }
+
+  // Derives the most recent enrollment history entry from stored historicoMatriculas on aluno
+  // Sort priority: ano desc → dataMatricula desc → id (timestamp) desc as final tiebreaker
+  const sortHistorico = (hist: any[]) => [...hist].sort((a, b) => {
+    const ay = parseInt(a.ano) || 0, by = parseInt(b.ano) || 0
+    if (ay !== by) return by - ay
+    const dm = (b.dataMatricula || '').localeCompare(a.dataMatricula || '')
+    if (dm !== 0) return dm
+    // Final tiebreaker: id is Date.now().toString() — larger = more recent
+    return (parseInt(b.id) || 0) - (parseInt(a.id) || 0)
+  })
+
+  const getUltimoCurso = (aluno: any): { turma: string; ano: string; situacao: string } | null => {
+    const hist: any[] = aluno.historicoMatriculas || []
+    if (hist.length === 0) return null
+    const ultimo = sortHistorico(hist)[0]
+    const turmaObj = turmas.find((t: any) => t.id === ultimo.turmaId)
+    const turmaNome = turmaObj?.nome || aluno.turma || '—'
+    return { turma: turmaNome, ano: ultimo.ano || '', situacao: ultimo.situacao || '' }
+  }
   // ── Exportação de fotos: cada foto salva com o código do aluno ─────────────
   const exportarFotos = async () => {
     const alunosComFoto = alunos.filter((a: any) => a.foto)
@@ -134,11 +165,16 @@ export default function AlunosPage() {
     return displayedBase.slice(startIndex, startIndex + itemsPerPage)
   }, [displayedBase, currentPage])
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirmId) {
        const deletedId = confirmId
-       setAlunosCtx((prev: any[]) => prev.filter((a: any) => a.id !== deletedId))
        const alunoDel = alunos.find((a: any) => a.id === deletedId)
+       try {
+           await fetch(`/api/alunos/${deletedId}`, { method: 'DELETE' })
+       } catch (e) {
+           console.error('Erro ao deletar', e)
+       }
+       setAlunosCtx((prev: any[]) => prev.filter((a: any) => a.id !== deletedId))
        logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
        setConfirmId(null)
     }
@@ -162,7 +198,7 @@ export default function AlunosPage() {
   }
 
   const KPIS = [
-    { id:'total',    label:'Total de Alunos',     value: total,    sub: `${matric} matriculados`,                                        color:'#6366f1', bg:'rgba(99,102,241,0.08)',  border:'rgba(99,102,241,0.2)',  Icon:Users,           trend:null,                          clickable:true },
+    { id:'total',    label:'Total de Alunos',     value: total,    sub: `${matric} matriculados`,                                        color:'#6366f1', bg:'rgba(99,102,241,0.08)',  border:'rgba(99,102,241,0.2)',  Icon:Users,           trend:null,                          clickable:false },
     { id:'evasao',   label:'Risco de Evasão',     value: riskAlto, sub: `${riskMed} risco médio`,                                        color:'#ef4444', bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.2)',   Icon:AlertTriangle,   trend:riskAlto>0?'danger':'ok',    clickable:riskAlto>0 },
     { id:'inadimpl', label:'Inadimplentes',        value: inadimpl, sub: total ? `${((inadimpl/total)*100).toFixed(1)}% do total` : '—', color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.2)', Icon:CircleDollarSign, trend:inadimpl>0?'warn':'ok',       clickable:inadimpl>0 },
     { id:'freq',     label:'Freq. Crítica (<75%)', value: freqCrit, sub: `de ${total} alunos`,                                           color:'#8b5cf6', bg:'rgba(139,92,246,0.08)',  border:'rgba(139,92,246,0.2)',  Icon:TrendingDown,    trend:freqCrit>0?'warn':'ok',       clickable:freqCrit>0 },
@@ -218,8 +254,12 @@ export default function AlunosPage() {
           </div>
         </td>
         <td><code style={{ fontSize:11, background:'hsl(var(--bg-overlay))', padding:'2px 6px', borderRadius:4 }}>{(a as any).codigo || a.matricula || a.id}</code></td>
-        <td><span className="badge badge-neutral" style={{ fontSize:10 }}>{a.turma || '—'}</span></td>
-        <td style={{ fontSize:12 }}>{a.serie || '—'}</td>
+        <td><span className="badge badge-neutral" style={{ fontSize:10 }}>{(() => { const uc = getUltimoCurso(a); if(!uc) return a.turma||'—'; return `${uc.turma}${uc.ano?' / '+uc.ano:''}` })()} </span></td>
+        <td style={{ fontSize:12 }}>{(() => {
+          const tObj = turmas.find(t => t.nome === a.turma)
+          const sid = (tObj as any)?.nivelEnsino || a.serie
+          return getSegmentoNome(sid)
+        })()}</td>
         <td>
           <div style={{ display:'flex', alignItems:'center', gap:5 }}>
             <div className="progress-bar" style={{ width:44 }}>
@@ -253,9 +293,6 @@ export default function AlunosPage() {
         </div>
         <div style={{ display:'flex', gap:10 }}>
           <button className="btn btn-secondary btn-sm" onClick={exportarFotos}><Download size={13}/> Exportar Fotos</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => { setEditingId(null); setShowCadastro(true) }}>
-            <UserPlus size={13}/> Cadastro Rápido
-          </button>
           <button className="btn btn-primary btn-sm"
             style={{ background:'linear-gradient(135deg,#6366f1,#3b82f6)' }}
             onClick={() => router.push('/academico/alunos/nova-matricula')}>
@@ -324,7 +361,7 @@ export default function AlunosPage() {
                 <div style={{ fontWeight:800, fontSize:13 }}>{activeKpiData.label}</div>
                 <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>
                   {activeKpi === 'segmentos'
-                    ? [...new Set(alunos.map(a=>a.serie).filter(Boolean))].join(', ')
+                    ? [...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(s => getSegmentoNome(s)).join(', ')
                     : `${kpiAlunos.length} aluno${kpiAlunos.length!==1?'s':''} neste filtro`}
                 </div>
               </div>
@@ -339,9 +376,9 @@ export default function AlunosPage() {
               {[...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(serie => {
                 const cnt = alunos.filter(a => a.serie === serie).length
                 return (
-                  <div key={serie} style={{ padding:'12px 16px', borderRadius:12, background:'hsl(var(--bg-base))', border:'1px solid hsl(var(--border-subtle))', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div key={serie as string} style={{ padding:'12px 16px', borderRadius:12, background:'hsl(var(--bg-base))', border:'1px solid hsl(var(--border-subtle))', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div>
-                      <div style={{ fontWeight:700, fontSize:13 }}>{serie}</div>
+                      <div style={{ fontWeight:700, fontSize:13 }}>{getSegmentoNome(serie)}</div>
                       <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{cnt} aluno{cnt!==1?'s':''}</div>
                     </div>
                     <div style={{ fontSize:22, fontWeight:900, color:'#10b981', fontFamily:'Outfit,sans-serif' }}>{cnt}</div>
@@ -408,7 +445,7 @@ export default function AlunosPage() {
           <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', justifyContent:'center' }}>
             <select className="form-input" style={{ width:'auto', fontSize:12 }} value={filterSerie} onChange={e => setFilterSerie(e.target.value)}>
               <option value="Todos">Todos os segmentos</option>
-              {[...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(s => <option key={s}>{s}</option>)}
+              {[...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(s => <option key={s as string} value={s as string}>{getSegmentoNome(s)}</option>)}
             </select>
             <select className="form-input" style={{ width:'auto', fontSize:12 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               {['Todos','matriculado','em_cadastro','transferido','inativo'].map(s => (
@@ -462,13 +499,16 @@ export default function AlunosPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Aluno</th><th>Código</th><th>Turma</th><th>Segmento</th><th>Turno</th><th>Frequência</th><th>Financeiro</th><th>Risco IA</th><th>Ações</th>
+                  <th>Aluno</th><th>Código</th><th>Último Curso</th><th>Segmento</th><th>Turno</th><th>Frequência</th><th>Financeiro</th><th>Risco IA</th><th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {displayed.map(aluno => {
                   const rc = riskColor(aluno.risco_evasao)
                   const { fin, ped } = getResp(aluno)
+                  const turmaObj = turmas.find(t => t.nome === aluno.turma)
+                  const segId = (turmaObj as any)?.nivelEnsino || aluno.serie
+                  const segmentoNome = getSegmentoNome(segId)
                   return (
                     <tr key={aluno.id}>
                       <td>
@@ -512,8 +552,22 @@ export default function AlunosPage() {
                         </div>
                       </td>
                       <td><code style={{ fontSize:11, background:'hsl(var(--bg-overlay))', padding:'2px 6px', borderRadius:4 }}>{(aluno as any).codigo || aluno.matricula || aluno.id}</code></td>
-                      <td><span className="badge badge-neutral">{aluno.turma || '—'}</span></td>
-                      <td><span className="badge badge-primary">{aluno.serie || '—'}</span></td>
+                      <td>{(() => {
+                        const uc = getUltimoCurso(aluno)
+                        if (!uc) return <span className="badge badge-neutral">{aluno.turma||'—'}</span>
+                        const isCursando = uc.situacao === 'Cursando'
+                        const isEncerrado = !isCursando && uc.situacao
+                        return (
+                          <span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,padding:'2px 8px',borderRadius:20,fontWeight:700,
+                            background:isCursando?'rgba(99,102,241,0.1)':isEncerrado?'rgba(245,158,11,0.09)':'hsl(var(--bg-overlay))',
+                            color:isCursando?'#818cf8':isEncerrado?'#d97706':'hsl(var(--text-muted))'
+                          }}>
+                            {uc.turma}{uc.ano?' / '+uc.ano:''}
+                            {uc.situacao&&<span style={{fontSize:9,opacity:0.75}}>· {uc.situacao}</span>}
+                          </span>
+                        )
+                      })()}</td>
+                      <td style={{ fontSize:12 }}>{segmentoNome || '—'}</td>
                       <td style={{ fontSize:12 }}>{aluno.turno || '—'}</td>
                       <td>
                         <div style={{ display:'flex', alignItems:'center', gap:6 }}>

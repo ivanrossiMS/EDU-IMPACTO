@@ -14,27 +14,33 @@ export async function GET() {
   
   const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
      // 1. Criar Virtual User para o Aluno
-     if (aluno.email) {
+     const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
+     if (alunoEmail) {
         acc.push({
-           id: `virtual-${aluno.id}`, // login/page.tsx usa .replace('virtual-', '')
+           id: `virtual-${aluno.id}`,
            nome: aluno.nome,
-           email: aluno.email,
+           email: alunoEmail,
            cargo: 'Aluno',
            perfil: 'Família',
-           status: ['matriculado', 'ativo', 'em_cadastro', 'pendente'].includes(aluno.status?.toLowerCase()) ? 'ativo' : 'inativo',
+           status: 'ativo',
            senha: aluno.dados?.senha || '',
            ultimoAcesso: 'Nunca'
         })
      }
      
-     // 2. Criar Virtual User para o Responsável
-     const respEmail = aluno.email || aluno.dados?.emailResponsavel || aluno.dados?.email_responsavel; 
-     // obs: se o responsável tem o próprio email diferente do aluno, adicionamos:
-     const realRespEmail = aluno.dados?.emailResponsavel || aluno.dados?.email_responsavel || (aluno.email_responsavel ? aluno.email_responsavel : null);
+     // 2. Criar Virtual User para o Responsável (email DIFERENTE do aluno)
+     const realRespEmail = (
+       aluno.dados?.emailResponsavel ||
+       aluno.dados?.email_responsavel ||
+       aluno.email_responsavel ||
+       aluno.emailResponsavel ||
+       aluno.dados?.responsaveis?.[0]?.email ||
+       (Array.isArray(aluno.responsaveis) ? aluno.responsaveis[0]?.email : null)
+     )?.trim().toLowerCase()
      
-     if (realRespEmail) {
-        const respNome = aluno.responsavel || `Responsável por ${aluno.nome}`;
-        // Evita duplicar responsavel se já inserido
+     // Só adicionar responsável se tiver email diferente do aluno
+     if (realRespEmail && realRespEmail !== alunoEmail) {
+        const respNome = aluno.responsavel || aluno.dados?.responsavel || `Responsável por ${aluno.nome}`
         if (!acc.some(u => u.email === realRespEmail)) {
            acc.push({
              id: `virtual-resp-${aluno.id}`, 
@@ -43,14 +49,14 @@ export async function GET() {
              cargo: 'Responsável',
              perfil: 'Família',
              status: 'ativo',
-             senha: '', 
+             senha: '',
              ultimoAcesso: 'Nunca'
            })
         }
      }
      
-     return acc;
-  }, []);
+     return acc
+  }, [])
 
   return NextResponse.json([...mappedSys, ...mappedAlunos])
 }

@@ -6,7 +6,7 @@ import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
 
 // ─── Data version — bump to force-clear all stored data ───────────
-const DATA_VERSION = '13'
+const DATA_VERSION = '16'
 
 // ─── Types ────────────────────────────────────────────────────────
 export interface Aluno {
@@ -47,6 +47,7 @@ export interface Lead {
 
 export interface Titulo {
   id: string; aluno: string; responsavel: string; descricao: string
+  nfEmitida?: boolean; nfId?: string
   valor: number; vencimento: string; pagamento: string | null
   status: 'pago' | 'pendente' | 'atrasado'; metodo: string | null; parcela: string
   eventoId?: string
@@ -160,6 +161,11 @@ export interface Mantenedor {
   unidades: Unidade[]
 }
 
+export interface Perfil {
+  id: string; nome: string; cor: string
+  permissoes: string[]; descricao: string
+}
+
 // ─── AGENDA ESCOLAR ───────────────────────────────────────────────
 export type TipoEvento = 'aula' | 'evento' | 'prova' | 'reuniao' | 'feriado' | 'excursao' | 'entrega' | 'atividade'
 
@@ -258,6 +264,7 @@ export interface ConfigSituacaoAluno {
   nome: string // ex: Cursando, Aprovado
   tipo: 'Ativo' | 'Inativo' | 'Historico' | 'Transferido' | 'Cancelado'
   situacao: 'ativo' | 'inativo'
+  matriculaAtiva: boolean // true = matrícula em curso, false = encerrada/histórico
   createdAt: string
 }
 
@@ -936,6 +943,7 @@ const KEYS = {
   transferencias: 'edu-data-transferencias',
   frequencias: 'edu-data-frequencias',
   lancamentosNota: 'edu-data-lancamentos-nota',
+  perfis: 'edu-sys-perfis',
   // Config Pedagógico
     // Novas Configs
   cfgTurnos: 'edu-cfg-turnos',
@@ -1039,17 +1047,18 @@ const TURNOS_DEFAULT: ConfigTurno[] = [
 ]
 
 const SITUACOES_DEFAULT: ConfigSituacaoAluno[] = [
-  { id: 'S1', codigo: 'APR', nome: 'Aprovado', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S2', codigo: 'APP', nome: 'Aprovado com P/P', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S3', codigo: 'CON', nome: 'Concluído', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S4', codigo: 'CUR', nome: 'Cursando', tipo: 'Ativo', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S5', codigo: 'DES', nome: 'Desistente', tipo: 'Inativo', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S6', codigo: 'CAN', nome: 'Matrícula cancelada', tipo: 'Cancelado', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S7', codigo: 'TRA', nome: 'Matrícula trancada', tipo: 'Inativo', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S8', codigo: 'REM', nome: 'Remanejado', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S9', codigo: 'REP', nome: 'Reprovado', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S10', codigo: 'RPF', nome: 'Reprovado por falta', tipo: 'Historico', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'S11', codigo: 'TRF', nome: 'Transferido', tipo: 'Transferido', situacao: 'ativo', createdAt: new Date().toISOString() },
+  { id: 'S1',  codigo: 'APR', nome: 'Aprovado',            tipo: 'Historico',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S2',  codigo: 'APP', nome: 'Aprovado com P/P',   tipo: 'Historico',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S3',  codigo: 'CON', nome: 'Concluído',           tipo: 'Historico',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S4',  codigo: 'CUR', nome: 'Cursando',            tipo: 'Ativo',       situacao: 'ativo',   matriculaAtiva: true,  createdAt: new Date().toISOString() },
+  { id: 'S5',  codigo: 'DES', nome: 'Desistente',          tipo: 'Inativo',     situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S6',  codigo: 'CAN', nome: 'Matrícula cancelada', tipo: 'Cancelado',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S7',  codigo: 'TRA', nome: 'Matrícula trancada',  tipo: 'Inativo',     situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S8',  codigo: 'REM', nome: 'Remanejado',          tipo: 'Transferido', situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S9',  codigo: 'REP', nome: 'Reprovado',           tipo: 'Historico',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S10', codigo: 'RPF', nome: 'Reprovado por falta', tipo: 'Historico',   situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S11', codigo: 'TRF', nome: 'Transferido',         tipo: 'Transferido', situacao: 'ativo',   matriculaAtiva: false, createdAt: new Date().toISOString() },
+  { id: 'S12', codigo: 'PC',  nome: 'Prog. Continuada',    tipo: 'Ativo',       situacao: 'ativo',   matriculaAtiva: true,  createdAt: new Date().toISOString() },
 ]
 
 const GRUPOS_ALUNOS_DEFAULT: ConfigGrupoAluno[] = [
@@ -1092,6 +1101,67 @@ const TIPOS_OCORRENCIA_DEFAULT: ConfigTipoOcorrencia[] = [
   { id: 'O8', codigo: 'T008', descricao: 'Agressão física/verbal entre alunos', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
   { id: 'O9', codigo: 'T009', descricao: 'Dano ao patrimônio escolar', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
 ]
+
+export interface UnidadeFiscal {
+  id: string
+  nome: string
+  cnpj: string
+  inscricaoMunicipal: string
+  cnae: string
+  municipio: string
+  codigoMunicipio?: string    // Código IBGE do município
+  uf?: string
+  ambiente: 'homologacao' | 'producao'
+  serieNF: string
+  aliquota: number
+  tributacao: string
+  situacao: 'ativo' | 'inativo'
+  createdAt: string
+  // ── Provedor NFS-e ──────────────────────────────────────────────────────────
+  provedor?: 'nfeio' | 'enotas' | 'tecnospeed' | 'abrasf' | 'mock'
+  apiKey?: string             // API Key do provedor intermediário
+  apiSecret?: string          // Secret (eNotas, Tecnospeed)
+  companyId?: string          // Company ID no provedor (NFE.io usa CNPJ ou ID)
+  urlWebservice?: string      // URL do webservice SOAP (modo direto ABRASF)
+  // ── Numeração RPS ───────────────────────────────────────────────────────────
+  proximoRps?: number         // Próximo número de RPS a emitir
+  serieRps?: string           // Série do RPS (ex: "A")
+  // ── Email prestador ─────────────────────────────────────────────────────────
+  email?: string
+  telefone?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cep?: string
+}
+
+export interface NotaFiscal {
+  id: string
+  unidadeId: string
+  numero: string              // Número oficial da NFS-e (retornado pela prefeitura)
+  rpsNumero?: string          // Número do RPS enviado
+  rpsSerie?: string           // Série do RPS
+  aluno: string
+  responsavel: string
+  tomadorCpfCnpj?: string     // CPF/CNPJ do tomador
+  valor: number
+  competencia: string
+  dataEmissao: string
+  status: 'emitida' | 'pendente' | 'processando' | 'cancelada' | 'erro'
+  chave?: string              // Chave de autenticação da NFS-e
+  chaveNFSe?: string          // Código de verificação da prefeitura
+  protocolo?: string          // Protocolo de transmissão
+  tituloId?: string
+  // ── Resposta da API ─────────────────────────────────────────────────────────
+  provedorId?: string         // ID interno do registro no provedor intermediário
+  xmlRps?: string             // XML do RPS enviado
+  xmlRetorno?: string         // XML de retorno da prefeitura
+  erroDescricao?: string      // Descrição do erro se status=erro
+  erroCorrecao?: string       // Sugestão de correção
+  linkVisualizacao?: string   // URL para visualizar NFS-e no portal da prefeitura
+  linkDownloadPdf?: string    // URL para download do PDF oficial
+}
 
 interface DataState {
   alunos: Aluno[]; setAlunos: Setter<Aluno[]>
@@ -1138,6 +1208,8 @@ interface DataState {
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
   caixasAbertos: CaixaAberta[]; setCaixasAbertos: Setter<CaixaAberta[]>
   fornecedoresCad: FornecedorCad[]; setFornecedoresCad: Setter<FornecedorCad[]>
+  unidadesFiscais: UnidadeFiscal[]; setUnidadesFiscais: Setter<UnidadeFiscal[]>
+  notasFiscais: NotaFiscal[]; setNotasFiscais: Setter<NotaFiscal[]>
   // RH
   advertencias: Advertencia[]; setAdvertencias: Setter<Advertencia[]>
   adiantamentos: Adiantamento[]; setAdiantamentos: Setter<Adiantamento[]>
@@ -1155,9 +1227,81 @@ interface DataState {
   censoAlunosData: CensoAlunoData[]; setCensoAlunosData: Setter<CensoAlunoData[]>
   censoTurmasData: CensoTurmaData[]; setCensoTurmasData: Setter<CensoTurmaData[]>
   censoProfsData: CensoProfissionalData[]; setCensoProfsData: Setter<CensoProfissionalData[]>
+  perfis: Perfil[]; setPerfis: Setter<Perfil[]>
 }
 
-const DataContext = createContext<DataState>({} as DataState)
+export const DEFAULT_PERFIS: Perfil[] = [
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/esquema-avaliacao','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/config-notas','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
+  { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias'] },
+  { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria'] },
+  { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade'] },
+  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','relatorios','/bi','/relatorios/censo','/relatorios/mec'] },
+  { id: 'P6', nome: 'Portaria & Segurança', cor: '#64748b', descricao: 'Controle de acesso e saída', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','portaria','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes'] },
+]
+
+const NOOP = () => {}
+const DataContext = createContext<DataState>({
+  // Arrays  — safe empty defaults to prevent .filter()/.map() crashes during initial render
+  alunos: [], setAlunos: NOOP,
+  turmas: [], setTurmas: NOOP,
+  funcionarios: [], setFuncionarios: NOOP,
+  leads: [], setLeads: NOOP,
+  titulos: [], setTitulos: NOOP,
+  contasPagar: [], setContasPagar: NOOP,
+  agendamentos: [], setAgendamentos: NOOP,
+  comunicados: [], setComunicados: NOOP,
+  tarefas: [], setTarefas: NOOP,
+  mantenedores: [], setMantenedores: NOOP,
+  eventosAgenda: [], setEventosAgenda: NOOP,
+  rotinaItems: [], setRotinaItems: NOOP,
+  autorizacoes: [], setAutorizacoes: NOOP,
+  momentos: [], setMomentos: NOOP,
+  enquetes: [], setEnquetes: NOOP,
+  ocorrencias: [], setOcorrencias: NOOP,
+  transferencias: [], setTransferencias: NOOP,
+  frequencias: [], setFrequencias: NOOP,
+  lancamentosNota: [], setLancamentosNota: NOOP,
+  cfgTurnos: [], setCfgTurnos: NOOP,
+  cfgSituacaoAluno: [], setCfgSituacaoAluno: NOOP,
+  cfgGruposAlunos: [], setCfgGruposAlunos: NOOP,
+  cfgDisciplinas: [], setCfgDisciplinas: NOOP,
+  cfgNiveisEnsino: [], setCfgNiveisEnsino: NOOP,
+  cfgTiposOcorrencia: [], setCfgTiposOcorrencia: NOOP,
+  cfgEsquemasAvaliacao: [], setCfgEsquemasAvaliacao: NOOP,
+  cfgCentrosCusto: [], setCfgCentrosCusto: NOOP,
+  cfgMetodosPagamento: [], setCfgMetodosPagamento: NOOP,
+  cfgCartoes: [], setCfgCartoes: NOOP,
+  cfgEventos: [], setCfgEventos: NOOP,
+  cfgGruposDesconto: [], setCfgGruposDesconto: NOOP,
+  cfgPadroesPagamento: [], setCfgPadroesPagamento: NOOP,
+  cfgPlanoContas: [], setCfgPlanoContas: NOOP,
+  cfgTiposDocumento: [], setCfgTiposDocumento: NOOP,
+  cfgConvenios: [], setCfgConvenios: NOOP,
+  cfgGruposDRE: [], setCfgGruposDRE: NOOP,
+  cfgCalendarioLetivo: [], setCfgCalendarioLetivo: NOOP,
+  movimentacoesManuais: [], setMovimentacoesManuais: NOOP,
+  caixasAbertos: [], setCaixasAbertos: NOOP,
+  fornecedoresCad: [], setFornecedoresCad: NOOP,
+  unidadesFiscais: [], setUnidadesFiscais: NOOP,
+  notasFiscais: [], setNotasFiscais: NOOP,
+  advertencias: [], setAdvertencias: NOOP,
+  adiantamentos: [], setAdiantamentos: NOOP,
+  systemLogs: [], setSystemLogs: NOOP,
+  perfis: [], setPerfis: NOOP,
+  censoAuditLogs: [], setCensoAuditLogs: NOOP,
+  censoOperacoes: [], setCensoOperacoes: NOOP,
+  censoAlunosData: [], setCensoAlunosData: NOOP,
+  censoTurmasData: [], setCensoTurmasData: NOOP,
+  censoProfsData: [], setCensoProfsData: NOOP,
+  censoPendencias: [], setCensoPendencias: NOOP,
+  censoExports: [], setCensoExports: NOOP,
+  // Non-arrays with safe defaults
+  dreConfig: {} as any, setDreConfig: NOOP,
+  censoConfig: {} as any, setCensoConfig: NOOP,
+  logSystemAction: NOOP,
+  logCensoAction: NOOP,
+  wipeAll: NOOP,
+} as unknown as DataState)
 
 import { ADIANTAMENTOS } from './data'
 
@@ -1165,13 +1309,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem(KEYS.version)
     if (stored !== DATA_VERSION) {
+      // Preserve only user session — NOT perfis (needs reset to new DEFAULT_PERFIS with correct keys)
+      const currentUser = localStorage.getItem('edu-current-user')
       localStorage.clear()
       localStorage.setItem(KEYS.version, DATA_VERSION)
-      // Reload para forçar a re-leitura com dados limpos
+      if (currentUser) localStorage.setItem('edu-current-user', currentUser)
       window.location.reload()
     }
-    // Nota: sincronização automática removida — causava ressurgimento de registros deletados.
-    // O fluxo correto é: deletar do Supabase via API + limpar localStorage simultaneamente.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1240,11 +1384,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [movimentacoesManuais, setMovimentacoesManuais] = useSupabaseArray<MovimentacaoManual>('financeiro/movimentacoes')
   const [caixasAbertos, setCaixasAbertos] = useLocalStorage<CaixaAberta[]>(KEYS.caixasAbertos, [])
   const [fornecedoresCad, setFornecedoresCad] = useSupabaseArray<FornecedorCad>('fornecedores')
+  const [unidadesFiscais, setUnidadesFiscais] = useLocalStorage<UnidadeFiscal[]>('edu-cfg-unidades-fiscais', [])
+  const [notasFiscais, setNotasFiscais] = useLocalStorage<NotaFiscal[]>('edu-op-notas-fiscais', [])
   const [advertencias, setAdvertencias] = useLocalStorage<Advertencia[]>(KEYS.advertencias, [])
   const [adiantamentos, setAdiantamentos] = useLocalStorage<Adiantamento[]>(KEYS.adiantamentos, ADIANTAMENTOS)
 
   // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
   const [systemLogs, setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
+
+  const [perfis, setPerfisRaw] = useLocalStorage<Perfil[]>('edu-perfis', DEFAULT_PERFIS)
 
   // Censo Escolar
   const CENSO_CONFIG_DEFAULT: CensoConfig = {
@@ -1344,7 +1492,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             const sanitizeLogData = (data: any) => {
               try {
                 return JSON.parse(JSON.stringify(data, (key, value) => {
-                  if (typeof value === 'string' && value.startsWith('data:image')) return '[IMAGEM OMITIDA]'
+                  if (typeof value === 'string') {
+                    if (value.startsWith('data:')) return '[DADO/IMAGEM OMITIDO]'
+                    if (value.length > 5000) return value.slice(0, 5000) + '... [TRUNCADO PELO SISTEMA DE LOG]'
+                  }
                   return value
                 }))
               } catch { return { error: 'data_too_complex' } }
@@ -1411,6 +1562,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
     setCfgGruposDRE(GRUPOS_DRE_DEFAULT); setDreConfig(DRE_CONFIG_DEFAULT)
     setMovimentacoesManuais([]); setCaixasAbertos([]); setFornecedoresCad([])
+    setUnidadesFiscais([]); setNotasFiscais([])
     setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
     setCensoPendencias([]); setCensoExports([]); setCensoAuditLogs([]); setCensoOperacoes([])
     setCensoAlunosData([]); setCensoTurmasData([]); setCensoProfsData([])
@@ -1458,7 +1610,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       dreConfig, setDreConfig,
       movimentacoesManuais, setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
       caixasAbertos, setCaixasAbertos: createTrackedSetter('Financeiro', 'Caixas', setCaixasAbertos),
-      fornecedoresCad, setFornecedoresCad: createTrackedSetter('Configurações', 'Fornecedores', setFornecedoresCad),
+      fornecedoresCad, setFornecedoresCad: createTrackedSetter('Operacional', 'Fornecedores', setFornecedoresCad),
+      unidadesFiscais, setUnidadesFiscais,
+      notasFiscais, setNotasFiscais,
       advertencias, setAdvertencias: createTrackedSetter('RH', 'Advertências', setAdvertencias),
       adiantamentos, setAdiantamentos: createTrackedSetter('RH', 'Adiantamentos', setAdiantamentos),
       systemLogs, setSystemLogs, logSystemAction,
@@ -1474,6 +1628,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       censoAlunosData, setCensoAlunosData,
       censoTurmasData, setCensoTurmasData,
       censoProfsData, setCensoProfsData,
+      perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
+      setPerfis: (val: any) => {
+        const resolved = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
+        const next = typeof val === 'function' ? (val as (p: typeof resolved) => typeof resolved)(resolved) : val
+        setPerfisRaw(next)
+      },
     }}>
       {children}
     </DataContext.Provider>

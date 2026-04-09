@@ -26,16 +26,19 @@ interface NavItem {
   roles?: string[]
 }
 
-interface NavGroup {
+export interface NavGroup {
   title: string
   moduleKey?: string
   roleKey?: string
   collapsible?: boolean
   defaultOpen?: boolean
   items: NavItem[]
+  href?: string
+  icon?: React.ReactNode
+  target?: string
 }
 
-const ALL_NAV_GROUPS: NavGroup[] = [
+export const ALL_NAV_GROUPS: NavGroup[] = [
   {
     title: 'Principal',
     collapsible: false,
@@ -44,8 +47,15 @@ const ALL_NAV_GROUPS: NavGroup[] = [
       { label: 'Central de Alertas', href: '/alertas', icon: <Bell size={16} /> },
       { label: 'Minhas Tarefas', href: '/tarefas', icon: <ClipboardCheck size={16} /> },
       { label: 'Calendário', href: '/calendario', icon: <Calendar size={16} /> },
-      { label: 'Agenda Digital', href: '/agenda-digital', icon: <BookHeart size={16} />, badge: 'NOVO', badgeColor: 'purple', target: '_blank' },
     ],
+  },
+
+  {
+    title: 'Agenda Digital',
+    href: '/agenda-digital',
+    target: '_blank',
+    icon: <BookHeart size={16} />,
+    items: [],
   },
 
 
@@ -369,7 +379,7 @@ function NavGroupComp({
   openGroupKey,
   onToggle,
 }: {
-  group: { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean }
+  group: { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean; href?: string; icon?: React.ReactNode; target?: string }
   collapsed: boolean
   groupKey: string
   openGroupKey: string | null
@@ -404,6 +414,56 @@ function NavGroupComp({
       requestAnimationFrame(() => requestAnimationFrame(() => setHeight(0)))
     }
   }, [open])
+
+  if (group.href) {
+    const isDirectActive = pathname === group.href || pathname.startsWith(group.href + '/')
+    return (
+      <div style={{ marginBottom: 4, marginTop: 6 }}>
+        {!collapsed ? (
+          <Link
+            href={group.href}
+            target={group.target}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              background: isDirectActive ? 'rgba(59,130,246,0.05)' : 'none',
+              border: 'none',
+              textDecoration: 'none',
+              borderLeft: isDirectActive ? '2px solid rgba(59,130,246,0.5)' : '2px solid transparent',
+              cursor: 'pointer',
+              textAlign: 'left',
+              userSelect: 'none',
+              transition: 'all 0.15s',
+            }}
+          >
+            <span style={{ color: isDirectActive ? '#60a5fa' : 'rgba(148,163,184,0.6)', flexShrink: 0 }}>
+              {group.icon}
+            </span>
+            <span style={{
+              flex: 1,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: isDirectActive ? '#93c5fd' : '#94a3b8',
+              transition: 'color 0.15s',
+            }}>
+              {group.title}
+            </span>
+          </Link>
+        ) : (
+          <div style={{ padding: '8px 0', display: 'flex', justifyContent: 'center' }}>
+            <Link href={group.href} target={group.target} title={group.title} style={{ color: isDirectActive ? '#60a5fa' : '#94a3b8' }}>
+              {group.icon}
+            </Link>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   if (!group.collapsible) {
     return (
@@ -486,8 +546,8 @@ function NavGroupComp({
    MAIN SIDEBAR COMPONENT
 ══════════════════════════════════════════ */
 export function Sidebar() {
-  const { sidebarCollapsed: collapsed, toggleSidebar, activeUnit, setActiveUnit, activeModules, sidebarTheme, currentUserPerfil } = useApp()
-  const { mantenedores = [] } = useData()
+  const { sidebarCollapsed: collapsed, toggleSidebar, activeUnit, setActiveUnit, activeModules, sidebarTheme, currentUserPerfil, hydrated } = useApp()
+  const { mantenedores = [], perfis = [] } = useData()
   const [unitOpen, setUnitOpen] = useState(false)
   const pathname = usePathname()
 
@@ -496,13 +556,48 @@ export function Sidebar() {
     ? ['Todas as Unidades', ...mantenedores.map(m => m.nome)]
     : ['Todas as Unidades', 'Unidade Centro', 'Unidade Norte', 'Unidade Sul']
 
-  const visibleGroups = ALL_NAV_GROUPS.filter(g => {
-    if (g.moduleKey && activeModules[g.moduleKey] === false) return false
-    if (g.roleKey && g.roleKey !== currentUserPerfil) return false
-    return true
-  })
+  const userPerfilObj = (perfis || []).find(p => p.nome === currentUserPerfil)
+  const userPerms = userPerfilObj?.permissoes || []
+  const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
 
-  type MergedGroup = { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean }
+  // Removed legacy bypass since DataContext now falls back to DEFAULT_PERFIS reliably
+  const isDiretor = currentUserPerfil === 'Diretor Geral'
+
+  const visibleGroups = ALL_NAV_GROUPS.map(g => {
+    // 1. Module active global check
+    if (g.moduleKey && activeModules[g.moduleKey] === false) return null
+    // 2. RoleKey exact match override
+    if (g.roleKey && g.roleKey !== currentUserPerfil) return null
+
+    // 3. Permissions checks
+    const modKey = g.moduleKey || toSlug(g.title)
+    const isPrincipal = g.title === 'Principal'
+    const hasExplicitGroupAccess = userPerms.includes(modKey)
+
+    // Clone group
+    const filteredGroup = { ...g, items: [] as NavItem[] }
+
+    g.items.forEach(item => {
+      if (item.children) {
+        const filteredChildren = item.children.filter(child => {
+          const childKey = child.href || toSlug(child.label)
+          return isPrincipal || userPerms.includes(childKey)
+        })
+        if (filteredChildren.length > 0) {
+          filteredGroup.items.push({ ...item, children: filteredChildren })
+        }
+      } else {
+        const itemKey = item.href || toSlug(item.label)
+        if (isPrincipal || userPerms.includes(itemKey)) {
+          filteredGroup.items.push(item)
+        }
+      }
+    })
+
+    return filteredGroup.items.length > 0 || (g.href && (isPrincipal || userPerms.includes(modKey))) ? filteredGroup : null
+  }).filter(Boolean) as NavGroup[]
+
+  type MergedGroup = { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean; href?: string; icon?: React.ReactNode; target?: string }
   const mergedGroups: MergedGroup[] = []
   for (const g of visibleGroups) {
     const last = mergedGroups[mergedGroups.length - 1]
@@ -514,6 +609,9 @@ export function Sidebar() {
         items: [...g.items],
         collapsible: g.collapsible ?? false,
         defaultOpen: g.defaultOpen ?? true,
+        href: g.href,
+        icon: g.icon,
+        target: g.target
       })
     }
   }
@@ -521,6 +619,7 @@ export function Sidebar() {
   // ── Accordion: controla qual grupo collapsible está aberto
   const getInitialOpenKey = useCallback(() => {
     for (const g of mergedGroups) {
+      if (g.href) continue
       if (!g.collapsible) continue
       const isActive = g.items.some(item =>
         item.href === pathname ||
@@ -583,7 +682,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0 16px' }}>
-        {mergedGroups.map((group, i) => (
+        {hydrated && mergedGroups.map((group, i) => (
           <NavGroupComp
             key={group.title + i}
             group={group}
