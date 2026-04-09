@@ -3529,7 +3529,10 @@ export default function NovaMatriculaPage() {
                     setVctoForm(v=>({...v,eventoFiltro:ev,deParcela:nums.length?String(Math.min(...nums)):'1',ateParcela:nums.length?String(Math.max(...nums)):String(parcelas.filter(p=>p.status!=='cancelado').length)}))
                   }} style={{fontWeight:600}}>
                     <option value="">— Todos os eventos —</option>
-                    {evNomes.map(ev=>(<option key={ev} value={ev}>{ev}</option>))}
+                    {evNomes.map(ev=>{
+                      const tNm = (parcelas.find(p=>(p as any).evento===ev) as any)?.turmaNome || turmas.find((t:any)=>t.id===(parcelas.find(p=>(p as any).evento===ev) as any)?.turmaId)?.nome || ''
+                      return <option key={ev} value={ev}>{ev}{tNm ? ` — ${tNm}` : ''}</option>
+                    })}
                   </select>
                   {vctoForm.eventoFiltro&&(<div style={{marginTop:6,padding:'6px 12px',background:'rgba(6,182,212,0.08)',borderRadius:8,fontSize:11,color:'hsl(var(--text-muted))'}}>Evento selecionado: <strong style={{color:'#06b6d4'}}>{vctoForm.eventoFiltro}</strong> · {parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===vctoForm.eventoFiltro).length} parcelas</div>)}
                 </div>
@@ -3610,7 +3613,10 @@ export default function NovaMatriculaPage() {
                     setAlterarValorForm(f=>({...f,eventoFiltro:ev,parcelas:nums}))
                   }} style={{fontWeight:600}}>
                     <option value="">— Todos os eventos —</option>
-                    {evNomes.map(ev=>(<option key={ev} value={ev}>{ev}</option>))}
+                    {evNomes.map(ev=>{
+                      const tNm = (parcelas.find(p=>(p as any).evento===ev) as any)?.turmaNome || turmas.find((t:any)=>t.id===(parcelas.find(p=>(p as any).evento===ev) as any)?.turmaId)?.nome || ''
+                      return <option key={ev} value={ev}>{ev}{tNm ? ` — ${tNm}` : ''}</option>
+                    })}
                   </select>
                 </div>
               )
@@ -4000,6 +4006,7 @@ export default function NovaMatriculaPage() {
                   <div style={{fontWeight:800,fontSize:15}}>Editar Parcela</div>
                   <div style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>
                     {parcelaAtiva.evento||parcelaAtiva.competencia}
+                    {(()=>{const tNm=(parcelaAtiva as any).turmaNome||turmas.find((t:any)=>t.id===(parcelaAtiva as any).turmaId)?.nome;return tNm?<span style={{marginLeft:6,fontSize:10,color:'#818cf8',fontWeight:700}}>🎓 {tNm}</span>:null})()}
                     {parcelaAtiva.codigo&&<span style={{marginLeft:6,fontFamily:'monospace',fontSize:10,color:'#6366f1'}}>#{parcelaAtiva.codigo}</span>}
                   </div>
                   <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:1}}>
@@ -4066,11 +4073,11 @@ export default function NovaMatriculaPage() {
               {/* Valores */}
               <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:12}}>
                 <F label="Valor Principal (R$)">
-                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.valor} onChange={e=>{
-                    const v=parseFloat(e.target.value)||0
+                  <input type="text" className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.valor)} onChange={e=>{
+                    const raw=e.target.value.replace(/\D/g,''); const v=raw?parseInt(raw,10)/100:0;
                     setParcelaAtiva((a:any)=>{
-                      const t=a.descTipo||'R$', raw=a.descRaw??a.desconto;
-                      const d=t==='%' ? +(v*raw/100).toFixed(2) : raw;
+                      const t=a.descTipo||'R$', raw2=a.descRaw??a.desconto;
+                      const d=t==='%' ? +(v*raw2/100).toFixed(2) : raw2;
                       return{...a,valor:v,desconto:d,valorFinal:Math.max(0,v-d)}
                     })
                   }}/>
@@ -4087,22 +4094,28 @@ export default function NovaMatriculaPage() {
                   </div>
                 </F>
                 <F label={`Desconto (${parcelaAtiva.descTipo||'R$'})`}>
-                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.descRaw??parcelaAtiva.desconto} onChange={e=>{
-                    const raw=parseFloat(e.target.value)||0
+                  <input type="text" className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.descRaw??parcelaAtiva.desconto)} onChange={e=>{
+                    const raw=e.target.value.replace(/\D/g,''); const rawNum=raw?parseInt(raw,10)/100:0;
                     setParcelaAtiva((a:any)=>{
                       const t=a.descTipo||'R$';
-                      const d=t==='%' ? +(a.valor*raw/100).toFixed(2) : raw;
-                      return{...a,descRaw:raw,desconto:d,valorFinal:Math.max(0,a.valor-d)}
+                      const d=t==='%' ? +(a.valor*rawNum/100).toFixed(2) : rawNum;
+                      return{...a,descRaw:rawNum,desconto:d,valorFinal:Math.max(0,a.valor-d)}
                     })
                   }}/>
                 </F>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
                 <F label="Juros (R$)">
-                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.juros??''} onChange={e=>setParcelaAtiva((a:any)=>({...a,juros:parseFloat(e.target.value)||0}))}/>
+                  <input type="text" className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.juros??0)} onChange={e=>{
+                    const raw=e.target.value.replace(/\D/g,''); const v=raw?parseInt(raw,10)/100:0;
+                    setParcelaAtiva((a:any)=>({...a,juros:v}))
+                  }}/>
                 </F>
                 <F label="Multa (R$)">
-                  <input type="number" step="0.01" className="form-input" style={{fontFamily:'monospace'}} value={parcelaAtiva.multa??''} onChange={e=>setParcelaAtiva((a:any)=>({...a,multa:parseFloat(e.target.value)||0}))}/>
+                  <input type="text" className="form-input" style={{fontFamily:'monospace'}} value={fmtMoeda(parcelaAtiva.multa??0)} onChange={e=>{
+                    const raw=e.target.value.replace(/\D/g,''); const v=raw?parseInt(raw,10)/100:0;
+                    setParcelaAtiva((a:any)=>({...a,multa:v}))
+                  }}/>
                 </F>
               </div>
               <F label="Manter Desconto">
@@ -4202,6 +4215,7 @@ export default function NovaMatriculaPage() {
                     </div>
                     <div>
                       <div style={{fontWeight:800,fontSize:14,color:'hsl(var(--text-base))',textTransform:'capitalize'}}>{(parcelaAtiva as any).evento||parcelaAtiva.competencia}</div>
+                      {(()=>{const tNm=(parcelaAtiva as any).turmaNome||turmas.find((t:any)=>t.id===(parcelaAtiva as any).turmaId)?.nome;return tNm?<div style={{fontSize:11,color:'#818cf8',fontWeight:600,marginTop:1}}>🎓 {tNm}</div>:null})()}
                       <div style={{display:'flex',gap:12,marginTop:3,fontSize:11,color:'hsl(var(--text-muted))'}}>
                         <span>Vcto: <strong style={{color:diasAtr>0?'#ef4444':'#f59e0b'}}>{parcelaAtiva.vencimento ? formatDate(parcelaAtiva.vencimento) : '—'}</strong></span>
                         {parcelaAtiva.codigo&&<span style={{fontFamily:'monospace',color:'#6366f1',fontSize:10}}>#{parcelaAtiva.codigo}</span>}
@@ -4262,18 +4276,18 @@ export default function NovaMatriculaPage() {
                       })
                     }}/>
                   </F>
-                  <F label="Multa">
+                  <F label="Multa (R$)">
                     <input className="form-input" style={{fontFamily:'monospace',color:parseMoeda(baixaForm.multa)>0?'#f87171':'inherit'}} value={baixaForm.multa} onChange={e=>{
-                      const nv=e.target.value;
+                      const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'0,00';
                       setBaixaForm((ff:any)=>{
                          const tr=Math.max(0,parcelaAtiva.valor-parseMoeda(ff.desconto||String(parcelaAtiva.desconto||'0'))+parseMoeda(ff.juros)+parseMoeda(nv))
                          return{...ff,multa:nv,formasPagto:ff.formasPagto.length===1?[{...ff.formasPagto[0],valor:fmtMoeda(tr)}]:ff.formasPagto}
                       })
                     }} placeholder="0,00"/>
                   </F>
-                  <F label="Juros">
+                  <F label="Juros (R$)">
                     <input className="form-input" style={{fontFamily:'monospace',color:parseMoeda(baixaForm.juros)>0?'#f87171':'inherit'}} value={baixaForm.juros} onChange={e=>{
-                      const nv=e.target.value;
+                      const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'0,00';
                       setBaixaForm((ff:any)=>{
                          const tr=Math.max(0,parcelaAtiva.valor-parseMoeda(ff.desconto||String(parcelaAtiva.desconto||'0'))+parseMoeda(nv)+parseMoeda(ff.multa))
                          return{...ff,juros:nv,formasPagto:ff.formasPagto.length===1?[{...ff.formasPagto[0],valor:fmtMoeda(tr)}]:ff.formasPagto}
@@ -4282,7 +4296,7 @@ export default function NovaMatriculaPage() {
                   </F>
                   <F label="Desconto (R$)">
                     <input className="form-input" style={{fontFamily:'monospace'}} value={baixaForm.desconto} onChange={e=>{
-                      const nv=e.target.value;
+                      const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'0,00';
                       setBaixaForm((ff:any)=>{
                          const tr=Math.max(0,parcelaAtiva.valor-parseMoeda(nv)+parseMoeda(ff.juros)+parseMoeda(ff.multa))
                          return{...ff,desconto:nv,formasPagto:ff.formasPagto.length===1?[{...ff.formasPagto[0],valor:fmtMoeda(tr)}]:ff.formasPagto}
@@ -4309,8 +4323,11 @@ export default function NovaMatriculaPage() {
                         onChange={e=>setBaixaForm((ff:any)=>({...ff,formasPagto:ff.formasPagto.map((x:any,i:number)=>i===idx?{...x,forma:e.target.value,cartao:null}:x)}))}
                       >{FORMAS.map(fo=><option key={fo}>{fo}</option>)}</select>
                       <input className="form-input" style={{flex:'0 0 120px',fontFamily:'monospace',fontSize:12}}
-                        value={item.valor} placeholder="R$ 0,00"
-                        onChange={e=>setBaixaForm((ff:any)=>({...ff,formasPagto:ff.formasPagto.map((x:any,i:number)=>i===idx?{...x,valor:e.target.value}:x)}))}
+                        value={item.valor} placeholder="0,00"
+                        onChange={e=>{
+                          const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'0,00';
+                          setBaixaForm((ff:any)=>({...ff,formasPagto:ff.formasPagto.map((x:any,i:number)=>i===idx?{...x,valor:nv}:x)}))
+                        }}
                       />
                       {item.forma.startsWith('Cartão')&&(
                         <button type="button" style={{padding:'0 10px',height:38,borderRadius:8,border:'1px solid rgba(99,102,241,0.4)',background:item.cartao?'rgba(99,102,241,0.12)':'hsl(var(--bg-overlay))',cursor:'pointer',fontSize:11,fontWeight:700,color:item.cartao?'#818cf8':'hsl(var(--text-muted))',whiteSpace:'nowrap'}}
@@ -4660,13 +4677,16 @@ export default function NovaMatriculaPage() {
                           {fmtMoeda(p.valor)}
                         </td>
                         <td style={{padding:'8px 4px'}}>
-                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#f59e0b'}} value={p.loteDesc} onChange={e=>updatePrc(p.num,'loteDesc',e.target.value)} />
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#f59e0b'}} value={p.loteDesc}
+                            onChange={e=>{const raw=e.target.value.replace(/\D/g,'');updatePrc(p.num,'loteDesc',raw?fmtMoeda(parseInt(raw,10)/100):'0,00')}} />
                         </td>
                         <td style={{padding:'8px 4px'}}>
-                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteMulta} onChange={e=>updatePrc(p.num,'loteMulta',e.target.value)} />
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteMulta}
+                            onChange={e=>{const raw=e.target.value.replace(/\D/g,'');updatePrc(p.num,'loteMulta',raw?fmtMoeda(parseInt(raw,10)/100):'0,00')}} />
                         </td>
                         <td style={{padding:'8px 4px'}}>
-                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteJuros} onChange={e=>updatePrc(p.num,'loteJuros',e.target.value)} />
+                          <input className="form-input" style={{fontFamily:'monospace',fontSize:11,height:28,padding:'0 6px',width:'100%',color:'#ef4444'}} value={p.loteJuros}
+                            onChange={e=>{const raw=e.target.value.replace(/\D/g,'');updatePrc(p.num,'loteJuros',raw?fmtMoeda(parseInt(raw,10)/100):'0,00')}} />
                         </td>
                         <td style={{textAlign:'right',fontFamily:'monospace',fontWeight:800,fontSize:13,color:'#10b981',paddingRight:8}}>
                           R$ {fmtMoeda(Math.max(0, p.valor - parseMoeda(p.loteDesc||'0') + parseMoeda(p.loteMulta||'0') + parseMoeda(p.loteJuros||'0')))}
@@ -4696,8 +4716,11 @@ export default function NovaMatriculaPage() {
                         onChange={e=>setBaixaLoteMultiFormas((ff:any)=>ff.map((x:any,i:number)=>i===idx?{...x,forma:e.target.value}:x))}
                       >{FORMAS.map(fo=><option key={fo}>{fo}</option>)}</select>
                       <input className="form-input" style={{flex:1,fontFamily:'monospace',fontSize:12}}
-                        value={item.valor} placeholder="R$ 0,00"
-                        onChange={e=>setBaixaLoteMultiFormas((ff:any)=>ff.map((x:any,i:number)=>i===idx?{...x,valor:e.target.value}:x))}
+                        value={item.valor} placeholder="0,00"
+                        onChange={e=>{
+                          const raw=e.target.value.replace(/\D/g,''); const nv=raw?fmtMoeda(parseInt(raw,10)/100):'0,00';
+                          setBaixaLoteMultiFormas((ff:any)=>ff.map((x:any,i:number)=>i===idx?{...x,valor:nv}:x))
+                        }}
                       />
                       {(item.forma.includes('Cartão')||item.forma.includes('Crédito')||item.forma.includes('Débito'))&&(
                         <button type="button" style={{padding:'0 10px',height:36,fontSize:11,background:'hsl(var(--bg-base))',border:'1px solid hsl(var(--border-subtle))',borderRadius:6,cursor:'pointer',color:'#818cf8',fontWeight:700,display:'flex',alignItems:'center',gap:4}}
