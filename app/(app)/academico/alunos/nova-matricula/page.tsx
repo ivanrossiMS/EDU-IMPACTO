@@ -3530,11 +3530,21 @@ export default function NovaMatriculaPage() {
                   }} style={{fontWeight:600}}>
                     <option value="">— Todos os eventos —</option>
                     {evNomes.map(ev=>{
-                      const tNm = (parcelas.find(p=>(p as any).evento===ev) as any)?.turmaNome || turmas.find((t:any)=>t.id===(parcelas.find(p=>(p as any).evento===ev) as any)?.turmaId)?.nome || ''
+                      const tNm = parcelas.filter(p=>(p as any).evento===ev).map(p=>(p as any).turmaNome || turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n) || ''
                       return <option key={ev} value={ev}>{ev}{tNm ? ` — ${tNm}` : ''}</option>
                     })}
                   </select>
-                  {vctoForm.eventoFiltro&&(<div style={{marginTop:6,padding:'6px 12px',background:'rgba(6,182,212,0.08)',borderRadius:8,fontSize:11,color:'hsl(var(--text-muted))'}}>Evento selecionado: <strong style={{color:'#06b6d4'}}>{vctoForm.eventoFiltro}</strong> · {parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===vctoForm.eventoFiltro).length} parcelas</div>)}
+                  {vctoForm.eventoFiltro&&(()=>{
+                    const parcEv = parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===vctoForm.eventoFiltro)
+                    const tNm = parcEv.map(p=>(p as any).turmaNome || turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n) || ''
+                    return(
+                      <div style={{marginTop:6,padding:'6px 12px',background:'rgba(6,182,212,0.08)',borderRadius:8,fontSize:11,color:'hsl(var(--text-muted))',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                        <span>Evento: <strong style={{color:'#06b6d4'}}>{vctoForm.eventoFiltro}</strong></span>
+                        {tNm && <span style={{padding:'2px 8px',borderRadius:20,background:'rgba(129,140,248,0.15)',border:'1px solid rgba(129,140,248,0.3)',color:'#818cf8',fontWeight:700,fontSize:10}}>🎓 {tNm}</span>}
+                        <span style={{marginLeft:'auto'}}>{parcEv.length} parcelas</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })()}
@@ -3603,21 +3613,31 @@ export default function NovaMatriculaPage() {
           <div style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
             {/* Evento selector */}
             {(()=>{
-              const evNomes=[...new Set(parcelas.filter(p=>p.status!=='cancelado').map(p=>(p as any).evento).filter(Boolean))]
+              const evNomes=[...new Set(parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento').map(p=>(p as any).evento).filter(Boolean))]
               return evNomes.length>0&&(
                 <div>
-                  <label className="form-label" style={{fontSize:11,marginBottom:6,display:'block'}}>Evento que será alterado</label>
+                  <label className="form-label" style={{fontSize:11,marginBottom:6,display:'block'}}>Evento que sera alterado</label>
                   <select className="form-input" value={alterarValorForm.eventoFiltro} onChange={e=>{
                     const ev=e.target.value
                     const nums=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento'&&((p as any).evento===ev||!ev)).map(p=>p.num)
                     setAlterarValorForm(f=>({...f,eventoFiltro:ev,parcelas:nums}))
                   }} style={{fontWeight:600}}>
-                    <option value="">— Todos os eventos —</option>
+                    <option value="">- Todos os eventos -</option>
                     {evNomes.map(ev=>{
-                      const tNm = (parcelas.find(p=>(p as any).evento===ev) as any)?.turmaNome || turmas.find((t:any)=>t.id===(parcelas.find(p=>(p as any).evento===ev) as any)?.turmaId)?.nome || ''
-                      return <option key={ev} value={ev}>{ev}{tNm ? ` — ${tNm}` : ''}</option>
+                      const tNm = parcelas.filter(p=>(p as any).evento===ev).map(p=>(p as any).turmaNome || turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n) || ''
+                      return <option key={ev} value={ev}>{ev}{tNm ? ` - ${tNm}` : ''}</option>
                     })}
                   </select>
+                  {alterarValorForm.eventoFiltro&&(()=>{
+                    const parcEv = parcelas.filter(p=>(p as any).evento===alterarValorForm.eventoFiltro)
+                    const tNm = parcEv.map(p=>(p as any).turmaNome || turmas.find((t:any)=>t.id===(p as any).turmaId)?.nome).find(n=>!!n) || ''
+                    return tNm ? (
+                      <div style={{marginTop:6,padding:'4px 12px',borderRadius:8,background:'rgba(129,140,248,0.08)',border:'1px solid rgba(129,140,248,0.2)',display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:10,color:'hsl(var(--text-muted))'}}>Turma:</span>
+                        <span style={{padding:'2px 8px',borderRadius:20,background:'rgba(129,140,248,0.15)',border:'1px solid rgba(129,140,248,0.3)',color:'#818cf8',fontWeight:700,fontSize:10}}>Turma: {tNm}</span>
+                      </div>
+                    ) : null
+                  })()}
                 </div>
               )
             })()}
