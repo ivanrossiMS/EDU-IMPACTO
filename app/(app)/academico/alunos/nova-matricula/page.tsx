@@ -2950,12 +2950,10 @@ export default function NovaMatriculaPage() {
                                     textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
                                   }}>({p.valor>0?((p.desconto/p.valor)*100).toFixed(1):0}%)</span>
                                   {(p as any).manterDesconto ? (
-                                    <span style={{fontSize:8,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>MANTER</span>
+                                    <span style={{fontSize:9,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:4,padding:'2px 5px',fontWeight:800,marginTop:3,lineHeight:1}}>Mantém desconto</span>
                                   ) : isV ? (
-                                    <span style={{fontSize:8,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>PERDIDO</span>
-                                  ) : (
-                                    <span style={{fontSize:8,background:'rgba(148,163,184,0.1)',color:'hsl(var(--text-muted))',border:'1px solid rgba(148,163,184,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>EXPIRA</span>
-                                  )}
+                                    <span style={{fontSize:9,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:4,padding:'2px 5px',fontWeight:800,marginTop:3,lineHeight:1}}>Desconto Perdido</span>
+                                  ) : null}
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
                             </td>
