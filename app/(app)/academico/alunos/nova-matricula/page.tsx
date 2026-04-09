@@ -2640,8 +2640,25 @@ export default function NovaMatriculaPage() {
                 <Btn full icon="📅" label="Vencimento" color="#06b6d4" onClick={()=>{
                   const naoPargas=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago');
                   if(naoPargas.length===0){ void dlg.alert('Não há parcelas pendentes.\nParcelas pagas não podem ter vencimento alterado.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
-                  const ev=[...new Set(naoPargas.map(p=>(p as any).evento).filter(Boolean))];
-                  setVctoForm({deParcela:'1',ateParcela:String(naoPargas.length),novoDia:'',eventoFiltro:(ev[0] as string)||''});
+                  // Pre-fill from selected pending parcelas
+                  const selPend = parcelasSelected.length>0
+                    ? parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status!=='pago'&&p.status!=='cancelado')
+                    : [];
+                  const ev = selPend.length>0
+                    ? (selPend[0] as any).evento||''
+                    : [...new Set(naoPargas.map(p=>(p as any).evento).filter(Boolean))][0]||'';
+                  const parcsForEv = ev
+                    ? naoPargas.filter(p=>(p as any).evento===ev)
+                    : naoPargas;
+                  const nums = selPend.length>0
+                    ? selPend.map(p=>p.num)
+                    : parcsForEv.map(p=>p.num);
+                  setVctoForm({
+                    eventoFiltro: ev,
+                    deParcela: nums.length?String(Math.min(...nums)):'1',
+                    ateParcela: nums.length?String(Math.max(...nums)):String(naoPargas.length),
+                    novoDia:''
+                  });
                   setModalVcto(true);
                 }}/>
                 <Btn full icon="💲" label="Alt. Valor" color="#a78bfa" onClick={()=>{
@@ -2659,7 +2676,18 @@ export default function NovaMatriculaPage() {
             {/* Coluna 3 — Consultas */}
             <GroupCard title="Consultas & Estorno" icon="🔍" color="#38bdf8">
               <Row>
-                <Btn full icon="🔍" label="Cons. Baixa" color="#38bdf8" onClick={()=>setModalConsultaBaixa(true)}/>
+                <Btn full icon="🔍" label="Cons. Baixa" color="#38bdf8" onClick={()=>{
+                  // If a single paid parcela is selected, jump directly to its baixa
+                  if(parcelasSelected.length===1){
+                    const selP = parcelas.find(p=>p.num===parcelasSelected[0]);
+                    if(selP?.status==='pago'){
+                      setParcelasSelected([selP.num]);
+                      setModalRecibo(true);
+                      return;
+                    }
+                  }
+                  setModalConsultaBaixa(true);
+                }}/>
                 <Btn full icon="↩️" label="Excluir Baixa" color="#f97316" disabled={!temSel||!parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} onClick={()=>setModalExcluirBaixa(true)}/>
               </Row>
               <Row>
