@@ -3607,8 +3607,11 @@ export default function NovaMatriculaPage() {
                 const numsAfetados = lista.filter((_,i)=>i>=deIdx&&i<=ateIdx).map(p=>p.num)
                 setParcelas(prev=>prev.map(p=>{
                   if(!numsAfetados.includes(p.num)||p.status==='pago'||p.status==='cancelado') return p
-                  const d=descLote.tipo==='%'?+(p.valor*v/100).toFixed(2):v
-                  return{...p,desconto:d,valorFinal:Math.max(0,+(p.valor-d).toFixed(2)),manterDesconto:(descLote as any).manterDesconto||false,descTipo:descLote.tipo,descRaw:v}
+                  // Sempre usa p.valor (bruto original), ignorando qualquer desconto anterior
+                  const base = p.valor
+                  const d = descLote.tipo==='%' ? +(base * v / 100).toFixed(2) : v
+                  // Substitui (não acumula) o desconto existente
+                  return {...p, desconto: d, descRaw: v, descTipo: descLote.tipo, valorFinal: Math.max(0, +(base - d).toFixed(2)), manterDesconto: (descLote as any).manterDesconto||false}
                 }))
                 setModalDesconto(false)
               }}><Check size={14}/> Aplicar Desconto</button>
