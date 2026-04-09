@@ -1329,6 +1329,8 @@ export default function NovaMatriculaPage() {
     const nv = parseMoeda(alterarValorForm.novoValor);
     if (!nv || alterarValorForm.parcelas.length === 0) return;
     setParcelas(prev => prev.map(p => {
+      // 🛡️ Nunca altera parcelas já pagas ou isentas
+      if (p.status === 'pago' || p.status === 'isento') return p;
       if (alterarValorForm.parcelas.includes(p.num)) {
         const t = (p as any).descTipo, r = (p as any).descRaw;
         const d = (t === '%' && r) ? +(nv * r / 100).toFixed(2) : p.desconto;
@@ -2595,14 +2597,20 @@ export default function NovaMatriculaPage() {
                     setModalBaixaLote(true)
                   }
                 }}/>
-                <Btn full icon="✏️" label="Editar" color="#6366f1" disabled={selCount!==1} onClick={()=>{
-                  const rawP=parcelas.find(x=>x.num===parcelasSelected[0]);
-                  if(rawP){
-                    const { juros, multa, dias } = calcAtraso(rawP, new Date().toISOString().split('T')[0]);
-                    setParcelaAtiva({...rawP, juros: rawP.juros || juros, multa: rawP.multa || multa, diasAtr: Math.max(0, dias)});
-                    setModalEditarParcela(true)
-                  }
-                }}/>
+                <Btn full icon="✏️" label="Editar" color="#6366f1"
+                  disabled={selCount!==1}
+                  onClick={()=>{
+                    const rawP=parcelas.find(x=>x.num===parcelasSelected[0]);
+                    if(rawP?.status==='pago'){
+                      alert('⚠️ Esta parcela já foi PAGA e está bloqueada para edição.\n\nPara editar, utilize o botão "Excluir Baixa" primeiro para reverter o pagamento.');
+                      return;
+                    }
+                    if(rawP){
+                      const { juros, multa, dias } = calcAtraso(rawP, new Date().toISOString().split('T')[0]);
+                      setParcelaAtiva({...rawP, juros: rawP.juros || juros, multa: rawP.multa || multa, diasAtr: Math.max(0, dias)});
+                      setModalEditarParcela(true)
+                    }
+                  }}/>
               </Row>
               <Row>
                 <Btn full icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>setModalBaixaResp(true)}/>
@@ -2614,11 +2622,33 @@ export default function NovaMatriculaPage() {
             <GroupCard title="Lançamentos Manuais" icon="🛠️" color="#8b5cf6">
               <Row>
                 <Btn full icon="➕" label="Inserir Evento" color="#8b5cf6" onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}/>
-                <Btn full icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const sn=se?parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===se).map(p=>p.num):parcelas.filter(p=>p.status!=='cancelado').map(p=>p.num);setDescLote({tipo:'%',valor:'',deParcela:sn.length?String(Math.min(...sn)):'1',ateParcela:sn.length?String(Math.max(...sn)):'1',eventoId:se,parcelasEvento:sn});setModalDesconto(true)}}/>
+                <Btn full icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{
+                  const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';
+                  const sn=se
+                    ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&(p as any).evento===se).map(p=>p.num)
+                    :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago').map(p=>p.num);
+                  if(sn.length===0){alert('⚠️ Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.');return;}
+                  setDescLote({tipo:'%',valor:'',deParcela:sn.length?String(Math.min(...sn)):'1',ateParcela:sn.length?String(Math.max(...sn)):'1',eventoId:se,parcelasEvento:sn});
+                  setModalDesconto(true);
+                }}/>
               </Row>
               <Row>
-                <Btn full icon="📅" label="Vencimento" color="#06b6d4" onClick={()=>{const ev=[...new Set(parcelas.filter(p=>p.status!=='cancelado').map(p=>(p as any).evento).filter(Boolean))];setVctoForm({deParcela:'1',ateParcela:String(parcelas.filter(p=>p.status!=='cancelado').length),novoDia:'',eventoFiltro:(ev[0] as string)||''});setModalVcto(true)}}/>
-                <Btn full icon="💲" label="Alt. Valor" color="#a78bfa" onClick={()=>{const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';const ns=se?parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===se).map(p=>p.num):parcelas.filter(p=>p.status!=='cancelado').map(p=>p.num);setAlterarValorForm({parcelas:ns,eventoFiltro:se,novoValor:'',motivo:''});setModalAlterarValor(true)}}/>
+                <Btn full icon="📅" label="Vencimento" color="#06b6d4" onClick={()=>{
+                  const naoPargas=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago');
+                  if(naoPargas.length===0){alert('⚠️ Não há parcelas pendentes.\nParcelas pagas não podem ter vencimento alterado.');return;}
+                  const ev=[...new Set(naoPargas.map(p=>(p as any).evento).filter(Boolean))];
+                  setVctoForm({deParcela:'1',ateParcela:String(naoPargas.length),novoDia:'',eventoFiltro:(ev[0] as string)||''});
+                  setModalVcto(true);
+                }}/>
+                <Btn full icon="💲" label="Alt. Valor" color="#a78bfa" onClick={()=>{
+                  const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';
+                  const ns=se
+                    ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&(p as any).evento===se).map(p=>p.num)
+                    :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago').map(p=>p.num);
+                  if(ns.length===0){alert('⚠️ Não há parcelas pendentes para alterar.\nParcelas já pagas não podem ter valor alterado.');return;}
+                  setAlterarValorForm({parcelas:ns,eventoFiltro:se,novoValor:'',motivo:''});
+                  setModalAlterarValor(true);
+                }}/>
               </Row>
             </GroupCard>
 
@@ -4099,15 +4129,22 @@ export default function NovaMatriculaPage() {
             <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',gap:10,background:'hsl(var(--bg-elevated))'}}>
               <div>
                 {parcelaAtiva.status !== 'pago' && (
-                  <button className="btn btn-ghost btn-sm" style={{color:'#f87171',fontSize:12}} onClick={()=>{if(confirm('Tem certeza que deseja marcar esta parcela como cancelada?')){setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:'Cancelamento via edição'}:p));setModalEditarParcela(false)}}}>🗑️ Cancelar</button>
+                  <button className="btn btn-ghost btn-sm" style={{color:'#f87171',fontSize:12}} onClick={()=>{if(confirm('Tem certeza que deseja marcar esta parcela como cancelada?')){setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:'Cancelamento via edição'}:p));setModalEditarParcela(false)}}}>🗑️ Excluir</button>
+                )}
+                {parcelaAtiva.status === 'pago' && (
+                  <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,background:'rgba(16,185,129,0.08)',border:'1px solid rgba(16,185,129,0.25)'}}>
+                    <span style={{fontSize:11,color:'#10b981',fontWeight:700}}>✅ Parcela paga — somente leitura. Use "Excluir Baixa" para editar.</span>
+                  </div>
                 )}
               </div>
               <div style={{display:'flex',gap:8}}>
-                <button className="btn btn-secondary" onClick={()=>setModalEditarParcela(false)}>Cancelar</button>
-                <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)'}} onClick={()=>{
-                  setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,...parcelaAtiva}:p))
-                  setModalEditarParcela(false)
-                }}><Check size={14}/> Salvar Alteracoes</button>
+                <button className="btn btn-secondary" onClick={()=>setModalEditarParcela(false)}>Fechar</button>
+                {parcelaAtiva.status !== 'pago' && (
+                  <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)'}} onClick={()=>{
+                    setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,...parcelaAtiva}:p))
+                    setModalEditarParcela(false)
+                  }}><Check size={14}/> Salvar Alterações</button>
+                )}
               </div>
             </div>
           </div>
