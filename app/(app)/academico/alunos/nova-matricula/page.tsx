@@ -2877,7 +2877,8 @@ export default function NovaMatriculaPage() {
                         const atr=p.status!=='pago'?calcJurosMulta(p):{juros:0,multa:0,dias:0}
                         const jEx=p.status==='pago'?((p as any).juros||0):atr.juros
                         const mEx=p.status==='pago'?((p as any).multa||0):atr.multa
-                        const totalP=p.status==='pago'?p.valorFinal:+(p.valor-(p.desconto||0)+jEx+mEx).toFixed(2)
+                        const descAplicado = (p.desconto && isV && !(p as any).manterDesconto) ? 0 : (p.desconto || 0)
+                        const totalP=p.status==='pago'?p.valorFinal:+(p.valor-descAplicado+jEx+mEx).toFixed(2)
                         const rowBg=sel?'rgba(99,102,241,0.055)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
                         const eid=(p as any).eventoId
                         const savedNum=(p as any).numParcela
@@ -2934,8 +2935,27 @@ export default function NovaMatriculaPage() {
                             <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
-                                  <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:'#d97706',fontWeight:700}}>- R$ {fmtMoeda(p.desconto)}</span>
-                                  <span style={{fontSize:10,color:'#d97706',opacity:.65,fontWeight:600}}>({p.valor>0?((p.desconto/p.valor)*100).toFixed(1):0}%)</span>
+                                  <span style={{
+                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
+                                    fontSize:13,
+                                    color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
+                                    fontWeight:700,
+                                    textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
+                                  }}>- R$ {fmtMoeda(p.desconto)}</span>
+                                  <span style={{
+                                    fontSize:10,
+                                    color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
+                                    opacity:.65,
+                                    fontWeight:600,
+                                    textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
+                                  }}>({p.valor>0?((p.desconto/p.valor)*100).toFixed(1):0}%)</span>
+                                  {(p as any).manterDesconto ? (
+                                    <span style={{fontSize:8,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>MANTER</span>
+                                  ) : isV ? (
+                                    <span style={{fontSize:8,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>PERDIDO</span>
+                                  ) : (
+                                    <span style={{fontSize:8,background:'rgba(148,163,184,0.1)',color:'hsl(var(--text-muted))',border:'1px solid rgba(148,163,184,0.3)',borderRadius:4,padding:'1px 4px',fontWeight:800,marginTop:2,lineHeight:1}}>EXPIRA</span>
+                                  )}
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
                             </td>
