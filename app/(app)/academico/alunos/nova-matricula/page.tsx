@@ -468,21 +468,24 @@ export default function NovaMatriculaPage() {
 
   // Função utilitária global para calcular juros e multa
   const calcAtraso = useCallback((p: any, dataPagtoStr?: string) => {
-    if (p.status === 'pago' || p.status === 'isento') return { juros: p.juros || 0, multa: p.multa || 0, dias: 0 }
-    if (!p.vencimento) return { juros: 0, multa: 0, dias: 0 }
+    if (p.status === 'pago' || p.status === 'isento') return { juros: p.juros || 0, multa: p.multa || 0, dias: 0, descAplicado: p.desconto || 0 }
+    if (!p.vencimento) return { juros: 0, multa: 0, dias: 0, descAplicado: p.desconto || 0 }
     
     const dataAlvo = dataPagtoStr ? new Date(dataPagtoStr + 'T12:00:00') : new Date()
     dataAlvo.setHours(0, 0, 0, 0)
     
     const [d, m, a] = p.vencimento.split('/')
-    if (!d || !m || !a) return { juros: 0, multa: 0, dias: 0 }
+    if (!d || !m || !a) return { juros: 0, multa: 0, dias: 0, descAplicado: p.desconto || 0 }
     const dv = new Date(`${a}-${m}-${d}T12:00:00`)
     dv.setHours(0, 0, 0, 0)
     
     const dias = Math.max(0, Math.floor((dataAlvo.getTime() - dv.getTime()) / 86400000))
-    if (dias <= 0) return { juros: p.juros || 0, multa: p.multa || 0, dias: 0 }
+    if (dias <= 0) return { juros: p.juros || 0, multa: p.multa || 0, dias: 0, descAplicado: p.desconto || 0 }
     
-    return { juros: +(p.valor * 0.00033 * dias).toFixed(2), multa: +(p.valor * 0.02).toFixed(2), dias }
+    const juros = +(p.valor * 0.00033 * dias).toFixed(2)
+    const multa = +(p.valor * 0.02).toFixed(2)
+    const descAplicado = (p.desconto && !(p as any).manterDesconto) ? 0 : (p.desconto || 0)
+    return { juros, multa, dias, descAplicado }
   }, [])
 
 
@@ -2582,7 +2585,15 @@ export default function NovaMatriculaPage() {
                 <Btn full icon="💳" label="Baixar" color="#10b981" disabled={!temSel} onClick={()=>{
                   if(selCount===1){
                     const p=parcelas.find(x=>x.num===parcelasSelected[0])
-                    if(p&&p.status!=='pago'){const{juros,multa}=calcAtraso(p);const t=+(p.valorFinal+juros+multa).toFixed(2);setParcelaAtiva({...p});const c='BX'+String(p.num).padStart(3,'0')+String(Date.now()).slice(-6);const cxDef=caixasAbertos.filter((c:any)=>!c.fechado).sort((a:any,b:any)=>b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id??'';setBaixaForm({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:fmtMoeda(t),cartao:null}],juros:juros>0?fmtMoeda(juros):'0',multa:multa>0?fmtMoeda(multa):'0',desconto:fmtMoeda(p.desconto||0),obs:'',comprovante:'',codPreview:c,caixaId:cxDef});setModalBaixarParcela(true)}
+                    if(p&&p.status!=='pago'){
+                      const atr = calcAtraso(p, new Date().toISOString().split('T')[0]);
+                      const t = +(p.valor - atr.descAplicado + atr.juros + atr.multa).toFixed(2);
+                      const c='BX'+String(p.num).padStart(3,'0')+String(Date.now()).slice(-6);
+                      const cxDef=caixasAbertos.filter((c:any)=>!c.fechado).sort((a:any,b:any)=>b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id??'';
+                      setBaixaForm({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:fmtMoeda(t),cartao:null}],juros:atr.juros>0?fmtMoeda(atr.juros):'0',multa:atr.multa>0?fmtMoeda(atr.multa):'0',desconto:fmtMoeda(atr.descAplicado),obs:'',comprovante:'',codPreview:c,caixaId:cxDef});
+                      setParcelaAtiva({...p});
+                      setModalBaixarParcela(true)
+                    }
                   } else {
                     const sp=parcelas.filter(x=>parcelasSelected.includes(x.num)&&x.status!=='pago');
                     const dpTarget=new Date().toISOString().split('T')[0];
@@ -2591,7 +2602,7 @@ export default function NovaMatriculaPage() {
                       const pDen = p.totalParcelas || (eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length)
                       const evtIndex = p.numParcela || (eparcs && eparcs.length > 0 ? eparcs.findIndex(x => x.num === p.num) + 1 : p.num)
                       const tNome = (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId))?.nome || p.turma || mat.turma || ''
-                      return {...p, loteJuros:fmtMoeda(atr.juros), loteMulta:fmtMoeda(atr.multa), loteDesc:fmtMoeda(p.desconto||0), loteDias:atr.dias, pDen, evtIndex, tNome}; 
+                      return {...p, loteJuros:fmtMoeda(atr.juros), loteMulta:fmtMoeda(atr.multa), loteDesc:fmtMoeda(atr.descAplicado), loteDias:atr.dias, pDen, evtIndex, tNome}; 
                     });
                     const tl=loteParcs.reduce((s,p)=>s+Math.max(0, p.valor-parseMoeda(p.loteDesc)+parseMoeda(p.loteJuros)+parseMoeda(p.loteMulta)),0);
                     const c='BX'+String(Date.now()).slice(-6)+String(Math.floor(Math.random()*100)).padStart(2,'0')+'LL';
@@ -2742,10 +2753,10 @@ export default function NovaMatriculaPage() {
           const hoje=new Date();hoje.setHours(0,0,0,0)
           const pd=(s:string)=>new Date(s.split('/').reverse().join('-')+'T12:00')
           const calcJurosMulta=(p:any)=>{
-            if(p.status==='pago'||p.status==='isento') return {juros:p.juros||0,multa:p.multa||0,dias:0}
+            if(p.status==='pago'||p.status==='isento') return {juros:p.juros||0,multa:p.multa||0,dias:0,descAplicado:p.desconto||0}
             const dv=pd(p.vencimento);const dias=Math.max(0,Math.floor((hoje.getTime()-dv.getTime())/86400000))
-            if(dias<=0) return {juros:p.juros||0,multa:p.multa||0,dias:0}
-            return {juros:+(p.valor*0.00033*dias).toFixed(2),multa:+(p.valor*0.02).toFixed(2),dias}
+            if(dias<=0) return {juros:p.juros||0,multa:p.multa||0,dias:0,descAplicado:p.desconto||0}
+            return {juros:+(p.valor*0.00033*dias).toFixed(2),multa:+(p.valor*0.02).toFixed(2),dias,descAplicado:(p.desconto && !(p as any).manterDesconto) ? 0 : (p.desconto || 0)}
           }
           const valid=parcelas.filter(p=>p.status!=='cancelado')
           const aV=valid.filter(p=>p.status==='pendente'&&pd(p.vencimento)>=hoje)
@@ -2874,10 +2885,10 @@ export default function NovaMatriculaPage() {
                         const sColor=p.status==='pago'?'#10b981':isV?'#ef4444':isH?'#f59e0b':'#6366f1'
                         const sBg=p.status==='pago'?'rgba(16,185,129,0.09)':isV?'rgba(239,68,68,0.07)':isH?'rgba(245,158,11,0.08)':'rgba(99,102,241,0.07)'
                         const sLabel=p.status==='pago'?'✓ Pago':isV?'⚠ Vencido':isH?'📌 Hoje':'● Pendente'
-                        const atr=p.status!=='pago'?calcJurosMulta(p):{juros:0,multa:0,dias:0}
+                        const atr=p.status!=='pago'?calcJurosMulta(p):{juros:0,multa:0,dias:0,descAplicado:p.desconto||0}
                         const jEx=p.status==='pago'?((p as any).juros||0):atr.juros
                         const mEx=p.status==='pago'?((p as any).multa||0):atr.multa
-                        const descAplicado = (p.desconto && isV && !(p as any).manterDesconto) ? 0 : (p.desconto || 0)
+                        const descAplicado = atr.descAplicado;
                         const totalP=p.status==='pago'?p.valorFinal:+(p.valor-descAplicado+jEx+mEx).toFixed(2)
                         const rowBg=sel?'rgba(99,102,241,0.055)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
                         const eid=(p as any).eventoId
