@@ -2865,8 +2865,7 @@ export default function NovaMatriculaPage() {
                           {l:'Vencimento',w:95},
                           {l:'Valor Bruto',w:95,r:true},
                           {l:'Desconto',w:85,r:true},
-                          {l:'Juros',w:70,r:true},
-                          {l:'Multa',w:70,r:true},
+                          {l:'Juros / Multa',w:105,r:true},
                           {l:'Total a Pagar',w:105,r:true},
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
@@ -2969,10 +2968,18 @@ export default function NovaMatriculaPage() {
                               ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
                             </td>
                             <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                              <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:jEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:jEx>0?700:400}}>{jEx>0?'R$ '+fmtMoeda(jEx):'—'}</span>
-                            </td>
-                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                              <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,color:mEx>0?'#ef4444':'hsl(var(--text-muted))',fontWeight:mEx>0?700:400}}>{mEx>0?'R$ '+fmtMoeda(mEx):'—'}</span>
+                              {(jEx>0||mEx>0) ? (
+                                <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+                                  {jEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                    <span style={{fontSize:9,color:'#f87171',fontWeight:700,opacity:.8}}>J</span>
+                                    <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'#ef4444',fontWeight:700}}>R$ {fmtMoeda(jEx)}</span>
+                                  </div>}
+                                  {mEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
+                                    <span style={{fontSize:9,color:'#f87171',fontWeight:700,opacity:.8}}>M</span>
+                                    <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'#ef4444',fontWeight:700}}>R$ {fmtMoeda(mEx)}</span>
+                                  </div>}
+                                </div>
+                              ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
                             </td>
                             <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:14,fontWeight:900,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>R$ {fmtMoeda(totalP)}</div>
