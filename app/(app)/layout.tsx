@@ -5,6 +5,7 @@ import { Topbar } from '@/components/layout/Topbar'
 import { RouteGuard } from '@/components/layout/RouteGuard'
 import { useApp } from '@/lib/context'
 import { DataProvider } from '@/lib/dataContext'
+import { DialogProvider } from '@/lib/dialogContext'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { getSessionUser } from '@/app/actions/authActions'
@@ -81,17 +82,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <DataProvider>
-      <div className="app-wrapper">
-        <Sidebar />
-        <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-          <Topbar />
-          <RouteGuard>
-            <main className="page-content">
-              {children}
-            </main>
-          </RouteGuard>
+      <DialogProvider>
+        <div className="app-wrapper">
+          <Sidebar />
+          <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+            <Topbar />
+            <RouteGuard>
+              <main className="page-content">
+                {children}
+              </main>
+            </RouteGuard>
+          </div>
         </div>
-      </div>
+      </DialogProvider>
     </DataProvider>
   )
 }

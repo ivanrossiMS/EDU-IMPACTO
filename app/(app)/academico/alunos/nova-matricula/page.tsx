@@ -14,6 +14,7 @@ import { Modal2aVia }            from '@/app/(app)/financeiro/boletos/components
 import dynamic from 'next/dynamic'
 const ExtratoModal = dynamic(() => import('@/components/financeiro/ExtratoModal'), { ssr: false })
 import { ReceiptModal } from '@/components/financeiro/ReceiptModal'
+import { useDialog } from '@/lib/dialogContext'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function validarCPF(cpf: string) {
@@ -435,6 +436,7 @@ const STEPS = [
 export default function NovaMatriculaPage() {
   const genCodigo = () => String(Math.floor(100000 + Math.random() * 900000))
   const router = useRouter()
+  const dlg = useDialog()
   const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], caixasAbertos = [], setCaixasAbertos, movimentacoesManuais = [], setMovimentacoesManuais, logSystemAction } = useData() || {}
   // Formas de pagamento dinâmicas com fallback
   const FORMAS_FALLBACK = ['PIX','Boleto','Dinheiro','Cartão de Crédito','Cartão de Débito','Débito Automático','Transferência','Cheque','Bolsa Integral']
@@ -852,7 +854,7 @@ export default function NovaMatriculaPage() {
       setDocGenStatus(prev => ({...prev, [docId]: 'done'}))
     } catch (err: any) {
       setDocGenStatus(prev => ({...prev, [docId]: 'idle'}))
-      alert('Erro ao gerar documento: ' + (err?.message ?? 'Erro desconhecido.'))
+      void dlg.alert('Erro ao gerar documento: ' + (err?.message ?? 'Erro desconhecido.'), { type: 'error' })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aluno, mae, pai, historico, mat, parcelas, fin, turmas, todosResp, numMatricula, mapeamentosDoc])
@@ -1310,7 +1312,7 @@ export default function NovaMatriculaPage() {
         // ── Modo texto: janela de impressão ───────────────────────────────────
         const conteudo = substituirTexto(doc.templateTexto ?? '')
         const win = window.open('','_blank')
-        if (!win) { alert('Permita pop-ups para gerar o documento.'); return }
+        if (!win) { void dlg.alert('Permita pop-ups para gerar o documento.', { type: 'warning' }); return }
         win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${doc.nome}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Georgia,serif;font-size:12pt;color:#000;background:#fff}@page{size:A4;margin:2cm}.wrap{max-width:800px;margin:0 auto}.title{font-size:16pt;font-weight:bold;text-align:center;margin-bottom:24pt}.body{line-height:1.9;white-space:pre-wrap}.footer{margin-top:40pt;display:flex;justify-content:space-between;font-size:10pt;color:#444;border-top:1px solid #ccc;padding-top:8pt}</style></head>
 <body><div class="wrap"><div class="title">${doc.nome}</div><div class="body">${conteudo.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}</div><div class="footer"><span>IMPACTO EDU   ${aluno.nome}   Código ${numMatricula}</span><span>${new Date().toLocaleDateString('pt-BR')}</span></div></div><script>window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`)
@@ -1318,7 +1320,7 @@ export default function NovaMatriculaPage() {
       }
     } catch(err) {
       console.error('Erro ao gerar documento:', err)
-      alert(`Erro ao gerar "${doc.nome}".\n\nPara .docx: verifique se o arquivo enviado é um .docx válido.\nErro: ${(err as Error)?.message ?? err}`)
+      void dlg.alert(`Erro ao gerar "${doc.nome}".\n\nPara .docx: verifique se o arquivo enviado é um .docx válido.\nErro: ${(err as Error)?.message ?? err}`, { type: 'error' })
     } finally {
       setGerandoDoc(null)
     }
@@ -2125,9 +2127,11 @@ export default function NovaMatriculaPage() {
                             setModalMatricula(true);
                           }}><Pencil size={11}/></button>
                           <button className="btn btn-ghost btn-icon btn-sm" style={{color:'#f87171'}} onClick={()=>{
-                            if(window.confirm(`Excluir a matrícula de ${h.ano}? Esta ação não pode ser desfeita.`)){
-                              setHistorico(prev=>prev.filter(x=>x.id!==h.id))
-                            }
+                            void (async () => {
+                              if(await dlg.confirm(`Excluir a matrícula de ${h.ano}? Esta ação não pode ser desfeita.`, { title: 'Excluir Matrícula', confirmLabel: 'Excluir', type: 'error' })){
+                                setHistorico(prev=>prev.filter(x=>x.id!==h.id))
+                              }
+                            })()
                           }}><X size={11}/></button>
                         </div>
                       </td>
@@ -2602,7 +2606,7 @@ export default function NovaMatriculaPage() {
                   onClick={()=>{
                     const rawP=parcelas.find(x=>x.num===parcelasSelected[0]);
                     if(rawP?.status==='pago'){
-                      alert('⚠️ Esta parcela já foi PAGA e está bloqueada para edição.\n\nPara editar, utilize o botão "Excluir Baixa" primeiro para reverter o pagamento.');
+                      void dlg.alert('Esta parcela já foi PAGA e está bloqueada para edição.\n\nPara editar, utilize o botão "Excluir Baixa" primeiro para reverter o pagamento.', { type: 'warning', title: 'Parcela Paga' });
                       return;
                     }
                     if(rawP){
@@ -2627,7 +2631,7 @@ export default function NovaMatriculaPage() {
                   const sn=se
                     ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&(p as any).evento===se).map(p=>p.num)
                     :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago').map(p=>p.num);
-                  if(sn.length===0){alert('⚠️ Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.');return;}
+                  if(sn.length===0){ void dlg.alert('Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
                   setDescLote({tipo:'%',valor:'',deParcela:sn.length?String(Math.min(...sn)):'1',ateParcela:sn.length?String(Math.max(...sn)):'1',eventoId:se,parcelasEvento:sn});
                   setModalDesconto(true);
                 }}/>
@@ -2635,7 +2639,7 @@ export default function NovaMatriculaPage() {
               <Row>
                 <Btn full icon="📅" label="Vencimento" color="#06b6d4" onClick={()=>{
                   const naoPargas=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago');
-                  if(naoPargas.length===0){alert('⚠️ Não há parcelas pendentes.\nParcelas pagas não podem ter vencimento alterado.');return;}
+                  if(naoPargas.length===0){ void dlg.alert('Não há parcelas pendentes.\nParcelas pagas não podem ter vencimento alterado.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
                   const ev=[...new Set(naoPargas.map(p=>(p as any).evento).filter(Boolean))];
                   setVctoForm({deParcela:'1',ateParcela:String(naoPargas.length),novoDia:'',eventoFiltro:(ev[0] as string)||''});
                   setModalVcto(true);
@@ -2645,7 +2649,7 @@ export default function NovaMatriculaPage() {
                   const ns=se
                     ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&(p as any).evento===se).map(p=>p.num)
                     :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago').map(p=>p.num);
-                  if(ns.length===0){alert('⚠️ Não há parcelas pendentes para alterar.\nParcelas já pagas não podem ter valor alterado.');return;}
+                  if(ns.length===0){ void dlg.alert('Não há parcelas pendentes para alterar.\nParcelas já pagas não podem ter valor alterado.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
                   setAlterarValorForm({parcelas:ns,eventoFiltro:se,novoValor:'',motivo:''});
                   setModalAlterarValor(true);
                 }}/>
@@ -4129,7 +4133,7 @@ export default function NovaMatriculaPage() {
             <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',gap:10,background:'hsl(var(--bg-elevated))'}}>
               <div>
                 {parcelaAtiva.status !== 'pago' && (
-                  <button className="btn btn-ghost btn-sm" style={{color:'#f87171',fontSize:12}} onClick={()=>{if(confirm('Tem certeza que deseja marcar esta parcela como cancelada?')){setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:'Cancelamento via edição'}:p));setModalEditarParcela(false)}}}>🗑️ Excluir</button>
+                  <button className="btn btn-ghost btn-sm" style={{color:'#f87171',fontSize:12}} onClick={()=>{void (async()=>{if(await dlg.confirm('Tem certeza que deseja marcar esta parcela como cancelada?',{type:'error',title:'Cancelar Parcela',confirmLabel:'Sim, cancelar'})){setParcelas(prev=>prev.map(p=>p.num===parcelaAtiva.num?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:'Cancelamento via edição'}:p));setModalEditarParcela(false)}})()}}> 🗑️ Excluir</button>
                 )}
                 {parcelaAtiva.status === 'pago' && (
                   <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,background:'rgba(16,185,129,0.08)',border:'1px solid rgba(16,185,129,0.25)'}}>
