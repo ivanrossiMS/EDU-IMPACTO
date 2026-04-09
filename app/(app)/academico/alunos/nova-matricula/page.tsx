@@ -3084,12 +3084,12 @@ export default function NovaMatriculaPage() {
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
                           <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:9,color:'#eab308',fontWeight:800}}>J</span>
-                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
+                              <span style={{fontSize:9,color:'#ef4444',fontWeight:800}}>J</span>
+                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:9,color:'#eab308',fontWeight:800}}>M</span>
-                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(234,179,8,0.1)',color:'#eab308',border:'1px solid rgba(234,179,8,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
+                              <span style={{fontSize:9,color:'#ef4444',fontWeight:800}}>M</span>
+                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
                             </div>
                           </div>
                         </td>
