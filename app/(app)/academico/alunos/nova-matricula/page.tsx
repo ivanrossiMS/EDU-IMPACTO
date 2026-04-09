@@ -13,6 +13,7 @@ import { ModalHistoricoBoletos } from '@/app/(app)/financeiro/boletos/components
 import { Modal2aVia }            from '@/app/(app)/financeiro/boletos/components/Modal2aVia'
 import dynamic from 'next/dynamic'
 const ExtratoModal = dynamic(() => import('@/components/financeiro/ExtratoModal'), { ssr: false })
+import { ReceiptModal } from '@/components/financeiro/ReceiptModal'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function validarCPF(cpf: string) {
@@ -3211,104 +3212,19 @@ export default function NovaMatriculaPage() {
         </div>
       )}
 
-      {/* MODAL RECIBO */}
-      {modalRecibo&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:5000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          {(() => {
-            const pagas = parcelasSelected.length > 0 ? parcelas.filter(p => parcelasSelected.includes(p.num)) : (parcelaAtiva ? [parcelaAtiva] : []);
-            const total = pagas.reduce((s,p)=>s+p.valorFinal,0);
-            const ref = pagas[0] || {} as any;
-            return (
-              <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:480,boxShadow:'0 40px 120px rgba(0,0,0,0.9)',display:'flex',flexDirection:'column',overflow:'hidden',border:'1px solid rgba(16,185,129,0.3)'}}>
-                <div style={{background:'linear-gradient(135deg,#10b981,#059669)',color:'#fff',padding:'24px',textAlign:'center',position:'relative'}}>
-                  <button style={{position:'absolute',top:16,right:16,background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',width:28,height:28,borderRadius:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setModalRecibo(false)}><X size={16}/></button>
-                  <div style={{width:60,height:60,background:'rgba(255,255,255,0.2)',borderRadius:30,display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 12px'}}>🧾</div>
-                  <h3 style={{fontSize:18,fontWeight:800,margin:0}}>Comprovante de Pagamento</h3>
-                  <div style={{fontSize:12,opacity:0.9,marginTop:4}}>Colégio Edu Impacto — CNPJ: 14.505.777/0001-90</div>
-                </div>
-                <div style={{padding:'24px'}}>
-                  <div style={{textAlign:'center',marginBottom:24}}>
-                    <div style={{fontSize:11,color:'hsl(var(--text-muted))',fontWeight:700,letterSpacing:1,marginBottom:4}}>VALOR RECEBIDO</div>
-                    <div style={{fontFamily:'monospace',fontSize:36,fontWeight:900,color:'#10b981',lineHeight:1}}>R$ {fmtMoeda(total)}</div>
-                  </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:12,fontSize:13}}>
-                    <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                      <span style={{color:'hsl(var(--text-muted))'}}>Aluno</span>
-                      <strong style={{textAlign:'right'}}>{aluno.nome}</strong>
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                      <span style={{color:'hsl(var(--text-muted))'}}>Itens Pagos</span>
-                      <div className="custom-scrollbar" style={{textAlign:'right',maxHeight:160,overflowY:'auto',paddingRight:6}}>
-                        {pagas.map((p,idx)=>(
-                          <div key={p.num} style={{marginBottom:idx===pagas.length-1?0:6}}>
-                            <div style={{fontWeight:800,lineHeight:1.2}}>{getEventoDisp(p)}</div>
-                            <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Parc. {String(p.num).padStart(2,'0')} — <strong style={{color:'hsl(var(--text-base))'}}>R$ {fmtMoeda(p.valorFinal)}</strong></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                      <span style={{color:'hsl(var(--text-muted))'}}>Data do Pagamento</span>
-                      <strong>{ref.dtPagto?new Date(ref.dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}</strong>
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                      <span style={{color:'hsl(var(--text-muted))'}}>Forma de Pagto</span>
-                      <strong>{ref.formaPagto||'—'}</strong>
-                    </div>
-                    {ref.comprovante && (
-                      <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                        <span style={{color:'hsl(var(--text-muted))'}}>N. Comprovante / Doc.</span>
-                        <strong style={{fontFamily:'monospace',color:'#f472b6'}}>{ref.comprovante}</strong>
-                      </div>
-                    )}
-                    <div style={{display:'flex',justifyContent:'space-between',borderBottom:'1px dashed hsl(var(--border-subtle))',paddingBottom:8}}>
-                      <span style={{color:'hsl(var(--text-muted))'}}>Código de Autenticação</span>
-                      <strong style={{fontFamily:'monospace',color:'#6366f1'}}>{ref.codBaixa||'—'}</strong>
-                    </div>
-                    {(()=>{
-                      const cartoes = ((ref as any).formasPagto||[]).filter((f:any)=>f.cartao&&(f.forma?.toLowerCase().includes('crédito')||f.forma?.toLowerCase().includes('débito')||f.forma?.toLowerCase().includes('credito')||f.forma?.toLowerCase().includes('debito')))
-                      if(cartoes.length===0) return null
-                      return (
-                        <div style={{padding:'12px 14px',background:'rgba(129,140,248,0.06)',border:'1px solid rgba(129,140,248,0.25)',borderRadius:10,borderBottom:'none'}}>
-                          <div style={{fontSize:11,fontWeight:700,color:'#818cf8',marginBottom:10,letterSpacing:.5}}>DADOS DO CARTÃO</div>
-                          {cartoes.map((f:any,i:number)=>(
-                            <div key={i} style={{display:'flex',flexDirection:'column',gap:6,fontSize:13,marginBottom:i<cartoes.length-1?12:0}}>
-                              <div style={{display:'flex',justifyContent:'space-between'}}>
-                                <span style={{color:'hsl(var(--text-muted))'}}>Bandeira / Tipo</span>
-                                <strong>{f.cartao.bandeira||'—'}</strong>
-                              </div>
-                              <div style={{display:'flex',justifyContent:'space-between'}}>
-                                <span style={{color:'hsl(var(--text-muted))'}}>Nº Cartão (Final)</span>
-                                <strong style={{fontFamily:'monospace'}}>{f.cartao.numero?'**** **** **** '+f.cartao.numero.slice(-4):'—'}</strong>
-                              </div>
-                              <div style={{display:'flex',justifyContent:'space-between'}}>
-                                <span style={{color:'hsl(var(--text-muted))'}}>Titular</span>
-                                <strong>{f.cartao.nome||'—'}</strong>
-                              </div>
-                              {f.cartao.validade&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'hsl(var(--text-muted))'}}>Validade</span><strong>{f.cartao.validade}</strong></div>}
-                              {f.cartao.parcelas&&Number(f.cartao.parcelas)>1&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'hsl(var(--text-muted))'}}>Parcelas Cartão</span><strong style={{color:'#f59e0b'}}>{f.cartao.parcelas}x</strong></div>}
-                              {f.cartao.autorizacao&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'hsl(var(--text-muted))'}}>Nº Autorização</span><strong style={{fontFamily:'monospace',color:'#34d399'}}>{f.cartao.autorizacao}</strong></div>}
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })()}
-                    {(ref.obs||ref.obsFin) && (
-                      <div style={{padding:'10px 14px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8}}>
-                        <div style={{fontSize:11,fontWeight:700,color:'#d97706',marginBottom:4}}>Observação</div>
-                        <div style={{fontSize:12,color:'hsl(var(--text-base))'}}>{ref.obs||ref.obsFin}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div style={{padding:'16px 24px',background:'hsl(var(--bg-elevated))',display:'flex',justifyContent:'space-between',gap:12}}>
-                  <button className="btn btn-secondary" style={{flex:1}} onClick={()=>{setModalRecibo(false); setModalConsultaBaixa(true)}}>Voltar</button>
-                  <button className="btn btn-primary" style={{flex:1}} onClick={()=>window.print()}><Printer size={16}/> Imprimir Via</button>
-                </div>
-              </div>
-            )
-          })()}
-        </div>
+      {/* MODAL RECIBO LUXO */}
+      {modalRecibo && (
+        <ReceiptModal
+          aluno={{
+            ...aluno,
+            responsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.nome || undefined,
+            emailResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.email || (aluno as any).email,
+            telResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.celular || (aluno as any).celular
+          }}
+          parcelas={parcelasSelected.length > 0 ? parcelas.filter(p => parcelasSelected.includes(p.num)) : (parcelaAtiva ? [parcelaAtiva as any] : [])}
+          onClose={() => setModalRecibo(false)}
+          onBack={modalConsultaBaixa ? () => { setModalRecibo(false); setModalConsultaBaixa(true); } : undefined}
+        />
       )}
 
       {/* MODAL ITENS EXCLUÍDOS */}
