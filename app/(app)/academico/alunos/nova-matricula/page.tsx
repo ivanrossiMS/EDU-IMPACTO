@@ -3606,7 +3606,7 @@ export default function NovaMatriculaPage() {
                   <label className="form-label" style={{fontSize:11,marginBottom:6,display:'block'}}>Evento que será alterado</label>
                   <select className="form-input" value={alterarValorForm.eventoFiltro} onChange={e=>{
                     const ev=e.target.value
-                    const nums=parcelas.filter(p=>p.status!=='cancelado'&&((p as any).evento===ev||!ev)).map(p=>p.num)
+                    const nums=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento'&&((p as any).evento===ev||!ev)).map(p=>p.num)
                     setAlterarValorForm(f=>({...f,eventoFiltro:ev,parcelas:nums}))
                   }} style={{fontWeight:600}}>
                     <option value="">— Todos os eventos —</option>
@@ -3627,8 +3627,8 @@ export default function NovaMatriculaPage() {
             {/* Parcelas com checkboxes individuais */}
             {(()=>{
               const listaParc=alterarValorForm.eventoFiltro
-                ?parcelas.filter(p=>p.status!=='cancelado'&&(p as any).evento===alterarValorForm.eventoFiltro)
-                :parcelas.filter(p=>p.status!=='cancelado')
+                ?parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento'&&(p as any).evento===alterarValorForm.eventoFiltro)
+                :parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento')
               if(listaParc.length===0) return null
               return(
                 <div style={{padding:'12px 16px',background:'hsl(var(--bg-elevated))',border:'1px solid hsl(var(--border-subtle))',borderRadius:12}}>
