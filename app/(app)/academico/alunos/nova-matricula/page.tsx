@@ -2627,13 +2627,23 @@ export default function NovaMatriculaPage() {
               <Row>
                 <Btn full icon="➕" label="Inserir Evento" color="#8b5cf6" onClick={()=>{setEventoForm(f=>({...f,turmaId:mat.turmaId}));setModalEventoFin(true)}}/>
                 <Btn full icon="🏷️" label="Descontos" color="#f59e0b" onClick={()=>{
-                  const se=parcelasSelected.length>0?(parcelas.find(p=>p.num===parcelasSelected[0]) as any)?.evento||'':'';
-                  const pendentes=parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento');
-                  const lista=se
-                    ?pendentes.filter(p=>(p as any).evento===se)
-                    :pendentes;
+                  const selP = parcelasSelected.length>0 ? parcelas.find(p=>p.num===parcelasSelected[0]) : null;
+                  const se = selP ? ((selP as any).evento||'') : '';
+                  const pendentes = parcelas.filter(p=>p.status!=='cancelado'&&p.status!=='pago'&&p.status!=='isento');
+                  const lista = (se ? pendentes.filter(p=>(p as any).evento===se) : pendentes)
+                    .sort((a,b)=>{
+                      const da=new Date((a.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                      const db=new Date((b.vencimento||'').split('/').reverse().join('-')+'T12:00')
+                      return da.getTime()-db.getTime()
+                    });
                   if(lista.length===0){ void dlg.alert('Não há parcelas pendentes para aplicar desconto.\nParcelas já pagas não podem receber desconto retroativo.', { type: 'warning', title: 'Sem Parcelas Pendentes' }); return;}
-                  setDescLote({tipo:'%',valor:'',deParcela:'1',ateParcela:String(lista.length),eventoId:se,parcelasEvento:lista.map(p=>p.num)});
+                  // Se há 1 parcela selecionada, encontra o índice dela na lista do evento (1-based)
+                  let deIdx = '1', ateIdx = String(lista.length);
+                  if(selP && parcelasSelected.length===1){
+                    const idx = lista.findIndex(p=>p.num===selP.num);
+                    if(idx>=0){ deIdx = String(idx+1); ateIdx = String(idx+1); }
+                  }
+                  setDescLote({tipo:'%',valor:'',deParcela:deIdx,ateParcela:ateIdx,eventoId:se,parcelasEvento:lista.map(p=>p.num)});
                   setModalDesconto(true);
                 }}/>
               </Row>
