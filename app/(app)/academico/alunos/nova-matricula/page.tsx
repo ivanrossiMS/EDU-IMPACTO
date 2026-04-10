@@ -2926,8 +2926,8 @@ export default function NovaMatriculaPage() {
                             {/* Nº da parcela + badge turma acima */}
                             {/* Nº da parcela — limpo */}
                             <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
-                              <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,padding:'4px 8px',borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
-                                <span style={{fontSize:13,letterSpacing:0.5}}>{String(pNum).padStart(2, '0')}/{String(pDen).padStart(2, '0')}</span>
+                              <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,width:28,height:28,borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
+                                <span style={{fontSize:13}}>{String(pNum).padStart(2, '0')}</span>
                               </div>
                               {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:3,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
                             </td>
