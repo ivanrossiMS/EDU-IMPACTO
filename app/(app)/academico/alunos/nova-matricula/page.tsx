@@ -2890,7 +2890,7 @@ export default function NovaMatriculaPage() {
                         const mEx=p.status==='pago'?((p as any).multa||0):atr.multa
                         const descAplicado = atr.descAplicado;
                         const totalP=p.status==='pago'?p.valorFinal:+(p.valor-descAplicado+jEx+mEx).toFixed(2)
-                        const rowBg=sel?'rgba(99,102,241,0.055)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
+                        const rowBg=sel?'rgba(99,102,241,0.15)':p.status==='pago'?'rgba(16,185,129,0.015)':isV?'rgba(239,68,68,0.015)':rowIdx%2===0?'transparent':'rgba(148,163,184,0.025)'
                         const eid=(p as any).eventoId
                         const savedNum=(p as any).numParcela
                         const savedTotal=(p as any).totalParcelas
