@@ -2863,6 +2863,7 @@ export default function NovaMatriculaPage() {
                         {[
                           {l:'Parc.',w:50,center:true},
                           {l:'Evento / Competência'},
+                          {l:'Dt. Emissão',w:95,center:true},
                           {l:'Vencimento',w:95},
                           {l:'Valor Bruto',w:95,r:true},
                           {l:'Desconto',w:85,r:true},
@@ -2870,7 +2871,6 @@ export default function NovaMatriculaPage() {
                           {l:'Total a Pagar',w:105,r:true},
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
-                          {l:'Dt. Emissão',w:95,center:true},
                         ].map((h:any,hi:number)=>(
                           <th key={hi} style={{padding:'10px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.8,textTransform:'uppercase',fontFamily:"'Inter',sans-serif"}}>{h.l}</th>
                         ))}
@@ -2936,6 +2936,28 @@ export default function NovaMatriculaPage() {
                                 )}
                                 <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'2px 7px',borderRadius:20,fontWeight:800,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25',lineHeight:'14px'}}>{sLabel}</span>
                               </div>
+                            </td>
+                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                              {(()=>{
+                                const emissao=(p as any).criadoEm||(p as any).dataEmissao
+                                const dtStr=emissao
+                                  ? new Date(emissao).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
+                                  : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
+                                return(
+                                  <span style={{
+                                    display:'inline-flex',alignItems:'center',gap:5,
+                                    padding:'4px 10px',borderRadius:20,
+                                    fontSize:10,fontWeight:700,
+                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
+                                    background:'rgba(99,102,241,0.08)',
+                                    color:'#818cf8',
+                                    border:'1px solid rgba(99,102,241,0.2)',
+                                    whiteSpace:'nowrap',
+                                  }}>
+                                    📅 {dtStr}
+                                  </span>
+                                )
+                              })()}
                             </td>
                             <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:isV||isH?800:600,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))'}}
@@ -3049,28 +3071,6 @@ export default function NovaMatriculaPage() {
                                 )
                               })()}
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
-                              {(()=>{
-                                const emissao=(p as any).criadoEm||(p as any).dataEmissao
-                                const dtStr=emissao
-                                  ? new Date(emissao).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
-                                  : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
-                                return(
-                                  <span style={{
-                                    display:'inline-flex',alignItems:'center',gap:5,
-                                    padding:'4px 10px',borderRadius:20,
-                                    fontSize:10,fontWeight:700,
-                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
-                                    background:'rgba(99,102,241,0.08)',
-                                    color:'#818cf8',
-                                    border:'1px solid rgba(99,102,241,0.2)',
-                                    whiteSpace:'nowrap',
-                                  }}>
-                                    📅 {dtStr}
-                                  </span>
-                                )
-                              })()}
-                            </td>
                           </tr>
                         )
                       })}
@@ -3086,7 +3086,9 @@ export default function NovaMatriculaPage() {
                           <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',marginRight:6, fontWeight:800}}>A Vencer: {aV.length}</span>
                           {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:6,background:'rgba(239,68,68,0.1)',color:'#ef4444', fontWeight:800}}>Vencido: {ven.length}</span>}
                         </td>
-                        {/* col 4: Vencimento — vazio */}
+                        {/* col 4: Dt. Emissão — vazio */}
+                        <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        {/* col 5: Vencimento — vazio */}
                         <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                         {/* col 5: Valor Bruto */}
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
@@ -3118,8 +3120,8 @@ export default function NovaMatriculaPage() {
                             return s + (p.status==='pago' ? p.valorFinal : +(p.valor-desc+j+m));
                           },0))}</span>
                         </td>
-                        {/* col 9+10+11: Pagamento + Ação + Dt.Emissão — vazio */}
-                        <td colSpan={3} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        {/* col 10+11: Pagamento + Ação — vazio */}
+                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                       </tr>
                     </tfoot>
                   </table>
