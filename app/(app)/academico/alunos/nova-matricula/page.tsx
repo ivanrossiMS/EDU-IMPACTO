@@ -2918,7 +2918,7 @@ export default function NovaMatriculaPage() {
                             }}
                             onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
                           >
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,background:sel?'#6366f1':'transparent',transition:'background 0.2s'}}/>
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                             </td>
@@ -2947,7 +2947,7 @@ export default function NovaMatriculaPage() {
                                 <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'12px'}}>{sLabel}</span>
                               </div>
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               {(()=>{
                                 const emissao=(p as any).criadoEm||(p as any).dataEmissao
                                 const dtStr=emissao
