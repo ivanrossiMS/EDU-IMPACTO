@@ -2857,7 +2857,7 @@ export default function NovaMatriculaPage() {
                   <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12,fontFamily:"'Inter',sans-serif"}}>
                     <thead style={{position:'sticky',top:0,zIndex:10}}>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
-                        <th style={{padding:'8px 6px',width:40,borderBottom:'2px solid hsl(var(--border-subtle))',textAlign:'center',borderRight:'1px solid hsl(var(--border-subtle))'}}>
+                        <th style={{padding:'14px 8px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
                           <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                         </th>
                         {[
@@ -2872,7 +2872,7 @@ export default function NovaMatriculaPage() {
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
                         ].map((h:any,hi:number)=>(
-                          <th key={hi} style={{padding:'10px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.8,textTransform:'uppercase',fontFamily:"'Inter',sans-serif"}}>{h.l}</th>
+                          <th key={hi} style={{padding:'14px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2903,41 +2903,52 @@ export default function NovaMatriculaPage() {
 
                         return(
                           <tr key={p.num}
-                            style={{background:rowBg,transition:'background 0.1s',cursor:'pointer',borderLeft:sel?'3px solid #6366f1':'3px solid transparent'}}
-                            onMouseEnter={e=>{if(!sel)(e.currentTarget as HTMLElement).style.background='rgba(148,163,184,0.055)'}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background=rowBg}}
+                            style={{background:rowBg,transition:'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',cursor:'pointer',position:'relative'}}
+                            onMouseEnter={e=>{
+                              if(!sel){
+                                (e.currentTarget as HTMLElement).style.background='hsl(var(--bg-overlay))';
+                                (e.currentTarget as HTMLElement).style.boxShadow='0 2px 8px -2px rgba(0,0,0,0.05)';
+                                (e.currentTarget as HTMLElement).style.transform='translateY(-1px)';
+                              }
+                            }}
+                            onMouseLeave={e=>{
+                              (e.currentTarget as HTMLElement).style.background=rowBg;
+                              (e.currentTarget as HTMLElement).style.boxShadow='none';
+                              (e.currentTarget as HTMLElement).style.transform='none';
+                            }}
                             onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
                           >
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',borderRight:'1px solid rgba(148,163,184,0.08)'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}} onClick={e=>e.stopPropagation()}>
+                              <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,background:sel?'#6366f1':'transparent',transition:'background 0.2s'}}/>
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                             </td>
 
                             {/* Nº da parcela + badge turma acima */}
                             {/* Nº da parcela — limpo */}
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                              <div style={{width:38,height:38,borderRadius:10,background:sBg,border:'1.5px solid '+sColor+'30',display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
-                                <span style={{fontSize:13,fontWeight:900,color:sColor,lineHeight:1}}>{pNum}</span>
-                                <span style={{fontSize:8,color:sColor,opacity:.5}}>/{pDen}</span>
+                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                              <div style={{width:32,height:32,borderRadius:'50%',background:sBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color:sColor,border:`1px solid ${sColor}20`}}>
+                                <span style={{fontSize:12,fontWeight:700,lineHeight:1}}>{pNum}</span>
+                                <span style={{fontSize:7,opacity:.6,marginTop:0,letterSpacing:0.5}}>{pDen}</span>
                               </div>
                               {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:3,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
                             </td>
 
                             {/* Evento + competência + badge turma + badge status */}
-                            <td style={{padding:'8px 6px',maxWidth:220,borderBottom:'1px solid hsl(var(--border-subtle))'}}>
-                              <div style={{fontWeight:700,fontSize:12,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{getEventoDisp(p)}</div>
-                              <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>{p.competencia}</div>
-                              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}}>
+                            <td style={{padding:'16px 8px',maxWidth:220,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                              <div style={{fontWeight:600,fontSize:13,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>{getEventoDisp(p)}</div>
+                              <div style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:2,opacity:.8}}>{p.competencia}</div>
+                              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
                                 {tNome&&(
                                   <span title={tNome} style={{
-                                    display:'inline-flex',alignItems:'center',fontSize:9,fontWeight:800,padding:'2px 7px',borderRadius:20,
-                                    background:'rgba(99,102,241,0.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,0.22)',
-                                    whiteSpace:'nowrap',maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',lineHeight:'14px'
-                                  }}>🎓 {tNome}</span>
+                                    display:'inline-flex',alignItems:'center',fontSize:9,fontWeight:600,padding:'3px 8px',borderRadius:4,
+                                    background:'rgba(148,163,184,0.06)',color:'hsl(var(--text-muted))',
+                                    whiteSpace:'nowrap',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',lineHeight:'12px'
+                                  }}>{tNome}</span>
                                 )}
-                                <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'2px 7px',borderRadius:20,fontWeight:800,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25',lineHeight:'14px'}}>{sLabel}</span>
+                                <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'12px'}}>{sLabel}</span>
                               </div>
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
                               {(()=>{
                                 const emissao=(p as any).criadoEm||(p as any).dataEmissao
                                 const dtStr=emissao
@@ -2945,76 +2956,75 @@ export default function NovaMatriculaPage() {
                                   : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
                                 return(
                                   <span style={{
-                                    display:'inline-flex',alignItems:'center',gap:5,
-                                    padding:'4px 10px',borderRadius:20,
-                                    fontSize:10,fontWeight:700,
-                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
-                                    background:'rgba(99,102,241,0.08)',
-                                    color:'#818cf8',
-                                    border:'1px solid rgba(99,102,241,0.2)',
+                                    display:'inline-flex',alignItems:'center',gap:4,
+                                    fontSize:12,fontWeight:500,color:'hsl(var(--text-muted))',
                                     whiteSpace:'nowrap',
                                   }}>
-                                    📅 {dtStr}
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{opacity:.6}}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                    {dtStr}
                                   </span>
                                 )
                               })()}
                             </td>
-                            <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                              <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:isV||isH?800:600,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))'}}
+                            <td style={{padding:'16px 8px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                              <div style={{fontSize:13,fontWeight:isV||isH?600:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))',fontVariantNumeric:'tabular-nums'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
                               {isV&&atr.dias>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'right',fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>R$ {fmtMoeda(p.valor)}</td>
-                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                              <span style={{color:'hsl(var(--text-muted))',fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(p.valor)}
+                            </td>
+                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span style={{
-                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
                                     fontSize:13,
                                     color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
-                                    fontWeight:700,
+                                    fontWeight:600,
                                     textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
-                                  }}>- R$ {fmtMoeda(p.desconto)}</span>
+                                  }}><span style={{fontSize:11,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(p.desconto)}</span>
                                   <span style={{
                                     fontSize:10,
                                     color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
-                                    opacity:.65,
-                                    fontWeight:600,
+                                    opacity:.6,
+                                    fontWeight:500,
                                     textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
                                   }}>({p.valor>0?((p.desconto/p.valor)*100).toFixed(1):0}%)</span>
                                   {(p as any).manterDesconto ? (
-                                    <span style={{fontSize:9,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:4,padding:'2px 5px',fontWeight:800,marginTop:3,lineHeight:1}}>Mantém desconto</span>
+                                    <span style={{fontSize:8,background:'rgba(16,185,129,0.1)',color:'#10b981',borderRadius:4,padding:'2px 5px',fontWeight:600,marginTop:3,lineHeight:1}}>Mantém desconto</span>
                                   ) : isV ? (
-                                    <span style={{fontSize:9,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:4,padding:'2px 5px',fontWeight:800,marginTop:3,lineHeight:1}}>Desconto Perdido</span>
+                                    <span style={{fontSize:8,background:'rgba(239,68,68,0.1)',color:'#ef4444',borderRadius:4,padding:'2px 5px',fontWeight:600,marginTop:3,lineHeight:1}}>Desconto Perdido</span>
                                   ) : null}
                                 </div>
-                              ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
+                              ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {(jEx>0||mEx>0) ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                                   {jEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span style={{fontSize:9,color:'#f87171',fontWeight:700,opacity:.8}}>J</span>
-                                    <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'#ef4444',fontWeight:700}}>R$ {fmtMoeda(jEx)}</span>
+                                    <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:.6}}>J</span>
+                                    <span style={{fontSize:12,color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(jEx)}</span>
                                   </div>}
                                   {mEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span style={{fontSize:9,color:'#f87171',fontWeight:700,opacity:.8}}>M</span>
-                                    <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'#ef4444',fontWeight:700}}>R$ {fmtMoeda(mEx)}</span>
+                                    <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:.6}}>M</span>
+                                    <span style={{fontSize:12,color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(mEx)}</span>
                                   </div>}
                                 </div>
-                              ) : <span style={{color:'hsl(var(--text-muted))'}}>—</span>}
+                              ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'right',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                              <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:14,fontWeight:900,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>R$ {fmtMoeda(totalP)}</div>
-                              {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:600,marginTop:2}}>c/ encargos</div>}
+                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                              <div style={{fontSize:14,fontWeight:800,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>
+                                <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(totalP)}
+                              </div>
+                              {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#ef4444',fontWeight:500,marginTop:2,opacity:.8}}>c/ encargos</div>}
                             </td>
-                            <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                              <span style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:12,color:'hsl(var(--text-muted))'}}>
+                            <td style={{padding:'16px 8px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                              <span style={{fontSize:12,color:'hsl(var(--text-muted))',fontVariantNumeric:'tabular-nums'}}>
                                 {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
                               </span>
                             </td>
 
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))'}}>
+                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               {(()=>{
                                 // Verifica se já tem boleto emitido no DataContext para esta parcela
                                 const tituloEmitido = titulos.find(t =>
@@ -3078,50 +3088,50 @@ export default function NovaMatriculaPage() {
                     <tfoot>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
                         {/* col 1+2: checkbox + Parc. */}
-                        <td colSpan={2} style={{padding:'8px 6px',fontWeight:700,fontSize:11,color:'hsl(var(--text-muted))',borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'hsl(var(--bg-overlay))',border:'1px solid hsl(var(--border-subtle))'}}>Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}</span>
+                        <td colSpan={2} style={{padding:'16px 8px',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderTop:'1px solid rgba(148,163,184,0.15)'}}>
+                          <span style={{opacity:0.8}}>Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}</span>
                         </td>
                         {/* col 3: Evento */}
-                        <td style={{padding:'8px 6px',fontSize:11,borderTop:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',marginRight:6, fontWeight:800}}>A Vencer: {aV.length}</span>
-                          {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:6,background:'rgba(239,68,68,0.1)',color:'#ef4444', fontWeight:800}}>Vencido: {ven.length}</span>}
+                        <td style={{padding:'16px 8px',fontSize:11,borderTop:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                          <span style={{padding:'4px 8px',borderRadius:4,background:'rgba(99,102,241,0.06)',color:'#6366f1',marginRight:6, fontWeight:600}}>A Vencer: {aV.length}</span>
+                          {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:4,background:'rgba(239,68,68,0.06)',color:'#ef4444', fontWeight:600}}>Vencido: {ven.length}</span>}
                         </td>
                         {/* col 4: Dt. Emissão — vazio */}
-                        <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        <td style={{borderTop:'1px solid rgba(148,163,184,0.15)'}}/>
                         {/* col 5: Vencimento — vazio */}
-                        <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        <td style={{borderTop:'1px solid rgba(148,163,184,0.15)'}}/>
                         {/* col 5: Valor Bruto */}
-                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,0.2)',fontWeight:800}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}</span>
+                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:600,color:'hsl(var(--text-base))',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                          <span style={{fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}
                         </td>
                         {/* col 6: Desconto */}
-                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(245,158,11,0.1)',color:'#d97706',border:'1px solid rgba(245,158,11,0.2)',fontWeight:800}}>- R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}</span>
+                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:600,color:'#d97706',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                          <span style={{fontSize:11,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}
                         </td>
                         {/* col 7: Juros / Multa — merged */}
-                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:12,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                          <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:9,color:'#ef4444',fontWeight:800}}>J</span>
-                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
+                              <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:0.6}}>J</span>
+                              <span style={{color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros),0))}</span>
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
-                              <span style={{fontSize:9,color:'#ef4444',fontWeight:800}}>M</span>
-                              <span style={{padding:'2px 6px',borderRadius:5,background:'rgba(239,68,68,0.1)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.2)',fontWeight:800}}>+ R$ {fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
+                              <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:0.6}}>M</span>
+                              <span style={{color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+(p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa),0))}</span>
                             </div>
                           </div>
                         </td>
                         {/* col 8: Total a Pagar */}
-                        <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:13,borderTop:'2px solid hsl(var(--border-subtle))'}}>
-                          <span style={{padding:'6px 10px',borderRadius:6,background:'rgba(16,185,129,0.1)',color:'#10b981',border:'1px solid rgba(16,185,129,0.2)',fontWeight:900}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>{
+                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:14,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums',fontWeight:700,color:'#10b981'}}>
+                          <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>{
                             const j = p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros;
                             const m = p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa;
                             const desc = calcJurosMulta(p).descAplicado;
                             return s + (p.status==='pago' ? p.valorFinal : +(p.valor-desc+j+m));
-                          },0))}</span>
+                          },0))}
                         </td>
                         {/* col 10+11: Pagamento + Ação — vazio */}
-                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        <td colSpan={2} style={{borderTop:'1px solid rgba(148,163,184,0.15)'}}/>
                       </tr>
                     </tfoot>
                   </table>
