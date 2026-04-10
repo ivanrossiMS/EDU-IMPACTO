@@ -2903,7 +2903,7 @@ export default function NovaMatriculaPage() {
 
                         return(
                           <tr key={p.num}
-                            style={{background:rowBg,transition:'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',cursor:'pointer',position:'relative'}}
+                            style={{background:rowBg,transition:'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',cursor:'pointer',position:'relative',zIndex: menuAcaoOpen === p.num ? 50 : undefined}}
                             onMouseEnter={e=>{
                               if(!sel){
                                 (e.currentTarget as HTMLElement).style.background='hsl(var(--bg-overlay))';
