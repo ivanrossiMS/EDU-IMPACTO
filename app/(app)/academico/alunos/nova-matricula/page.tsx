@@ -1158,7 +1158,7 @@ export default function NovaMatriculaPage() {
   const turmasFiltradas = turmas.filter(t=>t.ano===Number(mat.anoLetivo)||!t.ano)
 
   // Validações por step
-  const cpfsExist = alunos.map(a=>a.cpf).filter(Boolean)
+  const cpfsExist = alunos.filter(a => !(isEdicao && alunoEditando && a.id === (alunoEditando as any).id)).map(a=>a.cpf).filter(Boolean)
 
   // ── Motor de substituição de máscaras (espelha documentos/page.tsx) ──────────
   const buildAlunoObj = useCallback(() => {
