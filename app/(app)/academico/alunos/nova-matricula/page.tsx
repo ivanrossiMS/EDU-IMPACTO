@@ -2857,7 +2857,7 @@ export default function NovaMatriculaPage() {
                   <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12,fontFamily:"'Inter',sans-serif"}}>
                     <thead style={{position:'sticky',top:0,zIndex:10}}>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
-                        <th style={{padding:'14px 8px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
+                        <th style={{padding:'16px 24px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
                           <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                         </th>
                         {[
@@ -2872,7 +2872,7 @@ export default function NovaMatriculaPage() {
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
                         ].map((h:any,hi:number)=>(
-                          <th key={hi} style={{padding:'14px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
+                          <th key={hi} style={{padding:'16px 24px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
                         ))}
                       </tr>
                     </thead>
@@ -2918,14 +2918,14 @@ export default function NovaMatriculaPage() {
                             }}
                             onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
                           >
-                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}} onClick={e=>e.stopPropagation()}>
                               <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,background:sel?'#6366f1':'transparent',transition:'background 0.2s'}}/>
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                             </td>
 
                             {/* Nº da parcela + badge turma acima */}
                             {/* Nº da parcela — limpo */}
-                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{width:32,height:32,borderRadius:'50%',background:sBg,display:'inline-flex',alignItems:'center',justifyContent:'center',flexDirection:'column',color:sColor,border:`1px solid ${sColor}20`}}>
                                 <span style={{fontSize:12,fontWeight:700,lineHeight:1}}>{pNum}</span>
                                 <span style={{fontSize:7,opacity:.6,marginTop:0,letterSpacing:0.5}}>{pDen}</span>
@@ -2934,7 +2934,7 @@ export default function NovaMatriculaPage() {
                             </td>
 
                             {/* Evento + competência + badge turma + badge status */}
-                            <td style={{padding:'16px 8px',maxWidth:220,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'18px 24px',maxWidth:220,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{fontWeight:600,fontSize:13,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>{getEventoDisp(p)}</div>
                               <div style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:2,opacity:.8}}>{p.competencia}</div>
                               <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
@@ -2948,7 +2948,7 @@ export default function NovaMatriculaPage() {
                                 <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'12px'}}>{sLabel}</span>
                               </div>
                             </td>
-                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
                               {(()=>{
                                 const emissao=(p as any).criadoEm||(p as any).dataEmissao
                                 const dtStr=emissao
@@ -2966,15 +2966,15 @@ export default function NovaMatriculaPage() {
                                 )
                               })()}
                             </td>
-                            <td style={{padding:'16px 8px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               <div style={{fontSize:13,fontWeight:isV||isH?600:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))',fontVariantNumeric:'tabular-nums'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
                               {isV&&atr.dias>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
                             </td>
-                            <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               <span style={{color:'hsl(var(--text-muted))',fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(p.valor)}
                             </td>
-                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span style={{
@@ -2998,7 +2998,7 @@ export default function NovaMatriculaPage() {
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {(jEx>0||mEx>0) ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                                   {jEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -3012,19 +3012,19 @@ export default function NovaMatriculaPage() {
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'16px 8px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               <div style={{fontSize:14,fontWeight:800,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>
                                 <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(totalP)}
                               </div>
                               {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#ef4444',fontWeight:500,marginTop:2,opacity:.8}}>c/ encargos</div>}
                             </td>
-                            <td style={{padding:'16px 8px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               <span style={{fontSize:12,color:'hsl(var(--text-muted))',fontVariantNumeric:'tabular-nums'}}>
                                 {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
                               </span>
                             </td>
 
-                            <td style={{padding:'16px 8px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               {(()=>{
                                 // Verifica se já tem boleto emitido no DataContext para esta parcela
                                 const tituloEmitido = titulos.find(t =>
@@ -3088,11 +3088,11 @@ export default function NovaMatriculaPage() {
                     <tfoot>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
                         {/* col 1+2: checkbox + Parc. */}
-                        <td colSpan={2} style={{padding:'16px 8px',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderTop:'1px solid rgba(148,163,184,0.15)'}}>
+                        <td colSpan={2} style={{padding:'18px 24px',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderTop:'1px solid rgba(148,163,184,0.15)'}}>
                           <span style={{opacity:0.8}}>Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}</span>
                         </td>
                         {/* col 3: Evento */}
-                        <td style={{padding:'16px 8px',fontSize:11,borderTop:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                        <td style={{padding:'18px 24px',fontSize:11,borderTop:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                           <span style={{padding:'4px 8px',borderRadius:4,background:'rgba(99,102,241,0.06)',color:'#6366f1',marginRight:6, fontWeight:600}}>A Vencer: {aV.length}</span>
                           {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:4,background:'rgba(239,68,68,0.06)',color:'#ef4444', fontWeight:600}}>Vencido: {ven.length}</span>}
                         </td>
@@ -3101,15 +3101,15 @@ export default function NovaMatriculaPage() {
                         {/* col 5: Vencimento — vazio */}
                         <td style={{borderTop:'1px solid rgba(148,163,184,0.15)'}}/>
                         {/* col 5: Valor Bruto */}
-                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:600,color:'hsl(var(--text-base))',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:600,color:'hsl(var(--text-base))',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <span style={{fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}
                         </td>
                         {/* col 6: Desconto */}
-                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:13,fontWeight:600,color:'#d97706',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:600,color:'#d97706',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <span style={{fontSize:11,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}
                         </td>
                         {/* col 7: Juros / Multa — merged */}
-                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:12,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:12,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
                               <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:0.6}}>J</span>
@@ -3122,7 +3122,7 @@ export default function NovaMatriculaPage() {
                           </div>
                         </td>
                         {/* col 8: Total a Pagar */}
-                        <td style={{padding:'16px 8px',textAlign:'right',fontSize:14,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums',fontWeight:700,color:'#10b981'}}>
+                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:14,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums',fontWeight:700,color:'#10b981'}}>
                           <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>{
                             const j = p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros;
                             const m = p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa;
