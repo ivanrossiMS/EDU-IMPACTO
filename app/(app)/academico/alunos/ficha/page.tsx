@@ -185,15 +185,38 @@ function Ficha360Inner() {
                 ? <div style={{ textAlign:'center', padding:16, color:'hsl(var(--text-muted))', fontSize:13 }}><div style={{ fontSize:24, marginBottom:6 }}>🕵️</div>Nenhum aluno encontrado</div>
                 : filteredSearch.map(a => {
                     const rc = a.risco_evasao === 'alto' ? '#ef4444' : a.risco_evasao === 'medio' ? '#f59e0b' : '#10b981'
+                    
+                    const tid = a.turmaId || a.dadosMatricula?.turmaId
+                    const tObj = turmas.find((t: any) => t.id === tid) || turmas.find((t: any) => t.nome === a.turma || t.codigo === a.turma)
+                    const turmaStr = tObj?.nome || a.turma || 'Turma não atribuída'
+                    
+                    const resps = a.responsaveis || []
+                    const fin = resps.find((r: any) => r.respFinanceiro)?.nome?.split(' ')[0]
+                    const ped = resps.find((r: any) => r.respPedagogico)?.nome?.split(' ')[0]
+                    let respStr = 'Sem Responsável'
+                    if(fin && ped && fin === ped) respStr = `Resp: ${fin} (Fin / Ped)`
+                    else if(fin && ped) respStr = `Fin: ${fin} • Ped: ${ped}`
+                    const hist = a.historicoMatriculas || a.historico_matriculas || (a.dadosMatricula ? [a.dadosMatricula] : [])
+                    const histAtivo = hist.find((h:any) => h.situacao === 'Cursando') || hist[hist.length - 1]
+                    const stUltimaMatricula = histAtivo ? (histAtivo.situacao || histAtivo.status || 'Sem status') : (a.statusMatricula || a.status || 'Não Matriculado')
+
                     return (
                       <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch('') }}
                         style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderRadius:12, cursor:'pointer', textAlign:'left', width:'100%', background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
-                        <div className="avatar" style={{ width:38, height:38, fontSize:12, background:`${rc}20`, color:rc }}>{getInitials(a.nome)}</div>
+                        {a.foto ? (
+                          <div style={{ width:38, height:38, borderRadius:'50%', overflow:'hidden', flexShrink:0, border:`2px solid ${rc}40` }}>
+                            <img src={a.foto} alt={a.nome} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                          </div>
+                        ) : (
+                          <div className="avatar" style={{ width:38, height:38, fontSize:12, background:`${rc}20`, color:rc }}>{getInitials(a.nome)}</div>
+                        )}
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:700 }}>{a.nome}</div>
-                          <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{a.turma} • {a.serie} • {a.frequencia}% freq</div>
+                          <div style={{ fontSize:11, color:'hsl(var(--text-muted))', marginTop: 2 }}>
+                            {turmaStr} {a.ano||a.anoLetivo?`/ ${a.ano||a.anoLetivo}`:''} • {respStr}
+                          </div>
                         </div>
-                        <span className={`badge ${a.status==='matriculado'?'badge-success':'badge-neutral'}`} style={{ fontSize:10 }}>{a.status}</span>
+                        <span className="badge badge-info" style={{ fontSize:10, background: '#e0f2fe', color: '#0284c7' }}>{stUltimaMatricula}</span>
                       </button>
                     )
                   })
@@ -226,14 +249,38 @@ function Ficha360Inner() {
                 ? <div style={{ padding:12, textAlign:'center', fontSize:12, color:'hsl(var(--text-muted))' }}>Nenhum aluno encontrado</div>
                 : filteredSearch.map(a => {
                     const rc = a.risco_evasao === 'alto' ? '#ef4444' : a.risco_evasao === 'medio' ? '#f59e0b' : '#10b981'
+
+                    const tid = a.turmaId || a.dadosMatricula?.turmaId
+                    const tObj = turmas.find((t: any) => t.id === tid) || turmas.find((t: any) => t.nome === a.turma || t.codigo === a.turma)
+                    const turmaStr = tObj?.nome || a.turma || 'Turma não atribuída'
+                    
+                    const resps = a.responsaveis || []
+                    const fin = resps.find((r: any) => r.respFinanceiro)?.nome?.split(' ')[0]
+                    const ped = resps.find((r: any) => r.respPedagogico)?.nome?.split(' ')[0]
+                    let respStr = 'Sem Responsável'
+                    if(fin && ped && fin === ped) respStr = `Resp: ${fin} (Fin/Ped)`
+                    else if(fin && ped) respStr = `Fin: ${fin} • Ped: ${ped}`
+                    const hist = a.historicoMatriculas || a.historico_matriculas || (a.dadosMatricula ? [a.dadosMatricula] : [])
+                    const histAtivo = hist.find((h:any) => h.situacao === 'Cursando') || hist[hist.length - 1]
+                    const stUltimaMatricula = histAtivo ? (histAtivo.situacao || histAtivo.status || 'Sem status') : (a.statusMatricula || a.status || 'Não Matriculado')
+
                     return (
                       <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch('') }}
                         style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, cursor:'pointer', textAlign:'left', width:'100%', background:selectedId===a.id?'rgba(99,102,241,0.08)':'transparent', border:'none' }}>
-                        <div className="avatar" style={{ width:28, height:28, fontSize:9, background:`${rc}20`, color:rc }}>{getInitials(a.nome)}</div>
+                        {a.foto ? (
+                          <div style={{ width:28, height:28, borderRadius:'50%', overflow:'hidden', flexShrink:0, border:`1px solid ${rc}40` }}>
+                            <img src={a.foto} alt={a.nome} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                          </div>
+                        ) : (
+                          <div className="avatar" style={{ width:28, height:28, fontSize:9, background:`${rc}20`, color:rc }}>{getInitials(a.nome)}</div>
+                        )}
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:12, fontWeight:600 }}>{a.nome}</div>
-                          <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{a.turma} • {a.serie}</div>
+                          <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>
+                            {turmaStr} {a.ano||a.anoLetivo?`/ ${a.ano||a.anoLetivo}`:''} • {respStr}
+                          </div>
                         </div>
+                        <span className="badge badge-info" style={{ fontSize:9, background: '#e0f2fe', color: '#0284c7' }}>{stUltimaMatricula}</span>
                       </button>
                     )
                   })

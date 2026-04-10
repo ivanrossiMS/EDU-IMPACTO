@@ -7,6 +7,7 @@ import {
   DollarSign, AlertCircle, Clock, CheckCircle, XCircle,
   BarChart2, FileSpreadsheet, Send, Shield, Zap, Search, ChevronRight, Check
 } from 'lucide-react'
+import { useData } from '@/lib/dataContext'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,9 @@ interface Parcela {
   dataExclusao?: string
   motivoExclusao?: string
   numParcela?: number
+  totalParcelas?: number
+  // ID composto padronizado: ex '00051-3'
+  parcelaId?: string
 }
 
 interface ExtratoModalProps {
@@ -40,7 +44,7 @@ interface ExtratoModalProps {
   onFechar: () => void
   aluno: { nome: string; rga?: string; codigo?: string; cpf?: string }
   parcelas: Parcela[]
-  todosResp: { nome: string; respFinanceiro?: boolean; email?: string }[]
+  todosResp: { nome: string; respFinanceiro?: boolean; email?: string; cpf?: string; endereco?: any; numero?: string; cidade?: string; estado?: string; celular?: string; telefone?: string }[]
   mat: { anoLetivo?: string; turmaId?: string; escola?: string }
   turmas: { id: string; nome: string; curso?: string; unidade?: string }[]
   cfgEventos: { id: string; descricao: string; codigo?: string }[]
@@ -142,6 +146,7 @@ function CheckItem({ label, checked, onClick }: any) {
 export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosResp, mat, turmas, cfgEventos }: ExtratoModalProps) {
   const hoje = new Date().toISOString().slice(0, 10)
   const anoAtual = new Date().getFullYear()
+  const { mantenedores } = useData()
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'setup' | 'result'>('setup')
@@ -190,6 +195,16 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
   const respFinanceiro = todosResp.find(r => r.respFinanceiro)
   const eventosUnicos = useMemo(() => [...new Set(parcelas.map(p => p.evento || p.competencia || 'Mensalidade').filter(Boolean))], [parcelas])
 
+  const logoUrl = useMemo(() => {
+    if (!mantenedores || mantenedores.length === 0) return null
+    if (turmaAtual?.unidade) {
+      for (const m of mantenedores) {
+        if (m.unidades?.some(u => u.nomeFantasia === turmaAtual.unidade || u.id === turmaAtual.unidade)) return m.logo
+      }
+    }
+    return mantenedores[0].logo
+  }, [mantenedores, turmaAtual])
+
   const aplicarPreset = (preset: PeriodoPreset) => {
     setPeriodoPreset(preset)
     const y = anoAtual
@@ -219,8 +234,11 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
 
   const parcelasFiltradas = useMemo(() => {
     return parcelas.filter(p => {
-      if (tipoDoc === 'creditos' || tipoDoc === 'ir') { if (p.status !== 'pago') return false } 
-      else if (tipoDoc === 'debitos') { if (p.status === 'pago' || p.status === 'cancelado') return false }
+      // Ignorar eventos que foram formalmente excluídos da vida do aluno
+      if (p.dataExclusao || p.status === 'excluido') return false
+
+      // Para IR, trava de segurança governamental: NUNCA exibir não pagos
+      if (tipoDoc === 'ir' && p.status !== 'pago') return false
 
       const dataRef = tipoDoc === 'creditos' || tipoDoc === 'ir' ? parseDate(p.dtPagto || p.vencimento) : parseDate(p.vencimento)
       if (dataRef) {
@@ -234,6 +252,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
         if (String(ano) !== anoExercicio) return false
       }
 
+      // O dropdown "Situação" do usuário dita a regra principal:
       if (statusSel.length > 0 && !statusSel.includes(p.status)) return false
       const ev = p.evento || p.competencia || 'Mensalidade'
       if (eventosSel.length > 0 && !eventosSel.includes(ev)) return false
@@ -449,7 +468,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
 
         {/* ── MODO RESULTADO (O DOCUMENTO ULTRA PREMIUM) ──────────────────────── */}
         {viewMode === 'result' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#e2e8f0' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#e2e8f0', minHeight: 0 }}>
             
             {/* Toolbar do Documento */}
             <div style={{ padding: '12px 32px', background: '#fff', borderBottom: '1px solid #cbd5e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
@@ -468,8 +487,8 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                   {/* HEADER OFICIAL */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0f172a', paddingBottom: 16, marginBottom: 24 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ width: 50, height: 50, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontWeight: 800, fontSize: 10, textAlign: 'center' }}>
-                        LOGO<br/>ESCOLA
+                      <div style={{ width: 50, height: 50, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontWeight: 800, fontSize: 10, textAlign: 'center', overflow: 'hidden' }}>
+                        {logoUrl ? <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} /> : <>LOGO<br/>ESCOLA</>}
                       </div>
                       <div>
                         <div style={{ fontWeight: 900, fontSize: 18, color: '#0f172a', letterSpacing: '-0.02em', textTransform: 'uppercase' }}>COLÉGIO IMPACTO</div>
@@ -490,7 +509,26 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><div style={{ color: '#64748b', fontWeight: 700, width: 85, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>ALUNO</div><div style={{ color: '#0f172a', fontWeight: 600 }}>{aluno.nome}</div></div>
                       <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><div style={{ color: '#64748b', fontWeight: 700, width: 85, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>CPF</div><div style={{ color: '#0f172a', fontWeight: 600 }}>{aluno.cpf || '—'}</div></div>
-                      <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><div style={{ color: '#64748b', fontWeight: 700, width: 85, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>RESPONSÁVEL</div><div style={{ color: '#0f172a', fontWeight: 600 }}>{respFinanceiro?.nome || '—'}</div></div>
+                      <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><div style={{ color: '#64748b', fontWeight: 700, width: 85, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>RESPONSÁVEL</div>
+                        <div style={{ color: '#0f172a', fontWeight: 600 }}>
+                          <div>{respFinanceiro?.nome || '—'}</div>
+                           {respFinanceiro?.cpf && <div style={{ fontSize: 9, color: '#64748b', marginTop: 2, fontWeight: 500 }}>CPF: {respFinanceiro.cpf}</div>}
+                           {respFinanceiro?.endereco && (
+                              <div style={{ fontSize: 9, color: '#64748b', marginTop: 1, fontWeight: 500 }}>
+                                 {typeof respFinanceiro.endereco === 'string' ? respFinanceiro.endereco : respFinanceiro.endereco.logradouro}
+                                 {respFinanceiro.numero ? `, ${respFinanceiro.numero}` : (typeof respFinanceiro.endereco !== 'string' && respFinanceiro.endereco.numero) ? `, ${respFinanceiro.endereco.numero}` : ''}
+                                 {(typeof respFinanceiro.endereco !== 'string' && respFinanceiro.endereco.bairro) ? ` - ${respFinanceiro.endereco.bairro}` : ''}
+                                 {respFinanceiro.cidade ? ` - ${respFinanceiro.cidade}/${respFinanceiro.estado||''}` : (typeof respFinanceiro.endereco !== 'string' && respFinanceiro.endereco.cidade) ? ` - ${respFinanceiro.endereco.cidade}/${respFinanceiro.endereco.estado||''}` : ''}
+                                 {(typeof respFinanceiro.endereco !== 'string' && respFinanceiro.endereco.cep) ? ` - CEP: ${respFinanceiro.endereco.cep}` : ''}
+                              </div>
+                           )}
+                           {(respFinanceiro?.celular || respFinanceiro?.telefone) && (
+                              <div style={{ fontSize: 9, color: '#64748b', marginTop: 1, fontWeight: 500 }}>
+                                 {respFinanceiro.celular ? `Celular: ${respFinanceiro.celular}` : `Telefone: ${respFinanceiro.telefone}`}
+                              </div>
+                           )}
+                        </div>
+                      </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><div style={{ color: '#64748b', fontWeight: 700, width: 85, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>RGA / CÓD.</div><div style={{ color: '#0f172a', fontWeight: 600 }}>{aluno.rga || aluno.codigo || '—'}</div></div>
@@ -502,7 +540,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                   {/* AVISO IR */}
                   {tipoDoc === 'ir' && (
                     <div style={{ padding: 16, borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe', marginBottom: 24, fontSize: 11, color: '#1d4ed8', lineHeight: 1.5 }}>
-                      Declaramos para os devidos fins que o responsável financeiro <strong>{respFinanceiro?.nome || '—'}</strong> efetuou os pagamentos de despesas com educação listados abaixo referentes ao aluno <strong>{aluno.nome}</strong>, totalizando <strong>R$ {fmtMoeda(totalPagosCalc)}</strong> no ano-calendário de {anoExercicio}, servindo este documento como comprovante para declaração do Imposto de Renda.
+                      Declaramos para os devidos fins que o responsável financeiro <strong>{respFinanceiro?.nome || '—'}</strong>{respFinanceiro?.cpf ? <>, inscrito no CPF sob o nº <strong>{respFinanceiro.cpf}</strong>,</> : ','} efetuou os pagamentos de despesas com educação listados abaixo referentes ao aluno <strong>{aluno.nome}</strong>, totalizando <strong>R$ {fmtMoeda(totalPagosCalc)}</strong> no ano-calendário de {anoExercicio}, servindo este documento como comprovante para declaração do Imposto de Renda.
                     </div>
                   )}
 
@@ -533,7 +571,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                                <tr key={p.num}>
                                  <td style={{ padding: '12px 16px', fontSize: 11, color: '#334155', borderBottom: idx===items.length-1?'none':'1px solid #f1f5f9', verticalAlign: 'top' }}>
                                    <div style={{ fontWeight: 700, color: '#0f172a' }}>{p.evento || 'Mensalidade'}</div>
-                                   <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Comp: {p.competencia || '—'}  •  Parc {String(p.num).padStart(2,'0')}</div>
+                                   <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>Comp: {p.competencia || '—'}  •  Parc {String(p.numParcela || p.num || '1').padStart(2,'0')}</div>
                                  </td>
                                  <td style={{ padding: '12px 16px', fontSize: 11, color: '#334155', borderBottom: idx===items.length-1?'none':'1px solid #f1f5f9', verticalAlign: 'top' }}>
                                    <div><span style={{ color: '#94a3b8', fontSize: 9 }}>VENC:</span> {fmtData(p.vencimento)}</div>

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useData, newId } from '@/lib/dataContext'
+import { useData, newId, newEventoId, newParcelaId } from '@/lib/dataContext'
 
 import {
   User, MapPin, Layers, Users, Baby, Heart, GraduationCap, DollarSign, FileText,
@@ -761,6 +761,8 @@ export default function NovaMatriculaPage() {
     evento?: string; eventoId?: string; juros?: number; multa?: number
     dtPagto?: string; formaPagto?: string; comprovante?: string; obsFin?: string; codigo?: string; codBaixa?: string
     dataExclusao?: string; motivoExclusao?: string
+    // IDs sequenciais padronizados (ex: eventoId='00051', parcelaId='00051-3')
+    numParcela?: number; totalParcelas?: number; parcelaId?: string
   }
   const [parcelas, setParcelas] = useState<Parcela[]>([])
   const [descAplicar, setDescAplicar] = useState({ tipo:'%', valor:'', deParcela:'1' })
@@ -963,6 +965,61 @@ export default function NovaMatriculaPage() {
   const [modal2aVia, setModal2aVia]         = useState<import('@/lib/dataContext').Titulo | null>(null)
   // parcelas brutas selecionadas para emissão (shape original do financeiro do aluno)
   const [parcelasParaBoleto, setParcelasParaBoleto] = useState<any[]>([])
+  // ── Modal Exclusão de Parcelas (Transferido) ──────────────────────────────
+  const [modalExcluirParcelasTransf, setModalExcluirParcelasTransf] = useState(false)
+  const [parcelasTransfSel, setParcelasTransfSel] = useState<string[]>([])
+  const [parcelasTransfDisponiveis, setParcelasTransfDisponiveis] = useState<any[]>([])
+  const [situacaoExcecao, setSituacaoExcecao] = useState<string>('')
+
+  // Abre o modal de excluir parcelas se a situação for Transferido, Cancelado ou Remanejado
+  const abrirModalTransferido = (item: typeof formHist) => {
+    const sitCfg = cfgSituacaoAluno.find((s: any) => s.nome === item.situacao || s.codigo === item.situacao)
+    const nomeSit = (sitCfg?.nome || item.situacao || '').toLowerCase()
+    
+    // Gatilhos que forçam o fechamento financeiro (remoção de pendentes)
+    const gatilhos = ['transf', 'cancelada', 'remanejado']
+    const isGatilhoAtivo = gatilhos.some(g => nomeSit.includes(g))
+    
+    if (!isGatilhoAtivo || !item.turmaId) return
+    setSituacaoExcecao(item.situacao || 'Transferido/Cancelado')
+    const turmaIdTransf = item.turmaId
+    const STATUS_OK = ['pendente', 'vencido', 'cobranca', 'aberto']
+    // Fonte 1: parcelas locais (sessão atual, nova matrícula)
+    const locais = parcelas
+      .filter(p => (p as any).turmaId === turmaIdTransf && STATUS_OK.includes(p.status))
+      .map((p: any) => ({ ...p, _src: 'local' }))
+    // Fonte 2: titulos já salvos no banco (aluno existente)
+    const alunoId = alunoEditando?.id || (aluno as any)?.id
+    const doBanco = alunoId
+      ? (titulos as any[]).filter(t =>
+          t.alunoId === alunoId && t.turmaId === turmaIdTransf && STATUS_OK.includes(t.status || 'pendente')
+        ).map((t: any) => ({
+          competencia: t.competencia || t.vencimento || '',
+          evento: t.eventoDescricao || t.descricao || 'Mensalidade',
+          vencimento: t.vencimento || '',
+          valor: t.valor || 0,
+          valorFinal: t.valorFinal || t.valor || 0,
+          status: t.status || 'pendente',
+          turmaId: t.turmaId,
+          _src: 'titulo',
+          _tituloId: t.id,
+        }))
+      : []
+
+    // Remove duplicatas (mesma competência + evento + vencimento)
+    const setUnicas = new Set()
+    const todas = [...locais, ...doBanco].filter(p => {
+      const idStr = `${p.competencia}-${p.evento}-${p.vencimento}`
+      if (setUnicas.has(idStr)) return false
+      setUnicas.add(idStr)
+      return true
+    })
+
+    setParcelasTransfDisponiveis(todas)
+    setParcelasTransfSel(todas.map((_: any, i: number) => String(i)))
+    setModalExcluirParcelasTransf(true)
+  }
+
   // Legacy states (mantidos só para evitar erros em código existente que os referencia)
   const [boletoForm, setBoletoForm]         = useState({tipo:'1via',instrucao:'',multa:'2',juros:'0.033'})
   const [boletoEventosSel, setBoletoEventosSel] = useState<string[]>([])
@@ -1057,15 +1114,17 @@ export default function NovaMatriculaPage() {
     const tAssociada = turmas.find(t=>t.id === mat.turmaId)?.nome || ''
     const baseEvName = evtData?.descricao || (padrao as any)?.eventoDescricao || padrao?.parcelas?.[0]?.eventoDescricao || 'Mensalidade'
     
-    // Devolve para apenas Mensalidade, sem sufixo no evento, o turmaNome já é armazenado.
     const nomeEvento = baseEvName
-    const baseEvId = evtId || newId('EV')
-    const novoEventoId = mat.turmaId ? `${baseEvId}_${mat.turmaId}` : baseEvId
+    // ─── Gerar ID de evento único aleatório ─────────────────────────────────
+    // Coleta todos os IDs base existentes (titulos do banco + parcelas locais da sessão)
+    const todosEventoIds = [
+      ...titulos.map(t => (t as any).eventoId || ''),
+      ...parcelas.map(p => (p as any).eventoId || ''),
+    ].filter(Boolean)
+    const novoEventoId = newEventoId(todosEventoIds)
     // ── Calcula desconto por parcela ──────────────────────────────────────────
     const descontoValorRaw = parseFloat(((fin as any).descontoValor||'0').replace(',','.')) || 0
     const descontoTipo = (fin as any).descontoTipo || 'R$'
-    // Mesmo desconto aplicado em CADA parcela:
-    // R$ → valor fixo por parcela  |  % → % sobre a mensalidade
     const descontoPorParcela = descontoValorRaw > 0
       ? descontoTipo === '%'
         ? +(valor * descontoValorRaw / 100).toFixed(2)
@@ -1078,11 +1137,16 @@ export default function NovaMatriculaPage() {
       const comp = d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})
       const venc = d.toLocaleDateString('pt-BR')
       const valorFinal = +(valor - descontoPorParcela).toFixed(2)
+      const numParcela = i + 1
       novas.push({
-        num: i+1, competencia: comp, vencimento: venc,
+        num: numParcela, competencia: comp, vencimento: venc,
         valor, desconto: descontoPorParcela, valorFinal,
         status:'pendente', obs:'', editando:false,
         evento:nomeEvento, eventoId:novoEventoId,
+        // ID composto da parcela: ex '00051-1', '00051-2'
+        parcelaId: newParcelaId(novoEventoId, numParcela),
+        numParcela,
+        totalParcelas: total,
         turmaId: mat.turmaId || undefined, turmaNome: tAssociada || undefined,
         codigo: String(Math.floor(100000 + Math.random() * 900000)),
         selected: true
@@ -1424,12 +1488,14 @@ export default function NovaMatriculaPage() {
           aluno: aluno.nome,
           responsavel: todosResp.find(r => r.respFinanceiro)?.nome ?? mae.nome,
           descricao: p.evento || 'Mensalidade',
-          eventoId: p.eventoId || newId('EV'),
+          eventoId: p.eventoId || '00001',
           eventoDescricao: p.evento || 'Mensalidade',
           competencia: p.competencia || '',
           vencimento: p.vencimento ? p.vencimento.split('/').reverse().join('-') : '',
           valor: p.valor,
           desconto: p.desconto || 0,
+          // Campo 'parcela' recebe o ID composto (ex: '00051-3') para rastreabilidade total
+          parcela: p.parcelaId || newParcelaId(p.eventoId || '00001', p.numParcela || p.num || 1),
           status: p.status === 'pendente' ? 'pendente' as const : (p.status as any) || 'pendente' as const,
           pagamento: p.dtPagto || null,
           metodo: p.formaPagto || 'Boleto',
@@ -2417,21 +2483,13 @@ export default function NovaMatriculaPage() {
                           style={{background:'linear-gradient(135deg,#10b981,#059669)',marginLeft:'auto'}}
                           onClick={()=>{
                             const item = {...formHist,dataAlteracao:new Date().toLocaleDateString('pt-BR')}
-                            if(editHistId) setHistorico(prev=>{
-                              const updated = prev.map(h=>h.id===editHistId?item:h)
-                              const ativa = updated.find(h=>h.situacao==='Cursando') || updated[updated.length-1]
-                              if(ativa?.turmaId) setMat(m=>({...m, turmaId:ativa.turmaId, turno:ativa.turno||m.turno}))
-                              sincronizarTurmaAluno(updated)
-                              return updated
-                            })
-                            else setHistorico(prev=>{
-                              const updated = [...prev, item]
-                              const ativa = updated.find(h=>h.situacao==='Cursando') || updated[updated.length-1]
-                              if(ativa?.turmaId) setMat(m=>({...m, turmaId:ativa.turmaId, turno:ativa.turno||m.turno}))
-                              sincronizarTurmaAluno(updated)
-                              return updated
-                            })
+                            const updated = editHistId ? historico.map(h=>h.id===editHistId?item:h) : [...historico, item]
+                            const ativa = updated.find(h=>h.situacao==='Cursando') || updated[updated.length-1]
+                            if(ativa?.turmaId) setMat(m=>({...m, turmaId:ativa.turmaId, turno:ativa.turno||m.turno}))
+                            sincronizarTurmaAluno(updated)
+                            setHistorico(updated)
                             confirmarParcelas()
+                            setModalMatricula(false)
                           }}>
                           <Check size={13}/> Confirmar e Salvar Parcelas
                         </button>
@@ -2445,24 +2503,153 @@ export default function NovaMatriculaPage() {
               <button className="btn btn-secondary" onClick={()=>setModalMatricula(false)}>Cancelar</button>
               <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#8b5cf6,#6366f1)'}}
                 onClick={()=>{
-                  const item = {...formHist,dataAlteracao:new Date().toLocaleDateString('pt-BR')}
-                  const updateHist = (prev: typeof historico) => {
-                    const updated = editHistId ? prev.map(h=>h.id===editHistId?item:h) : [...prev, item]
-                    // sync mat + turma do aluno
-                    const ativa = updated.find(h=>h.situacao==='Cursando') || updated[updated.length-1]
-                    if(ativa?.turmaId) setMat(m=>({...m, turmaId:ativa.turmaId, turno:ativa.turno||m.turno}))
-                    sincronizarTurmaAluno(updated)
-                    return updated
-                  }
-                  setHistorico(updateHist)
+                  const item = {...formHist, dataAlteracao: new Date().toLocaleDateString('pt-BR')}
+                  const updated = editHistId ? historico.map(h => h.id === editHistId ? item : h) : [...historico, item]
+                  const ativa = updated.find(h => h.situacao === 'Cursando') || updated[updated.length - 1]
+                  if (ativa?.turmaId) setMat(m => ({...m, turmaId: ativa.turmaId, turno: ativa.turno || m.turno}))
+                  sincronizarTurmaAluno(updated)
+                  setHistorico(updated)
                   setModalMatricula(false)
-                }}>
-                <Check size={14}/> {editHistId?'Salvar Alteracoes':'Adicionar Matricula'}
+                  // Abre modal de parcelas se Transferido
+                  abrirModalTransferido(item)
+                }}
+              >
+                <Check size={14}/> {editHistId ? 'Salvar Alteracoes' : 'Adicionar Matricula'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ══ MODAL: DESEJA EXCLUIR PARCELAS DA TURMA? (Transferido) ══ */}
+      {modalExcluirParcelasTransf && (
+        <div style={{
+          position:'fixed',inset:0,zIndex:1100,
+          background:'rgba(0,0,0,0.65)',backdropFilter:'blur(6px)',
+          display:'flex',alignItems:'center',justifyContent:'center',padding:20
+        }}>
+          <div className="bg-white dark:bg-slate-900" style={{
+            borderRadius:16,width:'100%',maxWidth:580,
+            boxShadow:'0 24px 80px rgba(0,0,0,0.5)',border:'1px solid rgba(239,68,68,0.2)',
+            display:'flex',flexDirection:'column',maxHeight:'80vh'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding:'20px 24px',borderBottom:'1px solid rgba(239,68,68,0.15)',
+              background:'linear-gradient(135deg,rgba(239,68,68,0.08),rgba(220,38,38,0.04))',
+              borderRadius:'16px 16px 0 0',display:'flex',alignItems:'center',gap:12
+            }}>
+              <div style={{width:40,height:40,borderRadius:10,background:'rgba(239,68,68,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>📦</div>
+              <div>
+                <div style={{fontWeight:800,fontSize:15,color:'hsl(var(--text-base))',letterSpacing:-0.3}}>Deseja excluir parcelas da turma?</div>
+                <div style={{fontSize:11,color:'hsl(var(--text-muted))',marginTop:2}}>
+                  <strong style={{color:'#ef4444',textTransform:'uppercase'}}>{situacaoExcecao.toUpperCase()}</strong> — deixe selecionadas apenas as parcelas que deseja <b>MANTER</b>. As desmarcadas serão excluídas.
+                </div>
+              </div>
+              <button style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:'hsl(var(--text-muted))',padding:4}} onClick={() => setModalExcluirParcelasTransf(false)}>
+                <X size={18}/>
+              </button>
+            </div>
+
+            {/* Parcelas list */}
+            <div style={{flex:1,overflowY:'auto',padding:'16px 24px'}}>
+              {parcelasTransfDisponiveis.length === 0 ? (
+                <div style={{textAlign:'center',padding:'32px 0',color:'hsl(var(--text-muted))'}}>
+                  <div style={{fontSize:28,marginBottom:8}}>✅</div>
+                  <div style={{fontSize:13,fontWeight:600}}>Nenhuma parcela pendente nesta turma</div>
+                  <div style={{fontSize:11,marginTop:4}}>Não há parcelas a excluir para este aluno.</div>
+                </div>
+              ) : (
+                <>
+                  {/* Select all */}
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,paddingBottom:10,borderBottom:'1px solid rgba(148,163,184,0.12)'}}>
+                    <input type="checkbox"
+                      checked={parcelasTransfSel.length === parcelasTransfDisponiveis.length}
+                      onChange={e => setParcelasTransfSel(e.target.checked ? parcelasTransfDisponiveis.map((_,i) => String(i)) : [])}
+                      style={{width:15,height:15,accentColor:'#10b981',cursor:'pointer'}}
+                    />
+                    <span style={{fontSize:12,fontWeight:700,color:'hsl(var(--text-base))'}}>Selecionar todas ({parcelasTransfDisponiveis.length} parcelas)</span>
+                    <span style={{marginLeft:'auto',fontSize:11,color:'hsl(var(--text-muted))'}}>Total mantido: <b style={{color:'#10b981'}}>R$ {fmtMoeda(parcelasTransfDisponiveis.filter((_,i)=>parcelasTransfSel.includes(String(i))).reduce((s,p)=>s+(p.valorFinal||p.valor||0),0))}</b></span>
+                  </div>
+                  {/* Parcela rows */}
+                  {parcelasTransfDisponiveis.map((p, i) => {
+                    const sel = parcelasTransfSel.includes(String(i))
+                    const excluded = !sel
+                    const statusColor = p.status === 'vencido' ? '#ef4444' : p.status === 'pendente' ? '#f59e0b' : '#94a3b8'
+                    return (
+                      <div key={i} onClick={() => setParcelasTransfSel(prev => prev.includes(String(i)) ? prev.filter(x=>x!==String(i)) : [...prev, String(i)])}
+                        style={{
+                          display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:10,
+                          cursor:'pointer',marginBottom:6,transition:'background 0.15s',
+                          background: excluded ? 'rgba(239,68,68,0.07)' : 'hsl(var(--bg-elevated))',
+                          border: excluded ? '1px solid rgba(239,68,68,0.25)' : '1px solid transparent',
+                          opacity: excluded ? 0.6 : 1
+                        }}>
+                        <input type="checkbox" checked={sel} readOnly style={{width:14,height:14,accentColor:'#10b981',cursor:'pointer',pointerEvents:'none'}}/>
+                        <div style={{flex:1,minWidth:0, textDecoration: excluded ? 'line-through' : 'none'}}>
+                          <div style={{fontWeight:600,fontSize:12,color: excluded ? '#ef4444' : 'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.evento || 'Mensalidade'}</div>
+                          <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:1}}>{p.competencia}</div>
+                        </div>
+                        <div style={{textAlign:'right',flexShrink:0, textDecoration: excluded ? 'line-through' : 'none'}}>
+                          <div style={{fontWeight:700,fontSize:13,color: excluded ? '#ef4444' : 'hsl(var(--text-base))'}}>{fmtMoeda(p.valorFinal || p.valor || 0)}</div>
+                          <div style={{fontSize:9,fontWeight:600,color:statusColor,textTransform:'uppercase',marginTop:2}}>{excluded ? 'EXCLUÍDA' : p.status}</div>
+                        </div>
+                        <div style={{fontSize:10,fontFamily:'monospace',color:'hsl(var(--text-muted))',flexShrink:0, textDecoration: excluded ? 'line-through' : 'none'}}>{p.vencimento}</div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding:'14px 24px',display:'flex',justifyContent:'flex-end',gap:10,
+              borderTop:'1px solid rgba(148,163,184,0.12)',background:'hsl(var(--bg-elevated))',
+              borderRadius:'0 0 16px 16px'
+            }}>
+              <button className="btn btn-secondary" onClick={() => setModalExcluirParcelasTransf(false)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                style={{
+                  background: parcelasTransfSel.length === parcelasTransfDisponiveis.length 
+                     ? 'linear-gradient(135deg,#10b981,#059669)' 
+                     : 'linear-gradient(135deg,#ef4444,#dc2626)',
+                }}
+                onClick={() => {
+                  const idxsSel = new Set(parcelasTransfSel)
+                  // INVERTIDO: selecionadas = MANTER, não selecionadas = EXCLUIR
+                  const excluidas = parcelasTransfDisponiveis.filter((_: any, i: number) => !idxsSel.has(String(i)))
+                  
+                  if (excluidas.length > 0) {
+                    // Remove parcelas locais (nova matricula em andamento)
+                    const locais = excluidas.filter((s: any) => s._src === 'local')
+                    if (locais.length > 0) {
+                      setParcelas((prev: any[]) => prev.filter(p =>
+                        !locais.some((r: any) =>
+                          r.competencia === p.competencia && r.evento === p.evento &&
+                          r.vencimento === p.vencimento && r.valor === p.valor
+                        )))
+                    }
+                    // Remove titulos do banco (aluno existente editado)
+                    const tituloIds = excluidas.filter((s: any) => s._src === 'titulo').map((s: any) => s._tituloId).filter(Boolean)
+                    if (tituloIds.length > 0) {
+                      setTitulos((prev: any[]) => prev.filter((t: any) => !tituloIds.includes(t.id)))
+                    }
+                  }
+                  setModalExcluirParcelasTransf(false)
+                }}
+              >
+                {parcelasTransfSel.length === parcelasTransfDisponiveis.length 
+                  ? <><Check size={13}/> Manter todas as {parcelasTransfDisponiveis.length}</>
+                  : <><Trash2 size={13}/> Excluir {parcelasTransfDisponiveis.length - parcelasTransfSel.length} desmarcada(s)</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>,
     // STEP 4: Financeiro
     <div key="s4" style={{display:'flex',flexDirection:'column',gap:0,minHeight:600,background:'hsl(var(--bg-base))'}}>
@@ -2923,8 +3110,7 @@ export default function NovaMatriculaPage() {
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                             </td>
 
-                            {/* Nº da parcela + badge turma acima */}
-                            {/* Nº da parcela — limpo */}
+                            {/* Nº da parcela + parcelaId abaixo */}
                             <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,width:28,height:28,borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
                                 <span style={{fontSize:13}}>{String(pNum).padStart(2, '0')}</span>
@@ -2932,10 +3118,27 @@ export default function NovaMatriculaPage() {
                               {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:3,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
                             </td>
 
-                            {/* Evento + competência + badge turma + badge status */}
-                            <td style={{padding:'18px 24px',maxWidth:220,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
-                              <div style={{fontWeight:600,fontSize:13,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>{getEventoDisp(p)}</div>
-                              <div style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',marginTop:2,opacity:.8}}>{p.competencia}</div>
+                            {/* Evento + competência + badge parcelaId + badge turma + badge status */}
+                            <td style={{padding:'18px 24px',maxWidth:230,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                              {/* Linha 1: nome do evento — limpo, sem badge */}
+                              <div style={{fontWeight:600,fontSize:13,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>
+                                {getEventoDisp(p)}
+                              </div>
+                              {/* Linha 2: competência + badge do parcelaId */}
+                              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2,flexWrap:'wrap'}}>
+                                <span style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',opacity:.8}}>{p.competencia}</span>
+                                {/* parcelaId: salvo (ex: 'K4XJ2M-01') ou derivado de eid+pNum */}
+                                {(()=>{
+                                  const pid = (p as any).parcelaId
+                                    || (eid ? `${eid}-${String(pNum).padStart(2,'0')}` : null)
+                                  return pid ? (
+                                    <span style={{fontSize:9,fontFamily:'monospace',fontWeight:700,padding:'1px 6px',borderRadius:4,background:'rgba(99,102,241,0.08)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.15)',letterSpacing:.5,whiteSpace:'nowrap'}}>
+                                      {pid}
+                                    </span>
+                                  ) : null
+                                })()}
+                              </div>
+                              {/* Linha 3: badge turma + badge status */}
                               <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
                                 {tNome&&(
                                   <span title={tNome} style={{
@@ -3176,6 +3379,7 @@ export default function NovaMatriculaPage() {
           onClose={() => setModalHistorico(false)}
         />
       )}
+
 
       {/* ══ MODAL 2ª VIA ══ */}
       {modal2aVia && (
@@ -4136,17 +4340,20 @@ export default function NovaMatriculaPage() {
             <button className="btn btn-secondary" onClick={()=>setModalEventoFin(false)}>Cancelar</button>
             <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#10b981,#059669)'}} disabled={!eventoForm.valor||!eventoForm.parcelaFinal||!eventoForm.vencimentoInicial||(!eventoForm.eventoId&&!eventoForm.eventoNome.trim())} onClick={()=>{
               const ev=cfgEventos.find(e=>e.id===eventoForm.eventoId)
-              // Quantidade de parcelas DESTE evento (sempre começa em 1 — independente de outros eventos)
               const qtd=Math.max(1,parseInt(eventoForm.parcelaFinal)||1)
               const valInput=parseMoeda(eventoForm.valor)
-              let valTotal=valInput, valBase=+(valInput/qtd).toFixed(2), diff=+(valInput - (valBase*qtd)).toFixed(2)
-              if ((eventoForm as any).tipoValor==='parcela') { valBase=valInput; valTotal=valInput*qtd; diff=0; }
+              let valBase=+(valInput/(eventoForm.tipoValor==='parcela'?1:qtd)).toFixed(2), diff=+(valInput - (valBase*qtd)).toFixed(2)
+              if ((eventoForm as any).tipoValor==='parcela') { valBase=valInput; diff=0; }
               const dv=parseMoeda(eventoForm.descValor)
               const desc=eventoForm.descValor?(eventoForm.descTipo==='%'?+(valBase*dv/100).toFixed(2):dv):0
 
               const sd=new Date(eventoForm.vencimentoInicial+'T12:00')
-              // ID único para este lançamento — nome do evento não é a chave, o ID é
-              const alunoEventoId = newId('EV')
+              // ─── ID único de evento sequencial padronizado ─────────────────────────
+              const todosEventoIds = [
+                ...titulos.map((t:any) => t.eventoId || ''),
+                ...parcelas.map((p:any) => (p as any).eventoId || ''),
+              ].filter(Boolean)
+              const alunoEventoId = newEventoId(todosEventoIds)
               const nomeEvento = ev?.descricao||eventoForm.eventoNome||'Evento'
               const calcData=(i:number)=>{
                 if(eventoForm.tipoVencimento==='30dias'){const d=new Date(sd);d.setDate(d.getDate()+i*30);return d}

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect } from 'react'
 
-import { useData, Titulo, newId } from '@/lib/dataContext'
+import { useData, Titulo, newId, newEventoId, newParcelaId } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
 import {
   Plus, Search, Filter, X, Download, CheckCircle, Pencil, Trash2,
@@ -225,20 +225,33 @@ export default function ContasReceberPage() {
     
     // Save to the database using API
     if (gerarParcelas && previewParcelas.length > 0) {
-      // Multiple items
+      // Gera ID de evento padronizado para este lote de parcelas
+      const todosEventoIds = titulos.map(t => (t as any).eventoId || '').filter(Boolean)
+      const eventoIdLote = newEventoId(todosEventoIds)
       const novos = previewParcelas.map((p, i) => ({
         ...form,
-        id: "", // Let API auto-gen or we can generate
+        id: "",
         codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
         descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
-        parcela: `${i+1}/${previewParcelas.length}`,
+        // parcelaId composto: 00051-1, 00051-2...
+        parcela: newParcelaId(eventoIdLote, i + 1),
+        eventoId: eventoIdLote,
         valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber'
       }))
       const novosComId = novos.map(n => ({ ...n, id: newId('CR') }))
       setTitulos((prev: any[]) => [...prev, ...novosComId])
       logSystemAction('Financeiro (Receber)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas para ${form.aluno}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     } else if (isNew) {
-      const payload = { ...form, id: '', origemLanca: 'manual_receber' }
+      const todosEventoIds = titulos.map(t => (t as any).eventoId || '').filter(Boolean)
+      const eventoIdUnico = (form as any).eventoId || newEventoId(todosEventoIds)
+      const payload = {
+        ...form,
+        id: '',
+        eventoId: eventoIdUnico,
+        // Parcela única: convenção '00051-1'
+        parcela: newParcelaId(eventoIdUnico, 1),
+        origemLanca: 'manual_receber'
+      }
       setTitulos((prev: any[]) => [...prev, { ...payload, id: newId('CR') }])
       logSystemAction('Financeiro (Receber)', 'Cadastro', `Novo título gerado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     } else if (editingId) {

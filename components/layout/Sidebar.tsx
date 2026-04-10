@@ -68,7 +68,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       {
         label: 'Alunos', icon: <Users size={16} />,
         children: [
-          { label: 'Lista de Alunos', href: '/academico/alunos', icon: <Users size={14} /> },
+          { label: 'Alunos', href: '/academico/alunos', icon: <Users size={14} /> },
           { label: 'Ficha 360°', href: '/academico/alunos/ficha', icon: <UserCheck size={14} /> },
           { label: 'Responsáveis', href: '/academico/responsaveis', icon: <Users2 size={14} /> },
           { label: 'Transferências', href: '/academico/transferencias', icon: <ChevronRight size={14} /> },

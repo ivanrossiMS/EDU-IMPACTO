@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
 
 import { useData } from '@/lib/dataContext'
@@ -12,6 +13,9 @@ import {
 } from 'recharts'
 
 export default function ADAdminDashboard() {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const { comunicados } = useAgendaDigital()
   const { alunos, titulos } = useData()
 
@@ -45,6 +49,8 @@ export default function ADAdminDashboard() {
     { name: 'Sáb', engajamento: 30, envios: 0 },
     { name: 'Dom', engajamento: 20, envios: 0 },
   ]
+
+  if (!mounted) return <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Carregando painel...</div>
 
   return (
     <div className="ad-admin-page-container">
@@ -145,7 +151,7 @@ export default function ADAdminDashboard() {
          <div className="card" style={{ padding: 24 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 24 }}>Engajamento Semanal</h3>
           <div style={{ width: '100%', height: 260 }}>
-            <ResponsiveContainer>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorEngaj" x1="0" y1="0" x2="0" y2="1">

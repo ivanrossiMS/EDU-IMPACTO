@@ -42,7 +42,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   if (hydrated && currentUser && !isFamily) {
     const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
     const userPerms = userPerfilObj?.permissoes || []
-    if (!userPerms.includes('/agenda-digital')) {
+    if (!userPerms.includes('/agenda-digital') && !userPerms.includes('agenda-digital')) {
       return (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,

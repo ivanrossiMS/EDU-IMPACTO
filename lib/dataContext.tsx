@@ -1645,3 +1645,61 @@ export function useData() { return useContext(DataContext) }
 export function newId(prefix = 'ID'): string {
   return `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 10).toUpperCase()}`
 }
+
+// ─── IDs Financeiros de Eventos e Parcelas ───────────────────────────────────
+// Formato: XXXXXX-NN
+//   XXXXXX = 6 caracteres alfanuméricos aleatórios uppercase (ex: K4XJ2M)
+//   NN     = número da parcela zero-padded 2 dígitos (01, 02 ... 12)
+// Exemplo de parcelaId completo: K4XJ2M-01, K4XJ2M-02
+//
+// UNICIDADE garantida por:
+//   - geração aleatória (36^6 ≈ 2 bilhões de combinações possíveis)
+//   - verificação de colisão contra todos os IDs existentes passados pelo chamador
+
+// Charset sem caracteres ambíguos (sem 0/O, 1/l/I)
+const EVENTO_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+function gerarCodigoAleatorio(len = 6): string {
+  return Array.from({ length: len }, () =>
+    EVENTO_CHARSET[Math.floor(Math.random() * EVENTO_CHARSET.length)]
+  ).join('')
+}
+
+/**
+ * Gera um novo ID único de evento financeiro — formato aleatório de 6 chars.
+ * 
+ * @param idsExistentes - Array de eventoIds já em uso (para verificação de colisão)
+ * @returns string de 6 chars uppercase, ex: 'K4XJ2M'
+ */
+export function newEventoId(idsExistentes: string[] = []): string {
+  const existingSet = new Set(idsExistentes.map(id => {
+    // Extrai apenas a parte do evento (antes do '-')
+    const base = id?.split('-')[0] || id
+    return base?.toUpperCase()
+  }).filter(Boolean))
+
+  let id: string
+  let tentativas = 0
+  do {
+    id = gerarCodigoAleatorio(6)
+    tentativas++
+    if (tentativas > 1000) {
+      // Fallback extremamente improvável: adiciona chars extras para unicidade garantida
+      id = gerarCodigoAleatorio(6) + gerarCodigoAleatorio(2)
+      break
+    }
+  } while (existingSet.has(id))
+
+  return id
+}
+
+/**
+ * Gera o ID composto de uma parcela: 'XXXXXX-NN'
+ * 
+ * @param eventoId - ID do evento ex: 'K4XJ2M'
+ * @param numParcela - Número da parcela (1-based)
+ * @returns ex: 'K4XJ2M-01', 'K4XJ2M-12'
+ */
+export function newParcelaId(eventoId: string, numParcela: number): string {
+  return `${eventoId}-${String(numParcela).padStart(2, '0')}`
+}

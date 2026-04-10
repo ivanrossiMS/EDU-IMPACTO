@@ -191,11 +191,11 @@ export default function ResponsaveisPage() {
 
   const KPIS: KpiItem[] = [
     // Linha 1 – status
-    { id:'total',    label:'Total Responsáveis',  value:totalResp,     sub:`${(alunos || []).length} aluno(s) vinculado(s)`, color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)',  Icon:Users,          trend:null,                       clickable:true,         row:1 },
+    { id:'total',    label:'Total Responsáveis',  value:totalResp,     sub:`${(alunos || []).length} aluno(s) vinculado(s)`, color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)',  Icon:Users,          trend:null,                       clickable:false,        row:1 },
     { id:'inadimpl', label:'Com Inadimplência',   value:inadimplentes, sub:totalResp?`${((inadimplentes/totalResp)*100).toFixed(1)}% do total`:'—',                color:'#ef4444', bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.2)',   Icon:Wallet,         trend:inadimplentes>0?'danger':'ok', clickable:inadimplentes>0, row:1 },
     { id:'risco',    label:'Filhos em Risco',     value:comRisco,      sub:'família(s) com alertas',                 color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.2)', Icon:AlertTriangle,  trend:comRisco>0?'warn':'ok',     clickable:comRisco>0,   row:1 },
     { id:'freq',     label:'Freq. Crítica (<75%)',value:freqCrit,      sub:'responsável(is) afetados',               color:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.2)',  Icon:TrendingDown,   trend:freqCrit>0?'warn':'ok',     clickable:freqCrit>0,   row:1 },
-    { id:'semProbl', label:'Sem Pendências',      value:semProblemas,  sub:'situação regular',                       color:'#10b981', bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.2)',  Icon:Shield,         trend:null,                       clickable:semProblemas>0, row:1 },
+    { id:'semProbl', label:'Sem Pendências',      value:semProblemas,  sub:'situação regular',                       color:'#10b981', bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.2)',  Icon:Shield,         trend:null,                       clickable:false,        row:1 },
     // Linha 2 – tipos
     { id:'mae',         label:'Mães',              value:totalMae, sub:'responsáveis do tipo Mãe',   color:'#ec4899', bg:'rgba(236,72,153,0.08)',  border:'rgba(236,72,153,0.2)',  Icon:Heart,  trend:null, clickable:totalMae>0,  row:2 },
     { id:'pai',         label:'Pais',              value:totalPai, sub:'responsáveis do tipo Pai',   color:'#3b82f6', bg:'rgba(59,130,246,0.08)',  border:'rgba(59,130,246,0.2)',  Icon:User,   trend:null, clickable:totalPai>0,  row:2 },
@@ -365,12 +365,6 @@ export default function ResponsaveisPage() {
           <p className="page-subtitle" suppressHydrationWarning>
             {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? (alunos || []).length : '—'} aluno(s) vinculado(s)
           </p>
-        </div>
-        <div style={{ display:'flex', gap:10 }}>
-          <button className="btn btn-secondary btn-sm"><Download size={13}/> Exportar Lista</button>
-          <button className="btn btn-primary btn-sm" style={{ background:'linear-gradient(135deg,#6366f1,#3b82f6)' }} onClick={() => setShowContato(true)}>
-            <Plus size={13}/> Registrar Contato
-          </button>
         </div>
       </div>
 

@@ -144,16 +144,12 @@ export default function NovoAdiantamento() {
       {/* HEADER */}
       <div className="page-header" style={{ marginBottom: 24, alignItems: 'center', display: 'flex', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/rh/adiantamentos" className="btn btn-ghost btn-icon" style={{ background: 'hsl(var(--bg-elevated))' }}>
+          <Link href="/rh/adiantamentos" className="btn btn-ghost btn-icon">
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-1">
-              <Link href="/rh/adiantamentos" className="hover:text-blue-600 transition-colors">Adiantamentos</Link>
-              <span>/</span>
-              <span className="text-slate-900 font-medium tracking-tight">Novo Adiantamento</span>
-            </nav>
-            <h1 className="page-title" style={{ fontSize: 24 }}>Novo Adiantamento</h1>
+            <h1 className="page-title">Novo Adiantamento</h1>
+            <p className="page-subtitle">Preencha os dados abaixo para conceder um adiantamento</p>
           </div>
         </div>
       </div>
@@ -164,17 +160,17 @@ export default function NovoAdiantamento() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
           {/* BLOCO 1: FUNCIONÁRIO */}
-          <div className="card shadow-sm relative overflow-hidden" style={{ padding: 24, borderRadius: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#047857', fontWeight: 600 }}>
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'hsl(var(--primary))', fontWeight: 600 }}>
               <UserSquare2 size={18} />
               <h3>1. Beneficiário</h3>
             </div>
-            <div className="w-full">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Selecione o Funcionário / Cargos</label>
+            <div>
+              <label className="form-label">Selecione o Funcionário / Cargos</label>
               <select 
                 value={funcId} 
                 onChange={e => setFuncId(e.target.value)}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none"
+                className="form-input"
               >
                 <option value="" disabled>-- Clique para selecionar --</option>
                 {ativos.map(f => (
@@ -184,69 +180,69 @@ export default function NovoAdiantamento() {
             </div>
             
             {func && (
-              <div className="mt-4 p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl flex flex-col sm:flex-row sm:items-center gap-4">
-                 <div className="w-12 h-12 rounded-full border-2 border-white shadow-sm bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center shrink-0 text-lg uppercase">
+              <div style={{ marginTop: 16, padding: 16, background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 16 }}>
+                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, textTransform: 'uppercase' }}>
                     {func.nome.substring(0,2)}
                  </div>
-                 <div className="flex-1">
-                    <p className="font-bold text-slate-800 text-sm leading-tight">{func.nome}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{func.departamento} • Contratado em {new Date(func.admissao).toLocaleDateString()}</p>
+                 <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{func.nome}</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>{func.departamento} • Contratado em {new Date(func.admissao).toLocaleDateString()}</div>
                  </div>
-                 <div className="text-right">
-                    <p className="text-xs text-slate-500 uppercase font-semibold">Salário Base</p>
-                    <p className="font-bold text-emerald-700">{formatMoney(func.salario)}</p>
+                 <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', fontWeight: 600 }}>Salário Base</div>
+                    <div style={{ fontWeight: 800, color: '#047857' }}>{formatMoney(func.salario)}</div>
                  </div>
               </div>
             )}
           </div>
 
           {/* BLOCO 2: DADOS DO ADIANTAMENTO */}
-          <div className="card shadow-sm" style={{ padding: 24, borderRadius: 16, transition: 'opacity 300ms', opacity: !isFuncSelected ? 0.5 : 1, pointerEvents: !isFuncSelected ? 'none' : 'auto' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#1d4ed8', fontWeight: 600 }}>
+          <div className="card" style={{ padding: 24, transition: 'opacity 300ms', opacity: !isFuncSelected ? 0.5 : 1, pointerEvents: !isFuncSelected ? 'none' : 'auto' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'hsl(var(--primary))', fontWeight: 600 }}>
               <Banknote size={18} />
               <h3>2. Condições Financeiras</h3>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Valor Total Requerido (R$)</label>
+                <label className="form-label">Valor Total Requerido (R$)</label>
                 <input 
                   type="number" step="0.01" min="0" placeholder="ex: 1500.00"
                   value={valorTotalStr} onChange={e => setValorTotalStr(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
+                  className="form-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Quantidade de Parcelas</label>
-                <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-all">
-                  <button onClick={() => setQtdParcelas(Math.max(1, qtdParcelas-1))} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">-</button>
-                  <input type="number" min="1" max="24" value={qtdParcelas} readOnly className="w-full text-center bg-transparent outline-none font-bold text-slate-700" />
-                  <button onClick={() => setQtdParcelas(Math.min(24, qtdParcelas+1))} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">+</button>
+                <label className="form-label">Qtd. Parcelas</label>
+                <div style={{ display: 'flex', background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, overflow: 'hidden' }}>
+                  <button onClick={() => setQtdParcelas(Math.max(1, qtdParcelas-1))} style={{ padding: '8px 16px', background: 'hsl(var(--bg-elevated))', borderRight: '1px solid hsl(var(--border-subtle))', fontWeight: 800, cursor: 'pointer' }}>-</button>
+                  <input type="number" min="1" max="24" value={qtdParcelas} readOnly style={{ width: '100%', textAlign: 'center', background: 'transparent', border: 'none', fontWeight: 700, outline: 'none' }} />
+                  <button onClick={() => setQtdParcelas(Math.min(24, qtdParcelas+1))} style={{ padding: '8px 16px', background: 'hsl(var(--bg-elevated))', borderLeft: '1px solid hsl(var(--border-subtle))', fontWeight: 800, cursor: 'pointer' }}>+</button>
                 </div>
               </div>
             </div>
 
             {isValorValid && func && Math.round((valorTotal / func.salario)*100) > 30 && (
-              <div className="mt-3 p-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs flex gap-2">
-                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <div style={{ marginTop: 12, padding: 12, background: 'rgba(245,158,11,0.1)', color: '#d97706', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 10, fontSize: 12, display: 'flex', gap: 8 }}>
+                 <AlertCircle size={16} />
                  <p>O valor solicitado compromete mais de 30% do salário base do funcionário ({Math.round((valorTotal / func.salario)*100)}%). Sujeito à aprovação da diretoria.</p>
               </div>
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data p/ Desconto/Pagto da 1ª</label>
+                <label className="form-label">Data p/ Desconto/Pagto da 1ª</label>
                 <input 
                   type="date"
                   value={primeiraData} onChange={e => setPrimeiraData(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-slate-700"
+                  className="form-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Estratégia de Quitação</label>
+                <label className="form-label">Estratégia de Quitação</label>
                 <select 
                   value={formaQuitacao} onChange={e => setFormaQuitacao(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-700"
+                  className="form-input"
                 >
                   <option value="desconto_folha">Desconto em Folha (Automático)</option>
                   <option value="manual">Pagamento Manual (Caixa/PIX)</option>
@@ -257,10 +253,10 @@ export default function NovoAdiantamento() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Lançamento</label>
+                <label className="form-label">Tipo de Lançamento</label>
                 <select 
                   value={tipo} onChange={e => setTipo(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-700"
+                  className="form-input"
                 >
                   <option value="salarial">Adiantamento de Salário</option>
                   <option value="extraordinario">Ajuda Extraordinária</option>
@@ -269,11 +265,11 @@ export default function NovoAdiantamento() {
                 </select>
               </div>
               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Motivo (Opcional p/ aprovação)</label>
+                 <label className="form-label">Motivo (Opcional)</label>
                  <input 
                   type="text" placeholder="Ex: Reforma urgência, Viagem..."
                   value={motivo} onChange={e => setMotivo(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-slate-700"
+                  className="form-input"
                 />
               </div>
             </div>
@@ -283,50 +279,46 @@ export default function NovoAdiantamento() {
         </div>
 
         {/* COLUNA DIREITA - PARCELAMENTO & SALVAR (Span 1) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transition: 'opacity 300ms', opacity: !isFuncSelected || !isValorValid ? 0.5 : 1, pointerEvents: !isFuncSelected || !isValorValid ? 'none' : 'auto' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transition: 'opacity 300ms', opacity: !isFuncSelected || !isValorValid ? 0.3 : 1, pointerEvents: !isFuncSelected || !isValorValid ? 'none' : 'auto' }}>
           
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)', position: 'relative', overflow: 'hidden' }}>
-             
-             {/* Decor element */}
-             <div style={{ position: 'absolute', top: 0, right: 0, width: 128, height: 128, background: '#3b82f6', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.2, margin: '-40px' }}></div>
-
+          <div style={{ background: 'var(--gradient-dark)', border: '1px solid hsl(var(--border-subtle))', color: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', position: 'relative', overflow: 'hidden' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#93c5fd', fontWeight: 600, position: 'relative', zIndex: 10 }}>
               <Calculator size={18} />
               <h3>Simulação / Dízimas</h3>
             </div>
             
             {previewParcelas.length === 0 ? (
-               <p className="text-slate-400 text-sm italic">Preencha o valor e parcelas para gerar a pré-visualização contábil.</p>
+               <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontStyle: 'italic' }}>Preencha o valor e parcelas para gerar a pré-visualização contábil.</p>
             ) : (
-              <div className="relative z-10">
-                 <div className="max-h-[250px] overflow-y-auto pr-2 space-y-2 no-scrollbar">
+              <div style={{ position: 'relative', zIndex: 10 }}>
+                 <div style={{ maxHeight: 250, overflowY: 'auto', paddingRight: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {previewParcelas.map((p, index) => (
-                      <div key={p.numero} className="flex items-center justify-between bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                         <div className="flex items-center gap-3">
-                           <span className="w-6 h-6 rounded bg-slate-700 text-xs font-bold flex items-center justify-center text-slate-300">{p.numero}</span>
-                           <span className="text-sm font-medium text-slate-200">
+                      <div key={p.numero} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
+                         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                           <span style={{ width: 24, height: 24, borderRadius: 4, background: 'rgba(255,255,255,0.1)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.numero}</span>
+                           <span style={{ fontSize: 13, fontWeight: 500 }}>
                               {new Date(p.vencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                            </span>
                          </div>
-                         <span className={`font-bold text-sm ${index === previewParcelas.length - 1 && hasResidual ? 'text-amber-400' : 'text-blue-300'}`}>
+                         <span style={{ fontWeight: 800, fontSize: 13, color: index === previewParcelas.length - 1 && hasResidual ? '#fbbf24' : '#93c5fd' }}>
                            {formatMoney(p.valor)}
                          </span>
                       </div>
                     ))}
                  </div>
                  
-                 <div className="mt-4 pt-4 border-t border-slate-700">
-                   <div className="flex justify-between items-end">
-                      <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Total Simulado</span>
-                      <span className="text-xl font-bold bg-gradient-to-r from-blue-300 to-blue-100 bg-clip-text text-transparent">
+                 <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.5)' }}>Total Simulado</span>
+                      <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>
                         {formatMoney(previewParcelas.reduce((acc, curr) => acc + curr.valor, 0))}
                       </span>
                    </div>
                  </div>
 
                  {hasResidual && (
-                   <div className="mt-4 flex gap-2 items-start text-xs text-amber-200/80 bg-amber-900/20 p-2 rounded-lg border border-amber-900/50">
-                     <Info size={14} className="shrink-0 mt-0.5" />
+                   <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11, color: '#fde68a', background: 'rgba(245,158,11,0.15)', padding: 12, borderRadius: 8, border: '1px solid rgba(245,158,11,0.3)' }}>
+                     <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
                      <p>A última parcela absorveu a dízima / diferença para fechar os centavos exatos contábeis.</p>
                    </div>
                  )}
@@ -337,9 +329,10 @@ export default function NovoAdiantamento() {
           <button 
             onClick={handleSave}
             disabled={!isFuncSelected || !isValorValid || !isQtdValid}
-            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl flex flex-row items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed group"
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '16px', fontSize: 15, justifyContent: 'center' }}
           >
-            <Save size={18} className="group-hover:scale-110 transition-transform" />
+            <Save size={18} />
             Salvar Adiantamento
           </button>
         </div>
