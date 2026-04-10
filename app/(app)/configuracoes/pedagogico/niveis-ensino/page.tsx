@@ -298,11 +298,7 @@ export default function NiveisEnsinoPage() {
                     <GraduationCap size={22} color={cor} />
                   </div>
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <code style={{ fontSize: 19, fontWeight: 900, color: cor, fontFamily: 'Outfit, monospace', letterSpacing: '-0.3px' }}>{n.codigo}</code>
-                      <span style={{ fontSize: 9, padding: '1px 5px', background: `${cor}15`, color: cor, borderRadius: 4, fontWeight: 700, fontFamily: 'monospace', border: `1px solid ${cor}30` }}>AUTO</span>
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>{n.nome}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, lineHeight: 1.3, color: 'hsl(var(--text-primary))' }}>{n.nome}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>

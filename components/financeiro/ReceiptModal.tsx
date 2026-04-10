@@ -74,12 +74,13 @@ const receiptNumber = (ref: ReceiptParcela) => {
 
 function buildReceiptHTML(
   parcelas: ReceiptParcela[],
+  rawParcelas: ReceiptParcela[],
   aluno: ReceiptProps['aluno'],
   opts: { nomeEscola: string; cnpj: string; logo: string | null; cidade: string; issuerName: string; issuerCargo: string; hash: string }
 ) {
   const { nomeEscola, cnpj, logo, cidade, issuerName, issuerCargo, hash } = opts
-  const ref = parcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + p.valorFinal + (p.juros || 0) + (p.multa || 0), 0)
+  const ref = rawParcelas[0] || {} as ReceiptParcela
+  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0) + (p.juros || 0) + (p.multa || 0), 0)
   const rNum = receiptNumber(ref)
   const emissao = today()
   
@@ -102,13 +103,13 @@ function buildReceiptHTML(
   const tableRows = parcelas.map((p, i) => `
     <tr style="background:${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
       <td style="padding:14px;border-bottom:1px solid #e2e8f0;">
-        <div style="font-weight:700;color:#0f172a;font-size:12px">${p.evento || 'Mensalidade'}</div>
+        <div style="font-weight:700;color:#0f172a;font-size:12px">${(p as any).alunoNome ? (p as any).alunoNome + ' — ' : ''}${p.evento || 'Mensalidade'}</div>
         <div style="font-size:10px;color:#64748b;margin-top:4px">Competência: ${p.competencia || '—'} · Parc: ${String(p.num).padStart(2,'0')}</div>
       </td>
       <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:#475569;padding:14px;border-bottom:1px solid #e2e8f0;">R$ ${fmt(p.valor)}</td>
       <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:${p.desconto>0?'#ca8a04':'#94a3b8'};padding:14px;border-bottom:1px solid #e2e8f0;">${p.desconto>0?`- R$ ${fmt(p.desconto)}`:'—'}</td>
       <td style="text-align:right;font-family:'Courier New',monospace;font-size:12px;color:${((p.juros||0)+(p.multa||0))>0?'#dc2626':'#94a3b8'};padding:14px;border-bottom:1px solid #e2e8f0;">${((p.juros||0)+(p.multa||0))>0?`+ R$ ${fmt((p.juros||0)+(p.multa||0))}`:'—'}</td>
-      <td style="text-align:right;font-family:'Courier New',monospace;font-weight:800;font-size:13px;color:#16a34a;padding:14px;border-bottom:1px solid #e2e8f0;">R$ ${fmt(p.valorFinal+(p.juros||0)+(p.multa||0))}</td>
+      <td style="text-align:right;font-family:'Courier New',monospace;font-weight:800;font-size:13px;color:#16a34a;padding:14px;border-bottom:1px solid #e2e8f0;">R$ ${fmt((p.valorFinal || p.valor || 0) + (p.juros||0) + (p.multa||0))}</td>
     </tr>`).join('')
 
   const logoHTML = logo 
@@ -249,8 +250,16 @@ const DataField = ({ label, value, highlight = false }: { label: string; value: 
   </div>
 )
 
-export function ReceiptModal({ parcelas, aluno, onClose, onBack }: ReceiptProps) {
+export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: ReceiptProps) {
   const { mantenedores } = useData()
+
+  // ── Flatten if Baixa por Responsável ──
+  const parcelas = useMemo(() => {
+    return rawParcelas.flatMap((p: any) => {
+      if (p.parcelasVinculadas && p.parcelasVinculadas.length > 0) return p.parcelasVinculadas
+      return [p]
+    })
+  }, [rawParcelas])
 
   // ── Resolve institution data ──
   const mantenedor = (mantenedores as any)?.[0]
@@ -272,12 +281,11 @@ export function ReceiptModal({ parcelas, aluno, onClose, onBack }: ReceiptProps)
     return { nome: 'Secretaria', cargo: 'Administrativo' }
   })()
 
-  const ref = parcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + p.valorFinal + (p.juros || 0) + (p.multa || 0), 0)
-  const rNum = receiptNumber(ref)
-  
   // ── Hashes & Dynamics ──
   const emissao = today()
+  const ref = rawParcelas[0] || {} as ReceiptParcela
+  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0) + (p.juros || 0) + (p.multa || 0), 0)
+  const rNum = receiptNumber(ref)
   const hashVal = useMemo(generateUUID, [])
   const validationUrl = `https://impacto-edu.com/validar/${hashVal}`
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=0f172a`
@@ -290,7 +298,7 @@ export function ReceiptModal({ parcelas, aluno, onClose, onBack }: ReceiptProps)
 
   // ── Handlers ──
   const openPrintWindow = (autoprint = false) => {
-    const html = buildReceiptHTML(parcelas, aluno, { nomeEscola, cnpj, logo, cidade, issuerName: issuer.nome, issuerCargo: issuer.cargo, hash: hashVal })
+    const html = buildReceiptHTML(parcelas, rawParcelas, aluno, { nomeEscola, cnpj, logo, cidade, issuerName: issuer.nome, issuerCargo: issuer.cargo, hash: hashVal })
     const win = window.open('', '_blank', 'width=900,height=800,scrollbars=yes')
     if (!win) { alert('Permita popups para imprimir o recibo.'); return }
     win.document.open()
@@ -421,18 +429,18 @@ export function ReceiptModal({ parcelas, aluno, onClose, onBack }: ReceiptProps)
                 <div style={{ textAlign:'right' }}>Pago</div>
               </div>
               {parcelas.map((p, i) => {
-                const encargos = (p.juros||0) + (p.multa||0)
+                const encargos = (Number(p.juros)||0) + (Number(p.multa)||0); console.log('p:', p);
                 const isOdd = i % 2 !== 0
                 return (
                   <div key={p.num} style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 90px 100px', padding:'16px 20px', alignItems:'center', background:isOdd?'#f8fafc':'#fff', borderBottom: i<parcelas.length-1?'1px solid #f1f5f9':'none' }}>
                     <div>
-                      <div style={{ fontWeight:700, fontSize:13, color:'#0f172a' }}>{p.evento || 'Mensalidade'}</div>
+                      <div style={{ fontWeight:700, fontSize:13, color:'#0f172a' }}>{(p as any).alunoNome ? (p as any).alunoNome + ' — ' : ''}{p.evento || 'Mensalidade'}</div>
                       <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Parc {String(p.num).padStart(2,'0')} · Venc. {p.vencimento} {p.competencia?`· ${p.competencia}`:''}</div>
                     </div>
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:'#475569' }}>R$ {fmt(p.valor)}</div>
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:p.desconto>0?'#d97706':'#94a3b8' }}>{p.desconto>0?`-R$ ${fmt(p.desconto)}`:'—'}</div>
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:encargos>0?'#dc2626':'#94a3b8' }}>{encargos>0?`+R$ ${fmt(encargos)}`:'—'}</div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:13, fontWeight:800, color:'#10b981' }}>R$ {fmt(p.valorFinal + encargos)}</div>
+                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:13, fontWeight:800, color:'#10b981' }}>R$ {fmt((p.valorFinal || p.valor || 0) + encargos)}</div>
                   </div>
                 )
               })}

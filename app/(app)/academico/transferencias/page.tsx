@@ -2,7 +2,7 @@
 
 import { useData, Transferencia, newId } from '@/lib/dataContext'
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { ArrowRightLeft, Plus, CheckCircle, FileText, Download, X, Search } from 'lucide-react'
+import { ArrowRightLeft, Plus, CheckCircle, FileText, Download, X, Search, Pencil } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
 
 type StatusTransferencia = Transferencia['status']
@@ -78,6 +78,7 @@ export default function TransferenciasPage() {
   const [tab, setTab] = useState<'lista' | 'solicitar'>('lista')
   const [form, setForm] = useState<Omit<Transferencia, 'id' | 'createdAt'>>(BLANK)
   const [docsInput, setDocsInput] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
 
   // ── Filtros ──
   const [busca, setBusca] = useState('')
@@ -95,13 +96,13 @@ export default function TransferenciasPage() {
     return [...set].sort().reverse()
   }, [transferencias])
 
-  const turmasDisponiveis = useMemo(() => [...new Set(alunos.map(a => a.turma))].filter(Boolean).sort(), [alunos])
+  const turmasDisponiveis = useMemo(() => [...new Set((alunos || []).map(a => a.turma))].filter(Boolean).sort(), [alunos])
 
   const filtered = useMemo(() => transferencias.filter(t => {
     const mb = !busca || t.alunoNome.toLowerCase().includes(busca.toLowerCase()) || (t.escola || '').toLowerCase().includes(busca.toLowerCase())
     const mt = filtroTipo === 'todos' || t.tipo === filtroTipo
     const ms = filtroStatus === 'todos' || t.status === filtroStatus
-    const mtur = filtroTurma === 'todas' || alunos.find(a => a.nome === t.alunoNome)?.turma === filtroTurma
+    const mtur = filtroTurma === 'todas' || (alunos || []).find(a => a.nome === t.alunoNome)?.turma === filtroTurma
     const mano = filtroAno === 'todos' || (() => { try { return String(new Date(t.createdAt).getFullYear()) === filtroAno } catch { return false } })()
     return mb && mt && ms && mtur && mano
   }), [transferencias, busca, filtroTipo, filtroStatus, filtroTurma, filtroAno, alunos])
@@ -115,17 +116,30 @@ export default function TransferenciasPage() {
 
   const handleAdd = () => {
     if (!form.alunoNome.trim()) return
-    const nova: Transferencia = {
-      ...form,
-      id: newId('TR'),
-      data: form.data || new Date().toLocaleDateString('pt-BR'),
-      docs: docsInput.split(',').map(d => d.trim()).filter(Boolean),
-      createdAt: new Date().toISOString(),
+    const docs = docsInput.split(',').map(d => d.trim()).filter(Boolean)
+    if (editId) {
+      setTransferencias(prev => prev.map(t => t.id === editId ? { ...t, ...form, docs, data: form.data || t.data } : t))
+      setEditId(null)
+    } else {
+      const nova: Transferencia = {
+        ...form,
+        id: newId('TR'),
+        data: form.data || new Date().toLocaleDateString('pt-BR'),
+        docs,
+        createdAt: new Date().toISOString(),
+      }
+      setTransferencias(prev => [nova, ...prev])
     }
-    setTransferencias(prev => [nova, ...prev])
     setForm(BLANK)
     setDocsInput('')
     setTab('lista')
+  }
+
+  const handleEdit = (t: Transferencia) => {
+    setForm({ alunoNome: t.alunoNome, tipo: t.tipo, escola: t.escola, motivo: t.motivo, data: t.data, status: t.status, docs: t.docs })
+    setDocsInput(t.docs.join(', '))
+    setEditId(t.id)
+    setTab('solicitar')
   }
 
   const handleAvancar = (id: string) => {
@@ -178,11 +192,11 @@ export default function TransferenciasPage() {
       {/* Formulário */}
       {tab === 'solicitar' && (
         <div className="card" style={{ padding: '24px', maxWidth: 700, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Nova Solicitação de Transferência</div>
+          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>{editId ? 'Editar Transferência' : 'Nova Solicitação de Transferência'}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
               <label className="form-label">Aluno *</label>
-              <AlunoSearchInput value={form.alunoNome} onChange={v => setForm(p => ({ ...p, alunoNome: v }))} alunos={alunos} />
+              <AlunoSearchInput value={form.alunoNome} onChange={v => setForm(p => ({ ...p, alunoNome: v }))} alunos={alunos || []} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div>
@@ -211,8 +225,8 @@ export default function TransferenciasPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setTab('lista')}>Cancelar</button>
-            <button className="btn btn-primary btn-sm" onClick={handleAdd}><Plus size={13} />Registrar Transferência</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { setTab('lista'); setEditId(null); setForm(BLANK); setDocsInput('') }}>Cancelar</button>
+            <button className="btn btn-primary btn-sm" onClick={handleAdd}>{editId ? <><Pencil size={13} />Salvar Alterações</> : <><Plus size={13} />Registrar Transferência</>}</button>
           </div>
         </div>
       )}
@@ -285,7 +299,7 @@ export default function TransferenciasPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {filtered.map(t => {
                 const cfg = STATUS_CFG[t.status]
-                const turmaAluno = alunos.find(a => a.nome === t.alunoNome)?.turma
+                const turmaAluno = (alunos || []).find(a => a.nome === t.alunoNome)?.turma
                 return (
                   <div key={t.id} className="card" style={{ padding: '20px', borderLeft: `4px solid ${t.tipo === 'saida' ? '#ef4444' : '#10b981'}` }}>
                     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
@@ -322,6 +336,9 @@ export default function TransferenciasPage() {
                             <CheckCircle size={11} />Avançar
                           </button>
                         )}
+                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#3b82f6' }} onClick={() => handleEdit(t)} title="Editar transferência">
+                          <Pencil size={13} />
+                        </button>
                         <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => handleDelete(t.id)}>
                           <X size={13} />
                         </button>

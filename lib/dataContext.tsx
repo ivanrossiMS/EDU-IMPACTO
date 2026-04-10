@@ -6,7 +6,7 @@ import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
 
 // ─── Data version — bump to force-clear all stored data ───────────
-const DATA_VERSION = '16'
+const DATA_VERSION = '17'
 
 // ─── Types ────────────────────────────────────────────────────────
 export interface Aluno {

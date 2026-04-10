@@ -222,87 +222,17 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
         <div style={{display:'flex',gap:10,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
           {resp.respPedagogico&&<span style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:'rgba(99,102,241,0.2)',border:'1px solid rgba(99,102,241,0.4)',color:'#a5b4fc',fontWeight:800,display:'flex',alignItems:'center',gap:4}}><Check size={12}/> Pedagógico</span>}
           {resp.respFinanceiro&&<span style={{fontSize:11,padding:'4px 10px',borderRadius:8,background:'rgba(16,185,129,0.2)',border:'1px solid rgba(16,185,129,0.4)',color:'#6ee7b7',fontWeight:800,display:'flex',alignItems:'center',gap:4}}><Check size={12}/> Financeiro</span>}
-          {/* ── Botão Buscar Responsável ── */}
-          <div style={{position:'relative',marginLeft:8}}>
-            <div style={{display:'flex',gap:8}}>
-              <button
-                type="button"
-                onClick={()=>{setBuscarOpen(v=>!v);setBuscarQ('')}}
-                title="Buscar responsável já cadastrado"
-                style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,0.15)',background:buscarOpen?'rgba(255,255,255,0.15)':'rgba(255,255,255,0.05)',cursor:'pointer',fontSize:12,fontWeight:700,color:'#f8fafc',transition:'all .15s'}}
-              >
-                <Search size={14} color="#94a3b8"/> Buscar
-              </button>
-              {onRemove && (
-                <button
-                  type="button"
-                  onClick={e=>{e.stopPropagation(); onRemove()}}
-                  title="Remover este responsável"
-                  style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:8,border:'1px solid rgba(239,68,68,0.3)',background:'rgba(239,68,68,0.1)',cursor:'pointer',transition:'all .15s',color:'#fca5a5'}}
-                >
-                  <Trash2 size={14}/>
-                </button>
-              )}
-            </div>
-            {buscarOpen && (
-              <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:9999,width:340,background:'hsl(var(--bg-base))',border:'1px solid rgba(99,102,241,0.3)',borderRadius:12,boxShadow:'0 16px 48px rgba(0,0,0,0.55)',overflow:'hidden'}}>
-                {/* Header */}
-                <div style={{padding:'10px 12px',borderBottom:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-elevated))'}}>
-                  <div style={{fontSize:10,fontWeight:700,color:'#818cf8',marginBottom:6,letterSpacing:.5}}>BUSCAR RESPONSÁVEL EXISTENTE</div>
-                  <input
-                    autoFocus
-                    className="form-input"
-                    style={{fontSize:12,width:'100%'}}
-                    placeholder="Nome, CPF ou telefone..."
-                    value={buscarQ}
-                    onChange={e=>setBuscarQ(e.target.value)}
-                    onClick={e=>e.stopPropagation()}
-                  />
-                </div>
-                {/* Results */}
-                <div style={{maxHeight:220,overflowY:'auto'}}>
-                  {buscarQ.length < 3 ? (
-                    <div style={{padding:'20px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>
-                      Digite ao menos 3 letras para buscar
-                    </div>
-                  ) : isSearching ? (
-                    <div style={{padding:'20px 16px',color:'hsl(var(--text-muted))',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:8}}>
-                      <Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...
-                    </div>
-                  ) : respsFiltrados.length===0 ? (
-                    <div style={{padding:'20px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>
-                      Nenhum resultado encontrado.
-                    </div>
-                  ) : respsFiltrados.map((r,i) => (
-                    <div
-                      key={i}
-                      style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid hsl(var(--border-subtle))',transition:'background .1s'}}
-                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='rgba(99,102,241,0.08)'}
-                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}
-                      onClick={e=>{e.stopPropagation();selecionarResp(r)}}
-                    >
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                        <div>
-                          <div style={{fontWeight:700,fontSize:13}}>{r.nome}</div>
-                          <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:2,display:'flex',gap:8}}>
-                            {r.cpf && <span>CPF: {r.cpf}</span>}
-                            {r.celular && <span>📱 {r.celular}</span>}
-                          </div>
-                          {r.email && <div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>{r.email}</div>}
-                        </div>
-                        <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'rgba(99,102,241,0.1)',color:'#818cf8',fontWeight:700,flexShrink:0,marginLeft:8,marginTop:2}}>{r.parentesco}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {/* Footer */}
-                <div style={{padding:'8px 12px',borderTop:'1px solid hsl(var(--border-subtle))',background:'hsl(var(--bg-elevated))',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <span style={{fontSize:10,color:'hsl(var(--text-muted))'}}>{allResps.length} responsável(eis) cadastrado(s)</span>
-                  <button type="button" style={{fontSize:10,color:'hsl(var(--text-muted))',cursor:'pointer',background:'none',border:'none',padding:'2px 6px'}} onClick={e=>{e.stopPropagation();setBuscarOpen(false)}}>✕ Fechar</button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* ── Botão Remover Responsável ── */}
+          {onRemove && (
+            <button
+              type="button"
+              onClick={e=>{e.stopPropagation(); onRemove()}}
+              title="Remover este responsável"
+              style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:28,borderRadius:8,border:'1px solid rgba(239,68,68,0.3)',background:'rgba(239,68,68,0.1)',cursor:'pointer',transition:'all .15s',color:'#fca5a5',marginLeft:8}}
+            >
+              <Trash2 size={14}/>
+            </button>
+          )}
         </div>
       </div>
       {open && (
@@ -316,7 +246,53 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
           <div style={{display:'flex', flexDirection:'column', gap:20}}>
             <h4 style={{fontSize:12, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:10}}>Identificação e Documentos</h4>
             <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
-              <div style={{flex:2,minWidth:250}}><F label="Nome Completo"><input style={ultraInputStyle} value={resp.nome} onChange={e=>u('nome',e.target.value)}/></F></div>
+              <div style={{flex:2,minWidth:250,position:'relative'}}>
+                <F label="Nome Completo / Buscar Existente">
+                  <div style={{position:'relative'}}>
+                    <input 
+                      style={{...ultraInputStyle, paddingRight:36}} 
+                      value={resp.nome} 
+                      onChange={e=>{
+                        u('nome',e.target.value);
+                        setBuscarQ(e.target.value);
+                        if(e.target.value.length >= 3) setBuscarOpen(true);
+                        else setBuscarOpen(false);
+                      }}
+                      onFocus={()=>{
+                        setBuscarQ(resp.nome);
+                        if(resp.nome.length >= 3) setBuscarOpen(true);
+                      }}
+                      onBlur={()=>setTimeout(()=>setBuscarOpen(false), 200)}
+                      placeholder="Nome completo..."
+                    />
+                    <Search size={16} color="#94a3b8" style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}/>
+                  </div>
+                </F>
+                {buscarOpen && (
+                  <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:9999,width:'100%',minWidth:340,background:'hsl(var(--bg-base))',border:'1px solid rgba(99,102,241,0.3)',borderRadius:12,boxShadow:'0 16px 48px rgba(0,0,0,0.55)',overflow:'hidden'}}>
+                    <div style={{maxHeight:220,overflowY:'auto'}}>
+                      {buscarQ.length < 3 ? (
+                        <div style={{padding:'14px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>Digite ao menos 3 letras para buscar...</div>
+                      ) : isSearching ? (
+                        <div style={{padding:'14px 16px',color:'hsl(var(--text-muted))',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:8}}><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</div>
+                      ) : respsFiltrados.length === 0 ? (
+                        <div style={{padding:'14px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>Nenhum resultado encontrado.</div>
+                      ) : respsFiltrados.map((r,i) => (
+                        <div key={i} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid hsl(var(--border-subtle))',transition:'background .1s'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='rgba(99,102,241,0.08)'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'} onMouseDown={e=>{e.preventDefault(); selecionarResp(r)}}>
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                            <div>
+                              <div style={{fontWeight:700,fontSize:13}}>{r.nome}</div>
+                              <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:2,display:'flex',gap:8}}>{r.cpf&&<span>CPF: {r.cpf}</span>}{r.celular&&<span>📱 {r.celular}</span>}</div>
+                              {r.email&&<div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>{r.email}</div>}
+                            </div>
+                            <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'rgba(99,102,241,0.1)',color:'#818cf8',fontWeight:700,flexShrink:0,marginLeft:8}}>{r.parentesco}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div style={{flexShrink:0,width:170}}><F label="CPF"><CPFInput value={resp.cpf} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F></div>
               <div style={{flexShrink:0,width:150}}><F label="Sexo"><select style={ultraInputStyle} value={resp.sexo} onChange={e=>u('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
               <div style={{flex:1,minWidth:170}}><F label="Data de Nascimento"><input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={resp.dataNasc} onChange={e=>u('dataNasc',fmtDateMask(e.target.value))}/></F></div>
@@ -437,7 +413,7 @@ export default function NovaMatriculaPage() {
   const genCodigo = () => String(Math.floor(100000 + Math.random() * 900000))
   const router = useRouter()
   const dlg = useDialog()
-  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], caixasAbertos = [], setCaixasAbertos, movimentacoesManuais = [], setMovimentacoesManuais, logSystemAction } = useData() || {}
+  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], caixasAbertos = [], setCaixasAbertos, movimentacoesManuais = [], setMovimentacoesManuais, transferencias = [], setTransferencias, logSystemAction } = useData() || {}
   // Formas de pagamento dinâmicas com fallback
   const FORMAS_FALLBACK = ['PIX','Boleto','Dinheiro','Cartão de Crédito','Cartão de Débito','Débito Automático','Transferência','Cheque','Bolsa Integral']
   const FORMAS = cfgMetodosPagamento.filter((m: any) => m.situacao === 'ativo').length > 0
@@ -453,6 +429,7 @@ export default function NovaMatriculaPage() {
 
   const sourceAlunos = alunos || []
   const alunoEditando = editId ? sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) ?? null : null
+  const realEditId = alunoEditando ? (alunoEditando as any).id : null
   const [step, setStep] = useState(0)
   const [salvando, setSalvando] = useState(false)
   const isEdicao = !!alunoEditando
@@ -679,7 +656,7 @@ export default function NovaMatriculaPage() {
         updA('foto', base64)
         // 2. Persiste diretamente no alunos array (contorna closure stale do autoSalvar)
         //    Salva também o fotoNome = {codigo}.jpg para identificação correta no export
-        const sid = autoSaveIdRef.current || (isEdicao ? editId : null)
+        const sid = autoSaveIdRef.current || (isEdicao ? realEditId : null)
         if (sid) {
           setAlunos((prev: any[]) =>
             prev.map((a: any) => {
@@ -970,6 +947,11 @@ export default function NovaMatriculaPage() {
   const [parcelasTransfSel, setParcelasTransfSel] = useState<string[]>([])
   const [parcelasTransfDisponiveis, setParcelasTransfDisponiveis] = useState<any[]>([])
   const [situacaoExcecao, setSituacaoExcecao] = useState<string>('')
+  // ── Campos de transferência (integrados ao modal de exclusão) ──
+  const [transfData, setTransfData] = useState(new Date().toISOString().split('T')[0])
+  const [transfEscola, setTransfEscola] = useState('')
+  const [transfMotivo, setTransfMotivo] = useState('')
+  const [transfDocs, setTransfDocs] = useState('')
 
   // Abre o modal de excluir parcelas se a situação for Transferido, Cancelado ou Remanejado
   const abrirModalTransferido = (item: typeof formHist) => {
@@ -982,6 +964,11 @@ export default function NovaMatriculaPage() {
     
     if (!isGatilhoAtivo || !item.turmaId) return
     setSituacaoExcecao(item.situacao || 'Transferido/Cancelado')
+    // Reset transfer form fields
+    setTransfData(new Date().toISOString().split('T')[0])
+    setTransfEscola('')
+    setTransfMotivo('')
+    setTransfDocs('')
     const turmaIdTransf = item.turmaId
     const STATUS_OK = ['pendente', 'vencido', 'cobranca', 'aberto']
     // Fonte 1: parcelas locais (sessão atual, nova matrícula)
@@ -1467,7 +1454,7 @@ export default function NovaMatriculaPage() {
       turmaId:turmaIdEfetivo2,
     }
     if (isEdicao) {
-      setAlunos(prev => prev.map(a => a.id === editId ? { ...a, ...payload } : a))
+      setAlunos(prev => prev.map(a => a.id === realEditId ? { ...a, ...payload } : a))
       logSystemAction('Acadêmico (Alunos)', 'Edição', `Atualização da matrícula/dados de ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     } else {
       const novoId = autoSaveIdRef.current || `ALU${aluno.codigo}`
@@ -1507,21 +1494,30 @@ export default function NovaMatriculaPage() {
     }
     setSalvando(false)
     if (isEdicao && !forcarSaida) {
-      if (editId) {
-        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      if (realEditId) {
+        setAlunos(prev => prev.map(a => String(a.id) === String(realEditId) ? { ...a, ...payload } : a))
+        fetch(`/api/alunos/${realEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
       }
       setAutoSaveMsg('✅ Todas as alterações foram salvas com sucesso!')
       setTimeout(() => setAutoSaveMsg(''), 4000)
     } else {
-      if (isEdicao && forcarSaida && editId) {
-        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      if (isEdicao && forcarSaida && realEditId) {
+        setAlunos(prev => prev.map(a => String(a.id) === String(realEditId) ? { ...a, ...payload } : a))
+        fetch(`/api/alunos/${realEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+      } else if (!isEdicao) {
+        const sid = autoSaveIdRef.current || `ALU${aluno.codigo}`
+        setAlunos(prev => {
+          if (prev.some(a => a.id === sid)) return prev.map(a => a.id === sid ? { ...a, ...payload } : a)
+          return [{ ...payload, id: sid } as any, ...prev]
+        })
+        fetch('/api/alunos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, id: sid }) }).catch(console.error)
       }
       router.push('/academico/alunos')
     }
   }
 
   // ── Auto-save ao trocar de step (steps 0-3) ───────────────────────────────
-  const autoSaveIdRef = useRef<string|null>(isEdicao ? editId : null)
+  const autoSaveIdRef = useRef<string|null>(isEdicao ? realEditId : null)
   const [autoSaveMsg, setAutoSaveMsg] = useState('')
 
   // ── Secretaria Escolar: sincroniza aluno ↔ turma ────────────────────────────
@@ -1529,7 +1525,7 @@ export default function NovaMatriculaPage() {
   // Regra:  se houver item com situação "Cursando" → vincula o aluno à turma
   //         se NÃO houver "Cursando" → remove o aluno da turma (ex: Desistente)
   const sincronizarTurmaAluno = useCallback((hist: typeof historico) => {
-    const alunoIdAtual = autoSaveIdRef.current || (isEdicao ? editId : null)
+    const alunoIdAtual = autoSaveIdRef.current || (isEdicao ? realEditId : null)
     if (!alunoIdAtual) return // aluno ainda não criado
 
     const cursando = hist.find((h: any) => h.situacao === 'Cursando')
@@ -1605,11 +1601,11 @@ export default function NovaMatriculaPage() {
       obsFinanceiro:obsAlunoFin,
       turmaId:turmaIdEfetivo,
     }
-    if (isEdicao && editId) {
-      setAlunos(prev => prev.map(a => a.id === editId ? {...a, ...payload} : a))
+    if (isEdicao && realEditId) {
+      setAlunos(prev => prev.map(a => a.id === realEditId ? {...a, ...payload} : a))
       // Mock API HTTP só se houver nome garantido
       if (payload.nome && payload.nome.trim()) {
-        fetch(`/api/alunos/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
+        fetch(`/api/alunos/${realEditId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).catch(console.error)
       }
     } else {
       // Nova matrícula: upsert usando id estável gerado na primeira vez
@@ -2600,6 +2596,37 @@ export default function NovaMatriculaPage() {
                   })}
                 </>
               )}
+
+              {/* ── Campos de Transferência (só quando situacao contém 'transf') ── */}
+              {situacaoExcecao.toLowerCase().includes('transf') && (
+                <div style={{marginTop:16,padding:'16px 0',borderTop:'1px solid rgba(59,130,246,0.15)' }}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+                    <div style={{width:28,height:28,borderRadius:8,background:'rgba(59,130,246,0.12)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>📋</div>
+                    <div>
+                      <div style={{fontWeight:800,fontSize:13,color:'hsl(var(--text-base))'}}>Dados da Transferência</div>
+                      <div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>Preencha para registrar automaticamente em Acadêmico → Transferências</div>
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase',letterSpacing:0.6,marginBottom:4,display:'block'}}>Data</label>
+                      <input className="form-input" type="date" value={transfData} onChange={e => setTransfData(e.target.value)} style={{fontSize:12}} />
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase',letterSpacing:0.6,marginBottom:4,display:'block'}}>Escola de Destino</label>
+                      <input className="form-input" value={transfEscola} onChange={e => setTransfEscola(e.target.value)} placeholder="Nome da escola" style={{fontSize:12}} />
+                    </div>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <label style={{fontSize:10,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase',letterSpacing:0.6,marginBottom:4,display:'block'}}>Motivo</label>
+                    <input className="form-input" value={transfMotivo} onChange={e => setTransfMotivo(e.target.value)} placeholder="Ex: Mudança de bairro, troca de escola" style={{fontSize:12}} />
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:800,color:'hsl(var(--text-muted))',textTransform:'uppercase',letterSpacing:0.6,marginBottom:4,display:'block'}}>Documentos (separados por vírgula)</label>
+                    <input className="form-input" value={transfDocs} onChange={e => setTransfDocs(e.target.value)} placeholder="Ex: RG, Histórico, Declaração de Matrícula" style={{fontSize:12}} />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -2636,6 +2663,23 @@ export default function NovaMatriculaPage() {
                     if (tituloIds.length > 0) {
                       setTitulos((prev: any[]) => prev.filter((t: any) => !tituloIds.includes(t.id)))
                     }
+                  }
+
+                  // ── Auto-salvar registro de transferência ──
+                  if (situacaoExcecao.toLowerCase().includes('transf')) {
+                    const novaTransf = {
+                      id: newId('TR'),
+                      alunoNome: aluno.nome || '',
+                      tipo: 'saida' as const,
+                      escola: transfEscola,
+                      motivo: transfMotivo,
+                      data: transfData ? new Date(transfData + 'T12:00').toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR'),
+                      status: 'pendente' as const,
+                      docs: transfDocs.split(',').map((d: string) => d.trim()).filter(Boolean),
+                      createdAt: new Date().toISOString(),
+                    }
+                    setTransferencias((prev: any[]) => [novaTransf, ...(prev || [])])
+                    logSystemAction?.('Acadêmico (Transferências)', 'Registro automático', `Transferência de saída registrada via matrícula`, { registroId: novaTransf.id, nomeRelacionado: aluno.nome })
                   }
                   setModalExcluirParcelasTransf(false)
                 }}
@@ -3041,7 +3085,7 @@ export default function NovaMatriculaPage() {
                 </div>
               ):(
                 <div style={{flex:1,overflowX:'auto',overflowY:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:12,fontFamily:"'Inter',sans-serif"}}>
+                  <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:14,fontFamily:"'Inter',sans-serif"}}>
                     <thead style={{position:'sticky',top:0,zIndex:10}}>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
                         <th style={{padding:'16px 24px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
@@ -3059,7 +3103,7 @@ export default function NovaMatriculaPage() {
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
                         ].map((h:any,hi:number)=>(
-                          <th key={hi} style={{padding:'16px 24px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
+                          <th key={hi} style={{padding:'16px 24px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
                         ))}
                       </tr>
                     </thead>
@@ -3107,13 +3151,13 @@ export default function NovaMatriculaPage() {
                           >
                             <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,background:sel?'#6366f1':'transparent',transition:'background 0.2s'}}/>
-                              <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
+                              <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:16,height:16,accentColor:'#6366f1'}}/>
                             </td>
 
                             {/* Nº da parcela + parcelaId abaixo */}
                             <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
-                              <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,width:28,height:28,borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
-                                <span style={{fontSize:13}}>{String(pNum).padStart(2, '0')}</span>
+                              <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,width:32,height:32,borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
+                                <span style={{fontSize:15}}>{String(pNum).padStart(2, '0')}</span>
                               </div>
                               {isH&&<div style={{fontSize:7,background:'#f59e0b',color:'#000',borderRadius:3,padding:'1px 4px',fontWeight:900,marginTop:3,textAlign:'center',lineHeight:1.5}}>HOJE</div>}
                             </td>
@@ -3121,18 +3165,18 @@ export default function NovaMatriculaPage() {
                             {/* Evento + competência + badge parcelaId + badge turma + badge status */}
                             <td style={{padding:'18px 24px',maxWidth:230,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               {/* Linha 1: nome do evento — limpo, sem badge */}
-                              <div style={{fontWeight:600,fontSize:13,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>
+                              <div style={{fontWeight:600,fontSize:15,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>
                                 {getEventoDisp(p)}
                               </div>
                               {/* Linha 2: competência + badge do parcelaId */}
                               <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2,flexWrap:'wrap'}}>
-                                <span style={{fontSize:11,color:'hsl(var(--text-muted))',textTransform:'capitalize',opacity:.8}}>{p.competencia}</span>
+                                <span style={{fontSize:13,color:'hsl(var(--text-muted))',textTransform:'capitalize',opacity:.8}}>{p.competencia}</span>
                                 {/* parcelaId: salvo (ex: 'K4XJ2M-01') ou derivado de eid+pNum */}
                                 {(()=>{
                                   const pid = (p as any).parcelaId
                                     || (eid ? `${eid}-${String(pNum).padStart(2,'0')}` : null)
                                   return pid ? (
-                                    <span style={{fontSize:9,fontFamily:'monospace',fontWeight:700,padding:'1px 6px',borderRadius:4,background:'rgba(99,102,241,0.08)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.15)',letterSpacing:.5,whiteSpace:'nowrap'}}>
+                                    <span style={{fontSize:11,fontFamily:'monospace',fontWeight:700,padding:'2px 7px',borderRadius:4,background:'rgba(99,102,241,0.08)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.15)',letterSpacing:.5,whiteSpace:'nowrap'}}>
                                       {pid}
                                     </span>
                                   ) : null
@@ -3142,12 +3186,12 @@ export default function NovaMatriculaPage() {
                               <div style={{display:'flex',alignItems:'center',gap:6,marginTop:6}}>
                                 {tNome&&(
                                   <span title={tNome} style={{
-                                    display:'inline-flex',alignItems:'center',fontSize:9,fontWeight:600,padding:'3px 8px',borderRadius:4,
+                                    display:'inline-flex',alignItems:'center',fontSize:11,fontWeight:600,padding:'3px 8px',borderRadius:4,
                                     background:'rgba(148,163,184,0.06)',color:'hsl(var(--text-muted))',
                                     whiteSpace:'nowrap',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',lineHeight:'12px'
                                   }}>{tNome}</span>
                                 )}
-                                <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'12px'}}>{sLabel}</span>
+                                <span style={{display:'inline-flex',alignItems:'center',fontSize:11,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'14px'}}>{sLabel}</span>
                               </div>
                             </td>
                             <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
@@ -3159,7 +3203,7 @@ export default function NovaMatriculaPage() {
                                 return(
                                   <span style={{
                                     display:'inline-flex',alignItems:'center',gap:4,
-                                    fontSize:12,fontWeight:500,color:'hsl(var(--text-muted))',
+                                    fontSize:14,fontWeight:500,color:'hsl(var(--text-muted))',
                                     whiteSpace:'nowrap',
                                   }}>
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{opacity:.6}}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -3169,24 +3213,24 @@ export default function NovaMatriculaPage() {
                               })()}
                             </td>
                             <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
-                              <div style={{fontSize:13,fontWeight:isV||isH?600:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))',fontVariantNumeric:'tabular-nums'}}
+                              <div style={{fontSize:15,fontWeight:isV||isH?600:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))',fontVariantNumeric:'tabular-nums'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
-                              {isV&&atr.dias>0&&<div style={{fontSize:9,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
+                              {isV&&atr.dias>0&&<div style={{fontSize:11,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
-                              <span style={{color:'hsl(var(--text-muted))',fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(p.valor)}
+                            <td style={{padding:'18px 24px',textAlign:'right',fontSize:15,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                              <span style={{color:'hsl(var(--text-muted))',fontSize:13,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(p.valor)}
                             </td>
                             <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span style={{
-                                    fontSize:13,
+                                    fontSize:15,
                                     color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
                                     fontWeight:600,
                                     textDecoration: (isV && !(p as any).manterDesconto) ? 'line-through' : 'none'
-                                  }}><span style={{fontSize:11,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(p.desconto)}</span>
+                                  }}><span style={{fontSize:13,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(p.desconto)}</span>
                                   <span style={{
-                                    fontSize:10,
+                                    fontSize:12,
                                     color: (isV && !(p as any).manterDesconto) ? 'hsl(var(--text-muted))' : '#d97706',
                                     opacity:.6,
                                     fontWeight:500,
@@ -3204,24 +3248,28 @@ export default function NovaMatriculaPage() {
                               {(jEx>0||mEx>0) ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                                   {jEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:.6}}>J</span>
-                                    <span style={{fontSize:12,color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(jEx)}</span>
+                                    <span style={{fontSize:11,color:'#ef4444',fontWeight:600,opacity:.6}}>J</span>
+                                    <span style={{fontSize:14,color:'#ef4444',fontWeight:500}}><span style={{fontSize:12,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(jEx)}</span>
                                   </div>}
                                   {mEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
-                                    <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:.6}}>M</span>
-                                    <span style={{fontSize:12,color:'#ef4444',fontWeight:500}}><span style={{fontSize:10,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(mEx)}</span>
+                                    <span style={{fontSize:11,color:'#ef4444',fontWeight:600,opacity:.6}}>M</span>
+                                    <span style={{fontSize:14,color:'#ef4444',fontWeight:500}}><span style={{fontSize:12,marginRight:2,opacity:0.6}}>+ R$</span>{fmtMoeda(mEx)}</span>
                                   </div>}
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
-                              <div style={{fontSize:14,fontWeight:800,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>
-                                <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(totalP)}
+                            <td style={{
+                              padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums', 
+                              background: p.status === 'pago' ? 'rgba(16,185,129,0.08)' : isV ? 'rgba(239,68,68,0.08)' : 'rgba(99,102,241,0.05)', 
+                              boxShadow: p.status === 'pago' ? 'inset 1px 0 0 rgba(16,185,129,0.15), inset -1px 0 0 rgba(16,185,129,0.15)' : isV ? 'inset 1px 0 0 rgba(239,68,68,0.15), inset -1px 0 0 rgba(239,68,68,0.15)' : 'inset 1px 0 0 rgba(99,102,241,0.15), inset -1px 0 0 rgba(99,102,241,0.15)'
+                            }}>
+                              <div style={{fontSize:20,fontWeight:800,color:p.status==='pago'?'#10b981':(jEx+mEx)>0?'#ef4444':'hsl(var(--text-base))'}}>
+                                <span style={{fontSize:15,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(totalP)}
                               </div>
-                              {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:9,color:'#ef4444',fontWeight:500,marginTop:2,opacity:.8}}>c/ encargos</div>}
+                              {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:11,color:'#ef4444',fontWeight:500,marginTop:2,opacity:.8}}>c/ encargos</div>}
                             </td>
                             <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
-                              <span style={{fontSize:12,color:'hsl(var(--text-muted))',fontVariantNumeric:'tabular-nums'}}>
+                              <span style={{fontSize:14,color:'hsl(var(--text-muted))',fontVariantNumeric:'tabular-nums'}}>
                                 {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
                               </span>
                             </td>
@@ -3564,6 +3612,7 @@ export default function NovaMatriculaPage() {
           aluno={{
             ...aluno,
             responsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.nome || undefined,
+            cpfResponsavel: todosResp.find(r => r.respFinanceiro)?.cpf || undefined,
             emailResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.email || (aluno as any).email,
             telResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.celular || (aluno as any).celular
           }}
@@ -5214,7 +5263,7 @@ export default function NovaMatriculaPage() {
         const respFin=todosResp.find(r=>r.respFinanceiro)
         // Outros alunos que compartilham o mesmo responsável financeiro (por nome ou CPF)
         const outrosAlunos=alunos.filter((a:any)=>{
-          if(a.id===editId) return false  // exclui o próprio aluno
+          if(a.id===realEditId) return false  // exclui o próprio aluno
           const resps=(a as any).responsaveis
           if(!Array.isArray(resps)) return false
           return resps.some((r:any)=>{
@@ -5491,7 +5540,7 @@ export default function NovaMatriculaPage() {
 
       {modalBaixaRespConfirm&&(()=>{
         const selResp=baixaRespParcelas
-        const totalBruto=selResp.reduce((s:number,p:any)=>s+(p.valorFinal||p.valor||0),0)
+        const totalBruto=selResp.reduce((s:number,p:any)=>s+(p.totalP||p.valorFinal||p.valor||0),0)
         const totalFormas=baixaRespForm.formasPagto.reduce((s:number,f:any)=>s+parseMoeda(f.valor||'0'),0)
         const saldo=+(totalBruto-totalFormas).toFixed(2)
         const addForma=()=>setBaixaRespForm((f:any)=>({...f,formasPagto:[...f.formasPagto,{id:String(Date.now()),forma:'Dinheiro',valor:saldo>0?fmtMoeda(saldo):'',cartao:null}]}))
@@ -5527,10 +5576,14 @@ export default function NovaMatriculaPage() {
                       </div>
                       <div>
                         <div style={{fontWeight:700,fontSize:11}}>{p.alunoNome} — {p.evento||'Mensalidade'}</div>
-                        <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize'}}>{p.competencia} · Vcto {p.vencimento ? formatDate(p.vencimento) : '—'}</div>
+                        <div style={{fontSize:10,color:'hsl(var(--text-muted))',textTransform:'capitalize'}}>
+                           {p.competencia} · Vcto {p.vencimento ? formatDate(p.vencimento) : '—'}
+                           {((p.jurosCalc||0) + (p.multaCalc||0)) > 0 && <span style={{color:'#ef4444',marginLeft:6,fontWeight:600}}>+ R$ {fmtMoeda((p.jurosCalc||0)+(p.multaCalc||0))} encargos</span>}
+                           {((p.valor||0) > (p.valorFinal||p.valor||0)) && <span style={{color:'#f59e0b',marginLeft:6,fontWeight:600}}>- R$ {fmtMoeda((p.valor||0) - (p.valorFinal||p.valor||0))} desc</span>}
+                        </div>
                       </div>
                     </div>
-                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:800,fontSize:13,color:'#10b981',flexShrink:0}}>R$ {fmtMoeda(p.valorFinal||p.valor)}</div>
+                    <div style={{fontFamily:"'JetBrains Mono',monospace",fontWeight:800,fontSize:13,color:'#10b981',flexShrink:0}}>R$ {fmtMoeda(p.totalP||p.valorFinal||p.valor||0)}</div>
                   </div>
                 ))}
               </div>
@@ -5661,7 +5714,15 @@ export default function NovaMatriculaPage() {
                       num:      s.num,
                       evento:   s.evento||'Mensalidade',
                       competencia: s.competencia||'',
-                      valor:    s.valorFinal||s.valor||0,
+                      vencimento: s.vencimento||'',
+                      valor:    s.valor||0,
+                      desconto: Math.max(0, (s.valor||0) - (s.valorFinal||s.valor||0)),
+                      valorFinal: s.valorFinal||s.valor||0,
+                      juros:    s.jurosCalc||0,
+                      multa:    s.multaCalc||0,
+                      dtPagto:  baixaRespForm.dataPagto,
+                      formaPagto: formaStr,
+                      codBaixa: codBaixa
                     }))
                     // Atualiza parcelas do próprio aluno
                     setParcelas(prev=>prev.map(p=>{

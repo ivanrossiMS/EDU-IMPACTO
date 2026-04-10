@@ -12,7 +12,7 @@ export async function createSession(user: any) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: 43200 // 12 hours
+    // No maxAge/expires = session cookie → browser deletes on close
   });
 }
 

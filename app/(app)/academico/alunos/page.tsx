@@ -54,7 +54,7 @@ export default function AlunosPage() {
     const niveis = cfgNiveisEnsino.length > 0 ? cfgNiveisEnsino : (cfgNiveisEnsinoDb || [])
     const found = niveis.find((n: any) => String(n.id) === str || String(n.codigo) === str || String(n.nome) === str)
     if (found) return found.nome
-    const map: any = { 'EI': 'Educação Infantil', 'EF1': 'Ensino F. I', 'EF2': 'Ensino F. II', 'EM': 'Ensino Médio', 'EJA': 'EJA', '1': 'Educação Infantil', '2': 'Ensino F. I', '3': 'Ensino F. II', '4': 'Ensino Médio' }
+    const map: any = { 'EI': 'Educação Infantil', 'EF1': 'Ensino Fundamental I', 'EF2': 'Ensino Fundamental II', 'EM': 'Ensino Médio', 'EJA': 'Educação de Jovens e Adultos', '1': 'Educação Infantil', '2': 'Ensino Fundamental I', '3': 'Ensino Fundamental II', '4': 'Ensino Médio', '5': 'Educação de Jovens e Adultos' }
     return map[str] || str
   }
 
@@ -361,7 +361,7 @@ export default function AlunosPage() {
                 <div style={{ fontWeight:800, fontSize:13 }}>{activeKpiData.label}</div>
                 <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>
                   {activeKpi === 'segmentos'
-                    ? [...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(s => getSegmentoNome(s)).join(', ')
+                    ? [...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(s => getSegmentoNome(s)).filter(n => n !== '—').join(', ')
                     : `${kpiAlunos.length} aluno${kpiAlunos.length!==1?'s':''} neste filtro`}
                 </div>
               </div>
@@ -372,16 +372,16 @@ export default function AlunosPage() {
           </div>
 
           {activeKpi === 'segmentos' ? (
-            <div style={{ padding:'16px 20px', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:10 }}>
+            <div style={{ padding:'16px 20px', display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
               {[...new Set(alunos.map(a=>a.serie).filter(Boolean))].map(serie => {
                 const cnt = alunos.filter(a => a.serie === serie).length
                 return (
-                  <div key={serie as string} style={{ padding:'12px 16px', borderRadius:12, background:'hsl(var(--bg-base))', border:'1px solid hsl(var(--border-subtle))', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:13 }}>{getSegmentoNome(serie)}</div>
+                  <div key={serie as string} style={{ padding:'12px 16px', borderRadius:12, background:'hsl(var(--bg-base))', border:'1px solid hsl(var(--border-subtle))', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:13, wordBreak:'break-word' }}>{getSegmentoNome(serie)}</div>
                       <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{cnt} aluno{cnt!==1?'s':''}</div>
                     </div>
-                    <div style={{ fontSize:22, fontWeight:900, color:'#10b981', fontFamily:'Outfit,sans-serif' }}>{cnt}</div>
+                    <div style={{ fontSize:22, fontWeight:900, color:'#10b981', fontFamily:'Outfit,sans-serif', flexShrink:0 }}>{cnt}</div>
                   </div>
                 )
               })}
