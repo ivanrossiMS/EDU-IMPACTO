@@ -902,6 +902,7 @@ export default function NovaMatriculaPage() {
   const [modalVcto, setModalVcto] = useState(false)
   const [modalEventoFin, setModalEventoFin] = useState(false)
   const [modalObsFin, setModalObsFin] = useState(false)
+  const [menuAcaoOpen, setMenuAcaoOpen] = useState<number | null>(null)
   const [modalAlterarValor, setModalAlterarValor] = useState(false)
   const [modalExtrato, setModalExtrato] = useState(false)
   const [modalEditarParcela, setModalEditarParcela] = useState(false)
@@ -2862,7 +2863,6 @@ export default function NovaMatriculaPage() {
                         {[
                           {l:'Parc.',w:50,center:true},
                           {l:'Evento / Competência'},
-                          {l:'Dt. Emissão',w:95,center:true},
                           {l:'Vencimento',w:95},
                           {l:'Valor Bruto',w:95,r:true},
                           {l:'Desconto',w:85,r:true},
@@ -2870,6 +2870,7 @@ export default function NovaMatriculaPage() {
                           {l:'Total a Pagar',w:105,r:true},
                           {l:'Pagamento',w:90},
                           {l:'Ação',w:86,center:true},
+                          {l:'Dt. Emissão',w:95,center:true},
                         ].map((h:any,hi:number)=>(
                           <th key={hi} style={{padding:'10px 8px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:700,fontSize:10,color:'hsl(var(--text-muted))',borderBottom:'2px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:.8,textTransform:'uppercase',fontFamily:"'Inter',sans-serif"}}>{h.l}</th>
                         ))}
@@ -2936,28 +2937,6 @@ export default function NovaMatriculaPage() {
                                 <span style={{display:'inline-flex',alignItems:'center',fontSize:9,padding:'2px 7px',borderRadius:20,fontWeight:800,background:sBg,color:sColor,whiteSpace:'nowrap',border:'1px solid '+sColor+'25',lineHeight:'14px'}}>{sLabel}</span>
                               </div>
                             </td>
-                            <td style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}} onClick={e=>e.stopPropagation()}>
-                              {(()=>{
-                                const emissao=(p as any).criadoEm||(p as any).dataEmissao
-                                const dtStr=emissao
-                                  ? new Date(emissao).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
-                                  : new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'})
-                                return(
-                                  <span style={{
-                                    display:'inline-flex',alignItems:'center',gap:5,
-                                    padding:'4px 10px',borderRadius:20,
-                                    fontSize:10,fontWeight:700,
-                                    fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",
-                                    background:'rgba(99,102,241,0.08)',
-                                    color:'#818cf8',
-                                    border:'1px solid rgba(99,102,241,0.2)',
-                                    whiteSpace:'nowrap',
-                                  }}>
-                                    📅 {dtStr}
-                                  </span>
-                                )
-                              })()}
-                            </td>
                             <td style={{padding:'8px 6px',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap'}}>
                               <div style={{fontFamily:"'JetBrains Mono','Fira Mono',ui-monospace,monospace",fontSize:13,fontWeight:isV||isH?800:600,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
@@ -3021,36 +3000,51 @@ export default function NovaMatriculaPage() {
                                   (t.id.includes(String(p.num)) || t.parcela?.startsWith(String(p.num))) &&
                                   t.statusBancario && t.statusBancario !== 'rascunho'
                                 )
-                                if (p.status === 'pago') return (
-                                  <button type="button"
-                                    style={{fontSize:10,padding:'5px 10px',borderRadius:8,border:'1px solid rgba(16,185,129,0.3)',background:'rgba(16,185,129,0.07)',color:'#10b981',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:3}}
-                                    onClick={e=>{e.stopPropagation();setParcelaAtiva(p);setModalRecibo(true)}}>
-                                    🧾 Recibo
-                                  </button>
-                                )
+                                const isOpen = menuAcaoOpen === p.num;
                                 return (
-                                  <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
-                                    {tituloEmitido ? (
-                                      <button type="button"
-                                        title="Imprimir boleto já emitido"
-                                        style={{fontSize:10,padding:'5px 10px',borderRadius:8,border:'1px solid rgba(14,165,233,0.3)',background:'rgba(14,165,233,0.07)',color:'#0ea5e9',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:3,whiteSpace:'nowrap'}}
-                                        onClick={e=>{
-                                          e.stopPropagation()
-                                          if(tituloEmitido.htmlBoleto) {
-                                            const w=window.open('','_blank');if(w){w.document.write(tituloEmitido.htmlBoleto);w.document.close()}
-                                          }
-                                        }}>
-                                        🖨️ Imprimir
-                                      </button>
-                                    ) : (
-                                      <span style={{fontSize:10,color:'hsl(var(--text-muted))',fontStyle:'italic',display:'flex',alignItems:'center'}}>Sem boleto</span>
-                                    )}
-                                    <button type="button"
-                                      title={(p.obs||(p as any).obsFin) ? "Editar observação da parcela" : "Adicionar observação à parcela"}
-                                      style={{fontSize:10,padding:'4px 8px',borderRadius:8,border:'1px solid rgba(139,92,246,0.4)',background:(p.obs||(p as any).obsFin)?'rgba(139,92,246,0.15)':'transparent',color:'#8b5cf6',cursor:'pointer',fontWeight:700,display:'inline-flex',alignItems:'center',gap:4,transition:'all .2s'}}
-                                      onClick={e=>{e.stopPropagation();setObsFinForm({parcelas:[p.num],obs:(p as any).obsFin||p.obs||''});setModalObsFin(true)}}>
-                                      {(p.obs||(p as any).obsFin) ? '📝 Ver Obs' : '📝 +Obs'}
+                                  <div style={{position: 'relative', display: 'inline-block'}}>
+                                    <button type="button" 
+                                      onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(isOpen ? null : p.num); }} 
+                                      style={{background: isOpen ? 'rgba(99,102,241,0.1)' : 'transparent', border: 'none', cursor: 'pointer', padding: '6px 4px', borderRadius: '4px', color: isOpen ? '#6366f1' : 'hsl(var(--text-muted))', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                                     </button>
+                                    
+                                    {isOpen && (
+                                      <>
+                                        <div style={{position: 'fixed', inset: 0, zIndex: 40}} onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); }} />
+                                        <div style={{position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', zIndex: 50, padding: 4, minWidth: 160, display: 'flex', flexDirection: 'column', gap: 2}}>
+                                          {p.status === 'pago' ? (
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); setParcelaAtiva(p); setModalRecibo(true); }} style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4, color: 'hsl(var(--text-base))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500}} onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                              🧾 Ver Recibo
+                                            </button>
+                                          ) : (
+                                            <div style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, color: 'hsl(var(--text-muted))', opacity: 0.6, display: 'flex', alignItems: 'center', gap: 6, cursor: 'not-allowed', fontWeight: 500}}>
+                                              🧾 Sem Recibo
+                                            </div>
+                                          )}
+                                          
+                                          {tituloEmitido ? (
+                                            <button type="button" onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); if(tituloEmitido.htmlBoleto) { const w=window.open('','_blank');if(w){w.document.write(tituloEmitido.htmlBoleto);w.document.close()} } }} style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4, color: 'hsl(var(--text-base))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500}} onMouseEnter={e => e.currentTarget.style.background = 'rgba(14,165,233,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                              🖨️ Ver Boleto
+                                            </button>
+                                          ) : (
+                                            <div style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, color: 'hsl(var(--text-muted))', opacity: 0.6, display: 'flex', alignItems: 'center', gap: 6, cursor: 'not-allowed', fontWeight: 500}}>
+                                              🖨️ Sem Boleto
+                                            </div>
+                                          )}
+                                          
+                                          <button type="button" onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); setObsFinForm({parcelas: [p.num], obs: (p as any).obsFin || p.obs || ''}); setModalObsFin(true); }} style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4, color: 'hsl(var(--text-base))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500}} onMouseEnter={e => e.currentTarget.style.background = 'rgba(139,92,246,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            {(p.obs || (p as any).obsFin) ? '📝 Editar Observação' : '📝 Ver Observação'}
+                                          </button>
+                                          
+                                          {(p.obs || (p as any).obsFin) && (
+                                            <div style={{padding: '6px 10px', fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic', background: 'rgba(148,163,184,0.05)', borderRadius: 4, margin: '2px 4px 4px', whiteSpace: 'normal', wordBreak: 'break-word', textAlign: 'left', lineHeight: 1.4}}>
+                                              {p.obs || (p as any).obsFin}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
                                   </div>
                                 )
                               })()}
@@ -3092,9 +3086,9 @@ export default function NovaMatriculaPage() {
                           <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',marginRight:6, fontWeight:800}}>A Vencer: {aV.length}</span>
                           {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:6,background:'rgba(239,68,68,0.1)',color:'#ef4444', fontWeight:800}}>Vencido: {ven.length}</span>}
                         </td>
-                        {/* col 4+5: Dt. Emissão + Vencimento — vazios */}
-                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
-                        {/* col 6: Valor Bruto */}
+                        {/* col 4: Vencimento — vazio */}
+                        <td style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        {/* col 5: Valor Bruto */}
                         <td style={{padding:'8px 6px',textAlign:'right',fontFamily:'monospace',fontSize:12,borderTop:'2px solid hsl(var(--border-subtle))'}}>
                           <span style={{padding:'4px 8px',borderRadius:6,background:'rgba(99,102,241,0.1)',color:'#6366f1',border:'1px solid rgba(99,102,241,0.2)',fontWeight:800}}>R$ {fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}</span>
                         </td>
@@ -3124,8 +3118,8 @@ export default function NovaMatriculaPage() {
                             return s + (p.status==='pago' ? p.valorFinal : +(p.valor-desc+j+m));
                           },0))}</span>
                         </td>
-                        {/* col 10+11: Pagamento + Ação — vazio */}
-                        <td colSpan={2} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
+                        {/* col 9+10+11: Pagamento + Ação + Dt.Emissão — vazio */}
+                        <td colSpan={3} style={{borderTop:'2px solid hsl(var(--border-subtle))'}}/>
                       </tr>
                     </tfoot>
                   </table>
