@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -6,7 +8,16 @@ import { HardDrive, Download, CheckCircle, RotateCcw } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 export default function BackupSection() {
-  const { alunos, funcionarios, leads, titulos, contasPagar, comunicados, tarefas, mantenedores } = useData()
+  const { leads = [], comunicados = [], tarefas = [], mantenedores = [] } = useData() || {};
+  const [_alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [_funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const [_titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [_contasPagar, setContasPagar] = useSupabaseArray<any>('contas-pagar');
+
+  const alunos = _alunos || [];
+  const funcionarios = _funcionarios || [];
+  const titulos = _titulos || [];
+  const contasPagar = _contasPagar || [];
   const [downloading, setDownloading] = useState(false)
   const [lastBackup, setLastBackup] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)

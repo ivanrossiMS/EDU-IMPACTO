@@ -156,8 +156,8 @@ function SeriesPanel({ nivel, onUpdate }: { nivel: ConfigNivelEnsino; onUpdate: 
 }
 
 export default function NiveisEnsinoPage() {
-  const { cfgNiveisEnsino, setCfgNiveisEnsino, mantenedores } = useData()
-  const todasUnidades = mantenedores.flatMap(m => m.unidades ?? [])
+  const { cfgNiveisEnsino, setCfgNiveisEnsino, mantenedores = [] } = useData()
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades ?? [])
 
   type FormNivel = { nome: string; faixaEtaria: string; duracaoAnos: number; situacao: 'ativo' | 'inativo'; unidadeIds: string[] }
   const BLANK: FormNivel = { nome: '', faixaEtaria: '', duracaoAnos: 1, situacao: 'ativo', unidadeIds: [] }
@@ -227,10 +227,23 @@ export default function NiveisEnsinoPage() {
     const codigo = editId ? editCodigo : gerarCodigoNivel(form.nome, codigosExistentes)
     const series = formSeries.map((s, i) => ({ ...s, ordem: i + 1, codigo: gerarCodigoSerie(codigo, i + 1) }))
 
+    // Outer guard (uses closure state, works for normal clicks)
+    if (!editId && cfgNiveisEnsino.some(n => n.nome.toLowerCase() === form.nome.trim().toLowerCase())) {
+      alert('Já existe um nível de ensino com este nome!')
+      return
+    }
+
     if (editId) {
       setCfgNiveisEnsino(prev => prev.map(n => n.id === editId ? { ...n, ...form, codigo, series } : n))
     } else {
-      setCfgNiveisEnsino(prev => [...prev, { ...form, codigo, id: newId('NE'), series, createdAt: new Date().toISOString() }])
+      const novoId = newId('NE')
+      setCfgNiveisEnsino(prev => {
+        // Inner guard (uses real-time queued state, works against double-click race conditions)
+        if (prev.some(n => n.nome.toLowerCase() === form.nome.trim().toLowerCase() || n.id === novoId)) return prev
+        const realCodigo = gerarCodigoNivel(form.nome, prev.map(p => p.codigo))
+        const realSeries = formSeries.map((s, i) => ({ ...s, ordem: i + 1, codigo: gerarCodigoSerie(realCodigo, i + 1) }))
+        return [...prev, { ...form, codigo: realCodigo, id: novoId, series: realSeries, createdAt: new Date().toISOString() }]
+      })
     }
     setShowForm(false)
   }

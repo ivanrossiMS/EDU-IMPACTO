@@ -1,5 +1,6 @@
-'use client'
+﻿'use client'
 
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 
 import { useData, Turma, newId } from '@/lib/dataContext'
@@ -61,7 +62,10 @@ interface Props {
 }
 
 export default function TurmaModal({ open, onClose, editingId }: Props) {
-  const { turmas: _turmas, setTurmas, alunos: _alunos, setAlunos, cfgDisciplinas: _cfgDisc, funcionarios: _funcs, cfgPadroesPagamento: _cfgPadroes, mantenedores: _mantenedores, cfgNiveisEnsino: _cfgNiveis, cfgTurnos: _cfgTurnos, logSystemAction } = useData()
+  const { turmas: _turmas, setTurmas, cfgDisciplinas: _cfgDisc, cfgPadroesPagamento: _cfgPadroes, mantenedores: _mantenedores, cfgNiveisEnsino: _cfgNiveis, cfgTurnos: _cfgTurnos, logSystemAction } = useData()
+  const [_alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [_funcs, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  
   const turmas        = Array.isArray(_turmas)      ? _turmas      : []
   const alunos        = Array.isArray(_alunos)      ? _alunos      : []
   const cfgDisciplinas= Array.isArray(_cfgDisc)     ? _cfgDisc     : []
@@ -208,7 +212,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
     setAddDisciplina(false)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nome.trim()) return
     const codigo = form.codigo || gerarCodigoTurma(form.serie, form.turno)
     const payload = { ...form, codigo, padraoPagamentoIds } as any
@@ -217,13 +221,13 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
         ? { ...payload, id: editingId }
         : t
       ))
-      fetch(`/api/turmas/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: editingId}) })
+      await fetch(`/api/turmas/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: editingId}) })
         .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Edição', `Atualização da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     } else {
       const nid = newId('T')
       setTurmas(prev => [...prev, { ...payload, id: nid }])
-      fetch(`/api/turmas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: nid}) })
+      await fetch(`/api/turmas`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({...payload, id: nid}) })
         .catch(console.error)
       logSystemAction('Acadêmico (Turmas)', 'Cadastro', `Criação da turma ${payload.nome}`, { registroId: payload.codigo, nomeRelacionado: payload.nome, detalhesDepois: payload })
     }
@@ -830,3 +834,4 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
     </div>
   )
 }
+

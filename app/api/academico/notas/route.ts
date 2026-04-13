@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
   const alunoId = searchParams.get('aluno_id')
 
-  let query = supabaseServer.from('lancamentos_nota').select('*').order('created_at', { ascending: false })
+  let query = supabase.from('lancamentos_nota').select('*').order('created_at', { ascending: false })
   if (turmaId) query = query.eq('turma_id', turmaId)
   if (alunoId) query = query.eq('aluno_id', alunoId)
 
@@ -18,17 +19,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       const rows = body.map(n => buildRow(n))
-      const { error } = await supabaseServer.from('lancamentos_nota').upsert(rows)
+      const { error } = await supabase.from('lancamentos_nota').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
-    const { data, error } = await supabaseServer.from('lancamentos_nota').upsert(row).select().single()
+    const { data, error } = await supabase.from('lancamentos_nota').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {
@@ -37,10 +39,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const { error } = await supabaseServer.from('lancamentos_nota').delete().eq('id', id)
+  const { error } = await supabase.from('lancamentos_nota').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

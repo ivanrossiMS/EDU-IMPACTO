@@ -10,7 +10,6 @@ import { useRouter } from 'next/navigation'
 const QUICK_LINKS = [
   { label: 'Alunos', sub: 'Acadêmico', href: '/academico/alunos', icon: <Users size={14} color="#60a5fa" /> },
   { label: 'Contas a Receber', sub: 'Financeiro', href: '/financeiro/receber', icon: <DollarSign size={14} color="#34d399" /> },
-  { label: 'DRE Gerencial', sub: 'Financeiro', href: '/financeiro/dre', icon: <DollarSign size={14} color="#34d399" /> },
   { label: 'Censo Escolar', sub: 'Relatórios', href: '/relatorios/censo', icon: <FileText size={14} color="#f59e0b" /> },
   { label: 'Copilotos IA', sub: 'Inteligência', href: '/ia/copilotos', icon: <Brain size={14} color="#a78bfa" /> },
   { label: 'Folha de Pagamento', sub: 'RH', href: '/rh/folha', icon: <DollarSign size={14} color="#f59e0b" /> },
@@ -195,7 +194,6 @@ export function Topbar() {
               <div style={{ padding: '8px 12px 4px', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-disabled))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Assistentes</div>
               {[
                 { icon: '🎯', label: 'Copiloto da Direção', sub: 'Visão estratégica' },
-                { icon: '💰', label: 'Copiloto Financeiro', sub: 'DRE, fluxo, alertas' },
                 { icon: '📚', label: 'Copiloto Pedagógico', sub: 'Desempenho, notas' },
                 { icon: '👥', label: 'Copiloto de RH', sub: 'Equipe, folha, ponto' },
                 { icon: '📣', label: 'Copiloto de CRM', sub: 'Leads, retenção' },
@@ -313,9 +311,19 @@ export function Topbar() {
               <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
               <div className="dropdown-item danger" style={{ cursor: 'pointer' }} onClick={() => {
                 userDropdown.setOpen(false)
-                setCurrentUser(null)
-                localStorage.removeItem('edu-current-user')
-                router.push('/login')
+
+                // Clear ALL system state from localStorage (React keys + Supabase auth tokens)
+                const keysToRemove: string[] = []
+                for (let i = 0; i < localStorage.length; i++) {
+                  const k = localStorage.key(i)
+                  if (k && (k.startsWith('edu-') || k.startsWith('sb-'))) {
+                    keysToRemove.push(k)
+                  }
+                }
+                keysToRemove.forEach(k => localStorage.removeItem(k))
+
+                // Single navigation: server clears SSR cookies + redirects to /login atomically
+                window.location.href = '/api/auth/logout'
               }}>
                 <LogOut size={14} />Sair
               </div>

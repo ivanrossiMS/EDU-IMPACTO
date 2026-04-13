@@ -8,7 +8,6 @@ import {
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, UserCog, LogOut, ArrowLeft
 } from 'lucide-react'
-import { destroySession } from '@/app/actions/authActions'
 
 export default function AgendaDigitalColaboradorLayout({ 
   children
@@ -199,7 +198,7 @@ export default function AgendaDigitalColaboradorLayout({
             <button 
               onClick={async () => { 
                 setCurrentUser(null); 
-                await destroySession(); 
+                await fetch('/api/auth/logout', { method: 'POST' }); 
                 window.location.href = '/login'; 
               }} 
               className="btn btn-secondary btn-sm" 

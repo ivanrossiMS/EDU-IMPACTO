@@ -137,7 +137,7 @@ function PostCard({ post, onApprove, onReject, onDelete }: { post: ADMomento, on
 
 export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm } = useAgendaDigital()
-  const { turmas } = useData()
+  const { turmas = [] } = useData()
 
   const [filterType, setFilterType] = useState('pending')
   const [filterTurma, setFilterTurma] = useState('all')

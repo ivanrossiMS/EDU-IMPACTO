@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await context.params
-  const { data, error } = await supabaseServer.from('leads').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('leads').select('*').eq('id', id).single()
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
   return NextResponse.json({ ...data, ...(data.dados || {}) })
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await context.params
   try {
     const body = await request.json()
@@ -24,7 +26,7 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       score_ia: Number(score_ia) || 0, valor_potencial: Number(valor_potencial) || 0,
       notas: notas || '', dados: rest, updated_at: new Date().toISOString(),
     }
-    const { data: d, error } = await supabaseServer.from('leads').upsert(row).select().single()
+    const { data: d, error } = await supabase.from('leads').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...d, ...(d.dados || {}) })
   } catch (e: any) {
@@ -33,8 +35,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function DELETE(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await context.params
-  const { error } = await supabaseServer.from('leads').delete().eq('id', id)
+  const { error } = await supabase.from('leads').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

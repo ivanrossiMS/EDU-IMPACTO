@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -7,7 +9,8 @@ import Link from 'next/link'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 export default function ADAdminPessoas() {
-  const { alunos, setAlunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { adAlert, adConfirm } = useAgendaDigital()
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('todos')

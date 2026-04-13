@@ -42,11 +42,50 @@ function getResp(a: any): { fin: string; ped: string } {
   return { fin: '', ped: '' }
 }
 
+import { useApiQuery, useApiMutation } from '@/hooks/useApi'
+
+import { useQueryClient } from '@tanstack/react-query'
+
 export default function AlunosPage() {
   const router = useRouter()
-  const { logSystemAction, alunos = [], setAlunos: setAlunosCtx, turmas = [], cfgNiveisEnsino = [] } = useData()
+  // Retira alunos massivos da memória (useData), mantém turmas por ser leve e relacional
+  const { logSystemAction, turmas = [], cfgNiveisEnsino = [] } = useData()
   const { data: cfgNiveisEnsinoDb } = useConfigDb<any>('cfgNiveisEnsino')
-  const isLoading = false
+  
+  const queryClient = useQueryClient()
+
+  const [search, setSearch] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('') // Evita spam no motor Postgres
+
+  const [filterSerie, setFilterSerie] = useState('Todos')
+  const [filterStatus, setFilterStatus] = useState('Todos')
+  const [showCadastro, setShowCadastro] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  const [activeKpi, setActiveKpi] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 25
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => setMounted(true), [])
+
+  // ⚡ Otimização 3: Fetch inteligente com cache pela Rota Segura Enterprise
+  // Puxa até 1000 por padrão nas APIs antigas, mas agora limitamos a paginação real se precisarmos
+  const { data: apiResponse, isLoading } = useApiQuery<{data: any[], meta: any}>(
+    ['alunos-core', appliedSearch, filterSerie, filterStatus], 
+    '/api/alunos', 
+    { 
+      limit: 1500, // Limite seguro para os KPIs visuais rodarem sem estourar memória
+      search: appliedSearch === '' ? undefined : appliedSearch,
+      status: filterStatus === 'Todos' ? undefined : filterStatus,
+      serie: filterSerie === 'Todos' ? undefined : filterSerie
+    }
+  )
+
+  const mutateDelete = useApiMutation('/api/alunos', 'DELETE', [['alunos-core']])
+
+  const alunos = apiResponse?.data || []
 
   const getSegmentoNome = (idOrCod: string | number | undefined) => {
     if (!idOrCod) return '—'
@@ -77,6 +116,7 @@ export default function AlunosPage() {
     const turmaNome = turmaObj?.nome || aluno.turma || '—'
     return { turma: turmaNome, ano: ultimo.ano || '', situacao: ultimo.situacao || '' }
   }
+  
   // ── Exportação de fotos: cada foto salva com o código do aluno ─────────────
   const exportarFotos = async () => {
     const alunosComFoto = alunos.filter((a: any) => a.foto)
@@ -112,21 +152,6 @@ export default function AlunosPage() {
     }
   }
 
-
-  const [search, setSearch]         = useState('')
-  const [filterSerie, setFilterSerie]   = useState('Todos')
-  const [filterStatus, setFilterStatus] = useState('Todos')
-  const [showCadastro, setShowCadastro] = useState(false)
-  const [editingId, setEditingId]   = useState<string | null>(null)
-  const [confirmId, setConfirmId]   = useState<string | null>(null)
-  const [mounted, setMounted]       = useState(false)
-  const [activeKpi, setActiveKpi]   = useState<string | null>(null)
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 25
-  const searchRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => setMounted(true), [])
-
   // CSS animation
   useEffect(() => {
     const id = 'kpi-panel-style'
@@ -140,42 +165,31 @@ export default function AlunosPage() {
     document.head.appendChild(st)
   }, [])
 
-  const hasSearch = search.trim().length >= 3
-
-  const displayedBase = useMemo(() => {
-    return alunos.filter(a => {
-      const q = search.toLowerCase()
-      const matchCod = ((a as any).codigo || a.matricula || a.id).toLowerCase()
-      return (
-        (a.nome.toLowerCase().includes(q) || matchCod.includes(q) || a.turma.toLowerCase().includes(q)) &&
-        (filterSerie === 'Todos' || a.serie === filterSerie) &&
-        (filterStatus === 'Todos' || a.status === filterStatus)
-      )
-    })
-  }, [search, filterSerie, filterStatus, alunos])
+  const hasSearch = appliedSearch.trim().length > 0
 
   useEffect(() => {
     setCurrentPage(1)
   }, [search, filterSerie, filterStatus])
 
-  const totalPages = Math.ceil(displayedBase.length / itemsPerPage)
+  const totalPages = Math.ceil(alunos.length / itemsPerPage)
   
   const displayed = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage
-    return displayedBase.slice(startIndex, startIndex + itemsPerPage)
-  }, [displayedBase, currentPage])
+    return alunos.slice(startIndex, startIndex + itemsPerPage)
+  }, [alunos, currentPage])
 
   const handleDelete = async () => {
     if (confirmId) {
        const deletedId = confirmId
        const alunoDel = alunos.find((a: any) => a.id === deletedId)
        try {
-           await fetch(`/api/alunos/${deletedId}`, { method: 'DELETE' })
+           // Usa o Enterprise Mutation Zod com Toast Handling Integrado
+           await mutateDelete.mutateAsync({ id: deletedId })
+           
+           logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
        } catch (e) {
            console.error('Erro ao deletar', e)
        }
-       setAlunosCtx((prev: any[]) => prev.filter((a: any) => a.id !== deletedId))
-       logSystemAction('Acadêmico (Alunos)', 'Exclusão', `Exclusão permanente do aluno/matrícula`, { registroId: (alunoDel as any)?.codigo || alunoDel?.id, nomeRelacionado: alunoDel?.nome })
        setConfirmId(null)
     }
   }
@@ -420,7 +434,7 @@ export default function AlunosPage() {
         <div style={{ textAlign:'center' }}>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>🔍 Buscar Aluno</div>
           <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            Digite o nome, nº de matrícula ou turma para localizar o aluno
+            Digite o nome, n° de matrícula ou turma e aperte Enter
           </div>
         </div>
         <div style={{ position:'relative', width:'100%', maxWidth:560 }}>
@@ -431,11 +445,11 @@ export default function AlunosPage() {
             style={{ paddingLeft:48, paddingRight:search?44:16, fontSize:15, height:52, borderRadius:14, boxShadow:hasSearch?'0 0 0 3px rgba(99,102,241,0.15)':'none' }}
             placeholder="Ex: João Pedro, 20260001, 7º Ano A..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && setAppliedSearch(search)}
             autoFocus
           />
           {search && (
-            <button onClick={() => setSearch('')} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex' }}>
+            <button onClick={() => { setSearch(''); setAppliedSearch(''); }} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex' }}>
               <X size={16}/>
             </button>
           )}
@@ -452,7 +466,7 @@ export default function AlunosPage() {
                 <option key={s} value={s}>{s==='Todos'?'Todos':s==='matriculado'?'Matriculado':s==='em_cadastro'?'Em Cadastro':s==='transferido'?'Transferido':'Inativo'}</option>
               ))}
             </select>
-            <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{displayedBase.length} resultado{displayedBase.length!==1?'s':''}</span>
+            <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{apiResponse?.meta?.total || alunos.length} resultado{(apiResponse?.meta?.total || alunos.length)!==1?'s':''}</span>
           </div>
         )}
 
@@ -598,7 +612,7 @@ export default function AlunosPage() {
             {totalPages > 1 && (
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
                 <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, displayedBase.length)} de {displayedBase.length} alunos
+                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, (apiResponse?.meta?.total || alunos.length))} de {(apiResponse?.meta?.total || alunos.length)} alunos
                 </span>
                 <div style={{ display:'flex', gap:8 }}>
                   <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
@@ -625,3 +639,4 @@ export default function AlunosPage() {
     </div>
   )
 }
+

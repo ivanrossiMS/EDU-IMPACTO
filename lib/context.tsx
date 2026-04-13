@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { destroySession } from '@/app/actions/authActions'
 
 export type Theme = 'dark' | 'light'
 
@@ -94,7 +93,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('light')
   const [sidebarTheme, setSidebarThemeState] = useState<Theme>('dark')
   const [activeModules, setActiveModulesState] = useState<Record<string, boolean>>(DEFAULT_MODULES)
-  const [currentUserPerfil, setCurrentUserPerfilState] = useState('Diretor Geral')
+  const [currentUserPerfil, setCurrentUserPerfilState] = useState('')
   const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null)
   const [hydrated, setHydrated] = useState(false)
 
@@ -111,8 +110,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarThemeState(savedSidebarTheme)
     setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
     setActiveUnitState(savedUnit)
-    setCurrentUserPerfilState(savedPerfil)
-    setCurrentUserState(savedUser)
+    // Only hydrate user if explicitly saved — never default to a perfil
+    if (savedUser) {
+      setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
+      setCurrentUserState(savedUser)
+    } else {
+      // No saved user = logged out — clear any stale perfil
+      setCurrentUserPerfilState('')
+      localStorage.removeItem('edu-current-perfil')
+    }
     document.documentElement.setAttribute('data-theme', savedTheme)
     setHydrated(true)
   }, [])
@@ -150,14 +156,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setCurrentUser = useCallback((user: CurrentUser | null) => {
     setCurrentUserState(user)
-    saveSetting('edu-current-user', user)
-    if (user?.perfil) {
+    if (user) {
+      // Login: persist user data
+      saveSetting('edu-current-user', user)
       setCurrentUserPerfilState(user.perfil)
       saveSetting('edu-current-perfil', user.perfil)
-      // O cookie agora é gerado e protegido no log in pela Server Action 'createSession'.
     } else {
-      // Limpa a sessão chamando a Server Action
-      destroySession().catch(e => console.error('Logout error', e))
+      // Logout: wipe ALL user-related keys from localStorage
+      const USER_KEYS = [
+        'edu-current-user',
+        'edu-current-perfil',
+        'edu-user-passwords',  // legacy local passwords — nuke on every logout
+      ]
+      USER_KEYS.forEach(k => localStorage.removeItem(k))
+      setCurrentUserPerfilState('')
     }
   }, [])
 

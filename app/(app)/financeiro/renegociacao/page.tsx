@@ -1,4 +1,6 @@
-﻿'use client'
+'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+﻿
 
 import { useState, useMemo } from 'react'
 import { useData, newId } from '@/lib/dataContext'
@@ -24,7 +26,8 @@ const STATUS_BADGE = {
 }
 
 export default function RenegociacaoPage() {
-  const { alunos, titulos, setTitulos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
   const [acordos, setAcordos] = useState<AcordoRenegociacao[]>([])
   const [showModal, setShowModal] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState<'todos'|'ativo'|'quitado'|'inadimplente'>('todos')

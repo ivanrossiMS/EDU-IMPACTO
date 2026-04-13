@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData, Transferencia, newId } from '@/lib/dataContext'
 import { useState, useMemo, useRef, useEffect } from 'react'
@@ -74,7 +76,8 @@ function AlunoSearchInput({ value, onChange, alunos }: {
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function TransferenciasPage() {
-  const { transferencias, setTransferencias, alunos } = useData()
+  const { transferencias = [], setTransferencias } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [tab, setTab] = useState<'lista' | 'solicitar'>('lista')
   const [form, setForm] = useState<Omit<Transferencia, 'id' | 'createdAt'>>(BLANK)
   const [docsInput, setDocsInput] = useState('')

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -1357,7 +1359,8 @@ function ModalGerar({ doc, onClose, alunos, turmas, onGerado, mapeamentos }: {
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function DocumentosEscolares() {
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [documentos, setDocumentos] = useLocalStorage<DocumentoModelo[]>('edu-documentos-modelos', [])
   const [mascaras, setMascaras] = useLocalStorage<Mascara[]>('edu-mascaras-dict', MASCARAS_PADRAO)
   const [historico, setHistorico] = useLocalStorage<HistoricoGeracao[]>('edu-docs-historico', [])

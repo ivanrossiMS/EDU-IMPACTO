@@ -92,10 +92,22 @@ export default function DisciplinasPage() {
   const handleSave = () => {
     if (!form.nome.trim()) return
     const codigo = editId ? form.codigo : gerarCodigoDisc(codigosExistentes)
+
+    // Outer guard (uses closure state, works for normal clicks)
+    if (!editId && cfgDisciplinas.some(d => d.nome.toLowerCase() === form.nome.trim().toLowerCase())) {
+      alert('Já existe uma disciplina com este nome!')
+      return
+    }
+
     if (editId) {
       setCfgDisciplinas(prev => prev.map(c => c.id === editId ? { ...c, ...form, codigo } as ConfigDisciplina : c))
     } else {
-      setCfgDisciplinas(prev => [...prev, { ...form, id: newId('DS'), codigo, createdAt: new Date().toISOString() } as ConfigDisciplina])
+      const novoId = newId('DS')
+      setCfgDisciplinas(prev => {
+        // Inner guard (uses real-time queued state, works against double-click race conditions)
+        if (prev.some(d => d.nome.toLowerCase() === form.nome.trim().toLowerCase() || d.id === novoId)) return prev
+        return [...prev, { ...form, id: novoId, codigo: gerarCodigoDisc(prev.map(p => p.codigo)), createdAt: new Date().toISOString() } as ConfigDisciplina]
+      })
     }
     setShowForm(false)
   }

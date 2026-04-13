@@ -7,7 +7,6 @@ import { Plus, Edit2, Trash2, Check, ChevronRight, ChevronDown, FileText, Search
 
 const BLANK: Omit<ConfigPlanoContas, 'id' | 'createdAt'> = {
   codPlano: '', descricao: '', tipo: 'analitico', grupoConta: 'receitas', parentId: '', situacao: 'ativo',
-  grupoDRE: undefined, exibirDRE: true, naturezaDRE: undefined, ordemDRE: undefined,
 }
 
 const TIPO_CFG = {
@@ -59,10 +58,11 @@ function SkeletonNode({ node, depth }: { node: PlanoNode; depth: number }) {
 }
 
 /* ─── Table row (recursive) ───────────────────────────────────── */
-function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle, gruposDRE = [] }: {
+function PlanoContasRow({
+  node, depth, onEdit, onDelete, expanded, onToggle
+}: {
   node: PlanoNode; depth: number; onEdit: (n: ConfigPlanoContas) => void
   onDelete: (id: string) => void; expanded: Set<string>; onToggle: (id: string) => void
-  gruposDRE?: import('@/lib/dataContext').ConfigGrupoDRE[]
 }) {
   const tc = TIPO_CFG[node.tipo]
   const gc = GRUPO_CFG[node.grupoConta]
@@ -100,7 +100,7 @@ function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle, gruposDRE
         </td>
       </tr>
       {isExpanded && node.children.map(child => (
-        <PlanoRow key={child.id} node={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} expanded={expanded} onToggle={onToggle} gruposDRE={gruposDRE} />
+        <PlanoContasRow key={child.id} node={child} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} expanded={expanded} onToggle={onToggle} />
       ))}
     </>
   )
@@ -110,7 +110,6 @@ function PlanoRow({ node, depth, onEdit, onDelete, expanded, onToggle, gruposDRE
 export default function PlanoContasPage() {
   // ✅ Usa useConfigDb para persistência real no Supabase
   const { data: cfgPlanoContas, setData: setCfgPlanoContas, loading } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
-  const { cfgGruposDRE } = useData()
 
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
@@ -157,8 +156,6 @@ export default function PlanoContasPage() {
     setForm({
       codPlano: p.codPlano, descricao: p.descricao, tipo: p.tipo,
       grupoConta: p.grupoConta, parentId: p.parentId, situacao: p.situacao,
-      grupoDRE: p.grupoDRE, exibirDRE: p.exibirDRE ?? true,
-      naturezaDRE: p.naturezaDRE, ordemDRE: p.ordemDRE,
     })
     setShowForm(true)
   }
@@ -183,7 +180,6 @@ export default function PlanoContasPage() {
   }
   const handleExcluirTudo = () => {
     if (cfgPlanoContas.length === 0) { alert('Nenhuma conta cadastrada.'); return }
-    if (!confirm(`Tem certeza absoluta que deseja EXCLUIR TODAS as ${cfgPlanoContas.length} contas do Plano de Contas?\n\nEsta ação pode desorganizar lançamentos, relatórios e a DRE.`)) return
     const confirmTexto = prompt('Digite "EXCLUIR TUDO" para confirmar a exclusão:')
     if (confirmTexto !== 'EXCLUIR TUDO') { alert('Operação cancelada por segurança.'); return }
     setCfgPlanoContas([])
@@ -193,14 +189,12 @@ export default function PlanoContasPage() {
   const totalReceitas = cfgPlanoContas.filter(p => p.grupoConta === 'receitas').length
   const totalDespesas = cfgPlanoContas.filter(p => p.grupoConta === 'despesas').length
 
-  // ── Download do template XLSX (inclui campos DRE) ─────────────────
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new()
 
     // ── Aba principal: Modelo de importação ──────────────────────────
     const header = [[
       'Codigo', 'Descricao', 'Tipo', 'Grupo', 'Situacao', 'Conta pai (hierarquia)',
-      'GrupoDRE', 'NaturezaDRE', 'OrdemDRE', 'ExibirDRE',
     ]]
     const examples = [
       ['00',       'RECEITAS',                   'sintetico', 'receitas',  'ativo', '',      '1. Receita Bruta',  'credora',  1,  'sim'],
@@ -230,10 +224,6 @@ export default function PlanoContasPage() {
       ['Grupo',          'receitas | despesas | investimentos',                      'Sim'],
       ['Situacao',       'ativo | inativo',                                          'Não (padrão: ativo)'],
       ['Conta pai',      'Código da conta pai ou vazio para raiz',                   'Não'],
-      ['GrupoDRE',       'Ex: 1. Receita Bruta, 2. Deduções da Receita, 3. Custos dos Serviços Prestados, 4. Despesas Administrativas, 5. Despesas Comerciais/ Marketing, 6. Impostos e Tributos, 7. Investimentos (Patrimônio), 8. Não Classificados (Legado)', 'Não'],
-      ['NaturezaDRE',    'credora | devedora | neutra',                              'Não'],
-      ['OrdemDRE',       'Número inteiro para ordenação na DRE',                     'Não'],
-      ['ExibirDRE',      'sim | nao  (ou  true | false)',                            'Não (padrão: sim)'],
     ]
     const wsLeg = XLSX.utils.aoa_to_sheet(legenda)
     wsLeg['!cols'] = [{ wch: 18 }, { wch: 52 }, { wch: 20 }]
@@ -280,22 +270,7 @@ export default function PlanoContasPage() {
         const GRUPOS_VALIDOS = ['receitas', 'despesas', 'investimentos']
         const NATUREZAS_VALIDAS = ['credora', 'devedora', 'neutra']
 
-          const MAPA_DRE: Record<string, string> = {
-          'receita bruta': 'RECEITA_BRUTA',
-          'deduções da receita': 'DEDUCAO_RECEITA',
-          'deducoes da receita': 'DEDUCAO_RECEITA',
-          'custos dos serviços prestados': 'CUSTO_SERVICO',
-          'custos dos servicos prestados': 'CUSTO_SERVICO',
-          'despesas administrativas': 'DESP_ADMINISTRATIVA',
-          'despesas adminitrativas': 'DESP_ADMINISTRATIVA', // aceita typo comum
-          'despesas comerciais/ marketing': 'DESP_COMERCIAL',
-          'despesas comerciais / marketing': 'DESP_COMERCIAL',
-          'impostos e tributos': 'IMPOSTOS',
-          'investimentos (patrimônio)': 'INVESTIMENTOS',
-          'investimentos (patrimonio)': 'INVESTIMENTOS',
-          'não classificados (legado)': 'SEM_CLASSIFICACAO',
-          'nao classificados (legado)': 'SEM_CLASSIFICACAO',
-        }
+
 
         rows.slice(1).forEach((row, i) => {
           const lnum = i + 2
@@ -306,11 +281,7 @@ export default function PlanoContasPage() {
           const situacaoRaw  = String(row[4] || 'ativo').trim().toLowerCase()
           const contaPaiRaw  = String(row[5] || '').trim()
           
-          // ── Campos DRE (colunas 6–9) ────────────────────────────────
-          const grupoDREraw  = String(row[6] || '').trim()
           // Limpa números e prefixos (ex: "1. Receita Bruta" -> "receita bruta")
-          const cleanGrupoDRE = grupoDREraw.replace(/^\d+\.\s*/, '').toLowerCase()
-          const grupoDRE     = grupoDREraw ? (MAPA_DRE[cleanGrupoDRE] || grupoDREraw) : undefined
           const naturezaRaw  = String(row[7] || '').trim().toLowerCase() || undefined
           const ordemRaw     = row[8] !== undefined && row[8] !== '' ? parseInt(String(row[8])) : undefined
           const exibirRaw    = String(row[9] || 'sim').trim().toLowerCase()
@@ -321,7 +292,7 @@ export default function PlanoContasPage() {
           if (!GRUPOS_VALIDOS.includes(grupoRaw)) { erros.push(`Linha ${lnum}: grupo "${grupoRaw}" inválido. Use: receitas, despesas ou investimentos`); return }
           if (!['ativo', 'inativo'].includes(situacaoRaw)) { erros.push(`Linha ${lnum}: situação "${situacaoRaw}" inválida. Use: ativo ou inativo`); return }
           if (naturezaRaw && !NATUREZAS_VALIDAS.includes(naturezaRaw)) {
-            erros.push(`Linha ${lnum}: NaturezaDRE "${naturezaRaw}" inválida. Use: credora, devedora ou neutra`); return
+            erros.push(`Linha ${lnum}: natureza "${naturezaRaw}" inválida. Use: credora, devedora ou neutra`); return
           }
 
           if (cfgPlanoContas.some(p => p.codPlano === codigoRaw) || novas.some(n => n.codPlano === codigoRaw)) {
@@ -337,11 +308,6 @@ export default function PlanoContasPage() {
             parentId:    '',
             situacao:    situacaoRaw as 'ativo' | 'inativo',
             createdAt:   new Date().toISOString(),
-            // ── DRE fields ────────────────────────────────────────────
-            grupoDRE:    grupoDRE as any,
-            naturezaDRE: naturezaRaw as any,
-            ordemDRE:    Number.isNaN(ordemRaw as any) ? undefined : ordemRaw,
-            exibirDRE:   !['nao', 'false', '0', 'não'].includes(exibirRaw),
             // temp field for hierarchy resolution
             _contaPaiRaw: contaPaiRaw,
           } as any)
@@ -580,50 +546,7 @@ export default function PlanoContasPage() {
               </select>
             </div>
           </div>
-          {/* ── Seção DRE ─────────────────────────────────────────── */}
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px dashed hsl(var(--border-subtle))' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>🎯 Classificação na DRE Gerencial</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 130px auto', gap: 12 }}>
-              <div>
-                <label className="form-label">Grupo da DRE</label>
-                <select className="form-input" value={form.grupoDRE || ''}
-                  onChange={e => setForm(p => ({ ...p, grupoDRE: e.target.value as any || undefined }))}>
-                  <option value="">— Sem vínculo DRE —</option>
-                  {cfgGruposDRE.filter(g => g.natureza !== 'calculado').sort((a, b) => a.ordem - b.ordem).map(g => (
-                    <option key={g.id} value={g.codigo}>{g.ordem}. {g.nome}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Natureza DRE</label>
-                <select className="form-input" value={form.naturezaDRE || ''}
-                  onChange={e => setForm(p => ({ ...p, naturezaDRE: e.target.value as any || undefined }))}>
-                  <option value="">— Auto (pelo grupo) —</option>
-                  <option value="credora">Credora (soma positiva)</option>
-                  <option value="devedora">Devedora (reduz resultado)</option>
-                  <option value="neutra">Neutra (informativa)</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Ordem DRE</label>
-                <input className="form-input" type="number" min={0} placeholder="Auto"
-                  value={form.ordemDRE ?? ''}
-                  onChange={e => setForm(p => ({ ...p, ordemDRE: e.target.value ? parseInt(e.target.value) : undefined }))} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 2 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                  <input type="checkbox" checked={form.exibirDRE ?? true}
-                    onChange={e => setForm(p => ({ ...p, exibirDRE: e.target.checked }))} />
-                  Exibir na DRE
-                </label>
-              </div>
-            </div>
-            {!form.grupoDRE && form.tipo === 'analitico' && (
-              <div style={{ marginTop: 8, fontSize: 11, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <AlertCircle size={11} /> Conta analítica sem grupo DRE — lançamentos irão para &quot;Não Classificados&quot;
-              </div>
-            )}
-          </div>
+
           <div style={{ marginTop: 8, display: 'flex', gap: 16, alignItems: 'center' }}>
             {Object.entries(TIPO_CFG).map(([k, tc]) => (
               <span key={k} style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
@@ -670,11 +593,11 @@ export default function PlanoContasPage() {
             <tbody>
               {search ? (
                 filtered.sort((a, b) => a.codPlano.localeCompare(b.codPlano, undefined, { numeric: true })).map(p => (
-                  <PlanoRow key={p.id} node={{ ...p, children: [] }} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} gruposDRE={cfgGruposDRE} />
+                  <PlanoContasRow key={p.id} node={{ ...p, children: [] }} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} />
                 ))
               ) : (
                 tree.map(node => (
-                  <PlanoRow key={node.id} node={node} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} gruposDRE={cfgGruposDRE} />
+                  <PlanoContasRow key={node.id} node={node} depth={0} onEdit={openEdit} onDelete={handleDelete} expanded={expanded} onToggle={toggleExpand} />
                 ))
               )}
             </tbody>

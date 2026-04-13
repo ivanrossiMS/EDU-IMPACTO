@@ -1,16 +1,30 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { useApiQuery } from '@/hooks/useApi'
 
 import { useState, useMemo } from 'react'
 import { AlertTriangle, Phone, Mail, MessageSquare, Brain, Send, CheckCircle, Search, Filter, X, TrendingUp, RefreshCw } from 'lucide-react'
 
 export default function InadimplenciaPage() {
-  const { titulos = [], setTitulos } = useData()
-  const isLoading = false
+  const { data: kpiData, isLoading: loadKpis } = useApiQuery<any>(
+    ['dashboard-kpis', 'real'],
+    `/api/financeiro/dashboard?mes=real&mesPrev=real`,
+    { keepPreviousData: true }
+  )
+  const taxaInadimpl = kpiData?.inadimplenciaRate ? kpiData.inadimplenciaRate.toFixed(1) : '0.0'
 
-  // Filtros
+  const { data: listData, isLoading: loadTitulos } = useApiQuery<any>(
+    ['inadimplentes'],
+    `/api/titulos?status=atrasado&limit=5000`
+  )
+  const inadimplentes = listData?.data || []
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos') // for local optimistic updates
+
+  const isLoading = loadKpis || loadTitulos
   const [search, setSearch] = useState('')
   const [filtroRisco, setFiltroRisco] = useState<'todos'|'alto'|'medio'|'baixo'>('todos')
   const [filtroMin, setFiltroMin] = useState('')
@@ -24,11 +38,9 @@ export default function InadimplenciaPage() {
   const [negDesconto, setNegDesconto] = useState('0')
   const [negParcelas, setNegParcelas] = useState('3')
 
-  const inadimplentes = titulos.filter(t => t.status === 'atrasado')
-
   const getRisco = (dias: number) => dias > 60 ? 'alto' : dias > 30 ? 'medio' : 'baixo'
 
-  const filtered = useMemo(() => inadimplentes.filter(t => {
+  const filtered = useMemo(() => inadimplentes.filter((t: any) => {
     const diasAtraso = Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000)
     const risco = getRisco(diasAtraso)
     const q = search.toLowerCase()
@@ -42,11 +54,10 @@ export default function InadimplenciaPage() {
     return matchSearch && matchRisco && matchMin && matchMax && matchDe && matchAte
   }), [inadimplentes, search, filtroRisco, filtroMin, filtroMax, filtroDataDe, filtroDataAte])
 
-  const totalAtrasado = inadimplentes.reduce((s,t)=>s+t.valor,0)
-  const totalFiltrado = filtered.reduce((s,t)=>s+t.valor,0)
-  const altoRisco = inadimplentes.filter(t=>{const d=Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000);return d>60}).length
-  const medioRisco = inadimplentes.filter(t=>{const d=Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000);return d>30&&d<=60}).length
-  const taxaInadimpl = titulos.length>0?((inadimplentes.length/titulos.length)*100).toFixed(1):'0.0'
+  const totalAtrasado = inadimplentes.reduce((s: number,t: any)=>s+t.valor,0)
+  const totalFiltrado = filtered.reduce((s: number,t: any)=>s+t.valor,0)
+  const altoRisco = inadimplentes.filter((t: any)=>{const d=Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000);return d>60}).length
+  const medioRisco = inadimplentes.filter((t: any)=>{const d=Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000);return d>30&&d<=60}).length
 
   const activeFilters = [filtroRisco!=='todos', !!filtroMin, !!filtroMax, !!filtroDataDe, !!filtroDataAte].filter(Boolean).length
   const clearFilters = () => { setFiltroRisco('todos'); setFiltroMin(''); setFiltroMax(''); setFiltroDataDe(''); setFiltroDataAte(''); setSearch('') }

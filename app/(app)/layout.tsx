@@ -8,7 +8,6 @@ import { DataProvider } from '@/lib/dataContext'
 import { DialogProvider } from '@/lib/dialogContext'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { getSessionUser } from '@/app/actions/authActions'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, setCurrentUser } = useApp()
@@ -18,9 +17,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // 1. Valida a Sessão Real no Servidor preveindo Spoofing de LocalStorage
-      const serverUser: any = await getSessionUser();
-      
+      // 1. Valida a Sessão Real no Servidor (REST API imune a falhas de RPC do Webpack)
+      const res = await fetch('/api/auth/me', { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      if (!res.ok) {
+         setCurrentUser(null)
+         window.location.href = '/login'
+         return
+      }
+      const data = await res.json();
+      const serverUser: any = data.user;
       if (!serverUser) {
          setCurrentUser(null)
          window.location.href = '/login'

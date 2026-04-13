@@ -1,10 +1,16 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo, useEffect } from 'react'
 
 import { useData, ContaPagar, newId } from '@/lib/dataContext'
+import { useBaixaIntegrada } from '@/lib/useBaixaIntegrada'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
+import { useApiQuery, useApiMutation } from '@/hooks/useApi'
+import { useDebounce } from 'use-debounce'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Download, Search, Pencil, Trash2, CheckCircle, Clock,
   Filter, X, AlertTriangle, Building2, FileText, Calendar, DollarSign,
@@ -54,21 +60,29 @@ const BLANK_CP = {
 }
 
 export default function ContasPagarPage() {
-  const { fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction, contasPagar = [], setContasPagar } = useData()
+  const { fornecedoresCad = [], cfgPlanoContas, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction } = useData();
+  const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
+  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-pdv'], '/api/financeiro/caixas', { limit: 200 })
+  const caixasAbertos = respCaixas?.data || caixasAbertosLegacy || []
+  
+  const { registrarBaixa, estornarBaixa } = useBaixaIntegrada()
+  const queryClient = useQueryClient()
 
   // Métodos de pagamento dinâmicos (com fallback)
   const METODOS_FALLBACK = ['PIX', 'Dinheiro', 'Boleto Bancário', 'Cartão de Crédito', 'Transferência', 'Débito Automático', 'Cheque']
-  const metodosPagamento = cfgMetodosPagamento.filter(m => m.situacao === 'ativo').length > 0
-    ? cfgMetodosPagamento.filter(m => m.situacao === 'ativo')
+  const metodosPagamento = (cfgMetodosPagamento || []).filter(m => m.situacao === 'ativo').length > 0
+    ? (cfgMetodosPagamento || []).filter(m => m.situacao === 'ativo')
     : METODOS_FALLBACK.map((nome, i) => ({ id: `fb${i}`, nome, tipo: nome.toLowerCase(), situacao: 'ativo' as const }))
   // Tipos de documento dinâmicos (com fallback)
-  const TIPOS_DOC = cfgTiposDocumento.filter(t => t.situacao === 'ativo').length > 0
-    ? cfgTiposDocumento.filter(t => t.situacao === 'ativo').map(t => t.nome)
+  const TIPOS_DOC = (cfgTiposDocumento || []).filter(t => t.situacao === 'ativo').length > 0
+    ? (cfgTiposDocumento || []).filter(t => t.situacao === 'ativo').map(t => t.nome)
     : TIPOS_DOC_FALLBACK
   // Cartões ativos
-  const cartoesAtivos = cfgCartoes.filter(c => c.situacao === 'ativo')
+  const cartoesAtivos = (cfgCartoes || []).filter(c => c.situacao === 'ativo')
 
   const [search, setSearch] = useState('')
+  const [dbSearch] = useDebounce(search, 400) // Novo Debouncer para queries seguras
+  
   const [filtroStatus, setFiltroStatus] = useState<'todos'|'pendente'|'pago'|'vencendo'>('todos')
   const [filtroCategoria, setFiltroCategoria] = useState('Todas')
   const [currentPage, setCurrentPage] = useState(1)
@@ -78,9 +92,24 @@ export default function ContasPagarPage() {
   const [modal, setModal] = useState<'add'|'edit'|null>(null)
   const [editingId, setEditingId] = useState<string|null>(null)
   const [confirmId, setConfirmId] = useState<string|null>(null)
-  // Filtro de data específica
   const [filtroDe, setFiltroDe] = useState('')
   const [filtroAte, setFiltroAte] = useState('')
+
+  // ⚡ Otimização 4: Ciclo Enterprise de Busca Assíncrona 
+  const { data: apiResponse, isLoading } = useApiQuery<{data: any[], meta: any}>(
+    ['contas-pagar', dbSearch, filtroStatus], 
+    '/api/contas-pagar',
+    {
+       limit: 1500, // Limite seguro para visualização (paginação real feita via JS por enquanto, ou no banco se necessário)
+       search: dbSearch === '' ? undefined : dbSearch,
+       status: filtroStatus === 'vencendo' || filtroStatus === 'todos' ? undefined : filtroStatus
+    }
+  )
+
+  const mutateSave = useApiMutation('/api/contas-pagar', 'POST', [['contas-pagar']])
+  const mutateDelete = useApiMutation('/api/contas-pagar', 'DELETE', [['contas-pagar']])
+
+  const contasPagar = apiResponse?.data || []
   // Gráfico
   const [showGrafico, setShowGrafico] = useState(false)
   // Anexos: { [contaId]: { nome: string; url: string }[] }
@@ -93,7 +122,7 @@ export default function ContasPagarPage() {
   const planoModalItens = useMemo(() => {
     const q = planoModalSearch.toLowerCase()
     const grupo = showPlanoModal === 'baixa' ? undefined : 'despesas'
-    return cfgPlanoContas.filter(p => p.situacao === 'ativo' &&
+    return (cfgPlanoContas || []).filter(p => p.situacao === 'ativo' &&
       (!grupo || p.grupoConta === grupo) &&
       (p.descricao.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q)))
   }, [cfgPlanoContas, planoModalSearch, showPlanoModal])
@@ -113,30 +142,73 @@ export default function ContasPagarPage() {
   const valorLiquido = baixaForm.valorOriginal - baixaForm.desconto + baixaForm.juros + baixaForm.multa
 
   const openBaixa = (c: ContaPagar) => {
-    // Tenta encontrar conta de despesa com mesma descrição no plano
+    const planoContaValue = c.planoContasId || (c as any).plano_contas_id || ''
     const planoAuto = cfgPlanoContas.find(p =>
       p.grupoConta === 'despesas' && p.situacao === 'ativo' &&
-      (p.descricao.toLowerCase().includes(c.categoria.toLowerCase()) || c.descricao.toLowerCase().includes(p.descricao.toLowerCase()))
+      (c as any).categoria &&
+      (p.descricao.toLowerCase().includes((c as any).categoria.toLowerCase()) || (c as any).descricao.toLowerCase().includes(p.descricao.toLowerCase()))
     )
     const caixaAberto = caixasAbertos.find(cx => !cx.fechado)
+    const metodosAtivos = (cfgMetodosPagamento || []).filter(m => m.situacao === 'ativo')
+
     setBaixaForm({
       caixaId: caixaAberto?.id || '',
       tipoDoc: 'PIX',
       dataPagamento: new Date().toISOString().slice(0,10),
-      planoContasId: c.planoContasId || planoAuto?.id || '',
+      planoContasId: planoContaValue || planoAuto?.id || '',
       valorOriginal: c.valor,
       desconto: 0,
       juros: 0,
       multa: 0,
       obs: '',
-      composicao: metodosPagamento.find(m => m.situacao === 'ativo')?.id || '',
+      composicao: metodosPagamento.length > 0 ? metodosPagamento[0].nome : '',
     })
     setBaixaId(c.id)
   }
 
   const confirmarBaixa = async () => {
     if (!baixaId) return
-    setContasPagar((prev: any[]) => prev.map(a => a.id === baixaId ? { ...a, status: 'pago', dataPagamento: baixaForm.dataPagamento, valorPago: valorLiquido, caixaId: baixaForm.caixaId } : a))
+    const conta = contasPagar.find(a => a.id === baixaId)
+    if (!conta) return
+
+    try {
+        await mutateSave.mutateAsync({ 
+          ...conta, 
+          status: 'pago', 
+          dataPagamento: baixaForm.dataPagamento, 
+          valorPago: valorLiquido, 
+          caixaId: baixaForm.caixaId 
+        } as any)
+    } catch(e:any) { console.error(e) }
+
+    if (baixaForm.caixaId) {
+      try {
+        const response = await fetch('/api/financeiro/movimentacoes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            caixaId: baixaForm.caixaId,
+            tipo: 'saida',
+            valor: Math.abs(valorLiquido),
+            descricao: `Pagamento: ${conta.descricao}${conta.fornecedor ? ' — ' + conta.fornecedor : ''}`,
+            data: baixaForm.dataPagamento,
+            operador: 'Sistema',
+            planoContasId: baixaForm.planoContasId || null,
+            compensadoBanco: 'Compensado',
+            forma_pagamento: baixaForm.composicao || baixaForm.tipoDoc,
+            origem: 'baixa_pagar',
+            referenciaId: conta.id,
+            obs: baixaForm.obs || ''
+          })
+        })
+        if (!response.ok) {
+           const errText = await response.text()
+           console.error('SERVER REJECTED MOVIMENTACAO:', errText)
+        }
+      } catch (e) {
+        console.error('Erro de rede ao injetar movimentação', e)
+      }
+    }
     setBaixaId(null)
   }
 
@@ -144,12 +216,11 @@ export default function ContasPagarPage() {
   const [form, setForm] = useState({ ...BLANK_CP })
   const [fornecedorId, setFornecedorId] = useState('')
   const [fornecedorSearch, setFornecedorSearch] = useState('')
-  const [showFornecedorDrop, setShowFornecedorDrop] = useState(false)
+  const [showFornecedorModal, setShowFornecedorModal] = useState(false)
   const [planoContasId, setPlanoContasId] = useState('')
   const [planoSearch, setPlanoSearch] = useState('')
   const [showPlanoDrop, setShowPlanoDrop] = useState(false)
   
-  const [centroCustoId, setCentroCustoId] = useState('')
   const [usaRateio, setUsaRateio] = useState(false)
   const [aiSugerido, setAiSugerido] = useState(false)
   
@@ -164,56 +235,22 @@ export default function ContasPagarPage() {
   const set = (k: string, v: unknown) => setForm(prev => ({ ...prev, [k]: v }))
   const fmtC = formatCurrency
 
-  // 🤖 Inteligência de Classificação Automática do Centro de Custo
-  useEffect(() => {
-    if (modal !== 'add' || centroCustoId || !cfgCentrosCusto.length) return
-    
-    const textoAnalise = `${form.descricao} ${fornecedorSearch} ${planoSearch}`.toLowerCase()
-    
-    // Mapeamento Enxuto de Palavras-Chave -> Código do Centro
-    const keywords: Record<string, string[]> = {
-      'CC001': ['aluno', 'professor', 'pedagógico', 'aula', 'ead', 'livro', 'apostila', 'didático', 'acervo'], // ACADÊMICO
-      'CC002': ['energia', 'luz', 'água', 'aluguel', 'condomínio', 'limpeza', 'segurança', 'manutenção', 'obra', 'reforma'], // INFRAESTRUTURA
-      'CC003': ['secretaria', 'diretoria', 'coordenação', 'material de escritório', 'papelaria', 'correios'], // ADMINISTRATIVO
-      'CC004': ['ads', 'facebook', 'google', 'instagram', 'mídia', 'panfleto', 'evento', 'captação', 'brinde'], // MARKETING
-      'CC005': ['taxa', 'banco', 'juros', 'bancária', 'boleto', 'maquininha', 'cobrança', 'inadimplência'], // FINANCEIRO
-      'CC006': ['erp', 'sistema', 'software', 'ti', 'servidor', 'computador', 'internet', 'nuvem', 'licença'], // TECNOLOGIA
-      'CC007': ['advogado', 'jurídico', 'processo', 'honorários', 'tributário', 'consultoria', 'contador'], // JURÍDICO
-      'CC008': ['unimed', 'plano de saúde', 'vale alimentação', 'vr', 'va', 'vt', 'transporte', 'convênio'], // BENEFÍCIOS
-    }
-
-    let detectedId = ''
-    for (const [codCentro, keys] of Object.entries(keywords)) {
-      if (keys.some(k => textoAnalise.includes(k))) {
-        const centro = cfgCentrosCusto.find(c => c.codigo === codCentro)
-        if (centro) {
-          detectedId = centro.id
-          break
-        }
-      }
-    }
-
-    if (detectedId) {
-      setCentroCustoId(detectedId)
-      setAiSugerido(true)
-    }
-  }, [form.descricao, fornecedorSearch, planoSearch, modal, centroCustoId, cfgCentrosCusto])
 
   // Typeahead helpers
   const fornecedoresFiltrados = useMemo(() => {
     const q = fornecedorSearch.toLowerCase()
-    return fornecedoresCad.filter(f => (f.nomeFantasia || f.razaoSocial).toLowerCase().includes(q)).slice(0, 8)
+    return (fornecedoresCad || []).filter(f => (f.nomeFantasia || f.razaoSocial).toLowerCase().includes(q) || (f.cnpj || f.cpf || '').includes(q))
   }, [fornecedoresCad, fornecedorSearch])
 
   const planosFiltrados = useMemo(() => {
     const q = planoSearch.toLowerCase()
-    return cfgPlanoContas.filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo' &&
+    return (cfgPlanoContas || []).filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo' &&
       (p.descricao.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q))).slice(0, 8)
   }, [cfgPlanoContas, planoSearch])
 
   const hoje = new Date(); hoje.setHours(0,0,0,0)
   const em3dias = new Date(hoje); em3dias.setDate(hoje.getDate()+3)
-  const anos = useMemo(() => [...new Set(contasPagar.map(c=>c.vencimento?.slice(0,4)).filter(Boolean))].sort().reverse(), [contasPagar])
+  const anos = useMemo(() => [...new Set((contasPagar || []).map(c=>c.vencimento?.slice(0,4)).filter(Boolean))].sort().reverse(), [contasPagar])
 
   const isVencendo = (c: ContaPagar) => {
     if (c.status !== 'pendente') return false
@@ -222,23 +259,20 @@ export default function ContasPagarPage() {
   }
   const isVencido = (c: ContaPagar) => c.status !== 'pago' && new Date(c.vencimento) < hoje
 
+  // ⚡ Filtros Locais Menores (pois o grosso foi Server-Side)
   const filtered = useMemo(() => contasPagar.filter(c => {
-    const q = search.toLowerCase()
-  const searchActive = search.trim().length >= 3
-    const matchSearch = !searchActive || (c.descricao.toLowerCase().includes(q) || c.categoria.toLowerCase().includes(q) || c.fornecedor.toLowerCase().includes(q))
-    const matchStatus = filtroStatus === 'todos' || (filtroStatus === 'pendente' && c.status === 'pendente') || (filtroStatus === 'pago' && c.status === 'pago') || (filtroStatus === 'vencendo' && isVencendo(c))
     const matchCat = filtroCategoria === 'Todas' || c.categoria === filtroCategoria
     const matchMes = filtroMes === 'Todos' || c.vencimento?.slice(5,7) === String(MESES.indexOf(filtroMes)+1).padStart(2,'0')
     const matchAno = filtroAno === 'Todos' || c.vencimento?.startsWith(filtroAno)
     const matchDe = !filtroDe || (c.vencimento && c.vencimento >= filtroDe)
     const matchAte = !filtroAte || (c.vencimento && c.vencimento <= filtroAte)
-    return matchSearch && matchStatus && matchCat && matchMes && matchAno && matchDe && matchAte
-  }), [contasPagar, search, filtroStatus, filtroCategoria, filtroMes, filtroAno, filtroDe, filtroAte])
+    return matchCat && matchMes && matchAno && matchDe && matchAte
+  }), [contasPagar, filtroCategoria, filtroMes, filtroAno, filtroDe, filtroAte])
 
   // Reset paginação ao buscar
   useEffect(() => setCurrentPage(1), [search, filtroStatus, filtroCategoria, filtroMes, filtroAno, filtroDe, filtroAte])
 
-  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+  const totalPages = Math.ceil((apiResponse?.meta?.total || filtered.length) / itemsPerPage)
   
   const contasLista = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
@@ -253,24 +287,33 @@ export default function ContasPagarPage() {
   const clearFilters = () => { setFiltroCategoria('Todas'); setFiltroMes('Todos'); setFiltroAno('Todos'); setFiltroStatus('todos'); setSearch(''); setFiltroDe(''); setFiltroAte(''); setCurrentPage(1) }
   const activeFilters = [filtroCategoria!=='Todas', filtroMes!=='Todos', filtroAno!=='Todos', filtroStatus!=='todos', !!filtroDe, !!filtroAte].filter(Boolean).length
 
+  const [alertMsg, setAlertMsg] = useState<string | null>(null)
+
   const resetForm = () => {
     setForm({ ...BLANK_CP, codigo: gerarCodCP(contasPagar.length) })
-    setFornecedorId(''); setFornecedorSearch(''); setShowFornecedorDrop(false)
+    setFornecedorId(''); setFornecedorSearch(''); setShowFornecedorModal(false)
     setPlanoContasId(''); setPlanoSearch(''); setShowPlanoDrop(false)
-    setCentroCustoId(''); setUsaRateio(false); setAiSugerido(false); setTipoDoc('NF'); setNumDoc(''); setDataEmissao(new Date().toISOString().slice(0,10))
+    setUsaRateio(false); setAiSugerido(false); setTipoDoc('NF'); setNumDoc(''); setDataEmissao(new Date().toISOString().slice(0,10))
     setUnidade(''); setParcelar(false); setNumParcelas(3); setModoParcelas('corridos')
     setPreviewParcelas([])
   }
 
   const openAdd = () => { resetForm(); setEditingId(null); setModal('add') }
   const openEdit = (c: ContaPagar) => {
-    setForm({ codigo: (c as any).codigo || gerarCodCP(contasPagar.length), descricao: c.descricao, categoria: c.categoria, valor: c.valor, vencimento: c.vencimento, status: c.status, fornecedor: c.fornecedor })
-    setNumDoc(c.numeroDocumento || '')
-    setPlanoContasId(c.planoContasId || '')
-    setCentroCustoId(c.centroCustoId || '')
-    setUsaRateio(c.usaRateio || false)
-    const pc = cfgPlanoContas.find(p => p.id === c.planoContasId)
+    if (c.status === 'pago') {
+      setAlertMsg("Não é possível editar este lançamento diretamente porque ele já consta como PAGO no sistema. Se você precisa corrigir um erro ou regerar o boleto/parcela, feche esta janela e clique primeiro no botão laranja de 'Reverter' na linha correspondente.")
+      return
+    }
+    setForm(c as any) // Carrega os dados originais do objeto para os inputs do formulário principal
+    const pcId = c.planoContasId || (c as any).plano_contas_id || ''
+    setPlanoContasId(pcId)
+    setUsaRateio((c as any).usaRateio || false)
+    setDataEmissao((c as any).dataEmissao || (c as any).emissao || new Date().toISOString().slice(0,10))
+    const pc = (cfgPlanoContas || []).find(p => p.id === pcId)
     setPlanoSearch(pc ? `${(pc as any).codPlano || ''} — ${pc.descricao}` : '')
+    setFornecedorId((c as any).fornecedorId || '')
+    const fn = (fornecedoresCad || []).find(f => f.nomeFantasia === c.fornecedor || f.razaoSocial === c.fornecedor)
+    if(fn && !(c as any).fornecedorId) setFornecedorId(fn.id)
     setEditingId(c.id); setParcelar(false); setPreviewParcelas([]); setModal('edit')
   }
 
@@ -281,51 +324,58 @@ export default function ContasPagarPage() {
 
   const handleSave = async () => {
     if (!form.descricao.trim() || !form.valor || !form.vencimento) return
-    if (!centroCustoId) { alert('Atenção: A seleção de um Centro de Custo é obrigatória no novo modelo executivo.'); return }
     const fn = fornecedoresCad.find(f => f.id === fornecedorId)
     const payload = {
       ...form,
       fornecedor: fn ? (fn.nomeFantasia || fn.razaoSocial) : form.fornecedor,
+      fornecedorId: fornecedorId || null,
       numeroDocumento: numDoc,
       planoContasId: planoContasId,
-      centroCustoId,
       usaRateio,
+      dataEmissao: dataEmissao,
     }
-    if (parcelar && previewParcelas.length > 0) {
-      const novas = previewParcelas.map((p, i) => ({
-        ...payload,
-        id: '', // let backend set ID
-        codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
-        descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
-        valor: p.valor,
-        vencimento: p.vencimento,
-      }))
-      const novasComId = novas.map(n => ({ ...n, id: newId('CP') }))
-      setContasPagar((prev: any[]) => [...prev, ...novasComId])
-      logSystemAction('Financeiro (Pagar)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas a pagar para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
-    } else {
-      if (modal === 'add') {
-        setContasPagar((prev: any[]) => [...prev, { ...payload, id: newId('CP') }])
-        logSystemAction('Financeiro (Pagar)', 'Cadastro', `Criada conta a pagar de R$ ${payload.valor} para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
-      } else if (editingId) {
-        setContasPagar((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...payload } : a))
-        setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
-          m.referenciaId === editingId
-            ? { ...m, descricao: `Contas a Pagar — ${payload.descricao}${payload.fornecedor ? ` · ${payload.fornecedor}` : ''}`, valor: payload.valor, editadoEm: new Date().toISOString() }
-            : m
-        ))
-        logSystemAction('Financeiro (Pagar)', 'Edição', `Atualização da conta a pagar ${form.codigo}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
-      }
-    }
+    try {
+        if (parcelar && previewParcelas.length > 0) {
+            const novas = previewParcelas.map((p, i) => ({
+            ...payload,
+            id: undefined, // let backend set ID
+            codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
+            descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
+            valor: p.valor,
+            vencimento: p.vencimento,
+            }))
+            await mutateSave.mutateAsync(novas as any)
+            logSystemAction('Financeiro (Pagar)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas a pagar para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
+        } else {
+            if (modal === 'add') {
+                await mutateSave.mutateAsync(payload as any)
+                logSystemAction('Financeiro (Pagar)', 'Cadastro', `Criada conta a pagar de R$ ${payload.valor} para ${payload.fornecedor}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
+            } else if (editingId) {
+                await mutateSave.mutateAsync({ ...payload, id: editingId } as any)
+                // Movimentações manuais são de caixa, isso fica intacto se existir
+                setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
+                m.referenciaId === editingId
+                    ? { ...m, descricao: `Contas a Pagar — ${payload.descricao}${payload.fornecedor ? ` · ${payload.fornecedor}` : ''}`, valor: payload.valor, editadoEm: new Date().toISOString() }
+                    : m
+                ))
+                logSystemAction('Financeiro (Pagar)', 'Edição', `Atualização da conta a pagar ${form.codigo}`, { registroId: form.codigo, nomeRelacionado: payload.fornecedor })
+            }
+        }
+    } catch(e:any) { console.error(e) }
     setModal(null)
   }
 
   const handleDelete = async () => {
     if (confirmId) {
       const deletedT = contasPagar.find((c: any) => c.id === confirmId)
-      setContasPagar((prev: any[]) => prev.filter(x => x.id !== confirmId))
-      setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
-      logSystemAction('Financeiro (Pagar)', 'Exclusão', `Exclusão definitiva de conta a pagar.`, { registroId: (deletedT as any)?.codigo })
+      
+      try {
+        await mutateDelete.mutateAsync({ id: confirmId })
+        setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
+        logSystemAction('Financeiro (Pagar)', 'Exclusão', `Exclusão definitiva de conta a pagar.`, { registroId: (deletedT as any)?.codigo })
+      } catch (err) {
+        console.error("Erro ao excluir", err)
+      }
     }
     setConfirmId(null)
   }
@@ -422,7 +472,6 @@ export default function ContasPagarPage() {
                 <th>Nº Doc</th>
                 <th>Descrição</th>
                 <th>Fornecedor</th>
-                <th>Categoria</th>
                 <th>Emissão</th>
                 <th>Vencimento</th>
                 <th>Data Pagto.</th>
@@ -441,22 +490,44 @@ export default function ContasPagarPage() {
                     <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{c.numeroDocumento || '—'}</td>
                     <td style={{ fontWeight: 600, fontSize: 13, maxWidth: 200 }}>
                       <div>{c.descricao}</div>
-                      {anexos[c.id]?.length > 0 && (
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
-                          {anexos[c.id].map((f, i) => (
-                            <a key={i} href={f.url} target="_blank" rel="noreferrer"
-                              style={{ fontSize: 9, padding: '1px 5px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 2, textDecoration: 'none', cursor: 'pointer' }}
-                              title={`Abrir ${f.nome}`}>
-                              <Paperclip size={8} />{f.nome}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      {(((c as any).anexos || [])?.length > 0 || anexos[c.id]?.length > 0) && (() => {
+                        const allAnexos = [...((c as any).anexos || []), ...(anexos[c.id] || [])].filter((v,i,a)=>a.findIndex(t=>(t.nome===v.nome))===i)
+                        return (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+                            {allAnexos.map((f, i) => (
+                              <a key={i} onClick={(e) => {
+                                  e.preventDefault();
+                                  try {
+                                    if (f.url.startsWith('data:')) {
+                                      const [meta, base64] = f.url.split(',');
+                                      const mime = meta.split(':')[1].split(';')[0];
+                                      const binStr = atob(base64);
+                                      const arr = new Uint8Array(binStr.length);
+                                      for (let j = 0; j < binStr.length; j++) arr[j] = binStr.charCodeAt(j);
+                                      const blob = new Blob([arr], { type: mime });
+                                      const u = URL.createObjectURL(blob);
+                                      window.open(u, '_blank');
+                                    } else {
+                                      window.open(f.url, '_blank');
+                                    }
+                                  } catch (err) {
+                                    console.error('Erro ao abrir anexo:', err);
+                                    const a = document.createElement('a');
+                                    a.href = f.url;
+                                    a.download = f.nome;
+                                    a.click();
+                                  }
+                                }}
+                                style={{ fontSize: 9, padding: '1px 5px', background: 'rgba(96,165,250,0.1)', color: '#60a5fa', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 2, textDecoration: 'none', cursor: 'pointer' }}
+                                title={`Abrir ${f.nome}`}>
+                                <Paperclip size={8} />{f.nome}
+                              </a>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </td>
                     <td style={{ fontSize: 12 }}>{c.fornecedor || '—'}</td>
-                    <td>
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 100, background: `${CAT_COLORS[c.categoria] || '#6b7280'}20`, color: CAT_COLORS[c.categoria] || '#6b7280', fontWeight: 700 }}>{c.categoria}</span>
-                    </td>
                     {/* Emissão */}
                     <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>
                       {(c as any).dataEmissao ? new Date((c as any).dataEmissao + 'T12:00').toLocaleDateString('pt-BR') : '—'}
@@ -493,9 +564,12 @@ export default function ContasPagarPage() {
                             className="btn btn-sm"
                             style={{ fontSize: 11, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
                             onClick={async () => {
-                                setContasPagar((prev: any[]) => prev.map(a => a.id === c.id ? { ...a, status: 'pendente', dataPagamento: null } : a))
-                              // Remover movimentação automática ao reverter baixa
-                              setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== c.id))
+                                try {
+                                  await mutateSave.mutateAsync({ ...c, status: 'pendente', dataPagamento: null } as any)
+                                  // Adicionamos a lógica para retirar explicitamente o estorno na Fase C, 
+                                  // o alerta do hook informará o usuário como fazer o estorno no Histórico
+                                  estornarBaixa(`CP-${c.id}`)
+                                } catch(e:any) { console.error(e) }
                             }}>
                             <RotateCcw size={11} />Reverter
                           </button>
@@ -507,12 +581,36 @@ export default function ContasPagarPage() {
                           <Paperclip size={12} />
                           <input type="file" style={{ display: 'none' }} multiple onChange={e => {
                             const files = Array.from(e.target.files || [])
-                            if (files.length) setAnexos(prev => ({ ...prev, [c.id]: [...(prev[c.id] || []), ...files.map(f => ({ nome: f.name, url: URL.createObjectURL(f) }))] }))
+                            files.forEach(f => {
+                              const reader = new FileReader()
+                              reader.onload = async (ev) => {
+                                const base64 = ev.target?.result as string
+                                const newAnexo = { nome: f.name, url: base64 }
+                                
+                                // Preview imediato na UI
+                                setAnexos(prev => ({ 
+                                  ...prev, 
+                                  [c.id]: [...(prev[c.id] || ((c as any).anexos || [])), newAnexo] 
+                                }))
+                                
+                                // Persistência imediata no banco
+                                try {
+                                  await mutateSave.mutateAsync({ 
+                                    ...c, 
+                                    anexos: [...((c as any).anexos || []), newAnexo] 
+                                  } as any)
+                                } catch(e) { console.error('Falha ao salvar anexo no banco', e) }
+                              }
+                              reader.readAsDataURL(f)
+                            })
                             e.target.value = ''
                           }} />
                         </label>
                         <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(c)}><Pencil size={12} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => setConfirmId(c.id)}><Trash2 size={12} /></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => {
+                          if (c.status === 'pago') setAlertMsg("Não é possível editar ou excluir uma conta que já consta como PAGA no sistema. Feche esta janela e clique no botão de 'Reverter' primeiro.")
+                          else setConfirmId(c.id)
+                        }}><Trash2 size={12} /></button>
                       </div>
                     </td>
                   </tr>
@@ -543,114 +641,217 @@ export default function ContasPagarPage() {
       )}
       {/* Modal Gráfico Premium */}
       {showGrafico && (() => {
-        const porCategoria = CATEGORIAS.map(cat => ({
-          cat,
-          aberto: contasPagar.filter(c => c.categoria === cat && c.status === 'pendente').reduce((s,c) => s+c.valor, 0),
-          pago: contasPagar.filter(c => c.categoria === cat && c.status === 'pago').reduce((s,c) => s+c.valor, 0),
-          color: CAT_COLORS[cat] || '#6b7280',
-        })).filter(x => x.aberto > 0 || x.pago > 0)
+        const hojeStr = new Date().toISOString().slice(0,10)
+        
+        // --- 1. Aging / Risco
+        const atrasadoValor = contasPagar.filter(c => c.status === 'pendente' && (c.vencimento||'') < hojeStr).reduce((s,c)=>s+c.valor,0)
+        const vHojeValor = contasPagar.filter(c => c.status === 'pendente' && (c.vencimento||'') === hojeStr).reduce((s,c)=>s+c.valor,0)
+        const aVencerValor = contasPagar.filter(c => c.status === 'pendente' && (c.vencimento||'') > hojeStr).reduce((s,c)=>s+c.valor,0)
+        const totalAberto = atrasadoValor + vHojeValor + aVencerValor
+        const risk = [
+          { label: 'Vencidos / Atrasados', val: atrasadoValor, color: '#ef4444', gb: 'rgba(239,68,68,0.15)' },
+          { label: 'Vencem Hoje', val: vHojeValor, color: '#f59e0b', gb: 'rgba(245,158,11,0.15)' },
+          { label: 'A Vencer', val: aVencerValor, color: '#60a5fa', gb: 'rgba(96,165,250,0.15)' },
+        ].filter(r => r.val > 0).map(r => ({ ...r, pct: totalAberto > 0 ? (r.val/totalAberto)*100 : 0 }))
+
+        // --- 2. Fornecedores (Top 6)
+        const furnCount:Record<string,{nome:string, valor:number}> = {}
+        contasPagar.forEach(c => {
+          const fn = (fornecedoresCad || []).find(f => f.id === c.fornecedorId)
+          const nome = fn ? (fn.nomeFantasia || fn.razaoSocial) : c.fornecedor || 'Diversos/Sem Fornecedor'
+          if(!furnCount[nome]) furnCount[nome] = { nome, valor: 0 }
+          furnCount[nome].valor += c.valor
+        })
+        const topFurn = Object.values(furnCount).sort((a,b)=>b.valor-a.valor).slice(0,6)
+        const maxF = Math.max(...topFurn.map(f=>f.valor), 1)
+
+        // --- 3. Plano de Contas (Top 6)
+        const pcCount:Record<string,{nome:string, abr:number, pag:number, total:number}> = {}
+        contasPagar.forEach(c => {
+          const pcId = c.planoContasId || (c as any).plano_contas_id
+          const pc = (cfgPlanoContas||[]).find(p=>p.id===pcId)
+          const nome = pc ? pc.descricao : 'Sem Classificação'
+          if(!pcCount[nome]) pcCount[nome] = { nome, abr: 0, pag: 0, total: 0 }
+          if(c.status==='pendente') pcCount[nome].abr += c.valor
+          else pcCount[nome].pag += c.valor
+          pcCount[nome].total += c.valor
+        })
+        const topPc = Object.values(pcCount).sort((a,b)=>b.total-a.total).slice(0,6)
+        const maxPc = Math.max(...topPc.map(p=>p.total), 1)
+
+        // --- 4. Evolução Mensal (Ano)
         const porMes = MESES.map((mes, i) => ({
           mes,
-          valor: contasPagar.filter(c => parseInt(c.vencimento?.slice(5,7) || '0') === i+1).reduce((s,c) => s+c.valor, 0),
+          aberto: contasPagar.filter(c => c.status === 'pendente' && parseInt(c.vencimento?.slice(5,7) || '0') === i+1).reduce((s,c) => s+c.valor, 0),
           pago: contasPagar.filter(c => c.status === 'pago' && parseInt(c.vencimento?.slice(5,7) || '0') === i+1).reduce((s,c) => s+c.valor, 0),
+          valor: contasPagar.filter(c => parseInt(c.vencimento?.slice(5,7) || '0') === i+1).reduce((s,c) => s+c.valor, 0),
         })).filter(x => x.valor > 0)
-        const maxCat = Math.max(...porCategoria.map(x => x.aberto + x.pago), 1)
         const maxMes = Math.max(...porMes.map(x => x.valor), 1)
+
         return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
-            <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 860, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-              {/* Header */}
-              <div style={{ padding: '18px 24px', background: 'linear-gradient(135deg,rgba(239,68,68,0.07),rgba(59,130,246,0.03))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <BarChart2 size={20} color="#f87171" />
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(8px)' }}>
+            <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 24, width: '100%', maxWidth: 1040, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', maxHeight: '94vh', display: 'flex', flexDirection: 'column' }}>
+              {/* Header Ultra Premium */}
+              <div style={{ padding: '24px 32px', background: 'linear-gradient(135deg,rgba(239,68,68,0.08),rgba(14,165,233,0.03))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg,#f87171,#ef4444)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 16px rgba(239,68,68,0.2)' }}>
+                    <BarChart2 size={24} color="white" />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15 }}>Análise Gráfica — Contas a Pagar</div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{contasPagar.length} títulos • {fmtC(contasPagar.reduce((s,c)=>s+c.valor,0))} total</div>
+                    <div style={{ fontWeight: 800, fontSize: 18, color: 'hsl(var(--text-primary))' }}>Dashboard de Despesas Premium</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Inteligência e Análise do Fluxo de Saída</div>
                   </div>
                 </div>
-                <button onClick={() => setShowGrafico(false)} className="btn btn-ghost btn-icon"><X size={18} /></button>
+                <button onClick={() => setShowGrafico(false)} className="btn btn-ghost btn-icon" style={{ width: 40, height: 40, borderRadius: 20 }}><X size={20} /></button>
               </div>
 
-              {/* Body */}
-              <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                {/* Por Categoria */}
-                {porCategoria.length > 0 && (
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 3, height: 16, background: '#f87171', borderRadius: 2, display: 'inline-block' }} />
-                      Distribuição por Categoria
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {porCategoria.sort((a,b) => (b.aberto+b.pago)-(a.aberto+a.pago)).map(x => (
-                        <div key={x.cat}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ width: 10, height: 10, borderRadius: 2, background: x.color, display: 'inline-block' }} />
-                              <span style={{ fontSize: 12, fontWeight: 700 }}>{x.cat}</span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
-                              {x.aberto > 0 && <span style={{ color: '#f59e0b' }}>⏳ {fmtC(x.aberto)}</span>}
-                              {x.pago > 0 && <span style={{ color: '#10b981' }}>✅ {fmtC(x.pago)}</span>}
-                            </div>
-                          </div>
-                          <div style={{ height: 18, borderRadius: 9, background: 'hsl(var(--bg-elevated))', overflow: 'hidden', display: 'flex' }}>
-                            <div style={{ width: `${(x.pago / maxCat) * 100}%`, background: 'linear-gradient(90deg,#10b981,#059669)', transition: 'width 0.4s', minWidth: x.pago > 0 ? 2 : 0 }} />
-                            <div style={{ width: `${(x.aberto / maxCat) * 100}%`, background: 'linear-gradient(90deg,#f59e0b,#f97316)', transition: 'width 0.4s', minWidth: x.aberto > 0 ? 2 : 0 }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: '#10b981' }}/> Pago</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: '#f59e0b' }}/> Em aberto</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Por Mês */}
-                {porMes.length > 0 && (
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 3, height: 16, background: '#60a5fa', borderRadius: 2, display: 'inline-block' }} />
-                      Evolução Mensal de Vencimentos
-                    </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', height: 140 }}>
-                      {porMes.map(x => (
-                        <div key={x.mes} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                          <div style={{ fontSize: 9, color: '#60a5fa', fontWeight: 700 }}>{fmtC(x.valor).replace('R$','').trim()}</div>
-                          <div style={{ width: '100%', borderRadius: '4px 4px 0 0', background: 'linear-gradient(180deg,#60a5fa,#3b82f6)', height: `${Math.max((x.valor / maxMes) * 110, 4)}px`, position: 'relative', overflow: 'hidden' }}>
-                            {x.pago > 0 && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${(x.pago / x.valor) * 100}%`, background: 'rgba(16,185,129,0.4)' }} />}
-                          </div>
-                          <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>{x.mes}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {porCategoria.length === 0 && porMes.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>
-                    <BarChart2 size={40} style={{ opacity: 0.2, margin: '0 auto 12px' }} />
-                    <div>Nenhum dado para exibir</div>
-                  </div>
-                )}
+              {/* KPIs de Topo */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 1, background: 'hsl(var(--border-subtle))', flexShrink: 0, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ background: 'hsl(var(--bg-base))', padding: '16px 32px' }}>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Processado</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: '#60a5fa', paddingTop: 4 }}>{fmtC(contasPagar.reduce((s,c)=>s+c.valor,0))}</div>
+                </div>
+                <div style={{ background: 'hsl(var(--bg-base))', padding: '16px 32px' }}>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Em Aberto</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: '#f59e0b', paddingTop: 4 }}>{fmtC(totalPendente)}</div>
+                </div>
+                <div style={{ background: 'hsl(var(--bg-base))', padding: '16px 32px' }}>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vencidos</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: '#ef4444', paddingTop: 4 }}>{fmtC(totalVencidos)}</div>
+                </div>
+                <div style={{ background: 'hsl(var(--bg-base))', padding: '16px 32px' }}>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Já Pagos</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: '#10b981', paddingTop: 4 }}>{fmtC(totalPago)}</div>
+                </div>
               </div>
 
-              {/* Footer resumo */}
-              <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, background: 'hsl(var(--bg-elevated))', flexShrink: 0 }}>
-                {[
-                  { l: 'Total', v: fmtC(contasPagar.reduce((s,c)=>s+c.valor,0)), color: '#60a5fa' },
-                  { l: 'Em Aberto', v: fmtC(totalPendente), color: '#f59e0b' },
-                  { l: 'Pago', v: fmtC(totalPago), color: '#10b981' },
-                  { l: 'Vencidas', v: fmtC(totalVencidos), color: '#ef4444' },
-                ].map(k => (
-                  <div key={k.l} style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginBottom: 2 }}>{k.l}</div>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: k.color, fontFamily: 'Outfit,sans-serif' }}>{k.v}</div>
+              {/* Body: Quad Grid */}
+              <div style={{ padding: '24px 32px', overflowY: 'auto', flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24 }}>
+                  
+                  {/* Left Col */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    {/* WIDGET 1: RISK AGING */}
+                    <div style={{ background: 'hsl(var(--bg-elevated))', padding: 24, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AlertTriangle size={16} color="#f59e0b" /> Mapa de Risco de Liquidez (A Pagar)
+                      </div>
+                      
+                      {risk.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', padding: '20px 0', textAlign: 'center' }}>Nenhum título em aberto.</div>
+                      ) : (
+                        <>
+                          <div style={{ height: 28, borderRadius: 14, display: 'flex', overflow: 'hidden', marginBottom: 20, boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}>
+                            {risk.map(r => <div key={r.label} style={{ width: `${r.pct}%`, background: r.color, transition: 'width 0.5s ease-out' }} title={`${r.label}: ${fmtC(r.val)}`} />)}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {risk.map(r => (
+                              <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: r.gb, padding: '10px 14px', borderRadius: 10 }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: r.color }}>
+                                  <div style={{ width: 8, height: 8, borderRadius: 4, background: r.color, boxShadow: `0 0 8px ${r.color}` }}/> {r.label}
+                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, color: r.color }}>{r.pct.toFixed(1)}%</span>
+                                  <span style={{ fontWeight: 800, fontSize: 14, color: r.color }}>{fmtC(r.val)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* WIDGET 2: PLANO DE CONTAS */}
+                    <div style={{ background: 'hsl(var(--bg-elevated))', padding: 24, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Layers size={16} color="#0ea5e9" /> Classificação Operacional (Planos de Contas)
+                      </div>
+                      {topPc.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', padding: '20px 0', textAlign: 'center' }}>Sem classificações.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          {topPc.map(p => (
+                            <div key={p.nome}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                                <span style={{ fontWeight: 600, color: 'hsl(var(--text-primary))' }}>{p.nome}</span>
+                                <span style={{ fontWeight: 800, color: '#0ea5e9' }}>{fmtC(p.total)}</span>
+                              </div>
+                              <div style={{ height: 14, background: 'rgba(14,165,233,0.1)', borderRadius: 7, display: 'flex', overflow: 'hidden' }}>
+                                <div style={{ width: `${(p.pag/maxPc)*100}%`, background: '#10b981', transition: 'width 0.5s' }} title={`Pago: ${fmtC(p.pag)}`} />
+                                <div style={{ width: `${(p.abr/maxPc)*100}%`, background: '#0ea5e9', transition: 'width 0.5s' }} title={`Pendente: ${fmtC(p.abr)}`} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ))}
+
+                  {/* Right Col */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                    {/* WIDGET 3: EVOLUCAO MENSAL */}
+                    <div style={{ background: 'hsl(var(--bg-elevated))', padding: 24, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Calendar size={16} color="#60a5fa" /> Previsão de Caudal Mensal
+                      </div>
+                      
+                      {porMes.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', padding: '20px 0', textAlign: 'center' }}>Sem previsões.</div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', height: 180, paddingBottom: 10 }}>
+                            {porMes.map(x => (
+                              <div key={x.mes} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                <div style={{ fontSize: 10, color: '#60a5fa', fontWeight: 800 }}>{fmtC(x.valor).replace('R$','').trim()}</div>
+                                <div style={{ width: '100%', borderRadius: 6, background: 'rgba(59,130,246,0.15)', height: `${Math.max((x.valor / maxMes) * 140, 4)}px`, position: 'relative', overflow: 'hidden' }}>
+                                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${(x.pago/x.valor)*100}%`, background: '#10b981', transition: 'height 0.5s' }} title={`Pago: ${fmtC(x.pago)}`} />
+                                  <div style={{ position: 'absolute', bottom: `${(x.pago/x.valor)*100}%`, left: 0, right: 0, height: `${(x.aberto/x.valor)*100}%`, background: '#3b82f6', transition: 'height 0.5s' }} title={`Pendente: ${fmtC(x.aberto)}`} />
+                                </div>
+                                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{x.mes}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
+                              <div style={{ width: 10, height: 10, borderRadius: 5, background: '#10b981' }}/> Pago
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
+                              <div style={{ width: 10, height: 10, borderRadius: 5, background: '#3b82f6' }}/> Pendente
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* WIDGET 4: FORNECEDORES */}
+                    <div style={{ background: 'hsl(var(--bg-elevated))', padding: 24, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Building2 size={16} color="#8b5cf6" /> Concentração de Saídas (Top 6 Fornecedores)
+                      </div>
+                      {topFurn.length === 0 ? (
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', padding: '20px 0', textAlign: 'center' }}>Sem fornecedores rastreáveis.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          {topFurn.map((f, i) => (
+                            <div key={f.nome}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: '#8b5cf6', background: 'rgba(139,92,246,0.1)', padding: '2px 6px', borderRadius: 4 }}>#{i+1}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))' }}>{f.nome}</span>
+                                </div>
+                                <span style={{ fontWeight: 900, color: '#8b5cf6', fontSize: 13 }}>{fmtC(f.valor)}</span>
+                              </div>
+                              <div style={{ height: 6, background: 'rgba(139,92,246,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${(f.valor/maxF)*100}%`, height: '100%', background: 'linear-gradient(90deg, #8b5cf6, #a78bfa)', borderRadius: 3, transition: 'width 0.5s' }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                </div>
               </div>
             </div>
           </div>
@@ -666,7 +867,7 @@ export default function ContasPagarPage() {
                 <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Layers size={16} color="#60a5fa" /></div>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: 14 }}>Selecionar Plano de Contas</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{cfgPlanoContas.filter(p => p.situacao === 'ativo').length} contas ativas</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(cfgPlanoContas || []).filter(p => p.situacao === 'ativo').length} contas ativas</div>
                 </div>
               </div>
               <button onClick={() => setShowPlanoModal(null)} className="btn btn-ghost btn-icon"><X size={16} /></button>
@@ -715,6 +916,59 @@ export default function ContasPagarPage() {
         </div>
       )}
 
+      {/* ─── Modal Seleção Fornecedor ─── */}
+      {showFornecedorModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 24px', background: 'linear-gradient(135deg,rgba(16,185,129,0.06),rgba(59,130,246,0.04))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={16} color="#10b981" /></div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>Selecionar Fornecedor</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(fornecedoresCad || []).length} fornecedores cadastrados</div>
+                </div>
+              </div>
+              <button onClick={() => setShowFornecedorModal(false)} className="btn btn-ghost btn-icon"><X size={16} /></button>
+            </div>
+            <div style={{ padding: '12px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', flexShrink: 0 }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                <input autoFocus value={fornecedorSearch} onChange={e => setFornecedorSearch(e.target.value)} placeholder="Buscar por Nome Fantasia, Razão Social ou CNPJ..." style={{ width: '100%', padding: '10px 14px 10px 36px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }} />
+              </div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+              {fornecedoresCad?.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>Nenhum fornecedor cadastrado.</div>
+              ) : fornecedoresFiltrados.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>Nenhum fornecedor encontrado para "{fornecedorSearch}". <br/><br/><span style={{ fontSize: 11, opacity: 0.6 }}>Opcional: Feche o modal e deixe o fornecedor em branco ou procure outro.</span></div>
+              ) : (
+                fornecedoresFiltrados.map(f => (
+                  <div key={f.id}
+                    onClick={() => { 
+                      setFornecedorId(f.id); 
+                      set('fornecedor', f.nomeFantasia || f.razaoSocial); 
+                      if ((f as any).planoContasId) {
+                        const pc = cfgPlanoContas?.find(p => p.id === (f as any).planoContasId);
+                        if (pc) setPlanoContasId(pc.id);
+                      }
+                      setShowFornecedorModal(false); 
+                    }}
+                    style={{ padding: '13px 20px', cursor: 'pointer', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 14 }}
+                    onMouseEnter={el => (el.currentTarget.style.background = 'hsl(var(--bg-elevated))')}
+                    onMouseLeave={el => (el.currentTarget.style.background = 'transparent')}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{f.nomeFantasia || f.razaoSocial}</div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{f.cnpj || f.cpf || 'Documento Não Informado'} {f.razaoSocial && f.nomeFantasia ? ` · ${f.razaoSocial}` : ''}</div>
+                    </div>
+                    <Check size={14} style={{ opacity: fornecedorId === f.id ? 1 : 0, color: '#10b981' }} />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Premium Nova/Editar Conta */}
       {modal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 3000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
@@ -744,61 +998,27 @@ export default function ContasPagarPage() {
                 <input className="form-input" value={form.descricao} onChange={e => set('descricao', e.target.value)} placeholder="Ex: Folha de Pagamento — Abril/2026" style={{ fontWeight: 600 }} />
               </div>
 
-              {/* Linha 2: Fornecedor (busca) + Centro de Custo */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                {/* FORNECEDOR — typeahead */}
-                <div style={{ position: 'relative' }}>
-                  <label className="form-label">Fornecedor / Beneficiário</label>
-                  <div style={{ position: 'relative' }}>
-                    <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-                    <input
-                      className="form-input"
-                      style={{ paddingLeft: 30 }}
-                      value={fornecedorSearch}
-                      onChange={e => { setFornecedorSearch(e.target.value); setShowFornecedorDrop(true); if (!e.target.value) { setFornecedorId(''); set('fornecedor', '') } }}
-                      onFocus={() => setShowFornecedorDrop(true)}
-                      onBlur={() => setTimeout(() => setShowFornecedorDrop(false), 150)}
-                      placeholder="Buscar fornecedor ou beneficiário..."
-                    />
-                    {fornecedorSearch && <button type="button" onClick={() => { setFornecedorSearch(''); setFornecedorId(''); set('fornecedor', '') }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}><X size={12} /></button>}
-                  </div>
-                  {showFornecedorDrop && fornecedoresFiltrados.length > 0 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', marginTop: 4 }}>
-                      {fornecedoresFiltrados.map(f => (
-                        <div key={f.id}
-                          onMouseDown={() => { setFornecedorId(f.id); const nome = f.nomeFantasia || f.razaoSocial; setFornecedorSearch(nome); set('fornecedor', nome); setShowFornecedorDrop(false) }}
-                          style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid hsl(var(--border-subtle))', transition: 'background 0.1s' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <span style={{ fontWeight: 700 }}>{f.nomeFantasia || f.razaoSocial}</span>
-                          {f.nomeFantasia && f.razaoSocial && <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginLeft: 6 }}>{f.razaoSocial}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {showFornecedorDrop && fornecedoresFiltrados.length === 0 && fornecedorSearch.length > 0 && (
-                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Nenhum fornecedor encontrado — digite para cadastrar manualmente</div>
-                  )}
-                  {fornecedorId && <div style={{ fontSize: 10, color: '#10b981', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}><Check size={9} /> Fornecedor vinculado</div>}
-                </div>
-
-                {/* Centro de custo */}
+                {/* FORNECEDOR — botão abre modal */}
                 <div>
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    Centro de Custo *
-                    {aiSugerido && <span style={{ fontSize: 9, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', padding: '2px 6px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}><Building2 size={9} /> Auto-sugerido</span>}
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Building2 size={11} />Fornecedor / Beneficiário
+                    {fornecedorId && <span style={{ fontSize: 10, color: '#10b981', fontWeight: 600 }}>✓ Vinculado</span>}
                   </label>
-                  {cfgCentrosCusto.length > 0 ? (
-                    <select className="form-input" value={centroCustoId} onChange={e => { setCentroCustoId(e.target.value); setAiSugerido(false) }} style={{ borderColor: !centroCustoId ? '#f87171' : aiSugerido ? '#60a5fa' : '' }}>
-                      <option value="">Selecione obirgatoriamente...</option>
-                      {cfgCentrosCusto.map(cc => <option key={cc.id} value={cc.id}>{cc.codigo} — {cc.descricao}</option>)}
-                    </select>
-                  ) : (
-                    <input className="form-input" placeholder="Configure em Config. Financeiro" disabled style={{ opacity: 0.5 }} />
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                    <input type="checkbox" id="chkRateio" checked={usaRateio} onChange={e => setUsaRateio(e.target.checked)} />
-                    <label htmlFor="chkRateio" style={{ fontSize: 11, cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>Possui Rateio Avançado (Dividir entre múltiplos centros)</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ flex: 1, padding: '9px 14px', background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, fontSize: 13, color: (fornecedorId || form.fornecedor) ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {fornecedorId || form.fornecedor ? (() => {
+                        const sel = fornecedoresCad?.find(f => f.id === fornecedorId);
+                        return (
+                          <span style={{ fontWeight: 600 }}>{sel?.nomeFantasia || sel?.razaoSocial || form.fornecedor}</span>
+                        );
+                      })() : <span>Nenhum fornecedor selecionado</span>}
+                    </div>
+                    <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap', fontSize: 12 }}
+                      onClick={() => { setFornecedorSearch(''); setShowFornecedorModal(true) }}>
+                      <Search size={12} />Selecionar Fornecedor
+                    </button>
+                    {(fornecedorId || form.fornecedor) && <button type="button" className="btn btn-ghost btn-icon" onClick={() => { setFornecedorId(''); set('fornecedor', '') }}><X size={12} /></button>}
                   </div>
                 </div>
               </div>
@@ -831,7 +1051,7 @@ export default function ContasPagarPage() {
                   </button>
                   {planoContasId && <button type="button" className="btn btn-ghost btn-icon" onClick={() => { setPlanoContasId(''); setPlanoSearch('') }}><X size={12} /></button>}
                 </div>
-                {cfgPlanoContas.filter(p => p.grupoConta === 'despesas').length === 0 && (
+                {(cfgPlanoContas || []).filter(p => p.grupoConta === 'despesas').length === 0 && (
                   <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Configure o Plano de Contas em Configurações Financeiro.</div>
                 )}
               </div>
@@ -1011,14 +1231,18 @@ export default function ContasPagarPage() {
                     <label className="form-label">Caixa</label>
                     <select className="form-input" value={baixaForm.caixaId} onChange={e => setBF('caixaId', e.target.value)} style={{ height: 38, fontSize: 13 }}>
                       <option value="">Sem vínculo de caixa</option>
-                      {caixasAbertos.filter(cx => !cx.fechado).map(cx => (
-                        <option key={cx.id} value={cx.id}>{(cx as any).nomeCaixa || (cx as any).codigo || cx.operador} — {cx.operador}</option>
-                      ))}
+                      {caixasAbertos.filter(cx => !cx.fechado).map(cx => {
+                        const dateStr = cx.dataAbertura && String(cx.dataAbertura).includes('T') ? cx.dataAbertura : `${cx.dataAbertura || ''}T12:00`
+                        const dt = isNaN(new Date(dateStr).getTime()) ? '' : new Date(dateStr).toLocaleDateString('pt-BR')
+                        return <option key={cx.id} value={cx.id}>{(cx as any).nomeCaixa || (cx as any).codigo || cx.operador} — {dt} ({cx.operador})</option>
+                      })}
                       {caixasAbertos.filter(cx => cx.fechado).length > 0 && (
                         <optgroup label="Fechados">
-                          {caixasAbertos.filter(cx => cx.fechado).map(cx => (
-                            <option key={cx.id} value={cx.id}>{(cx as any).nomeCaixa || cx.operador} (fechado)</option>
-                          ))}
+                          {caixasAbertos.filter(cx => cx.fechado).map(cx => {
+                            const dateStr = cx.dataAbertura && String(cx.dataAbertura).includes('T') ? cx.dataAbertura : `${cx.dataAbertura || ''}T12:00`
+                            const dt = isNaN(new Date(dateStr).getTime()) ? '' : new Date(dateStr).toLocaleDateString('pt-BR')
+                            return <option key={cx.id} value={cx.id}>{(cx as any).nomeCaixa || cx.operador} — {dt} (fechado)</option>
+                          })}
                         </optgroup>
                       )}
                     </select>
@@ -1039,12 +1263,11 @@ export default function ContasPagarPage() {
                 <div>
                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <Layers size={11} />Plano de Contas / Conta de Crédito
-                    {planoSelecionado && <span style={{ fontSize: 10, color: '#10b981', marginLeft: 4, fontWeight: 600 }}>✓ Auto-selecionado</span>}
                   </label>
-                  {cfgPlanoContas.filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo').length > 0 ? (
+                  {(cfgPlanoContas || []).filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo').length > 0 ? (
                     <select className="form-input" value={baixaForm.planoContasId} onChange={e => setBF('planoContasId', e.target.value)} style={{ height: 38, fontSize: 13 }}>
                       <option value="">Selecionar conta do plano</option>
-                      {cfgPlanoContas.filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo').map(p => (
+                      {(cfgPlanoContas || []).filter(p => p.grupoConta === 'despesas' && p.situacao === 'ativo').map(p => (
                         <option key={p.id} value={p.id}>{(p as any).codPlano} — {p.descricao}</option>
                       ))}
                     </select>
@@ -1087,55 +1310,50 @@ export default function ContasPagarPage() {
                       </div>
                     </div>
 
-                    {/* Valor Líquido em destaque */}
-                    <div style={{ padding: '14px 18px', borderRadius: 12, background: `linear-gradient(135deg, ${valorLiquido >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)'}, transparent)`, border: `1px solid ${valorLiquido >= conta.valor ? 'rgba(245,158,11,0.3)' : valorLiquido < conta.valor ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginBottom: 2 }}>VALOR LÍQUIDO A PAGAR</div>
-                        <div style={{ fontSize: 26, fontWeight: 900, color: '#10b981', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em' }}>
-                          {fmtC(valorLiquido)}
+                    {/* Segunda linha: Liquido e Metodo */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 0.8fr)', gap: 12 }}>
+                      {/* Valor Líquido em destaque */}
+                      <div style={{ padding: '14px 18px', borderRadius: 12, background: `linear-gradient(135deg, ${valorLiquido >= 0 ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)'}, transparent)`, border: `1px solid ${valorLiquido >= conta.valor ? 'rgba(245,158,11,0.3)' : valorLiquido < conta.valor ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginBottom: 2 }}>VALOR LÍQUIDO A PAGAR</div>
+                          <div style={{ fontSize: 26, fontWeight: 900, color: '#10b981', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em' }}>
+                            {fmtC(valorLiquido)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                          {baixaForm.desconto > 0 && <div style={{ color: '#10b981' }}>- {fmtC(baixaForm.desconto)} desconto</div>}
+                          {baixaForm.juros > 0 && <div style={{ color: '#f59e0b' }}>+ {fmtC(baixaForm.juros)} juros</div>}
+                          {baixaForm.multa > 0 && <div style={{ color: '#ef4444' }}>+ {fmtC(baixaForm.multa)} multa</div>}
+                          {(baixaForm.desconto > 0 || baixaForm.juros > 0 || baixaForm.multa > 0) && (
+                            <div style={{ marginTop: 4, fontWeight: 700, color: valorLiquido < conta.valor ? '#10b981' : '#f59e0b' }}>
+                              {valorLiquido < conta.valor ? `↓ ${fmtC(conta.valor - valorLiquido)} economizado` : `↑ ${fmtC(valorLiquido - conta.valor)} acréscimo`}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div style={{ textAlign: 'right', fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                        {baixaForm.desconto > 0 && <div style={{ color: '#10b981' }}>- {fmtC(baixaForm.desconto)} desconto</div>}
-                        {baixaForm.juros > 0 && <div style={{ color: '#f59e0b' }}>+ {fmtC(baixaForm.juros)} juros</div>}
-                        {baixaForm.multa > 0 && <div style={{ color: '#ef4444' }}>+ {fmtC(baixaForm.multa)} multa</div>}
-                        {(baixaForm.desconto > 0 || baixaForm.juros > 0 || baixaForm.multa > 0) && (
-                          <div style={{ marginTop: 4, fontWeight: 700, color: valorLiquido < conta.valor ? '#10b981' : '#f59e0b' }}>
-                            {valorLiquido < conta.valor ? `↓ ${fmtC(conta.valor - valorLiquido)} economizado` : `↑ ${fmtC(valorLiquido - conta.valor)} acréscimo`}
+
+                      {/* Método de Pagamento Premium */}
+                      <div style={{ padding: '14px 18px', borderRadius: 12, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          <CreditCard size={12} /> Método de Pagamento
+                        </label>
+                        {metodosPagamento.length > 0 ? (
+                          <div style={{ position: 'relative' }}>
+                            <select className="form-input" style={{ fontSize: 14, fontWeight: 700, padding: '10px 14px', height: 'auto', background: 'hsl(var(--bg-base))', borderColor: 'hsl(var(--border-subtle))', appearance: 'none' }} value={baixaForm.composicao} onChange={e => setBF('composicao', e.target.value)}>
+                              {metodosPagamento.map(m => (
+                                <option key={m.id} value={m.nome}>{m.nome}</option>
+                              ))}
+                            </select>
+                            <ArrowDownCircle size={14} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
                           </div>
+                        ) : (
+                          <select className="form-input" style={{ fontSize: 13 }} value={baixaForm.composicao} onChange={e => setBF('composicao', e.target.value)}>
+                            {['PIX','Dinheiro','Boleto'].map(m => <option key={m}>{m}</option>)}
+                          </select>
                         )}
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Composição da Baixa (método de pagamento) */}
-                <div>
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <CreditCard size={11} />Composição da Baixa — Método de Pagamento
-                  </label>
-                  {metodosPagamento.filter(m => m.situacao === 'ativo').length > 0 ? (
-                    <>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                        {metodosPagamento.filter(m => m.situacao === 'ativo').slice(0, 8).map(m => (
-                          <button key={m.id} type="button"
-                            onClick={() => setBF('composicao', m.id)}
-                            style={{ fontSize: 11, padding: '5px 12px', borderRadius: 8, border: `2px solid ${baixaForm.composicao === m.id ? '#10b981' : 'hsl(var(--border-subtle))'}`, background: baixaForm.composicao === m.id ? 'rgba(16,185,129,0.1)' : 'transparent', color: baixaForm.composicao === m.id ? '#10b981' : 'hsl(var(--text-muted))', cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s' }}>
-                            {m.nome}
-                          </button>
-                        ))}
-                      </div>
-                      {metodoSelecionado && (
-                        <div style={{ fontSize: 11, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <BadgeCheck size={12} />Pagamento via <strong>{metodoSelecionado.nome}</strong>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <select className="form-input" value={baixaForm.composicao} onChange={e => setBF('composicao', e.target.value)}>
-                      {['PIX','Dinheiro','Boleto','Cartão de Crédito','Cartão de Débito','Transferência'].map(m => <option key={m}>{m}</option>)}
-                    </select>
-                  )}
                 </div>
 
                 {/* Observações */}
@@ -1166,6 +1384,21 @@ export default function ContasPagarPage() {
           </div>
         )
       })()}
+
+      {alertMsg && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+    <div className="modal-content" style={{ background: 'hsl(var(--bg-base))', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', maxWidth: 420, textAlign: 'center', padding: '32px 24px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🚫</div>
+            <h2 style={{ fontSize: 20, color: '#1e293b', marginBottom: 16, fontWeight: 800 }}>Ação Bloqueada</h2>
+            <p style={{ color: '#475569', fontSize: 15, lineHeight: 1.5, marginBottom: 28, fontWeight: 500 }}>
+              {alertMsg}
+            </p>
+            <button className="btn btn-primary" onClick={() => setAlertMsg(null)} style={{ width: '100%', padding: '12px', fontSize: 16, background: '#f59e0b', borderColor: '#f59e0b', color: 'white' }}>
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal open={confirmId !== null} onClose={() => setConfirmId(null)} onConfirm={handleDelete}
         message="A conta a pagar será removida permanentemente." />

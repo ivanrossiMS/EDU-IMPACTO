@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const q = searchParams.get('q')?.toLowerCase()
   const serie = searchParams.get('serie')
 
-  let query = supabaseServer.from('turmas').select('*').order('nome')
+  let query = supabase.from('turmas').select('*').order('nome')
   if (q) query = query.or(`nome.ilike.%${q}%,professor.ilike.%${q}%`)
   if (serie && serie !== 'Todos') query = query.eq('serie', serie)
 
@@ -20,19 +21,31 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
 
     if (Array.isArray(body)) {
-      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      const incomingIds = body.map(t => t.id).filter(Boolean);
+
+      if (incomingIds.length === 0) {
+        await supabase.from('turmas').delete().neq('id', 'impossible-id');
+        return NextResponse.json({ ok: true, count: 0 });
+      }
+
       const rows = body.map(t => buildRow(t))
-      const { error } = await supabaseServer.from('turmas').upsert(rows)
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      const { error: upErr } = await supabase.from('turmas').upsert(rows)
+      if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 })
+
+      // Sincronizar exclusões de turmas
+      const { error: delErr } = await supabase.from('turmas').delete().not('id', 'in', `(${incomingIds.join(',')})`);
+      if (delErr) console.error('Erro ao excluir turmas removidas:', delErr);
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
     const row = buildRow(body)
-    const { data, error } = await supabaseServer.from('turmas').upsert(row).select().single()
+    const { data, error } = await supabase.from('turmas').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {

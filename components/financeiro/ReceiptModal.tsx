@@ -429,10 +429,10 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
                 <div style={{ textAlign:'right' }}>Pago</div>
               </div>
               {parcelas.map((p, i) => {
-                const encargos = (Number(p.juros)||0) + (Number(p.multa)||0); console.log('p:', p);
+                const encargos = (Number(p.juros)||0) + (Number(p.multa)||0)
                 const isOdd = i % 2 !== 0
                 return (
-                  <div key={p.num} style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 90px 100px', padding:'16px 20px', alignItems:'center', background:isOdd?'#f8fafc':'#fff', borderBottom: i<parcelas.length-1?'1px solid #f1f5f9':'none' }}>
+                  <div key={`${p.num}-${i}`} style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 90px 100px', padding:'16px 20px', alignItems:'center', background:isOdd?'#f8fafc':'#fff', borderBottom: i<parcelas.length-1?'1px solid #f1f5f9':'none' }}>
                     <div>
                       <div style={{ fontWeight:700, fontSize:13, color:'#0f172a' }}>{(p as any).alunoNome ? (p as any).alunoNome + ' — ' : ''}{p.evento || 'Mensalidade'}</div>
                       <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Parc {String(p.num).padStart(2,'0')} · Venc. {p.vencimento} {p.competencia?`· ${p.competencia}`:''}</div>

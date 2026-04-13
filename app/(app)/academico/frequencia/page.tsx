@@ -33,7 +33,7 @@ function fmtDate(s: string, mode: 'short'|'full' = 'short') {
 }
 
 export default function FrequenciaPage() {
-  const { alunos, turmas, frequencias, setFrequencias, cfgCalendarioLetivo } = useData()
+  const { alunos = [], turmas = [], frequencias = [], setFrequencias, cfgCalendarioLetivo } = useData()
   const [turmaSel, setTurmaSel] = useState<string|null>(null)
   const [vista, setVista] = useState<'chamada'|'disciplina'|'relatorio'>('chamada')
 
@@ -160,8 +160,9 @@ export default function FrequenciaPage() {
       (filtroAno === 'todos' || String(t.ano) === filtroAno) &&
       (!filtroBusca || t.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
     )
-    const turmasHoje = turmas.filter(t => frequencias.some(f => f.turmaId === t.id && f.data === today)).length
-    const turmasSemHoje = turmas.length - turmasHoje
+    const turmasComAlunos = turmas.filter(t => alunos.some(a => a.turma === t.nome))
+    const turmasHoje = turmasComAlunos.filter(t => frequencias.some(f => f.turmaId === t.id && f.data === today)).length
+    const turmasSemHoje = turmasComAlunos.length - turmasHoje
 
     return (
       <div>
@@ -172,14 +173,14 @@ export default function FrequenciaPage() {
           </div>
         </div>
 
-        {turmasSemHoje > 0 && turmas.length > 0 && (
+        {turmasSemHoje > 0 && turmasComAlunos.length > 0 && (
           <div style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 20px', background:'rgba(245,158,11,0.07)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:14, marginBottom:20, borderLeft:'4px solid #f59e0b' }}>
             <div style={{ fontSize:24 }}>⚠️</div>
             <div style={{ flex:1 }}>
               <div style={{ fontWeight:700, fontSize:13, color:'#f59e0b' }}>{turmasSemHoje} turma{turmasSemHoje>1?'s':''} sem chamada registrada hoje</div>
               <div style={{ fontSize:12, color:'hsl(var(--text-secondary))' }}>Registre antes do fim do dia letivo</div>
             </div>
-            <div style={{ fontSize:11, fontWeight:700, color:'#f59e0b', background:'rgba(245,158,11,0.1)', padding:'4px 12px', borderRadius:20 }}>{turmasHoje}/{turmas.length}</div>
+            <div style={{ fontSize:11, fontWeight:700, color:'#f59e0b', background:'rgba(245,158,11,0.1)', padding:'4px 12px', borderRadius:20 }}>{turmasHoje}/{turmasComAlunos.length}</div>
           </div>
         )}
 
@@ -234,9 +235,11 @@ export default function FrequenciaPage() {
                     <div style={{ fontSize:20, fontWeight:900, color:c, fontFamily:'Outfit,sans-serif' }}>{turma.nome}</div>
                     <div style={{ fontSize:11, color:'hsl(var(--text-muted))', marginTop:3 }}>{turma.serie} • {turma.turno} • {alunosTurma.length} alunos</div>
                   </div>
-                  {temHoje
-                    ? <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700, height:'fit-content' }}>✓ Hoje</span>
-                    : <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontWeight:700, height:'fit-content' }}>⚠ Pendente</span>
+                  {alunosTurma.length === 0
+                    ? <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(107,114,128,0.1)', color:'#6b7280', fontWeight:700, height:'fit-content' }}>Sem alunos</span>
+                    : temHoje
+                      ? <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700, height:'fit-content' }}>✓ Hoje</span>
+                      : <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontWeight:700, height:'fit-content' }}>⚠ Pendente</span>
                   }
                 </div>
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -10,7 +12,7 @@ const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
 export default function AgendaDigitalIndex() {
   const router = useRouter()
   const { currentUserPerfil, currentUser } = useApp()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   useEffect(() => {
     const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)

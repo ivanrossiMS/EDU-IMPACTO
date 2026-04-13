@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useEffect, useMemo } from 'react'
 import { useData, Turma } from '@/lib/dataContext'
@@ -27,7 +29,8 @@ function OccupancyRing({ pct, color }: { pct: number; color: string }) {
 }
 
 export default function TurmasPage() {
-  const { alunos: _alunos, cfgTurnos: _cfgTurnos, cfgNiveisEnsino: _cfgNiveis, logSystemAction, turmas = [], setTurmas } = useData()
+  const { cfgTurnos: _cfgTurnos, cfgNiveisEnsino: _cfgNiveis, cfgPadroesPagamento, logSystemAction, turmas = [], setTurmas } = useData();
+  const [_alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const alunos = Array.isArray(_alunos) ? _alunos : []
   const cfgTurnos = Array.isArray(_cfgTurnos) ? _cfgTurnos : []
   const cfgNiveisEnsino = Array.isArray(_cfgNiveis) ? _cfgNiveis : []
@@ -193,6 +196,7 @@ export default function TurmasPage() {
                       </span>
                       <span className="badge badge-neutral">{turma.turno}</span>
                       {turma.ano && <span className="badge badge-neutral">{turma.ano}</span>}
+                      {turma.unidade && <span className="badge badge-neutral" style={{ border: '1px dashed hsl(var(--border-subtle))' }}>🏢 {turma.unidade}</span>}
                       {lotada && <span className="badge badge-danger">Lotada</span>}
                     </div>
                   </div>
@@ -208,8 +212,22 @@ export default function TurmasPage() {
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{turma.sala || '—'}</div>
                   </div>
                   <div style={{ gridColumn: '1/-1' }}>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>Professor(a) Responsavel</div>
+                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>Professor(a) Responsável</div>
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{turma.professor || '—'}</div>
+                  </div>
+                  <div style={{ gridColumn: '1/-1', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 6, marginTop: 2 }}>
+                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginBottom: 2 }}>Padrões de Pagamento</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {((turma as any).padraoPagamentoIds || []).length > 0 ? (
+                        ((turma as any).padraoPagamentoIds || []).map((pId: string) => {
+                          const p = (cfgPadroesPagamento || []).find((c: any) => c.id === pId)
+                          if (!p) return null
+                          return <span key={pId} className="badge badge-neutral" style={{ fontSize: 9, padding: '2px 6px', background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))' }}>{p.nome}</span>
+                        })
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Nenhum padrão vinculado</span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -224,13 +242,15 @@ export default function TurmasPage() {
         <div className="table-container">
           <table>
             <thead>
-              <tr><th>Turma</th><th>Segmento</th><th>Turno</th><th>Professor(a)</th><th>Sala</th><th>Ano</th><th>Ocupacao</th><th>Acoes</th></tr>
+              <tr><th>Turma</th><th>Segmento</th><th>Turno</th><th>Professor(a)</th><th>Sala</th><th>Ano</th><th>Padrões Pgto</th><th>Ocupacao</th><th>Acoes</th></tr>
             </thead>
             <tbody>
               {filtered.map(turma => {
                 const mat = alunosDaTurma(turma.id, turma.nome)
                 const pct = turma.capacidade > 0 ? Math.round((mat / turma.capacidade) * 100) : 0
                 const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
+                const pgtoIds = (turma as any).padraoPagamentoIds || []
+                const padroes = (cfgPadroesPagamento || []).filter(p => pgtoIds.includes(p.id))
                 return (
                   <tr key={turma.id}>
                     <td>
@@ -245,6 +265,9 @@ export default function TurmasPage() {
                     <td style={{ fontSize: 12 }}>{turma.professor || '—'}</td>
                     <td style={{ fontSize: 12 }}>{turma.sala || '—'}</td>
                     <td style={{ fontSize: 12, fontWeight: 700 }}>{turma.ano}</td>
+                    <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={padroes.map(p => p.nome).join(', ')}>
+                      {padroes.length > 0 ? padroes.map(p => p.nome).join(', ') : '—'}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div className="progress-bar" style={{ width: 60 }}>

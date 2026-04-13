@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const { data, error } = await supabaseServer
+  const supabase = await createProtectedClient();
+  const { data, error } = await supabase
     .from('tarefas').select('*').order('prazo')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json((data || []).map(r => ({ ...r, ...(r.dados || {}) })))
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const { id, titulo, descricao, responsavel, prazo, status, prioridade, ...rest } = body
@@ -20,7 +22,7 @@ export async function POST(request: Request) {
       prazo: prazo || '', status: status || 'pendente',
       prioridade: prioridade || 'media', dados: rest,
     }
-    const { data, error } = await supabaseServer.from('tarefas').upsert(row).select().single()
+    const { data, error } = await supabase.from('tarefas').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {

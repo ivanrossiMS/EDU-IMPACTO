@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray, useSupabaseCollection } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -52,10 +54,23 @@ const MiniCard = ({ icon, label, value, bg, border, valueColor }: {
 )
 
 function Ficha360Inner() {
-  const { ocorrencias, lancamentosNota, titulos, alunos = [], turmas = [], setAlunos } = useData()
+  const { ocorrencias = [], lancamentosNota = [], turmas = [], setAlunos } = useData();
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  
+  const [alunos] = useSupabaseCollection<any>(
+    'alunos',
+    [],
+    {
+      fetcher: () =>
+        fetch('/api/alunos')
+          .then(r => r.ok ? r.json() : [])
+          .then(d => Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : [])),
+      persister: async () => { /* read only */ }
+    }
+  );
   
   const searchParams = useSearchParams()
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(''); const [appliedSearch, setAppliedSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -79,16 +94,16 @@ function Ficha360Inner() {
 
   useEffect(() => setMounted(true), [])
 
-  const hasSearch = search.trim().length >= 3
+  const hasSearch = appliedSearch.trim().length > 0
   const filteredSearch = hasSearch
-    ? alunos.filter(a =>
-        a.nome?.toLowerCase().includes(search.toLowerCase()) ||
-        (a.matricula || '').includes(search) ||
-        (a.turma || '').toLowerCase().includes(search.toLowerCase())
+    ? (alunos || []).filter(a =>
+        a.nome?.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+        (a.matricula || '').includes(appliedSearch) ||
+        (a.turma || '').toLowerCase().includes(appliedSearch.toLowerCase())
       ).slice(0, 10)
     : []
 
-  const aluno = selectedId ? (alunos.find(a => String(a.id) === String(selectedId) || String((a as any).codigo) === String(selectedId) || String((a as any).matricula) === String(selectedId)) ?? null) : null
+  const aluno = selectedId ? ((alunos || []).find(a => String(a.id) === String(selectedId) || String((a as any).codigo) === String(selectedId) || String((a as any).matricula) === String(selectedId)) ?? null) : null
 
   // ── Responsáveis ──────────────────────────────────────────────────────────
   const responsaveis: any[] = useMemo(() => (aluno as any)?.responsaveis || [], [aluno])
@@ -97,6 +112,9 @@ function Ficha360Inner() {
 
   // ── Saúde ─────────────────────────────────────────────────────────────────
   const saude: any = useMemo(() => (aluno as any)?.saude || {}, [aluno])
+  const autorizados: any[] = useMemo(() => saude?.autorizados || [], [saude])
+  const respFinAut = respFin ? autorizados.find((a: any) => a.nome === respFin.nome) : null
+  const respPedAut = respPed ? autorizados.find((a: any) => a.nome === respPed.nome) : null
 
   // ── Turma ─────────────────────────────────────────────────────────────────
   const turmaObj = useMemo(() => {
@@ -134,7 +152,7 @@ function Ficha360Inner() {
   // ── Financeiro ────────────────────────────────────────────────────────────
   const parcelasAluno: any[] = useMemo(() => (aluno as any)?.parcelas || [], [aluno])
   const titulos2 = useMemo(() =>
-    aluno ? titulos.filter(t => t.aluno === aluno.nome || (t as any).alunoId === aluno.id) : [],
+    aluno ? (titulos || []).filter((t:any) => t.aluno === aluno.nome || t.alunoId === aluno.id) : [],
   [aluno, titulos])
   const parcelasVencidas = useMemo(() => {
     const hoje = new Date(); hoje.setHours(12, 0, 0, 0)
@@ -145,7 +163,7 @@ function Ficha360Inner() {
         return new Date(+parts[2], +parts[1]-1, +parts[0], 12) < hoje
       } catch { return false }
     })
-    const vencTitulos = titulos2.filter(t => {
+    const vencTitulos = (titulos2 || []).filter((t:any) => {
       if (t.status === 'pago') return false
       try { return new Date((t.vencimento || '') + 'T12:00') < hoje } catch { return false }
     })
@@ -172,12 +190,12 @@ function Ficha360Inner() {
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:36, marginBottom:12 }}>🎓</div>
             <div style={{ fontSize:16, fontWeight:800, marginBottom:6, fontFamily:'Outfit,sans-serif' }}>Ficha 360° do Aluno</div>
-            <div style={{ fontSize:13, color:'hsl(var(--text-muted))' }}>Digite o nome, nº de matrícula ou turma para localizar a ficha completa</div>
+            <div style={{ fontSize:13, color:'hsl(var(--text-muted))' }}>Digite o nome, nº de matrícula ou turma e aperte Enter para localizar a ficha completa</div>
           </div>
           <div style={{ position:'relative', width:'100%', maxWidth:560 }}>
             <Search size={18} style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))' }}/>
-            <input ref={searchRef} className="form-input" style={{ paddingLeft:48, fontSize:15, height:52, borderRadius:14 }} placeholder="Ex: João Pedro, 20260001, 7º Ano A..." value={search} onChange={e=>setSearch(e.target.value)} autoFocus/>
-            {search && <button onClick={()=>setSearch('')} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', display:'flex' }}><X size={16}/></button>}
+            <input ref={searchRef} className="form-input" style={{ paddingLeft:48, fontSize:15, height:52, borderRadius:14 }} placeholder="Ex: Joo Pedro, 20260001, 7 Ano A... e aperte Enter" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&setAppliedSearch(search)} autoFocus/>
+            {search && <button onClick={()=>{setSearch('');setAppliedSearch('');}} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', display:'flex' }}><X size={16}/></button>}
           </div>
           {hasSearch && (
             <div style={{ width:'100%', maxWidth:560, display:'flex', flexDirection:'column', gap:6 }}>
@@ -201,7 +219,7 @@ function Ficha360Inner() {
                     const stUltimaMatricula = histAtivo ? (histAtivo.situacao || histAtivo.status || 'Sem status') : (a.statusMatricula || a.status || 'Não Matriculado')
 
                     return (
-                      <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch('') }}
+                      <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch(''); setAppliedSearch(''); }}
                         style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px', borderRadius:12, cursor:'pointer', textAlign:'left', width:'100%', background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
                         {a.foto ? (
                           <div style={{ width:38, height:38, borderRadius:'50%', overflow:'hidden', flexShrink:0, border:`2px solid ${rc}40` }}>
@@ -223,7 +241,7 @@ function Ficha360Inner() {
               }
             </div>
           )}
-          {mounted && !hasSearch && <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{alunos.length} aluno{alunos.length!==1?'s':''} disponível{alunos.length!==1?'is':''}</div>}
+          {mounted && !hasSearch && <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{(alunos || []).length} aluno{(alunos || []).length!==1?'s':''} disponível{(alunos || []).length!==1?'is':''}</div>}
         </div>
       )}
 
@@ -234,13 +252,13 @@ function Ficha360Inner() {
           <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'hsl(var(--bg-elevated))', borderRadius:12, border:'1px solid hsl(var(--border-subtle))' }}>
             <Search size={14} style={{ color:'hsl(var(--text-muted))', flexShrink:0 }}/>
             <div style={{ position:'relative', flex:1, maxWidth:400 }}>
-              <input ref={searchRef} className="form-input" style={{ fontSize:13, paddingRight:search?36:12 }} placeholder="Trocar aluno..." value={search} onChange={e=>setSearch(e.target.value)}/>
-              {search && <button onClick={()=>setSearch('')} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', display:'flex' }}><X size={14}/></button>}
+              <input ref={searchRef} className="form-input" style={{ fontSize:13, paddingRight:search?36:12 }} placeholder="Trocar aluno... aperte Enter" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>e.key==='Enter'&&setAppliedSearch(search)}/>
+              {search && <button onClick={()=>{setSearch('');setAppliedSearch('');}} style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', display:'flex' }}><X size={14}/></button>}
             </div>
             <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>Exibindo:</span>
             <div className="avatar" style={{ width:26, height:26, fontSize:9, background:`${riskColor}20`, color:riskColor, flexShrink:0 }}>{getInitials(aluno.nome)}</div>
             <span style={{ fontSize:13, fontWeight:700 }}>{aluno.nome}</span>
-            <button className="btn btn-ghost btn-sm" style={{ marginLeft:'auto', fontSize:11 }} onClick={()=>{ setSelectedId(null); setSearch('') }}><X size={12}/> Fechar ficha</button>
+            <button className="btn btn-ghost btn-sm" style={{ marginLeft:'auto', fontSize:11 }} onClick={()=>{ setSelectedId(null); setSearch(''); setAppliedSearch(''); }}><X size={12}/> Fechar ficha</button>
           </div>
 
           {hasSearch && (
@@ -265,7 +283,7 @@ function Ficha360Inner() {
                     const stUltimaMatricula = histAtivo ? (histAtivo.situacao || histAtivo.status || 'Sem status') : (a.statusMatricula || a.status || 'Não Matriculado')
 
                     return (
-                      <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch('') }}
+                      <button key={a.id} onClick={()=>{ setSelectedId(a.id); setSearch(''); setAppliedSearch(''); }}
                         style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, cursor:'pointer', textAlign:'left', width:'100%', background:selectedId===a.id?'rgba(99,102,241,0.08)':'transparent', border:'none' }}>
                         {a.foto ? (
                           <div style={{ width:28, height:28, borderRadius:'50%', overflow:'hidden', flexShrink:0, border:`1px solid ${rc}40` }}>
@@ -416,6 +434,16 @@ function Ficha360Inner() {
                     <R k="CPF" v={respFin.cpf}/><R k="RG" v={respFin.rg}/><R k="E-mail" v={respFin.email}/>
                     <R k="Celular" v={respFin.celular}/><R k="Tel. Comercial" v={respFin.telComercial}/>
                     <R k="Prof. / Emprego" v={respFin.profissao}/>
+                    <R k="Cartão RFID" v={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                        <span>{(respFinAut?.rfid || respFin.rfid) || '—'}</span>
+                        {respFinAut && (
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: respFinAut.proibido ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', color: respFinAut.proibido ? '#ef4444' : '#22c55e', fontWeight: 800 }}>
+                            {respFinAut.proibido ? 'PROIBIDO' : 'LIBERADO'}
+                          </span>
+                        )}
+                      </div>
+                    }/>
                   </>
               }
             </div>
@@ -439,6 +467,16 @@ function Ficha360Inner() {
                     <R k="CPF" v={respPed.cpf}/><R k="RG" v={respPed.rg}/><R k="E-mail" v={respPed.email}/>
                     <R k="Celular" v={respPed.celular}/><R k="Tel. Comercial" v={respPed.telComercial}/>
                     <R k="Prof. / Emprego" v={respPed.profissao}/>
+                    <R k="Cartão RFID" v={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                        <span>{(respPedAut?.rfid || respPed.rfid) || '—'}</span>
+                        {respPedAut && (
+                          <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: respPedAut.proibido ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)', color: respPedAut.proibido ? '#ef4444' : '#22c55e', fontWeight: 800 }}>
+                            {respPedAut.proibido ? 'PROIBIDO' : 'LIBERADO'}
+                          </span>
+                        )}
+                      </div>
+                    }/>
                   </>
               }
             </div>
@@ -647,3 +685,4 @@ export default function Ficha360Page() {
     </Suspense>
   )
 }
+

@@ -13,22 +13,6 @@ export const LEADS: any[] = []
 export const TITULOS: any[] = []
 export const CONTAS_PAGAR: any[] = []
 
-export const DRE_DATA = {
-  periodo: 'Jan–Mar 2026',
-  receita_bruta: 0,
-  deducoes: 0,
-  receita_liquida: 0,
-  custos_pessoal: 0,
-  custos_diretos: 0,
-  despesas_adm: 0,
-  despesas_marketing: 0,
-  despesas_tecnologia: 0,
-  depreciacao: 0,
-  ebitda: 0,
-  resultado_financeiro: 0,
-  lucro_liquido: 0,
-  margem_liquida: 0,
-}
 
 export const RECEITA_DESPESA_MENSAL: any[] = []
 

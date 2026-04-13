@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
 import {
@@ -22,8 +24,8 @@ function StatusChip({ ok, warn, label }: { ok?: boolean; warn?: boolean; label: 
 
 // ─── ESCOLA ────────────────────────────────────────────────────────────────────
 function EscolaSection() {
-  const { mantenedores, censoConfig } = useData()
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const { mantenedores = [], censoConfig } = useData()
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
   const man = mantenedores.find(m => m.unidades.some(u => u.id === escola?.id)) || mantenedores[0]
@@ -92,11 +94,12 @@ function EscolaSection() {
 
 // ─── TURMAS ────────────────────────────────────────────────────────────────────
 function TurmasSection() {
-  const { turmas, alunos, censoTurmasData, setCensoTurmasData, logCensoAction, censoConfig, mantenedores } = useData()
+  const { turmas = [], censoTurmasData, setCensoTurmasData, logCensoAction, censoConfig, mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [editingId, setEditingId] = useState<string|null>(null)
   const [editForm, setEditForm]   = useState<Partial<CensoTurmaData>>({})
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 
@@ -210,8 +213,9 @@ function TurmasSection() {
 
 // ─── ALUNOS ────────────────────────────────────────────────────────────────────
 function AlunosSection() {
-  const { alunos, censoAlunosData, censoConfig, mantenedores } = useData()
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const { censoAlunosData, censoConfig, mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 
@@ -271,13 +275,14 @@ const DISCIPLINAS_COMUNS = [
 ]
 
 function ProfissionaisSection() {
-  const { funcionarios, turmas, censoProfsData, setCensoProfsData, logCensoAction, censoConfig, mantenedores } = useData()
+  const { turmas = [], censoProfsData, setCensoProfsData, logCensoAction, censoConfig, mantenedores = [] } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const cfgDisciplinas = DISCIPLINAS_COMUNS
   const [editingId, setEditingId] = useState<string|null>(null)
   const [editForm, setEditForm]   = useState<Partial<CensoProfissionalData>>({})
   const [addVinculo, setAddVinculo] = useState({ turmaId:'', disciplinaId:'', cargaHoraria:0 })
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 
@@ -430,7 +435,8 @@ function ProfissionaisSection() {
 
 // ─── VÍNCULOS ──────────────────────────────────────────────────────────────────
 function VinculosSection() {
-  const { turmas, censoProfsData, funcionarios } = useData()
+  const { turmas = [], censoProfsData } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const turmasValidas = turmas.filter(t => t.nome?.trim())
   const rows: { turma:string; prof:string; disc:string; ch:number }[] = []
   censoProfsData.forEach(cp => {

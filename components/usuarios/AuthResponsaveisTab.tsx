@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useMemo } from 'react'
 import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users } from 'lucide-react'
@@ -7,7 +9,8 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
 
 export function AuthResponsaveisTab() {
-  const { alunos, setAlunos, logSystemAction } = useData()
+  const { logSystemAction } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [authUsers, setAuthUsers] = useLocalStorage<any[]>('edu-auth-users', [])
   const [search, setSearch] = useState('')
   const [editModal, setEditModal] = useState<any | null>(null)

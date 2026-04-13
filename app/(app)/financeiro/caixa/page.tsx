@@ -1,4 +1,6 @@
-﻿'use client'
+'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+﻿
 
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
@@ -11,7 +13,8 @@ const MESES_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho
 const MESES_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
 export default function FluxoCaixaPage() {
-  const { titulos, contasPagar } = useData()
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [contasPagar, setContasPagar] = useSupabaseArray<any>('contas-pagar');
 
   const [filtroMes, setFiltroMes] = useState<number | 'todos'>('todos')
   const [filtroAno, setFiltroAno] = useState<string>('todos')

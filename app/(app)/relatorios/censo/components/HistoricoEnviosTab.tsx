@@ -17,7 +17,7 @@ const CHECKLIST_TEMPLATE = [
 ]
 
 export function HistoricoEnviosTab() {
-  const { censoExports, censoOperacoes, setCensoOperacoes, censoConfig, logCensoAction } = useData()
+  const { censoExports = [], censoOperacoes, setCensoOperacoes, censoConfig, logCensoAction } = useData()
   const [showWizard, setShowWizard] = useState(false)
   const [selectedExportId, setSelectedExportId] = useState('')
   const [checklist, setChecklist] = useState<Record<string,boolean>>({})

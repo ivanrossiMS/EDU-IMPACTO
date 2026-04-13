@@ -44,9 +44,8 @@ const GROUPS: ModuleGroup[] = [
     id:'fin', label:'Financeiro', color:'#10b981',
     modules:[
       { id:'planoContas',        label:'Plano de Contas',       qty:10 },
-      { id:'eventosFin',         label:'Eventos Financeiros',   qty:8,  depends:['planoContas','centrosCusto'] },
+      { id:'eventosFin',         label:'Eventos Financeiros',   qty:8,  depends:['planoContas'] },
       { id:'padroesPagamento',   label:'Padrão de Pagamentos',  qty:5,  depends:['eventosFin'] },
-      { id:'centrosCusto',       label:'Centros de Custo',      qty:6 },
       { id:'fornecedores',       label:'Fornecedores',          qty:10 },
       { id:'aberturaCaixa',      label:'Abertura de Caixa',     qty:3 },
       { id:'contasReceber',      label:'Contas a Receber',      qty:20, depends:['fornecedores'] },
@@ -163,27 +162,10 @@ export default function TestDataSection() {
             break
           }
 
-          // ── Centros de Custo ─────────────────────────────────────────────
-          case 'centrosCusto': {
-            const DESCS = ['Administrativo','Pedagógico','Financeiro','TI','RH','Manutenção','Eventos','Limpeza']
-            const items: any[] = []
-            for (let i=0;i<q;i++) {
-              items.push({
-                id:sid(), codigo:`CC${String(i+1).padStart(3,'0')}`,
-                descricao:`${rnd(DESCS)} ${i+1}`,
-                tipo:rnd(['receita','despesa','ambos']) as 'receita'|'despesa'|'ambos',
-                responsavel:nomeCompleto(),
-                situacao:'ativo', createdAt:isoNow(),
-              })
-            }
-            data.setCfgCentrosCusto(p => [...p, ...items])
-            addLog({ module:'Centros de Custo', count:q, ok:true })
-            break
-          }
 
           // ── Eventos Financeiros ──────────────────────────────────────────
           case 'eventosFin': {
-            const curCentros = data.cfgCentrosCusto
+
             const curPlanos  = data.cfgPlanoContas
             const DESCS_REC = ['Mensalidade Jan','Mensalidade Fev','Mensalidade Mar','Matrícula','Rematrícula','Taxa de Material','Uniforme','Excursão','Evento Cultural','Reforço']
             const DESCS_DESP = ['Salários Docentes','Salários Admin','Energia Elétrica','Água','Internet','Materiais Didáticos','Limpeza','Segurança','Manutenção Predial','Material de Escritório']
@@ -196,7 +178,6 @@ export default function TestDataSection() {
                 id, codigo:`EV${String(i+1).padStart(3,'0')}`,
                 descricao:rnd(tipo==='receita'?DESCS_REC:DESCS_DESP),
                 planoContasId: curPlanos.length ? rnd([...curPlanos, ...genPlanoIds.map(x=>({id:x}))]).id : genPlanoIds[0] || '',
-                tipo, centroCustoId: curCentros.length ? rnd(curCentros).id : '',
                 situacao:'ativo', createdAt:isoNow(),
               })
             }
@@ -752,7 +733,7 @@ export default function TestDataSection() {
     data.setCaixasAbertos(p => p.filter(x => !isSeed(x.id)))
     data.setMovimentacoesManuais(p => p.filter(x => !isSeed(x.id)))
     data.setCfgPlanoContas(p => p.filter(x => !isSeed(x.id)))
-    data.setCfgCentrosCusto(p => p.filter(x => !isSeed(x.id)))
+
     data.setCfgEventos(p => p.filter(x => !isSeed(x.id)))
     data.setCfgPadroesPagamento(p => p.filter(x => !isSeed(x.id)))
     data.setFrequencias(p => p.filter(x => !isSeed(x.id)))

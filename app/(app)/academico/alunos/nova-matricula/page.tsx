@@ -1999,6 +1999,7 @@ export default function NovaMatriculaPage() {
                           const t = resp.celular || (resp as any).telefone || ''
                           if (t) updAut('telefone', t)
                           if (resp.parentesco) updAut('parentesco', resp.parentesco)
+                          if (resp.rfid) updAut('rfid', resp.rfid)
                         } else updAut('nome', e.target.value.replace('__sel__',''))
                       }}>
                       <option value="">— Selecionar responsável cadastrado —</option>
@@ -2078,7 +2079,13 @@ export default function NovaMatriculaPage() {
                     <span style={{fontSize:10,fontWeight:700,color:'hsl(var(--text-muted))',letterSpacing:.5,flexShrink:0}}>RFID:</span>
                     <input className="form-input" style={{fontSize:12,width:140,fontFamily:'monospace',letterSpacing:1}}
                       placeholder="Código RFID..." value={aut.rfid||''}
-                      onChange={e=>updAut('rfid',e.target.value)}/>
+                      onChange={e => {
+                        const val = e.target.value;
+                        updAut('rfid', val);
+                        if (aut.nome) {
+                          setTodosResp(prev => prev.map(r => r.nome === aut.nome ? { ...r, rfid: val } : r));
+                        }
+                      }}/>
                   </div>
                 </div>
 

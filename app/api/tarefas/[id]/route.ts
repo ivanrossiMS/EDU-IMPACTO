@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await params
   try {
     const body = await request.json()
@@ -14,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       prioridade: prioridade || 'media', dados: rest,
       updated_at: new Date().toISOString(),
     }
-    const { data, error } = await supabaseServer.from('tarefas').update(row).eq('id', id).select().single()
+    const { data, error } = await supabase.from('tarefas').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data)
   } catch (e: any) {
@@ -23,8 +24,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await params
-  const { error } = await supabaseServer.from('tarefas').delete().eq('id', id)
+  const { error } = await supabase.from('tarefas').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

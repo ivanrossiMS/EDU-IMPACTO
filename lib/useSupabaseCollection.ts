@@ -10,7 +10,7 @@ interface CacheEntry<T> {
   inflightPromise?: Promise<T>
 }
 
-const CACHE_TTL_MS = 30_000   // 30 seconds stale-while-revalidate window
+const CACHE_TTL_MS = 60_000   // 60 seconds stale-while-revalidate window
 const memCache = new Map<string, CacheEntry<any>>()
 
 function getCacheEntry<T>(key: string): CacheEntry<T> | undefined {
@@ -99,11 +99,19 @@ export function useSupabaseCollection<T>(
         const stored = localStorage.getItem(lsKey)
         if (stored) {
           const parsed = JSON.parse(stored) as T
-          if (Array.isArray(initialValueRef.current) && !Array.isArray(parsed)) return initialValueRef.current
+          // Safety: if we expect an array but got something else, clear corruption and return initialValue
+          if (Array.isArray(initialValueRef.current) && !Array.isArray(parsed)) {
+            localStorage.removeItem(lsKey)  // clear corrupted entry
+            return initialValueRef.current
+          }
           return parsed
         }
-      } catch {}
+      } catch {
+        // Malformed JSON — clear it
+        try { localStorage.removeItem(lsKey) } catch {}
+      }
     }
+    // Final fallback — always return a valid initial value
     return initialValueRef.current
   }
 
@@ -150,36 +158,27 @@ export function useSupabaseCollection<T>(
     fetchWithDedup<T>(endpoint, doFetch)
       .then(data => {
         if (cancelled || !isMounted.current) return
-        if (data !== undefined && data !== null) {
-          if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-             data = initialValueRef.current
-          }
-          setState(data)
-          // Persist successful API response to localStorage too
-          if (typeof window !== 'undefined') {
-            try { localStorage.setItem(lsKey, JSON.stringify(data)) } catch {}
-          }
+        // Normalize: if result is not usable, fall back to initial value
+        let normalized: T = data
+        if (data === undefined || data === null) {
+          normalized = initialValueRef.current
+        } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
+          // Expected array but received object/null — use initial
+          normalized = initialValueRef.current
+        }
+        setState(normalized)
+        // Persist successful API response to localStorage too
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem(lsKey, JSON.stringify(normalized)) } catch {}
         }
         setLoading(false)
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled || !isMounted.current) return
-        // API failed - try localStorage as fallback
-        if (typeof window !== 'undefined') {
-          try {
-            const stored = localStorage.getItem(lsKey)
-            if (stored) {
-              const parsed = JSON.parse(stored) as T
-              if (Array.isArray(initialValueRef.current) && !Array.isArray(parsed)) {
-                 setState(initialValueRef.current)
-                 setCacheEntry(endpoint, initialValueRef.current)
-              } else {
-                 setState(parsed)
-                 setCacheEntry(endpoint, parsed)
-              }
-            }
-          } catch {}
-        }
+        // API failed — do NOT read from localStorage as "truth"
+        // Keep whatever is already in state (from cache or initialValue)
+        // but signal the error so the UI can warn the user
+        setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
         setLoading(false)
       })
 
@@ -190,44 +189,57 @@ export function useSupabaseCollection<T>(
   const persist = useCallback(async (next: T) => {
     // 1. Invalidate mem-cache
     invalidateCache(endpoint)
-    // 2. ALWAYS save to localStorage first (permanent fallback)
-    if (typeof window !== 'undefined') {
-      try { localStorage.setItem(lsKey, JSON.stringify(next)) } catch {}
-    }
-    // 3. Update mem-cache
+    // 2. Update mem-cache optimistically
     setCacheEntry(endpoint, next)
-    // 4. Sync to API (best effort — won't revert localStorage on failure)
+    // 3. Sync to API FIRST (source of truth)
     try {
       if (options?.persister) {
         await options.persister(next)
       } else {
-        await fetch(`/api/${endpoint}`, {
+        const res = await fetch(`/api/${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(next),
         })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          console.error(`[useSupabaseCollection] API sync failed for ${endpoint}:`, res.status, body)
+          if (isMounted.current) setError(`Erro ao salvar: ${body?.error || res.status}`)
+          return
+        }
+      }
+      // 4. API succeeded → update localStorage as offline cache
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem(lsKey, JSON.stringify(next)) } catch {}
       }
       if (isMounted.current) setError(null)
     } catch (e: any) {
-      // API failed but localStorage is already saved — data is safe
-      console.warn(`[useSupabaseCollection] API sync failed for ${endpoint}, data preserved in localStorage`)
+      console.warn(`[useSupabaseCollection] API sync failed for ${endpoint}:`, e?.message)
+      if (isMounted.current) setError(`Erro de rede ao salvar`)
     }
   }, [endpoint, lsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Sync latest state to allow synchronous derivation without React's impure setState updater
+  const latestState = useRef<T>(state);
+  useEffect(() => { latestState.current = state; }, [state]);
+
   // ── Setter — optimistic update then persist ────────────────────────────────
   const set = useCallback((valOrFn: T | ((prev: T) => T)) => {
-    setState(prev => {
-      // Guard: prev can be undefined after Fast Refresh or race conditions
-      const safePrev: T = prev !== undefined ? prev : initialValueRef.current
-      const next = typeof valOrFn === 'function'
-        ? (valOrFn as (p: T) => T)(safePrev)
-        : valOrFn
-      // Optimistically update cache too
-      setCacheEntry(endpoint, next)
-      persist(next)
-      return next
-    })
-  }, [persist, endpoint])
+    const safePrev: T = latestState.current !== undefined ? latestState.current : initialValueRef.current;
+    const next = typeof valOrFn === 'function'
+      ? (valOrFn as (p: T) => T)(safePrev)
+      : valOrFn;
+    
+    // Update ref immediately for sequential setter calls
+    latestState.current = next;
+    
+    // React state update (Pure)
+    setState(next);
+    
+    // Side effects (Run exactly once outside setState)
+    setCacheEntry(endpoint, next);
+    persist(next);
+  }, [persist, endpoint]);
 
   return [state, set, { loading, error }]
 }
@@ -244,9 +256,19 @@ export function useSupabaseArray<T>(
   return useSupabaseCollection<T[]>(endpoint, initialValue, {
     fetcher: () =>
       fetch(`/api/${endpoint}`)
-        .then(r => {
+        .then(async r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return r.json();
+            const payload = await r.json();
+            // Always return an array — never return an object or null
+            if (Array.isArray(payload)) return payload
+            if (Array.isArray(payload?.data)) return payload.data
+            // API returned error object or unexpected shape — return empty array
+            console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
+            return []
+        })
+        .catch(err => {
+            console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
+            return [] as T[]
         }),
     persister: async (arr) => {
       await fetch(`/api/${endpoint}`, {

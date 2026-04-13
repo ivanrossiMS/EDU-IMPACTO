@@ -5,7 +5,6 @@ import { Brain, Send, ChevronDown, MessageSquare, Zap, BarChart3, DollarSign, Us
 
 const COPILOTOS = [
   { id: 'direcao', icon: '🎯', label: 'Copiloto da Direção', desc: 'Visão estratégica, KPIs executivos, decisões gerenciais', color: '#3b82f6', sistema: 'Você é o Copiloto da Direção do IMPACTO EDU. Ajude o diretor com insights estratégicos, análise de KPIs e tomada de decisão. Seja conciso, profissional e baseado em dados.' },
-  { id: 'financeiro', icon: '💰', label: 'Copiloto Financeiro', desc: 'DRE, fluxo de caixa, inadimplência, projeções', color: '#10b981', sistema: 'Você é o Copiloto Financeiro. Especialista em educação financeira escolar, DRE, contas a receber, inadimplência e projeções.' },
   { id: 'pedagogico', icon: '📚', label: 'Copiloto Pedagógico', desc: 'Desempenho de alunos, evasão, planos de aula', color: '#8b5cf6', sistema: 'Você é o Copiloto Pedagógico. Especialista em desempenho acadêmico, prevenção de evasão, currículos e BNCC.' },
   { id: 'rh', icon: '👥', label: 'Copiloto de RH', desc: 'Equipe, folha de pagamento, ponto, férias', color: '#f59e0b', sistema: 'Você é o Copiloto de RH. Especialista em gestão de pessoas, folha de pagamento, ponto eletrônico e CLT educacional.' },
   { id: 'crm', icon: '📣', label: 'Copiloto de CRM', desc: 'Leads, captação, retenção e campanhas', color: '#ec4899', sistema: 'Você é o Copiloto de CRM. Especialista em captação de alunos, funil de leads, estratégias de retenção e marketing educacional.' },
@@ -13,7 +12,6 @@ const COPILOTOS = [
 
 const QUICK_PROMPTS: Record<string, string[]> = {
   direcao: ['Qual é o resumo executivo de hoje?', 'Quais os 3 maiores riscos da escola?', 'Crie um plano de ação para reduzir evasão', 'Compare nossa performance com benchmarks do setor'],
-  financeiro: ['Qual o DRE do 1º trimestre?', 'Quais alunos têm mais de 60 dias de atraso?', 'Projeção de receita para abril', 'Como reduzir 20% da inadimplência?'],
   pedagogico: ['Quais turmas têm pior desempenho?', 'Crie um plano de recuperação para o 8B', 'Liste alunos com frequência abaixo de 75%', 'Gere um plano de aula de matemática para o 9A'],
   rh: ['Quantos funcionários estão de férias em abril?', 'Quais os maiores custos de folha?', 'Gere relatório de ponto de março', 'Quem tem aniversário esta semana?'],
   crm: ['Quantos leads em aberto?', 'Qual a taxa de conversão do último mês?', 'Monte uma estratégia de rematrícula 2026/2', 'Quais alunos têm maior risco de não renovar?'],

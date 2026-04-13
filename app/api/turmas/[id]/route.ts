@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await params
-  const { data, error } = await supabaseServer.from('turmas').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('turmas').select('*').eq('id', id).single()
   if (error) return NextResponse.json({ error: error.message }, { status: 404 })
   return NextResponse.json({ ...data, ...(data.dados || {}) })
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await params
   try {
     const body = await request.json()
@@ -22,7 +24,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       unidade: unidade || '', ano: ano || new Date().getFullYear(),
       dados: rest, updated_at: new Date().toISOString(),
     }
-    const { data, error } = await supabaseServer.from('turmas').update(row).eq('id', id).select().single()
+    const { data, error } = await supabase.from('turmas').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) })
   } catch (e: any) {
@@ -31,8 +33,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   const { id } = await params
-  const { error } = await supabaseServer.from('turmas').delete().eq('id', id)
+  const { error } = await supabase.from('turmas').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

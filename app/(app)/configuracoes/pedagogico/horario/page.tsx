@@ -30,7 +30,7 @@ function getColorFromName(name: string) {
 }
 
 export default function HorarioAulasPage() {
-  const { turmas, rotinaItems, setRotinaItems, cfgDisciplinas } = useData()
+  const { turmas = [], rotinaItems = [], setRotinaItems, cfgDisciplinas } = useData()
 
   // Navigation State
   const [viewMode, setViewMode] = useState<'lista' | 'grade'>('lista')

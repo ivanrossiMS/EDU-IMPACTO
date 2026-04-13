@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { use } from 'react'
 import { Calendar as CalendarIcon, Clock, MapPin, Target } from 'lucide-react'
@@ -6,7 +8,7 @@ import { useData } from '@/lib/dataContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
   const aluno = alunos.find(a => a.id === resolvedParams.slug)

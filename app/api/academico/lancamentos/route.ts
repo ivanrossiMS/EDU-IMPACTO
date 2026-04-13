@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turmaId')
   const bimestre = searchParams.get('bimestre')
 
-  let query = supabaseServer.from('lancamentos_nota').select('*').order('created_at', { ascending: false })
+  let query = supabase.from('lancamentos_nota').select('*').order('created_at', { ascending: false })
   if (turmaId) query = query.eq('turma_id', turmaId)
   if (bimestre) query = query.eq('bimestre', parseInt(bimestre))
 
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const { id, turmaId, disciplina, bimestre, notas, criadoPor } = body
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
       notas: notas || [],
       criado_por: criadoPor || '',
     }
-    const { data, error } = await supabaseServer.from('lancamentos_nota').upsert(row).select().single()
+    const { data, error } = await supabase.from('lancamentos_nota').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {

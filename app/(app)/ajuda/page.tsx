@@ -14,7 +14,6 @@ const FAQS = [
 
 const VIDEOS = [
   { titulo: 'Tour completo: 5 minutos', duracao: '5:12', categoria: 'Início' },
-  { titulo: 'Financeiro: DRE e Fluxo de Caixa', duracao: '8:45', categoria: 'Financeiro' },
   { titulo: 'Como configurar o Censo Escolar', duracao: '12:30', categoria: 'MEC/INEP' },
   { titulo: 'Portal do Professor completo', duracao: '6:18', categoria: 'Professores' },
 ]

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useEffect } from 'react'
 import { X, Search, Users, ChevronRight, ChevronLeft, Check, User } from 'lucide-react'
@@ -12,7 +14,8 @@ interface DestinatariosModalProps {
 }
 
 export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [] }: DestinatariosModalProps) {
-  const { turmas, alunos } = useData()
+  const { turmas } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [search, setSearch] = useState('')
   const [activeFolder, setActiveFolder] = useState<{ id: string, name: string, type?: string } | null>(null)
   const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})

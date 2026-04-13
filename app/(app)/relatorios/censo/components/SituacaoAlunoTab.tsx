@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
 import { type CensoAlunoData, INEP_SITUACOES_CENSO } from '@/lib/dataContext'
@@ -14,10 +16,8 @@ const SIT_COLORS: Record<string, string> = {
 }
 
 export function SituacaoAlunoTab() {
-  const {
-    alunos, transferencias, frequencias, censoConfig,
-    censoAlunosData, setCensoAlunosData, logCensoAction, mantenedores
-  } = useData()
+  const { transferencias = [], frequencias = [], censoConfig, censoAlunosData, setCensoAlunosData, logCensoAction, mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   const [search, setSearch]           = useState('')
   const [filterTurma, setFilterTurma] = useState('')
@@ -29,7 +29,7 @@ export function SituacaoAlunoTab() {
   const [page, setPage]               = useState(1)
   const PAGE_SIZE = 30
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 

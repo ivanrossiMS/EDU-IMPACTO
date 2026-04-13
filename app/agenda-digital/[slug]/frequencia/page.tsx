@@ -1,11 +1,13 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, use } from 'react'
 import { Upload, CheckCircle2, AlertTriangle, FileText, Activity } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 
 export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const aluno = alunos.find(a => a.id === resolvedParams.slug)
   

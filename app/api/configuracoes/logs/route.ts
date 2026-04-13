@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const limit = parseInt(searchParams.get('limit') || '200')
   const modulo = searchParams.get('modulo')
 
-  let query = supabaseServer.from('system_logs').select('*')
+  let query = supabase.from('system_logs').select('*')
     .order('data_hora', { ascending: false }).limit(limit)
   if (modulo) query = query.eq('modulo', modulo)
 
@@ -28,6 +29,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const row = {
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
       detalhes_antes: body.detalhesAntes || null,
       detalhes_depois: body.detalhesDepois || null,
     }
-    const { data, error } = await supabaseServer.from('system_logs').insert(row).select().single()
+    const { data, error } = await supabase.from('system_logs').insert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {

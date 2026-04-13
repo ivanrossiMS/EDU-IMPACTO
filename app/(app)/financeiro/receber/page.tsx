@@ -1,13 +1,16 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useEffect } from 'react'
 
 import { useData, Titulo, newId, newEventoId, newParcelaId } from '@/lib/dataContext'
 import { formatCurrency } from '@/lib/utils'
-import {
-  Plus, Search, Filter, X, Download, CheckCircle, Pencil, Trash2,
+import { Plus, Search, Filter, X, Download, CheckCircle, Pencil, Trash2,
   AlertTriangle, Clock, TrendingUp, DollarSign, BarChart2,
   Check, FileText, Tag, Layers, RotateCcw
 } from 'lucide-react'
+import { useDebounce } from 'use-debounce'
+import { useApiQuery, useApiMutation } from '@/hooks/useApi'
 
 // ─── Constantes ────────────────────────────────────────────────────
 const METODOS_FALLBACK = ['PIX', 'Boleto', 'Cartão de Crédito', 'Cartão de Débito', 'Débito Automático', 'Dinheiro', 'Cheque', 'Transferência', 'Bolsa Integral']
@@ -54,23 +57,24 @@ const BLANK: Omit<Titulo, 'id'> & { codigo: string; origemLanca?: string } = {
   origemLanca: 'manual_receber'
 }
 
+import { useQueryClient } from '@tanstack/react-query'
+
 export default function ContasReceberPage() {
-  const { alunos, cfgEventos, cfgMetodosPagamento, caixasAbertos, setCaixasAbertos, setMovimentacoesManuais, logSystemAction, titulos: dbTitulos = [], setTitulos } = useData()
-  const METODOS = cfgMetodosPagamento.filter(m => m.situacao === 'ativo').map(m => m.nome)
-  const metodosSelect = METODOS.length > 0 ? METODOS : METODOS_FALLBACK
-
-  // Apenas títulos marcados estritamente como lançamentos manuais nesta tela
-  const titulosReceber = dbTitulos.filter(t => (t as any).origemLanca === 'manual_receber') || []
-  const titulos = dbTitulos
-
-  // Eventos de receita ativos do sistema (sem fallback hardcoded)
-  const eventosReceita = cfgEventos.filter(e => e.tipo === 'receita' && e.situacao === 'ativo')
-  // Todos eventos ativos (receita + despesa) para o filtro geral
-  const todosEventosAtivos = cfgEventos.filter(e => e.situacao === 'ativo')
+  const { cfgEventos, cfgMetodosPagamento, setMovimentacoesManuais, logSystemAction } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
+  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-pdv'], '/api/financeiro/caixas', { limit: 200 })
+  const caixasAbertos = respCaixas?.data || caixasAbertosLegacy || []
+  
+  const [ctxTitulos, setTitulos] = useSupabaseArray<any>('titulos');
+  
+  const queryClient = useQueryClient()
+  const mutateTitulo = useApiMutation('/api/titulos', 'POST', [['titulos-receber']])
 
   // ── Filtros ──
   const [tabStatus, setTabStatus] = useState<'todos' | 'pendente' | 'atrasado' | 'pago'>('todos')
-  const [search, setSearch] = useState('')
+  const [searchRaw, setSearchRaw] = useState('')
+  const [search] = useDebounce(searchRaw, 400) // ⚡ Otimização 1: Evita render lock no input
   const [showFilters, setShowFilters] = useState(false)
   const [filtroMetodo, setFiltroMetodo] = useState('todos')
   const [filtroMes, setFiltroMes] = useState('todos')
@@ -81,6 +85,28 @@ export default function ContasReceberPage() {
   const [filtroEvento, setFiltroEvento] = useState('todos')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 25
+
+  // ⚡ Otimização 2: Bypass do contexto global para cache local assíncrono (Reduz congelamento de UI)
+  const { data: apiResponse, isLoading: loadingTitulos } = useApiQuery<{data: any[]}>(['titulos-receber', search, tabStatus, filtroMes, filtroAno, filtroMetodo], '/api/titulos', { 
+    limit: 1000,
+    search: search === '' ? undefined : search,
+    status: tabStatus === 'todos' ? undefined : tabStatus
+  })
+  
+  // Utiliza a API Enterprise Cacheada como Fonte da Verdade. Se não tiver loaded ainda, exibe o contexto (redução de saltos na tela)
+  const dbTitulos = apiResponse ? apiResponse.data : (ctxTitulos || [])
+
+  const METODOS = (cfgMetodosPagamento || []).filter(m => m.situacao === 'ativo').map(m => m.nome)
+  const metodosSelect = METODOS.length > 0 ? METODOS : METODOS_FALLBACK
+
+  // Apenas títulos marcados estritamente como lançamentos manuais nesta tela
+  const titulosReceber = dbTitulos.filter(t => (t as any).origemLanca === 'manual_receber') || []
+  const titulos = dbTitulos
+
+  // Eventos de receita ativos do sistema (sem fallback hardcoded)
+  const eventosReceita = (cfgEventos || []).filter(e => e.tipo === 'receita' && e.situacao === 'ativo')
+  // Todos eventos ativos (receita + despesa) para o filtro geral
+  const todosEventosAtivos = (cfgEventos || []).filter(e => e.situacao === 'ativo')
 
   // ── Modal ──
   const [modal, setModal] = useState<'new' | 'edit' | 'baixa' | 'view' | null>(null)
@@ -97,7 +123,7 @@ export default function ContasReceberPage() {
   const [showAlunoDrop, setShowAlunoDrop] = useState(false)
   const alunosFiltrados = useMemo(() => {
     const q = alunoSearch.toLowerCase()
-    return alunos.filter(a => a.nome.toLowerCase().includes(q) || (a.responsavel || '').toLowerCase().includes(q)).slice(0, 10)
+    return (alunos || []).filter(a => a.nome.toLowerCase().includes(q) || (a.responsavel || '').toLowerCase().includes(q)).slice(0, 10)
   }, [alunos, alunoSearch])
 
   // ── Typeahead: Evento ──
@@ -105,7 +131,7 @@ export default function ContasReceberPage() {
   const [showEventoDrop, setShowEventoDrop] = useState(false)
   const eventosFiltrados = useMemo(() => {
     const q = eventoSearch.toLowerCase()
-    return cfgEventos.filter(e => e.situacao === 'ativo' && e.descricao.toLowerCase().includes(q)).slice(0, 8)
+    return (cfgEventos || []).filter(e => e.situacao === 'ativo' && e.descricao.toLowerCase().includes(q)).slice(0, 8)
   }, [cfgEventos, eventoSearch])
 
   // ── Modal de seleção de Evento ──
@@ -113,7 +139,7 @@ export default function ContasReceberPage() {
   const [eventoModalSearch, setEventoModalSearch] = useState('')
   const eventosFiltradosModal = useMemo(() => {
     const q = eventoModalSearch.toLowerCase()
-    return cfgEventos.filter(e => e.situacao === 'ativo' && (e.descricao.toLowerCase().includes(q) || e.tipo.includes(q)))
+    return (cfgEventos || []).filter(e => e.situacao === 'ativo' && (e.descricao.toLowerCase().includes(q) || e.tipo.includes(q)))
   }, [cfgEventos, eventoModalSearch])
 
   // ── Gerador de Parcelas ──
@@ -206,7 +232,13 @@ export default function ContasReceberPage() {
     setGerarParcelas(false); setNumParcelas(3); setDataInicioParcelas(''); setPreviewParcelas([])
     setEditingId(null); setModal('new')
   }
+  const [alertMsg, setAlertMsg] = useState<string | null>(null)
+
   const openEdit = (t: Titulo) => {
+    if (t.status === 'pago') {
+      setAlertMsg("Não é possível editar ou excluir uma conta que já consta como PAGA no sistema. Feche esta janela e clique no botão de 'Reverter' primeiro.")
+      return
+    }
     setForm({ codigo: (t as any).codigo || genCod(titulos as any), ...t } as any)
     setAlunoSearch(t.aluno || ''); setEventoSearch('')
     setGerarParcelas(false); setPreviewParcelas([])
@@ -220,7 +252,7 @@ export default function ContasReceberPage() {
   }
 
   const handleSave = async () => {
-    if (!form.aluno.trim() || !form.vencimento) return
+    if (!form.vencimento) return
     const isNew = modal === 'new'
     
     // Save to the database using API
@@ -230,39 +262,39 @@ export default function ContasReceberPage() {
       const eventoIdLote = newEventoId(todosEventoIds)
       const novos = previewParcelas.map((p, i) => ({
         ...form,
-        id: "",
+        id: undefined,
         codigo: `${form.codigo}-P${String(i+1).padStart(2,'0')}`,
         descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
-        // parcelaId composto: 00051-1, 00051-2...
         parcela: newParcelaId(eventoIdLote, i + 1),
         eventoId: eventoIdLote,
         valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber'
       }))
-      const novosComId = novos.map(n => ({ ...n, id: newId('CR') }))
-      setTitulos((prev: any[]) => [...prev, ...novosComId])
-      logSystemAction('Financeiro (Receber)', 'Cadastro em Lote', `Lançamento de ${previewParcelas.length} parcelas para ${form.aluno}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
+      
+      // Envia array completo pro Bulk Upsert Enterprise!
+      await mutateTitulo.mutateAsync(novos)
+
     } else if (isNew) {
       const todosEventoIds = titulos.map(t => (t as any).eventoId || '').filter(Boolean)
       const eventoIdUnico = (form as any).eventoId || newEventoId(todosEventoIds)
       const payload = {
         ...form,
-        id: '',
+        id: undefined,
         eventoId: eventoIdUnico,
-        // Parcela única: convenção '00051-1'
         parcela: newParcelaId(eventoIdUnico, 1),
         origemLanca: 'manual_receber'
       }
-      setTitulos((prev: any[]) => [...prev, { ...payload, id: newId('CR') }])
-      logSystemAction('Financeiro (Receber)', 'Cadastro', `Novo título gerado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
+      await mutateTitulo.mutateAsync(payload)
+
     } else if (editingId) {
-      setTitulos((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...form } : a))
+      // Fetch o título atual da API p/ preservar campos extras antes de dar Upsert Override
+      const oldTitulo = titulos.find(x => x.id === editingId) || {}
+      await mutateTitulo.mutateAsync({ ...oldTitulo, ...form, id: editingId })
       
       setMovimentacoesManuais((prev: any) => prev.map((m: any) =>
         m.referenciaId === editingId
           ? { ...m, descricao: `Contas a Receber — ${form.descricao}${form.aluno ? ` · ${form.aluno}` : ''}`, valor: form.valor, editadoEm: new Date().toISOString() }
           : m
       ))
-      logSystemAction('Financeiro (Receber)', 'Edição', `Título atualizado no valor de R$ ${form.valor}`, { registroId: form.codigo, nomeRelacionado: form.aluno })
     }
 
     setModal(null); setEditingId(null)
@@ -274,30 +306,43 @@ export default function ContasReceberPage() {
     if (!titulo) return
     
     const changes = {
+      ...titulo, // preserva
       status: 'pago' as const, pagamento: baixaForm.dataPagamento,
       metodo: baixaForm.metodo, valor: baixaForm.valorPago || titulo.valor,
       obs: baixaForm.obs,
     }
     
-    setTitulos((prev: any[]) => prev.map(a => a.id === editingId ? { ...a, ...changes } : a))
+    // Upsert Instantâneo na Rota Segura (Zod e RLS validará automaticamente)
+    await mutateTitulo.mutateAsync(changes)
 
-    // Espelhar como Movimentação Manual no caixa selecionado
+    // Espelhar como Movimentação na Rota Server-Side Segura
     if (baixaForm.caixaId && titulo) {
-      const now = new Date().toISOString()
-      const refId = 'CR-' + titulo.id.slice(-8)
-      setMovimentacoesManuais((prev: any) => [...prev, {
-        id: refId, caixaId: baixaForm.caixaId, tipo: 'receita',
-        fornecedorId: '', fornecedorNome: titulo.responsavel || titulo.aluno || '',
-        descricao: `Contas a Receber — ${titulo.descricao}${titulo.aluno ? ` · ${titulo.aluno}` : ''}`,
-        dataLancamento: baixaForm.dataPagamento, dataMovimento: baixaForm.dataPagamento,
-        valor: baixaForm.valorPago || titulo.valor,
-        planoContasId: '', planoContasDesc: '',
-        tipoDocumento: 'REC', numeroDocumento: (titulo as any).codigo || '',
-        dataEmissao: titulo.vencimento || baixaForm.dataPagamento,
-        compensadoBanco: false, observacoes: baixaForm.obs || '',
-        criadoEm: now, editadoEm: now,
-        origem: 'baixa_receber', referenciaId: editingId || ''
-      }])
+      try {
+        const response = await fetch('/api/financeiro/movimentacoes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            caixaId: baixaForm.caixaId,
+            tipo: 'entrada',
+            valor: Math.abs(baixaForm.valorPago || titulo.valor),
+            descricao: `Contas a Receber — ${titulo.descricao}${titulo.aluno ? ` · ${titulo.aluno}` : ''}`,
+            data: baixaForm.dataPagamento,
+            operador: 'Sistema',
+            planoContasId: null,
+            forma_pagamento: baixaForm.metodo,
+            compensadoBanco: 'Compensado',
+            origem: 'baixa_receber',
+            referenciaId: titulo.id,
+            obs: baixaForm.obs || ''
+          })
+        })
+        if (!response.ok) {
+           const errText = await response.text()
+           console.error('SERVER REJECTED MOVIMENTACAO RECEBER:', errText)
+        }
+      } catch (e) {
+        console.error('Erro de rede ao injetar movimentação', e)
+      }
     }
     
     logSystemAction('Financeiro (Receber)', 'Baixa de Pagamento', `Título liquidado via ${baixaForm.metodo}`, { registroId: (titulo as any)?.codigo, nomeRelacionado: titulo?.aluno })
@@ -305,18 +350,20 @@ export default function ContasReceberPage() {
     setModal(null); setEditingId(null)
   }
 
+  const mutateDelete = useApiMutation('/api/titulos', 'DELETE', [['titulos-receber']])
+
   const handleDelete = async () => {
     if (confirmId) {
-      const tituloAnterior = titulos.find(t => t.id === confirmId)
-      setTitulos((prev: any[]) => prev.filter(x => x.id !== confirmId))
+      // 💥 Deleção Segura com RLS e Zod Validated Middleware
+      await mutateDelete.mutateAsync({ id: confirmId })
+      // Remover movimentação automática vinculada se existir
       setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== confirmId))
-      logSystemAction('Financeiro (Receber)', 'Exclusão', `Título removido do sistema permanentemente`, { registroId: (tituloAnterior as any)?.codigo, nomeRelacionado: tituloAnterior?.aluno })
     }
     setConfirmId(null)
   }
 
   const clearFilters = () => {
-    setSearch(''); setFiltroMetodo('todos'); setFiltroMes('todos')
+    setSearchRaw(''); setFiltroMetodo('todos'); setFiltroMes('todos')
     setFiltroAno('todos'); setDataVencDe(''); setDataVencAte('')
     setFiltroAging('todos'); setFiltroEvento('todos')
   }
@@ -447,7 +494,7 @@ export default function ContasReceberPage() {
         </div>
         <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
           <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Buscar aluno, código, responsável..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Buscar aluno, código, responsável..." value={searchRaw} onChange={e => setSearchRaw(e.target.value)} />
         </div>
         <button className={`btn btn-sm ${showFilters || activeFilters > 0 ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowFilters(p => !p)}>
           <Filter size={13} />Filtros {activeFilters > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: '50%', width: 16, height: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, marginLeft: 2 }}>{activeFilters}</span>}
@@ -610,8 +657,8 @@ export default function ContasReceberPage() {
                             className="btn btn-sm"
                             style={{ fontSize: 10, padding: '3px 8px', background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 700, borderRadius: 6, cursor: 'pointer', whiteSpace: 'nowrap' }}
                             onClick={async () => {
-                              // Reverter o título para pendente
-                                setTitulos((prev: any[]) => prev.map(a => a.id === t.id ? { ...a, status: 'pendente', pagamento: null, metodo: null, obs: null } : a))
+                              // Reverter o título para pendente usando a Nova Rota Segura Enterprise
+                                await mutateTitulo.mutateAsync({ ...t, status: 'pendente', pagamento: null, metodo: null, obs: null })
                               // Remover movimentação automática vinculada
                               setMovimentacoesManuais((prev: any) => prev.filter((m: any) => m.referenciaId !== t.id))
                             }}>
@@ -621,7 +668,10 @@ export default function ContasReceberPage() {
                         <button className="btn btn-ghost btn-sm btn-icon" onClick={() => openEdit(t)} title="Editar">
                           <Pencil size={12} />
                         </button>
-                        <button className="btn btn-ghost btn-sm btn-icon" style={{ color: '#f87171' }} onClick={() => setConfirmId(t.id)} title="Excluir">
+                        <button className="btn btn-ghost btn-sm btn-icon" style={{ color: '#f87171' }} onClick={() => {
+                          if (t.status === 'pago') setAlertMsg("Não é possível editar ou excluir uma conta que já consta como PAGA no sistema. Feche esta janela e clique no botão de 'Reverter' primeiro.")
+                          else setConfirmId(t.id)
+                        }} title="Excluir">
                           <Trash2 size={12} />
                         </button>
                       </div>
@@ -732,7 +782,7 @@ export default function ContasReceberPage() {
               {/* Aluno ── Typeahead */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div style={{ position: 'relative' }}>
-                  <label className="form-label">Aluno *</label>
+                  <label className="form-label">Aluno</label>
                   <div style={{ position: 'relative' }}>
                     <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
                     <input
@@ -827,7 +877,7 @@ export default function ContasReceberPage() {
                   <label className="form-label">Método de Pagamento</label>
                   <select className="form-input" value={form.metodo ?? ''} onChange={e => set('metodo', e.target.value || null)}>
                     <option value="">— Nenhum —</option>
-                    {METODOS.map(m => <option key={m}>{m}</option>)}
+                    {metodosSelect.map(m => <option key={m}>{m}</option>)}
                   </select>
                 </div>
               </div>
@@ -922,7 +972,7 @@ export default function ContasReceberPage() {
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={!form.aluno || !form.vencimento || (gerarParcelas && previewParcelas.length === 0)}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={!form.vencimento || (gerarParcelas && previewParcelas.length === 0)}>
                   <Check size={14} />{gerarParcelas && previewParcelas.length > 0 ? `Criar ${previewParcelas.length} Parcelas` : modal === 'new' ? 'Registrar Título' : 'Salvar Alterações'}
                 </button>
               </div>
@@ -977,9 +1027,11 @@ export default function ContasReceberPage() {
                         <select className="form-input" style={{ fontSize: 12, fontWeight: 700 }} value={baixaForm.caixaId}
                           onChange={e => setBaixaForm(p => ({ ...p, caixaId: e.target.value }))}>
                           <option value="">— Selecionar caixa —</option>
-                          {cxAtivos.map(c => (
-                            <option key={c.id} value={c.id}>{c.nomeCaixa || 'Caixa'} · {new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR')} ({c.operador})</option>
-                          ))}
+                          {cxAtivos.map(c => {
+                            const dateStr = c.dataAbertura && String(c.dataAbertura).includes('T') ? c.dataAbertura : `${c.dataAbertura || ''}T12:00`
+                            const dt = isNaN(new Date(dateStr).getTime()) ? '' : new Date(dateStr).toLocaleDateString('pt-BR')
+                            return <option key={c.id} value={c.id}>{c.nomeCaixa || 'Caixa'} · {dt} ({c.operador})</option>
+                          })}
                         </select>
                       )}
                     </div>
@@ -1027,6 +1079,21 @@ export default function ContasReceberPage() {
                 <CheckCircle size={14} />Confirmar Baixa
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {alertMsg && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-content" style={{ background: 'hsl(var(--bg-base))', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', maxWidth: 420, textAlign: 'center', padding: '32px 24px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🚫</div>
+            <h2 style={{ fontSize: 20, color: '#1e293b', marginBottom: 16, fontWeight: 800 }}>Ação Bloqueada</h2>
+            <p style={{ color: '#475569', fontSize: 15, lineHeight: 1.5, marginBottom: 28, fontWeight: 500 }}>
+              {alertMsg}
+            </p>
+            <button className="btn btn-primary" onClick={() => setAlertMsg(null)} style={{ width: '100%', padding: '12px', fontSize: 16, background: '#f59e0b', borderColor: '#f59e0b', color: 'white' }}>
+              Entendido
+            </button>
           </div>
         </div>
       )}

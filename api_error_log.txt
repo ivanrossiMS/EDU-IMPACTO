@@ -1,0 +1,21 @@
+
+[2026-04-12T23:00:28.057Z] POST /api/alunos Error: {"name":"ZodError","message":"[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"cpf\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  },\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"data_nascimento\"\n    ],\n    \"message\": \"Invalid input: expected string, received null\"\n  }\n]"} - [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "cpf"
+    ],
+    "message": "Invalid input: expected string, received null"
+  },
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "data_nascimento"
+    ],
+    "message": "Invalid input: expected string, received null"
+  }
+]
+
+[2026-04-12T23:01:15.260Z] POST /api/alunos Error: {} - new row violates row-level security policy for table "alunos"

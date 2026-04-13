@@ -8,13 +8,17 @@ export const metadata: Metadata = {
   description: 'Plataforma enterprise de gestão escolar completa — acadêmico, financeiro, RH, CRM, comunicação, BI e IA.',
 }
 
+import { ReactQueryProvider } from '@/components/ReactQueryProvider'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
+          <ReactQueryProvider>
           <AppProvider>
             {children}
           </AppProvider>
+          </ReactQueryProvider>
       </body>
     </html>
   )

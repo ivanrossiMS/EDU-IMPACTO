@@ -94,8 +94,6 @@ export interface Titulo {
   htmlBoleto?: string
   eventos?: Array<{ id: string; data: string; tipo: string; descricao: string; payload?: string }>
   
-  // NOVO: Integração DRE Executiva
-  centroCustoId?: string
 }
 
 
@@ -106,8 +104,6 @@ export interface ContaPagar {
   planoContasId?: string
   codigo?: string // Adicionado para consistência visual nas contas a pagar
   
-  // NOVO: Centro de Custo Enxuto e Rateio Opcional
-  centroCustoId?: string
   usaRateio?: boolean
 }
 
@@ -340,16 +336,6 @@ export interface ConfigEsquemaAvaliacao {
 // CONFIG. FINANCEIRO
 // ═══════════════════════════════════════════════════════════════════
 
-export interface ConfigCentroCusto {
-  id: string
-  codigo: string
-  descricao: string
-  tipo: 'receita' | 'despesa' | 'ambos'
-  responsavel: string
-  situacao: 'ativo' | 'inativo'
-  createdAt: string
-}
-
 export interface MetodoPagamento {
   id: string
   codigo: string
@@ -384,7 +370,6 @@ export interface ConfigEvento {
   descricao: string
   planoContasId: string
   tipo: 'receita' | 'despesa'
-  centroCustoId: string
   situacao: 'ativo' | 'inativo'
   createdAt: string
 }
@@ -460,21 +445,6 @@ export interface ConfigPadraoPagamento {
   createdAt: string
 }
 
-export type GrupoDRECodigo =
-  | 'RECEITA_BRUTA'
-  | 'DEDUCAO_RECEITA'
-  | 'RECEITA_LIQUIDA'
-  | 'CUSTO_SERVICO'
-  | 'LUCRO_BRUTO'
-  | 'DESP_ADMINISTRATIVA'
-  | 'DESP_COMERCIAL'
-  | 'RESULTADO_OPERACIONAL'
-  | 'RESULTADO_FINANCEIRO'
-  | 'RESULTADO_ANTES_IMPOSTOS'
-  | 'IMPOSTOS'
-  | 'LUCRO_LIQUIDO'
-  | 'INVESTIMENTOS'
-  | 'SEM_CLASSIFICACAO'
 
 export interface ConfigPlanoContas {
   id: string
@@ -485,36 +455,8 @@ export interface ConfigPlanoContas {
   parentId: string               // '' = raiz
   situacao: 'ativo' | 'inativo'
   createdAt: string
-  // ── Integração DRE ──────────────────────────────────────
-  grupoDRE?: GrupoDRECodigo      // qual grupo da DRE essa conta alimenta
-  exibirDRE?: boolean            // aparece no relatório DRE?
-  naturezaDRE?: 'credora' | 'devedora' | 'neutra' // como soma no cálculo
-  ordemDRE?: number              // posição dentro do grupo
 }
 
-export interface ConfigGrupoDRE {
-  id: string
-  codigo: GrupoDRECodigo
-  nome: string
-  nomeCurto?: string
-  tipo: 'receita' | 'deducao' | 'custo' | 'despesa' | 'resultado' | 'imposto' | 'informativo'
-  natureza: 'credora' | 'devedora' | 'calculado'
-  formula?: string               // ex: 'RECEITA_BRUTA - DEDUCAO_RECEITA'
-  ordem: number
-  exibir: boolean
-  nivel: 'grupo' | 'subtotal' | 'total'
-  corDestaque?: string
-  createdAt: string
-}
-
-export interface DREConfig {
-  id: string
-  regimeApuracao: 'caixa' | 'competencia'
-  exibirZerados: boolean
-  exibirContasInativas: boolean
-  periodosFechados: string[]     // YYYY-MM fechados
-  updatedAt: string
-}
 
 // ─── MOVIMENTAÇÕES FINANCEIRAS ─────────────────────────────────────
 export type TipoMovimentacao = 'receita' | 'despesa'
@@ -537,8 +479,6 @@ export interface MovimentacaoManual {
   dataEmissao: string
   compensadoBanco: boolean
   observacoes: string
-  centroCustoId?: string
-  centroCustoDesc?: string
   criadoEm: string
   editadoEm: string
   /** Origem automática — diferencia de lançamentos manuais */
@@ -557,8 +497,6 @@ export interface MovCaixaItem {
   planoContas?: string
   compensadoBanco?: string
   caixaId?: string
-  centroCustoId?: string
-  centroCustoDesc?: string
   /** Origem automática do lançamento (diferencia de lançamentos manuais) */
   origem?: 'baixa_aluno' | 'baixa_pagar' | 'baixa_receber' | 'manual'
   /** Referência ao documento de origem (ex: codBaixa, id da conta) */
@@ -954,7 +892,6 @@ const KEYS = {
   cfgTiposOcorrencia: 'edu-cfg-tipos-ocorrencia',
   cfgEsquemasAvaliacao: 'edu-cfg-esquemas-avaliacao',
   // Config Financeiro
-  cfgCentrosCusto: 'edu-cfg-centros-custo',
   cfgMetodosPagamento: 'edu-cfg-metodos-pagamento',
   cfgCartoes: 'edu-cfg-cartoes',
   cfgEventos: 'edu-cfg-eventos-fin',
@@ -963,8 +900,7 @@ const KEYS = {
   cfgPlanoContas: 'edu-cfg-plano-contas',
   cfgTiposDocumento: 'edu-cfg-tipos-documento',
   cfgConvenios: 'edu-cfg-convenios',
-  cfgGruposDRE: 'edu-cfg-grupos-dre',
-  dreConfig: 'edu-cfg-dre-config',
+
   // Operações
   cfgCalendarioLetivo: 'edu-cfg-calendario-letivo',
   movimentacoesManuais: 'edu-op-movimentacoes',
@@ -1007,32 +943,7 @@ const NIVEIS_DEFAULT: ConfigNivelEnsino[] = [
   ]), createdAt: new Date().toISOString() },
 ]
 
-// ─── Grupos DRE Padrão ───────────────────────────────────────────
-const GRUPOS_DRE_DEFAULT: ConfigGrupoDRE[] = [
-  { id: 'GD01', codigo: 'RECEITA_BRUTA',          nome: 'Receita Bruta',                 nomeCurto: 'Rec. Bruta',     tipo: 'receita',     natureza: 'credora',   ordem: 1,  nivel: 'grupo',    exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
-  { id: 'GD02', codigo: 'DEDUCAO_RECEITA',         nome: 'Deduções da Receita',           nomeCurto: 'Deduções',       tipo: 'deducao',     natureza: 'devedora',  ordem: 2,  nivel: 'grupo',    exibir: true, corDestaque: '#f59e0b', createdAt: new Date().toISOString() },
-  { id: 'GD03', codigo: 'RECEITA_LIQUIDA',         nome: 'Receita Líquida',               nomeCurto: 'Rec. Líquida',   tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITA_BRUTA - DEDUCAO_RECEITA',          ordem: 3,  nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
-  { id: 'GD04', codigo: 'CUSTO_SERVICO',           nome: 'Custos dos Serviços Prestados', nomeCurto: 'Custos Diretos', tipo: 'custo',       natureza: 'devedora',  ordem: 4,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
-  { id: 'GD05', codigo: 'LUCRO_BRUTO',             nome: 'Lucro Bruto',                   nomeCurto: 'Lucro Bruto',    tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITA_LIQUIDA - CUSTO_SERVICO',           ordem: 5,  nivel: 'subtotal', exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
-  { id: 'GD06', codigo: 'DESP_ADMINISTRATIVA',     nome: 'Despesas Administrativas',      nomeCurto: 'Desp. Admin.',   tipo: 'despesa',     natureza: 'devedora',  ordem: 6,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
-  { id: 'GD07', codigo: 'DESP_COMERCIAL',          nome: 'Despesas Comerciais / Marketing', nomeCurto: 'Marketing',    tipo: 'despesa',     natureza: 'devedora',  ordem: 7,  nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
-  { id: 'GD08', codigo: 'RESULTADO_OPERACIONAL',   nome: 'Resultado Operacional',         nomeCurto: 'EBITDA',         tipo: 'resultado',   natureza: 'calculado', formula: 'LUCRO_BRUTO - DESP_ADMINISTRATIVA - DESP_COMERCIAL', ordem: 8, nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
-  { id: 'GD09', codigo: 'RESULTADO_FINANCEIRO',    nome: 'Resultado Financeiro',          nomeCurto: 'Res. Financeiro',tipo: 'resultado',   natureza: 'calculado', formula: 'RECEITAS_FINANCEIRAS - DESPESAS_FINANCEIRAS', ordem: 9, nivel: 'grupo',    exibir: true, corDestaque: '#8b5cf6', createdAt: new Date().toISOString() },
-  { id: 'GD10', codigo: 'RESULTADO_ANTES_IMPOSTOS',nome: 'Resultado Antes dos Impostos',  nomeCurto: 'LAIR',           tipo: 'resultado',   natureza: 'calculado', formula: 'RESULTADO_OPERACIONAL + RESULTADO_FINANCEIRO', ordem: 10, nivel: 'subtotal', exibir: true, corDestaque: '#3b82f6', createdAt: new Date().toISOString() },
-  { id: 'GD11', codigo: 'IMPOSTOS',                nome: 'Impostos e Tributos',           nomeCurto: 'Impostos',       tipo: 'imposto',     natureza: 'devedora',  ordem: 11, nivel: 'grupo',    exibir: true, corDestaque: '#ef4444', createdAt: new Date().toISOString() },
-  { id: 'GD12', codigo: 'LUCRO_LIQUIDO',           nome: 'Lucro Líquido do Exercício',    nomeCurto: 'Lucro Líquido',  tipo: 'resultado',   natureza: 'calculado', formula: 'RESULTADO_ANTES_IMPOSTOS - IMPOSTOS',         ordem: 12, nivel: 'total',    exibir: true, corDestaque: '#10b981', createdAt: new Date().toISOString() },
-  { id: 'GD13', codigo: 'INVESTIMENTOS',           nome: 'Investimentos (Patrimônio)',    nomeCurto: 'Investimentos',  tipo: 'informativo', natureza: 'devedora',  ordem: 13, nivel: 'grupo',    exibir: true, corDestaque: '#f59e0b', createdAt: new Date().toISOString() },
-  { id: 'GD14', codigo: 'SEM_CLASSIFICACAO',       nome: 'Não Classificados (Legado)',    nomeCurto: 'Sem Classif.',   tipo: 'informativo', natureza: 'neutra',    ordem: 14, nivel: 'grupo',    exibir: true, corDestaque: '#6b7280', createdAt: new Date().toISOString() },
-] as unknown as ConfigGrupoDRE[]
 
-const DRE_CONFIG_DEFAULT: DREConfig = {
-  id: 'DRE_CFG_1',
-  regimeApuracao: 'caixa',
-  exibirZerados: false,
-  exibirContasInativas: false,
-  periodosFechados: [],
-  updatedAt: new Date().toISOString(),
-}
 
 // ─── Context interface ────────────────────────────────────────────
 type Setter<T> = (v: T | ((p: T) => T)) => void
@@ -1192,7 +1103,6 @@ interface DataState {
   cfgTiposOcorrencia: ConfigTipoOcorrencia[]; setCfgTiposOcorrencia: Setter<ConfigTipoOcorrencia[]>
   cfgEsquemasAvaliacao: ConfigEsquemaAvaliacao[]; setCfgEsquemasAvaliacao: Setter<ConfigEsquemaAvaliacao[]>
   // Config Financeiro
-  cfgCentrosCusto: ConfigCentroCusto[]; setCfgCentrosCusto: Setter<ConfigCentroCusto[]>
   cfgMetodosPagamento: MetodoPagamento[]; setCfgMetodosPagamento: Setter<MetodoPagamento[]>
   cfgCartoes: ConfigCartao[]; setCfgCartoes: Setter<ConfigCartao[]>
   cfgEventos: ConfigEvento[]; setCfgEventos: Setter<ConfigEvento[]>
@@ -1201,8 +1111,6 @@ interface DataState {
   cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
   cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
   cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
-  cfgGruposDRE: ConfigGrupoDRE[]; setCfgGruposDRE: Setter<ConfigGrupoDRE[]>
-  dreConfig: DREConfig; setDreConfig: Setter<DREConfig>
   cfgCalendarioLetivo: ConfigCalendarioLetivo[]; setCfgCalendarioLetivo: Setter<ConfigCalendarioLetivo[]>
   // Operações Financeiras
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
@@ -1231,7 +1139,7 @@ interface DataState {
 }
 
 export const DEFAULT_PERFIS: Perfil[] = [
-  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/esquema-avaliacao','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/config-notas','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/esquema-avaliacao','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/config-notas','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade'] },
@@ -1268,7 +1176,6 @@ const DataContext = createContext<DataState>({
   cfgNiveisEnsino: [], setCfgNiveisEnsino: NOOP,
   cfgTiposOcorrencia: [], setCfgTiposOcorrencia: NOOP,
   cfgEsquemasAvaliacao: [], setCfgEsquemasAvaliacao: NOOP,
-  cfgCentrosCusto: [], setCfgCentrosCusto: NOOP,
   cfgMetodosPagamento: [], setCfgMetodosPagamento: NOOP,
   cfgCartoes: [], setCfgCartoes: NOOP,
   cfgEventos: [], setCfgEventos: NOOP,
@@ -1277,7 +1184,6 @@ const DataContext = createContext<DataState>({
   cfgPlanoContas: [], setCfgPlanoContas: NOOP,
   cfgTiposDocumento: [], setCfgTiposDocumento: NOOP,
   cfgConvenios: [], setCfgConvenios: NOOP,
-  cfgGruposDRE: [], setCfgGruposDRE: NOOP,
   cfgCalendarioLetivo: [], setCfgCalendarioLetivo: NOOP,
   movimentacoesManuais: [], setMovimentacoesManuais: NOOP,
   caixasAbertos: [], setCaixasAbertos: NOOP,
@@ -1296,7 +1202,7 @@ const DataContext = createContext<DataState>({
   censoPendencias: [], setCensoPendencias: NOOP,
   censoExports: [], setCensoExports: NOOP,
   // Non-arrays with safe defaults
-  dreConfig: {} as any, setDreConfig: NOOP,
+
   censoConfig: {} as any, setCensoConfig: NOOP,
   logSystemAction: NOOP,
   logCensoAction: NOOP,
@@ -1321,23 +1227,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
 
   // ── DADOS PRIMÁRIOS — persistidos no Supabase ──────────────────────
-  const [alunos, setAlunos] = useSupabaseArray<Aluno>('alunos')
+  // (alunos, titulos, contas-pagar, caixas, funcionários foram desacoplados para SWR Regional nas próprias telas para não travar Context global)
   const [turmas, setTurmas] = useSupabaseArray<Turma>('turmas')
-  const [funcionarios, setFuncionarios] = useSupabaseArray<Funcionario>('rh/funcionarios')
   const [leads, setLeads] = useSupabaseArray<Lead>('leads')
-  const [titulos, setTitulos] = useSupabaseArray<Titulo>('titulos')
-  const [contasPagar, setContasPagar] = useSupabaseArray<ContaPagar>('contas-pagar')
   const [agendamentos, setAgendamentos] = useSupabaseArray<Agendamento>('agendamentos')
   const [comunicados, setComunicados] = useSupabaseArray<Comunicado>('comunicados')
   const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
   const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
-  const [eventosAgenda, setEventosAgenda] = useLocalStorage<EventoAgenda[]>(KEYS.eventosAgenda, [])
-  const [rotinaItems, setRotinaItems] = useLocalStorage<RotinaItem[]>(KEYS.rotinaItems, [])
-  const [autorizacoes, setAutorizacoes] = useLocalStorage<AutorizacaoDigital[]>(KEYS.autorizacoes, [])
-  const [momentos, setMomentos] = useLocalStorage<MomentoItem[]>(KEYS.momentos, [])
-  const [enquetes, setEnquetes] = useLocalStorage<Enquete[]>(KEYS.enquetes, [])
+  const [eventosAgenda, setEventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [rotinaItems, setRotinaItems] = useSupabaseArray<RotinaItem>('agenda/rotina')
+  const [autorizacoes, setAutorizacoes] = useSupabaseArray<AutorizacaoDigital>('agenda/autorizacoes')
+  const [momentos, setMomentos] = useSupabaseArray<MomentoItem>('agenda/momentos')
+  const [enquetes, setEnquetes] = useSupabaseArray<Enquete>('agenda/enquetes')
   const [ocorrencias, setOcorrencias] = useSupabaseArray<Ocorrencia>('ocorrencias')
-  const [transferencias, setTransferencias] = useLocalStorage<Transferencia[]>(KEYS.transferencias, [])
+  const [transferencias, setTransferencias] = useSupabaseArray<Transferencia>('academico/transferencias')
   const [frequencias, setFrequencias] = useSupabaseArray<RegistroFrequencia>('academico/frequencias')
   const [lancamentosNota, setLancamentosNota] = useSupabaseArray<LancamentoNota>('academico/notas')
   // Config Pedagógico
@@ -1350,7 +1253,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia')
   const { data: cfgEsquemasAvaliacao, setData: setCfgEsquemasAvaliacao } = useConfigDb<ConfigEsquemaAvaliacao>('cfgEsquemasAvaliacao')
   // ── CONFIGURAÇÕES FINANCEIRAS — persistidas em Supabase (tabela configuracoes) ──
-  const { data: cfgCentrosCusto, setData: setCfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto')
   const { data: cfgMetodosPagamento, setData: setCfgMetodosPagamento } = useConfigDb<MetodoPagamento>('cfgMetodosPagamento')
   const { data: cfgCartoes, setData: setCfgCartoes } = useConfigDb<ConfigCartao>('cfgCartoes')
   const { data: cfgEventos, setData: setCfgEventos } = useConfigDb<ConfigEvento>('cfgEventos')
@@ -1378,21 +1280,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgConvenios, setData: setCfgConvenios } = useConfigDb<ConfigConvenio>('cfgConvenios')
 
   const { data: cfgCalendarioLetivo, setData: setCfgCalendarioLetivo } = useConfigDb<ConfigCalendarioLetivo>('cfgCalendarioLetivo')
-  const { data: cfgGruposDRE, setData: setCfgGruposDRE } = useConfigDb<ConfigGrupoDRE>('cfgGruposDRE')
-  const [dreConfig, setDreConfig] = useLocalStorage<DREConfig>(KEYS.dreConfig, DRE_CONFIG_DEFAULT)
   // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
   const [movimentacoesManuais, setMovimentacoesManuais] = useSupabaseArray<MovimentacaoManual>('financeiro/movimentacoes')
-  const [caixasAbertos, setCaixasAbertos] = useLocalStorage<CaixaAberta[]>(KEYS.caixasAbertos, [])
+  // caixasAbertos movido para SWR Direto na Tela de Caixas
   const [fornecedoresCad, setFornecedoresCad] = useSupabaseArray<FornecedorCad>('fornecedores')
-  const [unidadesFiscais, setUnidadesFiscais] = useLocalStorage<UnidadeFiscal[]>('edu-cfg-unidades-fiscais', [])
-  const [notasFiscais, setNotasFiscais] = useLocalStorage<NotaFiscal[]>('edu-op-notas-fiscais', [])
-  const [advertencias, setAdvertencias] = useLocalStorage<Advertencia[]>(KEYS.advertencias, [])
-  const [adiantamentos, setAdiantamentos] = useLocalStorage<Adiantamento[]>(KEYS.adiantamentos, ADIANTAMENTOS)
+  const [unidadesFiscais, setUnidadesFiscais] = useSupabaseArray<UnidadeFiscal>('financeiro/unidades-fiscais')
+  const [notasFiscais, setNotasFiscais] = useSupabaseArray<NotaFiscal>('financeiro/notas-fiscais')
+  const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
+  const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos')
 
   // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
   const [systemLogs, setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
 
-  const [perfis, setPerfisRaw] = useLocalStorage<Perfil[]>('edu-perfis', DEFAULT_PERFIS)
+  const [perfis, setPerfisRaw] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
 
   // Censo Escolar
   const CENSO_CONFIG_DEFAULT: CensoConfig = {
@@ -1405,14 +1305,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
   const [censoConfig, setCensoConfigRaw] = useLocalStorage<CensoConfig>(KEYS.censoConfig, CENSO_CONFIG_DEFAULT)
   const setCensoConfig = useCallback((v: CensoConfig) => setCensoConfigRaw(v), [setCensoConfigRaw])
-  const [censoPendencias, setCensoPendencias] = useLocalStorage<CensoPendencia[]>(KEYS.censoPendencias, [])
-  const [censoExports, setCensoExports] = useLocalStorage<CensoExport[]>(KEYS.censoExports, [])
-  const [censoAuditLogs, setCensoAuditLogs] = useLocalStorage<CensoAuditLog[]>(KEYS.censoAuditLogs, [])
-  const [censoOperacoes, setCensoOperacoes] = useLocalStorage<CensoOperacaoEnvio[]>(KEYS.censoOperacoes, [])
+  const [censoPendencias, setCensoPendencias] = useSupabaseArray<CensoPendencia>('censo/pendencias')
+  const [censoExports, setCensoExports] = useSupabaseArray<CensoExport>('censo/exports')
+  const [censoAuditLogs, setCensoAuditLogs] = useSupabaseArray<CensoAuditLog>('censo/auditoria')
+  const [censoOperacoes, setCensoOperacoes] = useSupabaseArray<CensoOperacaoEnvio>('censo/operacoes')
   // Enriquecimento Censitário
-  const [censoAlunosData, setCensoAlunosData] = useLocalStorage<CensoAlunoData[]>(KEYS.censoAlunosData, [])
-  const [censoTurmasData, setCensoTurmasData] = useLocalStorage<CensoTurmaData[]>(KEYS.censoTurmasData, [])
-  const [censoProfsData, setCensoProfsData] = useLocalStorage<CensoProfissionalData[]>(KEYS.censoProfsData, [])
+  const [censoAlunosData, setCensoAlunosData] = useSupabaseArray<CensoAlunoData>('censo/escola/alunos')
+  const [censoTurmasData, setCensoTurmasData] = useSupabaseArray<CensoTurmaData>('censo/escola/turmas')
+  const [censoProfsData, setCensoProfsData] = useSupabaseArray<CensoProfissionalData>('censo/escola/profs')
 
   const logCensoAction = useCallback((acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => {
     let userName = 'Admin Local'
@@ -1448,6 +1348,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {}
     }
 
+    const sanitizeLogData = (data: any) => {
+      try {
+        return JSON.parse(JSON.stringify(data, (key, value) => {
+          if (typeof value === 'string') {
+            if (value.startsWith('data:')) return '[DADO/IMAGEM OMITIDO]'
+            if (value.length > 5000) return value.slice(0, 5000) + '... [TRUNCADO]'
+          }
+          if (Array.isArray(value) && value.length > 50) {
+            return [...value.slice(0, 50), `... +${value.length - 50} itens`]
+          }
+          return value
+        }))
+      } catch { return { error: 'data_too_complex' } }
+    }
+
+    const sanitizedPayload = payload ? sanitizeLogData(payload) : {}
+
     const newLog: SystemLog = {
       id: `LOG-${Date.now()}`,
       dataHora: new Date().toISOString(),
@@ -1456,10 +1373,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       modulo,
       acao,
       descricao,
-      status: payload?.status || 'sucesso',
-      origem: payload?.origem || 'sistema',
+      status: sanitizedPayload.status || 'sucesso',
+      origem: sanitizedPayload.origem || 'sistema',
       ip: '127.0.0.1',
-      ...payload
+      ...sanitizedPayload
     }
     setSystemLogs(prev => [newLog, ...prev])
     // Persist log to Supabase asynchronously (fire and forget)
@@ -1558,9 +1475,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setMomentos([]); setEnquetes([])
     setOcorrencias([]); setTransferencias([]); setFrequencias([]); setLancamentosNota([])
     setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
-    setCfgCentrosCusto([]); setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
+    setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
-    setCfgGruposDRE(GRUPOS_DRE_DEFAULT); setDreConfig(DRE_CONFIG_DEFAULT)
     setMovimentacoesManuais([]); setCaixasAbertos([]); setFornecedoresCad([])
     setUnidadesFiscais([]); setNotasFiscais([])
     setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
@@ -1570,12 +1486,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DataContext.Provider value={{
-      alunos, setAlunos: createTrackedSetter('Acadêmico', 'Alunos', setAlunos),
+      // Legacy stubs para não quebrar interface TypeScript TS2740 (Arrays Decoupled para SWR)
+      alunos: [], setAlunos: NOOP,
+      funcionarios: [], setFuncionarios: NOOP,
+      titulos: [], setTitulos: NOOP,
+      contasPagar: [], setContasPagar: NOOP,
+
       turmas, setTurmas: createTrackedSetter('Acadêmico', 'Turmas', setTurmas),
-      funcionarios, setFuncionarios: createTrackedSetter('RH', 'Funcionários', setFuncionarios),
       leads, setLeads: createTrackedSetter('Comercial', 'Leads', setLeads),
-      titulos, setTitulos: createTrackedSetter('Financeiro', 'Contas a Receber', setTitulos),
-      contasPagar, setContasPagar: createTrackedSetter('Financeiro', 'Contas a Pagar', setContasPagar),
       agendamentos, setAgendamentos: createTrackedSetter('Comercial', 'Agendamentos', setAgendamentos),
       comunicados, setComunicados: createTrackedSetter('Comunicação', 'Comunicados', setComunicados),
       tarefas, setTarefas: createTrackedSetter('Operacional', 'Tarefas', setTarefas),
@@ -1596,7 +1514,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       cfgNiveisEnsino, setCfgNiveisEnsino: createTrackedSetter('Configurações', 'Níveis de Ensino', setCfgNiveisEnsino),
       cfgTiposOcorrencia, setCfgTiposOcorrencia: createTrackedSetter('Configurações', 'Tipos de Ocorrência', setCfgTiposOcorrencia),
       cfgEsquemasAvaliacao, setCfgEsquemasAvaliacao: createTrackedSetter('Configurações', 'Esquemas de Avaliação', setCfgEsquemasAvaliacao),
-      cfgCentrosCusto, setCfgCentrosCusto: createTrackedSetter('Configurações', 'Centros de Custo', setCfgCentrosCusto),
       cfgMetodosPagamento, setCfgMetodosPagamento: createTrackedSetter('Configurações', 'Métodos de Pagamento', setCfgMetodosPagamento),
       cfgCartoes, setCfgCartoes: createTrackedSetter('Configurações', 'Cartões', setCfgCartoes),
       cfgEventos, setCfgEventos: createTrackedSetter('Configurações', 'Eventos Financeiros', setCfgEventos),
@@ -1606,10 +1523,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       cfgTiposDocumento, setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
       cfgConvenios, setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
       cfgCalendarioLetivo, setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
-      cfgGruposDRE, setCfgGruposDRE: createTrackedSetter('Configurações', 'Grupos DRE', setCfgGruposDRE),
-      dreConfig, setDreConfig,
+
       movimentacoesManuais, setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
-      caixasAbertos, setCaixasAbertos: createTrackedSetter('Financeiro', 'Caixas', setCaixasAbertos),
       fornecedoresCad, setFornecedoresCad: createTrackedSetter('Operacional', 'Fornecedores', setFornecedoresCad),
       unidadesFiscais, setUnidadesFiscais,
       notasFiscais, setNotasFiscais,

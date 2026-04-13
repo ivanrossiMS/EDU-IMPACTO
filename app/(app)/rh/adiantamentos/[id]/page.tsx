@@ -14,7 +14,7 @@ function formatMoney(value: number) {
 export default function AdiantamentoDetalhe() {
   const params = useParams()
   const idStr = params.id as string
-  const { adiantamentos, setAdiantamentos } = useData()
+  const { adiantamentos = [], setAdiantamentos } = useData()
   
   const item = adiantamentos.find(a => a.id === idStr)
   

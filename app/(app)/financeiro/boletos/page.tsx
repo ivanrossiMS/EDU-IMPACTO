@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React from 'react'
 import { useData, ConfigConvenio, Titulo } from '@/lib/dataContext'
@@ -28,7 +30,9 @@ const ABAS: { id: Aba; icon: string; label: string; badge?: string }[] = [
 ]
 
 export default function BoletosPage() {
-  const { titulos, setTitulos, alunos, cfgConvenios, setCfgConvenios, cfgEventos } = useData()
+  const { cfgConvenios, setCfgConvenios, cfgEventos } = useData();
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [aba, setAba] = React.useState<Aba>('dashboard')
 
   // ── Convênios CRUD ──────────────────────────────────────────────

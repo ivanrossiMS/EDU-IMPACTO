@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const { data, error } = await supabaseServer
+  const supabase = await createProtectedClient();
+  const { data, error } = await supabase
     .from('mantenedores').select('*').order('nome')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   const result = (data || []).map(row => ({
@@ -12,21 +13,34 @@ export async function GET() {
     unidades: row.unidades ?? [],
     ...(row.dados || {}),
   }))
-  return NextResponse.json(result)
+  return NextResponse.json({ data: result })
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
-      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      const incomingIds = body.map(m => m.id).filter(Boolean);
+
+      if (incomingIds.length === 0) {
+        // Se a lista veio vazia, deletar todos os registros porque o frontend limpou
+        await supabase.from('mantenedores').delete().neq('id', 'impossible-id');
+        return NextResponse.json({ ok: true, count: 0 });
+      }
+
       const rows = body.map(m => buildRow(m))
-      const { error } = await supabaseServer.from('mantenedores').upsert(rows)
+      const { error } = await supabase.from('mantenedores').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+      // Remover do banco os que não vieram na listagem final (sincronização de exclusões)
+      const { error: delErr } = await supabase.from('mantenedores').delete().not('id', 'in', `(${incomingIds.join(',')})`);
+      if (delErr) console.error('Erro ao excluir mantenedores removidos:', delErr);
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('mantenedores').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, unidades: data.unidades ?? [], ...(data.dados || {}) }, { status: 201 })

@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const alunoId = searchParams.get('alunoId')
   const q = searchParams.get('q')
 
-  let query = supabaseServer.from('titulos').select('*').order('vencimento')
+  let query = supabase.from('titulos').select('*').order('vencimento')
 
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (alunoId) query = query.eq('aluno_id', alunoId)
@@ -31,6 +32,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const {
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
       dados_bancarios: dadosBancarios,
     }
 
-    const { data, error } = await supabaseServer.from('titulos').upsert(row).select().single()
+    const { data, error } = await supabase.from('titulos').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {

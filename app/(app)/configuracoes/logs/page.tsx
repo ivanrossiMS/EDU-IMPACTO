@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useData, SystemLog } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
 import {
@@ -21,7 +21,7 @@ const ACTION_CFG: Record<string, { color: string; bg: string; text: string }> = 
 const getActionColor = (acao: string) => ACTION_CFG[acao] || { color: '#64748b', bg: 'rgba(100,116,139,0.15)', text: '#64748b' }
 
 export default function SystemLogsPage() {
-  const { systemLogs } = useData()
+  const { systemLogs = [] } = useData() || {}
 
   // Filtros
   const [search, setSearch] = useState('')
@@ -29,6 +29,14 @@ export default function SystemLogsPage() {
   const [filtroAcao, setFiltroAcao] = useState('Todas')
   const [filtroPeriodo, setFiltroPeriodo] = useState('7dias')
   
+  // Paginação
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const itensPorPagina = 20
+
+  useEffect(() => {
+    setPaginaAtual(1)
+  }, [search, filtroModulo, filtroAcao, filtroPeriodo])
+
   // Detalhe
   const [viewLog, setViewLog] = useState<SystemLog | null>(null)
 
@@ -112,6 +120,12 @@ export default function SystemLogsPage() {
 
     return rs.sort((a,b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime())
   }, [systemLogs, search, filtroModulo, filtroAcao, filtroPeriodo])
+
+  const paginatedLogs = useMemo(() => {
+    const start = (paginaAtual - 1) * itensPorPagina
+    return filteredLogs.slice(start, start + itensPorPagina)
+  }, [filteredLogs, paginaAtual])
+  const totalPaginas = Math.ceil(filteredLogs.length / itensPorPagina)
 
   // KPIs
   const totalLogs = filteredLogs.length
@@ -256,7 +270,7 @@ export default function SystemLogsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map(l => {
+                {paginatedLogs.map(l => {
                   const corAcao = getActionColor(l.acao)
                   return (
                     <tr key={l.id} className="hover:bg-slate-50 transition-colors">
@@ -309,6 +323,18 @@ export default function SystemLogsPage() {
                 })}
               </tbody>
             </table>
+            {totalPaginas > 1 && (
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                <span style={{ fontSize: 13, color: '#64748b' }}>
+                  Mostrando {((paginaAtual - 1) * itensPorPagina) + 1} a {Math.min(paginaAtual * itensPorPagina, filteredLogs.length)} de {filteredLogs.length}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn btn-secondary btn-sm" disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)}>Anterior</button>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0 12px', fontSize: 13, fontWeight: 600 }}>{paginaAtual} / {totalPaginas}</span>
+                  <button className="btn btn-secondary btn-sm" disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)}>Próxima</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

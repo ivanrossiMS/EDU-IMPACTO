@@ -1,4 +1,4 @@
-SyntaxError: Unterminated string in JSON at position 10471454 (line 1 column 10471455)
+SyntaxError: Expected ':' after property name in JSON at position 10455257 (line 1 column 10455258)
     at JSON.parse (<anonymous>)
     at parseJSONFromBytes (node:internal/deps/undici/undici:4259:19)
     at successSteps (node:internal/deps/undici/undici:6882:27)

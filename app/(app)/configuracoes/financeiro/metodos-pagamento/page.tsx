@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
+import { useData } from '@/lib/dataContext'
 import {
   Plus, Pencil, Trash2, Check, X, Search, CreditCard,
   Banknote, Smartphone, FileText, RefreshCw, Wallet,
@@ -63,7 +64,9 @@ const genCod = (lista: MetodoPagamento[]) => {
 }
 
 export default function MetodosPagamentoPage() {
-  const [metodos, setMetodos] = useLocalStorage<MetodoPagamento[]>('edu-cfg-metodos-pagamento', DEFAULTS)
+  const { cfgMetodosPagamento, setCfgMetodosPagamento } = useData()
+  const metodos = (cfgMetodosPagamento && cfgMetodosPagamento.length > 0) ? cfgMetodosPagamento : DEFAULTS
+  const setMetodos = setCfgMetodosPagamento
 
   const [search, setSearch] = useState('')
   const [filtroSit, setFiltroSit] = useState<'todos' | 'ativo' | 'inativo'>('todos')

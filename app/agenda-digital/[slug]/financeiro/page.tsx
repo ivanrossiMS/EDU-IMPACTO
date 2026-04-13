@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData, Titulo } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -8,7 +10,8 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 export default function ADFinanceiroPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos, titulos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
   const { currentUser } = useApp()
   const resolvedParams = use(params as Promise<{ slug: string }>)
   

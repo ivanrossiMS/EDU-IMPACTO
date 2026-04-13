@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useEffect } from 'react'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
@@ -17,7 +19,8 @@ export default function ADAdminDashboard() {
   useEffect(() => setMounted(true), [])
 
   const { comunicados } = useAgendaDigital()
-  const { alunos, titulos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
 
   const alunosAtivos = (alunos || []).filter(a => a.status === 'matriculado' || a.status === 'ativo')
   

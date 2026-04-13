@@ -115,18 +115,19 @@ function MantenedorForm({ data, onChange, logoRef, onLogoUpload }: {
 }
 
 export default function MultiUnidadesPage() {
-  const { mantenedores, setMantenedores } = useData()
+  const { mantenedores = [], setMantenedores } = useData()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [saved, setSaved] = useState(false)
 
   // ─ One-time migration: backfill missing 'codigo' for existing units ─
   useEffect(() => {
     const year = new Date().getFullYear()
-    const needsMigration = mantenedores.some(m => m.unidades.some(u => !u.codigo))
+    if (!Array.isArray(mantenedores) || mantenedores.length === 0) return
+    const needsMigration = mantenedores.some(m => (m.unidades ?? []).some(u => !u.codigo))
     if (!needsMigration) return
-    setMantenedores(prev => prev.map(m => ({
+    setMantenedores(prev => (prev ?? []).map(m => ({
       ...m,
-      unidades: m.unidades.map(u => u.codigo ? u : { ...u, codigo: `UNI-${year}-${Math.random().toString(36).slice(2,6).toUpperCase()}` })
+      unidades: (m.unidades ?? []).map(u => u.codigo ? u : { ...u, codigo: `UNI-${year}-${Math.random().toString(36).slice(2,6).toUpperCase()}` })
     })))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -147,8 +148,18 @@ export default function MultiUnidadesPage() {
   const [confirmId, setConfirmId] = useState<{ type: 'mantenedor' | 'unidade'; mId: string; uId?: string } | null>(null)
 
   /* ── KPIs ── */
-  const totalAlunos = mantenedores.flatMap(m => m.unidades).reduce((s, u) => s + (u.alunosAtivos || 0), 0)
-  const totalUnidades = mantenedores.flatMap(m => m.unidades).length
+  let totalAlunos = 0;
+  let totalUnidades = 0;
+  if (Array.isArray(mantenedores)) {
+    mantenedores.forEach(m => {
+      if (m && Array.isArray(m.unidades)) {
+        totalUnidades += m.unidades.length;
+        m.unidades.forEach(u => {
+          totalAlunos += (u?.alunosAtivos || 0);
+        });
+      }
+    });
+  }
 
   const toggleExpanded = (id: string) => {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -248,10 +259,10 @@ export default function MultiUnidadesPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
         {[
-          { icon: '🏢', label: 'Mantenedores', value: mantenedores.length, color: '#8b5cf6' },
+          { icon: '🏢', label: 'Mantenedores', value: (mantenedores || []).length, color: '#8b5cf6' },
           { icon: '🏫', label: 'Unidades', value: totalUnidades, color: '#3b82f6' },
           { icon: '🎓', label: 'Total de Alunos', value: totalAlunos.toLocaleString('pt-BR'), color: '#10b981' },
-          { icon: '📋', label: 'CNPJs Cadastrados', value: mantenedores.length + totalUnidades, color: '#f59e0b' },
+          { icon: '📋', label: 'CNPJs Cadastrados', value: (mantenedores || []).length + totalUnidades, color: '#f59e0b' },
         ].map(k => (
           <div key={k.label} className="card" style={{ padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'center' }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: `${k.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{k.icon}</div>
@@ -265,7 +276,7 @@ export default function MultiUnidadesPage() {
 
       {/* Mantenedores list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {mantenedores.map(m => (
+        {(mantenedores ?? []).map(m => (
           <div key={m.id} className="card" style={{ overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
             {/* Mantenedor Header */}
             <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', borderBottom: expanded.has(m.id) ? '1px solid hsl(var(--border-subtle))' : 'none' }}
@@ -370,7 +381,7 @@ export default function MultiUnidadesPage() {
           </div>
         ))}
 
-        {mantenedores.length === 0 && (
+        {(mantenedores ?? []).length === 0 && (
           <div style={{ textAlign: 'center', padding: '56px', color: 'hsl(var(--text-muted))', fontSize: 14 }}>
             <Building2 size={48} style={{ margin: '0 auto 14px', opacity: 0.3 }} />
             <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>Nenhum mantenedor cadastrado</p>

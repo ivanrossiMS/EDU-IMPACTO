@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const modulo = searchParams.get('modulo')
   const limit = parseInt(searchParams.get('limit') || '200')
 
-  let query = supabaseServer.from('system_logs')
+  let query = supabase.from('system_logs')
     .select('*').order('data_hora', { ascending: false }).limit(limit)
   if (modulo) query = query.eq('modulo', modulo)
 
@@ -33,9 +34,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const logs = Array.isArray(body) ? body : [body]
+    const sanitize = (obj: any) => {
+       if (!obj || typeof obj !== 'object') return obj;
+       const copy = { ...obj };
+       if (copy.foto) copy.foto = '[BASE64_OMITIDO]';
+       if (copy.arquivoBase64) copy.arquivoBase64 = '[BASE64_OMITIDO]';
+       return copy;
+    }
+
     const rows = logs.map(l => ({
       id: l.id || `LOG-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
       data_hora: l.dataHora || new Date().toISOString(),
@@ -48,30 +58,29 @@ export async function POST(request: Request) {
       origem: l.origem || 'sistema',
       registro_id: l.registroId || null,
       nome_relacionado: l.nomeRelacionado || null,
-      detalhes_antes: l.detalhesAntes,
-      detalhes_depois: l.detalhesDepois,
+      detalhes_antes: sanitize(l.detalhesAntes),
+      detalhes_depois: sanitize(l.detalhesDepois),
     }))
-    const { error } = await supabaseServer.from('system_logs').upsert(rows)
+    const { error } = await supabase.from('system_logs').upsert(rows)
     if (error) {
-      console.error('[API system-logs] Upsert error:', error)
-      try { require('fs').writeFileSync('sys-logs-error.txt', JSON.stringify(error, null, 2)) } catch(e){}
+      console.error('[API system-logs] Upsert error:', error.message)
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     return NextResponse.json({ ok: true, count: rows.length })
   } catch (e: any) {
     console.error('[API system-logs] Unknown Catch error:', e.message)
-    try { require('fs').writeFileSync('sys-logs-error.txt', String(e.stack || e.message)) } catch(err){}
-    return NextResponse.json({ error: e.message }, { status: 400 })
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
   }
 }
 
 // GET /api/system-logs?limit=500 — also accepts DELETE for cleanup
 export async function DELETE(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const olderThanDays = parseInt(searchParams.get('olderThanDays') || '90')
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - olderThanDays)
-  const { error } = await supabaseServer.from('system_logs')
+  const { error } = await supabase.from('system_logs')
     .delete().lt('data_hora', cutoff.toISOString())
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })

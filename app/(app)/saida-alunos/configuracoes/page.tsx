@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
 import { DataProvider, useData } from '@/lib/dataContext'
@@ -235,7 +237,7 @@ const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 // ABA: Relatórios
 // ─────────────────────────────────────────────────────────────────────────────
 function TabRelatorios() {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const isMobile = useIsMobile()
 
   const [filter, setFilter] = useState<FilterKey>('todos')

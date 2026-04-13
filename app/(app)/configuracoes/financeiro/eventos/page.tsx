@@ -1,18 +1,21 @@
 'use client'
-import { ConfigEvento, ConfigPlanoContas, ConfigCentroCusto, newId } from '@/lib/dataContext'
+import { ConfigEvento, ConfigPlanoContas, newId } from '@/lib/dataContext'
 import { useConfigDb } from '@/lib/useConfigDb'
 import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, Tag, Search, Upload, X, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 const BLANK: Omit<ConfigEvento, 'id' | 'createdAt'> = {
-  codigo: '', descricao: '', planoContasId: '', tipo: 'receita', centroCustoId: '', situacao: 'ativo',
+  codigo: '',
+  descricao: '',
+  tipo: 'receita',
+  planoContasId: '',
+  situacao: 'ativo'
 }
 
 export default function EventosPage() {
   const { data: cfgEventos, setData: setCfgEventos, loading } = useConfigDb<ConfigEvento>('cfgEventos')
   const { data: cfgPlanoContas } = useConfigDb<ConfigPlanoContas>('cfgPlanoContas')
-  const { data: cfgCentrosCusto } = useConfigDb<ConfigCentroCusto>('cfgCentrosCusto')
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -57,7 +60,6 @@ export default function EventosPage() {
       ['Descricao', 'Texto livre', 'Sim'],
       ['Tipo', 'receita | despesa', 'Sim'],
       ['PlanoDeContas', 'Código exato do Plano de Contas (ex: 1.1.01)', 'Não'],
-      ['CentroDeCusto', 'Código exato do Centro de Custo (ex: CC001)', 'Não'],
       ['Situacao', 'ativo | inativo', 'Não (Padrão: ativo)'],
     ]
     const wsLeg = XLSX.utils.aoa_to_sheet(legenda)
@@ -113,7 +115,6 @@ export default function EventosPage() {
 
           // Associa os relacionamentos pelo código numérico / alphanumérico fornecido
           const pcMatch = pContasRaw ? cfgPlanoContas.find(p => p.codPlano === pContasRaw) : null
-          const ccMatch = cCustoRaw ? cfgCentrosCusto.find(c => c.codigo === cCustoRaw) : null
 
           novos.push({ 
             id: newId('EV'), 
@@ -121,7 +122,6 @@ export default function EventosPage() {
             descricao, 
             tipo: tipoNorm as 'receita' | 'despesa', 
             planoContasId: pcMatch?.id || '', 
-            centroCustoId: ccMatch?.id || '', 
             situacao: situacaoNorm, 
             createdAt: new Date().toISOString() 
           })
@@ -143,7 +143,7 @@ export default function EventosPage() {
   const openNew = () => { setEditId(null); setForm({ ...BLANK, codigo: gerarCodEV() }); setShowForm(true) }
   const openEdit = (e: ConfigEvento) => {
     setEditId(e.id)
-    setForm({ codigo: e.codigo, descricao: e.descricao, planoContasId: e.planoContasId, tipo: e.tipo, centroCustoId: e.centroCustoId, situacao: e.situacao })
+    setForm(e)
     setShowForm(true)
   }
   const handleDelete = (id: string) => setCfgEventos(prev => prev.filter(e => e.id !== id))
@@ -205,7 +205,6 @@ export default function EventosPage() {
           <div style={{ fontSize:12, color:'hsl(var(--text-muted))', marginBottom:12, lineHeight:1.6 }}>
             <strong>Formato esperado (XLSX com colunas separadas):</strong><br />
             • Coluna A: Código <em>(Opcional)</em> · Coluna B: Descrição · Coluna C: Tipo (receita/despesa)<br />
-            • Coluna D: Plano de Contas (cód.) · Coluna E: Centro de Custo (cód.) · Coluna F: Situação (ativo/inativo)
           </div>
           <div style={{ display:'flex', gap:10, alignItems:'center' }}>
             <button className="btn btn-secondary btn-sm" onClick={downloadModelo}><Download size={12} />Baixar Modelo XLSX</button>
@@ -301,13 +300,7 @@ export default function EventosPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="form-label">Centro de Custo</label>
-              <select className="form-input" value={form.centroCustoId} onChange={e => setForm(p => ({ ...p, centroCustoId: e.target.value }))}>
-                <option value="">Nenhum</option>
-                {cfgCentrosCusto.map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.descricao}</option>)}
-              </select>
-            </div>
+
             <div>
               <label className="form-label">Situação</label>
               <select className="form-input" value={form.situacao} onChange={e => setForm(p => ({ ...p, situacao: e.target.value as 'ativo' | 'inativo' }))}>
@@ -335,19 +328,17 @@ export default function EventosPage() {
         <div className="table-container">
           <table>
             <thead>
-              <tr><th style={{ width: 100 }}>Código</th><th>Descrição</th><th>Tipo</th><th>Plano de Contas</th><th>Centro de Custo</th><th>Situação</th><th>Ações</th></tr>
             </thead>
             <tbody>
               {filtered.map(e => {
                 const pc = cfgPlanoContas.find(p => p.id === e.planoContasId)
-                const cc = cfgCentrosCusto.find(c => c.id === e.centroCustoId)
                 return (
                   <tr key={e.id}>
                     <td><code style={{ fontSize: 12, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4, color: e.tipo === 'receita' ? '#34d399' : '#f87171' }}>{e.codigo}</code></td>
                     <td style={{ fontWeight: 600 }}>{e.descricao}</td>
                     <td><span className={`badge ${e.tipo === 'receita' ? 'badge-success' : 'badge-danger'}`}>{e.tipo === 'receita' ? '📈 Receita' : '📉 Despesa'}</span></td>
                     <td style={{ fontSize: 12 }}>{pc ? `${pc.codPlano} — ${pc.descricao}` : '—'}</td>
-                    <td style={{ fontSize: 12 }}>{cc ? `${cc.codigo} — ${cc.descricao}` : '—'}</td>
+
                     <td><span className={`badge ${e.situacao === 'ativo' ? 'badge-success' : 'badge-neutral'}`}>{e.situacao === 'ativo' ? '✓' : '✗'}</span></td>
                     <td>
                       <div style={{ display: 'flex', gap: 4 }}>

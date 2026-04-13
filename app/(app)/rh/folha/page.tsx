@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -55,7 +57,7 @@ function calcFolha(salario: number) {
 }
 
 export default function FolhaPagamentoPage() {
-  const { funcionarios } = useData()
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const hoje = new Date()
   const [mes, setMes] = useState(hoje.getMonth())
   const [ano, setAno] = useState(hoje.getFullYear())

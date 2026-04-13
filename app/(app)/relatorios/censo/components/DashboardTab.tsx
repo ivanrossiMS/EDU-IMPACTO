@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
 import {
@@ -46,9 +48,11 @@ function QuickAction({ label, icon, color, onClick, disabled }: any) {
 }
 
 export function DashboardTab({ onNavigate }: { onNavigate: (tab: any) => void }) {
-  const { alunos, turmas, funcionarios, censoPendencias, censoExports, censoConfig, mantenedores } = useData()
+  const { turmas = [], censoPendencias = [], censoExports = [], censoConfig, mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 

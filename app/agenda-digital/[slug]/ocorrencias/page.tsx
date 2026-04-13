@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, use } from 'react'
 import { AlertTriangle, AlertCircle, CheckCircle2, Shield, Heart } from 'lucide-react'
@@ -16,7 +18,7 @@ interface Ocorrencia {
 }
 
 export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const aluno = alunos.find(a => a.id === resolvedParams.slug)
 

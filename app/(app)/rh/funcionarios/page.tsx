@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo } from 'react'
 import { useData, Funcionario, newId } from '@/lib/dataContext'
@@ -7,7 +9,7 @@ import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
 import * as XLSX from 'xlsx'
 import {
   UserPlus, Download, Search, Pencil, Trash2, X, Check,
-  User, Briefcase, FileText, Phone, BadgeCheck, Building2, ChevronDown, Upload
+  User, Briefcase, FileText, Phone, BadgeCheck, Building2, ChevronDown, Upload, Shield
 } from 'lucide-react'
 
 const CARGOS = ['Professor', 'Professora', 'Coordenador(a) Pedagógico(a)', 'Diretor(a)', 'Vice-Diretor(a)', 'Secretária', 'Psicólogo(a)', 'Fonoaudiólogo(a)', 'Auxiliar Administrativo', 'Assistente de TI', 'Motorista', 'Auxiliar de Serviços Gerais', 'Nutricionista', 'Outro']
@@ -30,16 +32,19 @@ const BLANK_FORM = {
   tipoContrato: 'CLT', escolaridade: 'Graduação', cargaHoraria: 40,
   bonus: 0,
   pis: '', banco: '', agencia: '', conta: '', observacoes: '',
+  perfilSistema: '', // Perfil de acesso do sistema (configuracoes/usuarios)
 }
 
 type FormData = typeof BLANK_FORM
 
 export default function FuncionariosPage() {
-  const { funcionarios, setFuncionarios, mantenedores, logSystemAction } = useData()
+  const { mantenedores = [], logSystemAction, perfis } = useData();
+  const [funcionariosRaw, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const funcionarios = funcionariosRaw || [];
 
   // Unidades do sistema
   const unidades = useMemo(() =>
-    mantenedores.flatMap(m => m.unidades.map(u => u.nomeFantasia || u.razaoSocial)), [mantenedores])
+    (mantenedores || []).flatMap(m => (m.unidades || []).map((u: any) => u.nomeFantasia || u.razaoSocial)), [mantenedores])
 
   const [search, setSearch] = useState('')
   const [filtroSt, setFiltroSt] = useState('Todos')
@@ -50,6 +55,8 @@ export default function FuncionariosPage() {
   const [importModal, setImportModal] = useState(false)
   const [aba, setAba] = useState<'pessoal' | 'profissional' | 'documentos' | 'contato'>('pessoal')
   const [form, setForm] = useState<FormData>({ ...BLANK_FORM })
+  const [isSaving, setIsSaving] = useState(false)
+  const [userCreateResult, setUserCreateResult] = useState<{ok: boolean; msg: string} | null>(null)
 
   const set = (k: string, v: unknown) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -82,23 +89,79 @@ export default function FuncionariosPage() {
       pis: (f as any).pis || '', banco: (f as any).banco || '',
       agencia: (f as any).agencia || '', conta: (f as any).conta || '',
       observacoes: (f as any).observacoes || '',
+      perfilSistema: (f as any).perfilSistema || '',
     })
     setEditingId(f.id); setModal('edit'); setAba('pessoal')
   }
-  const closeModal = () => { setModal(null); setEditingId(null) }
+  const closeModal = () => { setModal(null); setEditingId(null); setUserCreateResult(null) }
 
-  const handleSave = () => {
-    if (!form.nome.trim()) return
+  const handleSave = async () => {
+    if (!form.nome.trim() || isSaving) return
+
+    // Outer Guard
+    if (modal === 'add' && funcionarios.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase())) {
+      alert('Já existe um funcionário com este nome!')
+      return
+    }
+
+    setIsSaving(true)
+    setUserCreateResult(null)
     const payload = { ...form }
+
     if (modal === 'add') {
       const generatedId = newId('F')
-      setFuncionarios(prev => [...prev, { ...payload, id: generatedId } as any])
-      logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
+      setFuncionarios(prev => {
+        const safePrev = prev || []
+        // Inner Guard
+        if (safePrev.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase() || f.id === generatedId)) return safePrev
+        const next = [...safePrev, { ...payload, id: generatedId } as any]
+        logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
+        return next
+      })
+
+      // --- Auto-create system user if perfilSistema is selected ---
+      const pSistema = (payload as any).perfilSistema
+      if (pSistema && form.email.trim()) {
+        try {
+          const sysUserPayload = {
+            id: newId('U'),
+            nome: form.nome.trim(),
+            email: form.email.trim(),
+            cargo: form.cargo,
+            perfil: pSistema,
+            status: 'ativo',
+            twofa: false,
+            ultimoAcesso: 'Nunca'
+          }
+          const res = await fetch('/api/configuracoes/usuarios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sysUserPayload)
+          })
+          if (res.ok) {
+            setUserCreateResult({ ok: true, msg: `✅ Usuário de acesso criado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
+            logSystemAction('RH (Funcionários)', 'Cadastro', `Acesso ao sistema criado para ${payload.nome}`, { registroId: sysUserPayload.id, nomeRelacionado: payload.nome, detalhesDepois: sysUserPayload })
+          } else {
+            const err = await res.json().catch(() => ({}))
+            if (res.status === 409 || err?.error?.toLowerCase?.().includes('duplicate') || err?.error?.toLowerCase?.().includes('already')) {
+              setUserCreateResult({ ok: false, msg: `⚠️ Já existe usuário com o e-mail ${form.email.trim()}. Acesso não duplicado.` })
+            } else {
+              setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro ao criar acesso: ${err?.error || res.status}` })
+            }
+          }
+        } catch (e: any) {
+          setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro de rede ao criar acesso.` })
+        }
+        setIsSaving(false)
+        // Don't close modal immediately — show result to user
+        return
+      }
     } else if (editingId) {
       const funcAntigo = funcionarios.find(f => f.id === editingId)
       setFuncionarios(prev => prev.map(f => f.id === editingId ? { ...f, ...payload } as any : f))
       logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
     }
+    setIsSaving(false)
     closeModal()
   }
 
@@ -261,6 +324,7 @@ export default function FuncionariosPage() {
                 <th>Salário</th>
                 <th>Admissão</th>
                 <th>Unidade</th>
+                <th>Perfil Sistema</th>
                 <th>Status</th>
                 <th>Ações</th>
               </tr>
@@ -285,6 +349,19 @@ export default function FuncionariosPage() {
                   <td style={{ fontWeight: 800, color: '#34d399', fontFamily: 'Outfit, sans-serif' }}>{formatCurrency(f.salario)}</td>
                   <td style={{ fontSize: 12 }}>{f.admissao}</td>
                   <td style={{ fontSize: 12 }}>{f.unidade || '—'}</td>
+                  <td>
+                    {(() => {
+                      const pMatch = (perfis || []).find((p: any) => p.nome === (f as any).perfilSistema)
+                      return (f as any).perfilSistema ? (
+                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, fontWeight: 700,
+                          background: `${pMatch?.cor || '#8b5cf6'}20`, color: pMatch?.cor || '#8b5cf6',
+                          display: 'inline-flex', alignItems: 'center', gap: 4
+                        }}>
+                          <Shield size={9} />{(f as any).perfilSistema}
+                        </span>
+                      ) : <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>—</span>
+                    })()}
+                  </td>
                   <td>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 100, fontWeight: 700, background: `${STATUS_COLOR[f.status] || '#6b7280'}20`, color: STATUS_COLOR[f.status] || '#6b7280' }}>{f.status}</span>
                   </td>
@@ -359,6 +436,52 @@ export default function FuncionariosPage() {
                     <select className="form-input" value={form.escolaridade} onChange={e => set('escolaridade', e.target.value)}>
                       {ESCOLARIDADES.map(s => <option key={s}>{s}</option>)}
                     </select>
+                  </div>
+
+                  {/* Perfil de acesso ao sistema */}
+                  <div style={{ gridColumn: '1/-1' }}>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Shield size={13} style={{ color: '#8b5cf6' }} />
+                      Perfil de Acesso ao Sistema
+                      <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', fontWeight: 400 }}>(Configurações → Usuários → Perfis)</span>
+                    </label>
+                    {(perfis || []).length === 0 ? (
+                      <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px dashed rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.04)', fontSize: 12, color: '#f59e0b' }}>
+                        ⚠ Nenhum perfil cadastrado. Acesse <strong>Configurações → Usuários → Perfis</strong> para criar.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {/* Option: sem perfil */}
+                        <label style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                          border: `1px solid ${!(form as any).perfilSistema ? 'rgba(99,102,241,0.4)' : 'hsl(var(--border-subtle))'}`,
+                          background: !(form as any).perfilSistema ? 'rgba(99,102,241,0.04)' : 'transparent',
+                        }}>
+                          <input type="radio" name="perfilSistema" checked={!(form as any).perfilSistema}
+                            onChange={() => set('perfilSistema', '')}
+                            style={{ accentColor: '#6366f1' }} />
+                          <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Sem acesso ao sistema</span>
+                        </label>
+                        {(perfis || []).map((p: any) => (
+                          <label key={p.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                            border: `1px solid ${(form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') + '60' : 'hsl(var(--border-subtle))'}`,
+                            background: (form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') + '10' : 'transparent',
+                            transition: 'all 0.15s',
+                          }}>
+                            <input type="radio" name="perfilSistema" checked={(form as any).perfilSistema === p.nome}
+                              onChange={() => set('perfilSistema', p.nome)}
+                              style={{ accentColor: p.cor || '#8b5cf6' }} />
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.cor || '#8b5cf6', flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: (form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') : 'hsl(var(--text-primary))' }}>{p.nome}</div>
+                              {p.descricao && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{p.descricao}</div>}
+                            </div>
+                            {(form as any).perfilSistema === p.nome && <Check size={13} color={p.cor || '#8b5cf6'} />}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -464,12 +587,43 @@ export default function FuncionariosPage() {
               )}
             </div>
 
+            {/* System user creation result banner */}
+            {userCreateResult && (
+              <div style={{
+                margin: '0 28px 0',
+                padding: '12px 16px',
+                borderRadius: 10,
+                background: userCreateResult.ok ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                border: `1px solid ${userCreateResult.ok ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)'}`,
+                fontSize: 13,
+                color: userCreateResult.ok ? '#10b981' : '#f59e0b',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10
+              }}>
+                <span style={{ flex: 1 }}>{userCreateResult.msg}</span>
+              </div>
+            )}
+
             {/* Footer */}
             <div style={{ padding: '16px 28px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'hsl(var(--bg-elevated))', flexShrink: 0 }}>
-              <button className="btn btn-secondary" onClick={closeModal}>Cancelar</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={!form.nome.trim()}>
-                <Check size={14} />{modal === 'add' ? 'Cadastrar Funcionário' : 'Salvar Alterações'}
-              </button>
+              {userCreateResult ? (
+                <button className="btn btn-primary" onClick={closeModal}>
+                  <Check size={14} /> Concluído — Fechar
+                </button>
+              ) : (
+                <>
+                  <button className="btn btn-secondary" onClick={closeModal} disabled={isSaving}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={handleSave} disabled={!form.nome.trim() || isSaving}
+                    style={{ opacity: isSaving ? 0.7 : 1 }}>
+                    {isSaving
+                      ? <><span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} /> Criando acesso...</>
+                      : <><Check size={14} />{modal === 'add' ? (form as any).perfilSistema ? 'Cadastrar + Criar Acesso' : 'Cadastrar Funcionário' : 'Salvar Alterações'}</>
+                    }
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

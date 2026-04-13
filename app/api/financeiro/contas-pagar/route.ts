@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const q = searchParams.get('q')
 
-  let query = supabaseServer.from('contas_pagar').select('*').order('vencimento')
+  let query = supabase.from('contas_pagar').select('*').order('vencimento')
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (q) query = query.or(`descricao.ilike.%${q}%,fornecedor.ilike.%${q}%`)
 
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const { id, codigo, descricao, categoria, valor, vencimento, status, fornecedor, numeroDocumento, planoContasId, ...rest } = body
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
       dados: rest,
     }
 
-    const { data, error } = await supabaseServer.from('contas_pagar').upsert(row).select().single()
+    const { data, error } = await supabase.from('contas_pagar').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data, { status: 201 })
   } catch (e: any) {
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const supabase = await createProtectedClient();
   // Bulk update or single update via query param ?id=
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
@@ -68,7 +71,7 @@ export async function PUT(request: Request) {
       dados: rest, updated_at: new Date().toISOString(),
     }
 
-    const { data, error } = await supabaseServer.from('contas_pagar').update(row).eq('id', id).select().single()
+    const { data, error } = await supabase.from('contas_pagar').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data)
   } catch (e: any) {

@@ -58,7 +58,7 @@ function IgnoreModal({ pendencia, onClose, onSave }: { pendencia: CensoPendencia
 }
 
 export function PendenciasTab() {
-  const { censoPendencias, setCensoPendencias, censoConfig, logCensoAction } = useData()
+  const { censoPendencias = [], setCensoPendencias, censoConfig, logCensoAction } = useData()
   const [search, setSearch]         = useState('')
   const [filterTipo, setFilterTipo] = useState<CensoPendenciaTipo | ''>('')
   const [filterStatus, setFilterStatus] = useState<CensoPendenciaStatus | ''>('')

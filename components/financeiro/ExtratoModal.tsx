@@ -8,6 +8,7 @@ import {
   BarChart2, FileSpreadsheet, Send, Shield, Zap, Search, ChevronRight, Check
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import { useApiQuery } from '@/hooks/useApi'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -143,10 +144,46 @@ function CheckItem({ label, checked, onClick }: any) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosResp, mat, turmas, cfgEventos }: ExtratoModalProps) {
+export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacyParcelas, todosResp, mat, turmas, cfgEventos }: ExtratoModalProps) {
   const hoje = new Date().toISOString().slice(0, 10)
   const anoAtual = new Date().getFullYear()
   const { mantenedores } = useData()
+
+  // ── Query O(1) Banco Relacional ────────────────────────────────────────────
+  // Tenta puxar do banco SQL diretamente (Garantia ACID de Pagamento Vivo). 
+  // Se o aluno ainda não foi salvo (aluno.id é um Rascunho), exibe o legacyParcelas da RAM.
+  const isDraft = !aluno || !('id' in aluno) || String((aluno as any).id).startsWith('ALU')
+  
+  const alunoId = String((aluno as any)?.id || '')
+  const shouldFetch = aberto && !isDraft && alunoId.length > 0
+  const { data: fetchResult, isLoading: loadingDB } = useApiQuery(
+     ['fin-parcelas', alunoId],
+     '/api/financeiro/parcelas',
+     shouldFetch ? { aluno_id: alunoId, limit: 1000 } : undefined
+  )
+
+
+  const parcelas = useMemo(() => {
+     if (isDraft) return legacyParcelas || []
+     if (fetchResult && fetchResult.data) {
+         // Converte as parcelas do Banco Relacional no Formato que o Premium Modal Entende!
+         return fetchResult.data.map((p: any) => ({
+             ...p.dados_legados,
+             status: p.status, // Sobrescreve status do JSON pelo status REAL DO BANCO
+             valorFinal: p.status === 'pago' ? p.valor_pago : (p.valor_original - p.desconto + p.juros + p.multa),
+             dtPagto: p.data_pagamento,
+             valor: p.valor_original,
+             evento: p.fin_eventos?.tipo,
+             vencimento: p.vencimento ? p.vencimento.split('-').reverse().join('/') : p.dados_legados?.vencimento,
+             eventoId: p.evento_id,
+             parcelaId: p.id,
+             num: p.numero_parcela,
+             competencia: p.dados_legados?.competencia || `${p.vencimento?.slice(5,7)}/${p.vencimento?.slice(0,4)}`
+         })) as Parcela[]
+     }
+     return legacyParcelas || []
+  }, [fetchResult, legacyParcelas, isDraft])
+  // ───────────────────────────────────────────────────────────────────────────
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'setup' | 'result'>('setup')
@@ -235,7 +272,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
   const parcelasFiltradas = useMemo(() => {
     return parcelas.filter(p => {
       // Ignorar eventos que foram formalmente excluídos da vida do aluno
-      if (p.dataExclusao || p.status === 'excluido') return false
+      if (p.dataExclusao || p.status === ('excluido' as any)) return false
 
       // Para IR, trava de segurança governamental: NUNCA exibir não pagos
       if (tipoDoc === 'ir' && p.status !== 'pago') return false
@@ -263,7 +300,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
   const totalValorOriginal = parcelasFiltradas.reduce((s, p) => s + p.valor, 0)
   const totalDesconto = parcelasFiltradas.reduce((s, p) => s + (p.desconto || 0), 0)
   const totalEncargosTotais = parcelasFiltradas.reduce((s, p) => s + (p.juros || 0) + (p.multa || 0), 0)
-  const totalPagosCalc = parcelasFiltradas.filter(p => p.status === 'pago').reduce((s, p) => s + p.valorFinal, 0)
+  const totalPagosCalc = parcelasFiltradas.filter(p => p.status === 'pago').reduce((s, p) => s + ((p as any).totalPago || Math.max(0, p.valor - (p.desconto || 0) + (p.juros || 0) + (p.multa || 0))), 0)
   const totalAbertosCalc = parcelasFiltradas.filter(p => p.status !== 'pago' && p.status !== 'cancelado').reduce((s, p) => s + p.valorFinal, 0)
 
   const parcelasAgrupadas = useMemo(() => {
@@ -550,7 +587,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                       
                       <div style={{ background: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyItems: 'center', justifyContent: 'space-between', alignItems: 'center' }}>
                          <div style={{ fontWeight: 800, fontSize: 12, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{grupo}</div>
-                         <div style={{ fontWeight: 900, fontSize: 14, color: '#0f172a' }}>R$ {fmtMoeda(items.reduce((s, p) => s + p.valorFinal, 0))}</div>
+                         <div style={{ fontWeight: 900, fontSize: 14, color: '#0f172a' }}>R$ {fmtMoeda(items.reduce((s, p) => s + (p.status==='pago' ? ((p as any).totalPago || Math.max(0, p.valor - (p.desconto || 0) + (p.juros || 0) + (p.multa || 0))) : p.valorFinal), 0))}</div>
                       </div>
 
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -588,7 +625,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas, todosR
                                     {jm > 0 && <div style={{ color: '#dc2626', marginTop: 2 }}>Enc: +R$ {fmtMoeda(jm)}</div>}
                                  </td>
                                  <td style={{ padding: '12px 16px', fontSize: 11, color: '#334155', borderBottom: idx===items.length-1?'none':'1px solid #f1f5f9', verticalAlign: 'top', textAlign: 'right' }}>
-                                    <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>R$ {fmtMoeda(p.valorFinal)}</div>
+                                    <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a' }}>R$ {fmtMoeda(p.status==='pago' ? ((p as any).totalPago || Math.max(0, p.valor - (p.desconto || 0) + (p.juros || 0) + (p.multa || 0))) : p.valorFinal)}</div>
                                  </td>
                                </tr>
                              )

@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
 
 # vercel
 .vercel
@@ -53,4 +54,37 @@ ts_error.log
 
 # Netlify
 .netlify/
+
+# Fix scripts (gerados por automação — não versionar)
+fix*.js
+fix-*.js
+wipe.js
+wipe.mjs
+refactor*.js
+refactor*.py
+gen_profiles.js
+force_update*.js
+check_logs.js
+
+# Backups e arquivos recuperados
+*.backup*.tsx
+recovered_page.tsx
+tmp_git_page.tsx
+backup.zip
+page.backup*.tsx
+diff_output.txt
+
+# Arquivos temporários de diagnóstico
+err.html
+trace.txt
+tsc-errors.txt
+ts_errors.txt
+sys-logs-error.txt
+scr*.png
+tmp-alunos.json
+tmp-users.json
+tmp-calls.txt
+tmp-full-search.txt
+tmp-upda.txt
+tmp-grep.txt
 

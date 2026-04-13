@@ -28,8 +28,7 @@ const ALL_CONFIG_CHAVES = [
   'cfgTurnos', 'cfgSituacaoAluno', 'cfgGruposAlunos',
   'cfgDisciplinas', 'cfgNiveisEnsino', 'cfgTiposOcorrencia', 'cfgEsquemasAvaliacao',
   'cfgCentrosCusto', 'cfgMetodosPagamento', 'cfgCartoes', 'cfgEventos',
-  'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas',
-  'cfgTiposDocumento', 'cfgConvenios', 'cfgGruposDRE', 'cfgCalendarioLetivo',
+  'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas', 'cfgTiposDocumento'
 ]
 
 /**
@@ -183,13 +182,16 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
     }
   }, [chave])
 
+  // Keep a ref to the latest data to allow synchronous derivation without React's setState updater
+  const latestData = useRef<T[]>(data);
+  useEffect(() => { latestData.current = data; }, [data]);
+
   const setData = useCallback((valOrFn: T[] | ((prev: T[]) => T[])) => {
-    setDataState(prev => {
-      const next = typeof valOrFn === 'function' ? (valOrFn as (p: T[]) => T[])(prev) : valOrFn
-      persist(next)
-      return next
-    })
-  }, [persist])
+    const next = typeof valOrFn === 'function' ? (valOrFn as (p: T[]) => T[])(latestData.current) : valOrFn;
+    latestData.current = next;
+    setDataState(next);
+    persist(next);
+  }, [persist]);
 
   return { data, setData, loading, error }
 }

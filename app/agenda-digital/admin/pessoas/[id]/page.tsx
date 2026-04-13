@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useParams, useRouter } from 'next/navigation'
@@ -9,7 +11,8 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 export default function ADAdminPessoaDetail() {
   const { id } = useParams()
   const router = useRouter()
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { adAlert } = useAgendaDigital()
 
   const aluno = (alunos || []).find(a => a.id === id)

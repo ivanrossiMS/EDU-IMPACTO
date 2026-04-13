@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useParams, useRouter } from 'next/navigation'
@@ -13,7 +15,8 @@ interface SysUser { id: string; nome: string; email: string; cargo: string; stat
 export default function ADAdminTurmaDetail() {
   const { id } = useParams()
   const router = useRouter()
-  const { turmas, alunos } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { adAlert, adConfirm } = useAgendaDigital()
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   

@@ -124,7 +124,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
 }
 
 export default function CalendarioPage() {
-  const { eventosAgenda, setEventosAgenda } = useData()
+  const { eventosAgenda = [], setEventosAgenda } = useData()
   const [gruposManuais] = useLocalStorage<{nome: string}[]>('ad_grupos_manuais', [])
   const turmasNomes = gruposManuais.map(t => t.nome)
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])

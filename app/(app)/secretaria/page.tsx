@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useRef, useEffect } from 'react'
 import { FileText, Download, Search, Plus, CheckCircle, Clock, AlertCircle, Archive, Trash2, Save, X, FolderOpen, ChevronRight, Users, FileCheck, Lock, RefreshCw } from 'lucide-react'
@@ -149,7 +151,8 @@ function ArquivoModal({ cat, files, onClose }: { cat: typeof ARQUIVO_CATS[0]; fi
 
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function SecretariaPage() {
-  const { alunos, funcionarios } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const [tab, setTab] = useState<'solicitacoes' | 'docs' | 'arquivo'>('solicitacoes')
   const [solicitacoes, setSolicitacoes] = useLocalStorage<Solicitacao[]>('edu-secretaria-solicitacoes', [])
   const [search, setSearch] = useState('')

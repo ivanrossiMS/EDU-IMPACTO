@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useData, FornecedorCad, newId } from '@/lib/dataContext'
 import { Plus, Search, Trash2, Pencil, Check, Building2, X, Layers, Upload, Download } from 'lucide-react'
@@ -16,7 +18,8 @@ const BLANK: Omit<FornecedorCad, 'id' | 'createdAt'> = {
 }
 
 export default function FornecedoresPage() {
-  const { fornecedoresCad, setFornecedoresCad, contasPagar, cfgPlanoContas } = useData()
+  const { fornecedoresCad = [], setFornecedoresCad, cfgPlanoContas } = useData();
+  const [contasPagar, setContasPagar] = useSupabaseArray<any>('contas-pagar');
   const [search, setSearch] = useState('')
   const [filterSit, setFilterSit] = useState('Todos')
   const [showForm, setShowForm] = useState(false)

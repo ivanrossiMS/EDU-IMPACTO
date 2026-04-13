@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -23,7 +24,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (planoContasId !== undefined) row.plano_contas_id = planoContasId
     
     // The rest falls into "dados" field dynamically. We fetch the old one to preserve.
-    const { data: oldData } = await supabaseServer.from('contas_pagar').select('dados').eq('id', id).single()
+    const { data: oldData } = await supabase.from('contas_pagar').select('dados').eq('id', id).single()
     const currentDados = oldData?.dados || {}
     
     row.dados = {
@@ -44,7 +45,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     
     row.updated_at = new Date().toISOString()
 
-    const { data, error } = await supabaseServer.from('contas_pagar').update(row).eq('id', id).select().single()
+    const { data, error } = await supabase.from('contas_pagar').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(data)
   } catch (e: any) {
@@ -53,11 +54,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createProtectedClient();
   try {
     const { id } = await params
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-    const { error } = await supabaseServer.from('contas_pagar').delete().eq('id', id)
+    const { error } = await supabase.from('contas_pagar').delete().eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     
     return NextResponse.json({ success: true })

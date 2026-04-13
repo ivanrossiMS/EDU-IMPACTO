@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData, Advertencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
@@ -41,7 +43,8 @@ const BLANK: Omit<Advertencia, 'id' | 'createdAt'> = {
 }
 
 export default function AdvertenciasPage() {
-  const { advertencias, setAdvertencias, funcionarios } = useData()
+  const { advertencias = [], setAdvertencias } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
 
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
@@ -55,7 +58,7 @@ export default function AdvertenciasPage() {
   const sf = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }))
 
   const funcsFiltrados = useMemo(() =>
-    funcionarios.filter(f =>
+    (funcionarios || []).filter(f =>
       (f.nome || '').toLowerCase().includes(funcSearch.toLowerCase()) ||
       (f.cargo || '').toLowerCase().includes(funcSearch.toLowerCase())
     ).slice(0, 8),
@@ -98,18 +101,18 @@ export default function AdvertenciasPage() {
 
   // Métricas
   const mesAtual = new Date().toISOString().slice(0, 7)
-  const doMes = advertencias.filter(a => a.data.startsWith(mesAtual))
-  const pendCiencia = advertencias.filter(a => !a.ciente && a.status === 'emitida')
-  const graves = advertencias.filter(a => a.tipo === 'suspensao' || a.tipo === 'demissao_causa')
+  const doMes = (advertencias || []).filter(a => a.data.startsWith(mesAtual))
+  const pendCiencia = (advertencias || []).filter(a => !a.ciente && a.status === 'emitida')
+  const graves = (advertencias || []).filter(a => a.tipo === 'suspensao' || a.tipo === 'demissao_causa')
   const reincidentes = (() => {
     const map: Record<string, number> = {}
-    advertencias.forEach(a => { map[a.funcionarioId] = (map[a.funcionarioId] || 0) + 1 })
+    ;(advertencias || []).forEach(a => { map[a.funcionarioId] = (map[a.funcionarioId] || 0) + 1 })
     return Object.values(map).filter(c => c >= 2).length
   })()
 
   // Filtros
   const filtered = useMemo(() => {
-    let list = advertencias
+    let list = (advertencias || [])
     if (filtroTipo !== 'todos') list = list.filter(a => a.tipo === filtroTipo)
     if (filtroStatus !== 'todos') list = list.filter(a => a.status === filtroStatus)
     if (busca) {
@@ -123,7 +126,7 @@ export default function AdvertenciasPage() {
     return [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   }, [advertencias, filtroTipo, filtroStatus, busca])
 
-  const viewAdv = viewId ? advertencias.find(a => a.id === viewId) : null
+  const viewAdv = viewId ? (advertencias || []).find(a => a.id === viewId) : null
 
   // ── VIEW DETAIL MODAL ──────────────────────────────────────────────────────
   if (viewAdv) {
@@ -229,7 +232,7 @@ export default function AdvertenciasPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Advertências de Funcionários</h1>
-          <p className="page-subtitle">Registro e controle disciplinar de colaboradores • {advertencias.length} registro(s)</p>
+          <p className="page-subtitle">Registro e controle disciplinar de colaboradores • {(advertencias || []).length} registro(s)</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Nova Advertência</button>
       </div>
@@ -249,7 +252,7 @@ export default function AdvertenciasPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 22 }}>
         {[
-          { label: 'Total', value: advertencias.length, color: '#3b82f6', icon: '📋', sub: 'todas as advertências' },
+          { label: 'Total', value: (advertencias || []).length, color: '#3b82f6', icon: '📋', sub: 'todas as advertências' },
           { label: 'Este mês', value: doMes.length, color: '#8b5cf6', icon: '📅', sub: 'no período atual' },
           { label: 'Aguard. ciência', value: pendCiencia.length, color: '#f59e0b', icon: '⚠️', sub: 'precisam assinatura' },
           { label: 'Graves', value: graves.length, color: '#dc2626', icon: '⛔', sub: 'suspensão + justa causa' },
@@ -270,8 +273,8 @@ export default function AdvertenciasPage() {
       {/* Distribuição por tipo */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 22 }}>
         {(Object.entries(TIPO_CONFIG) as [TipoAdv, typeof TIPO_CONFIG[TipoAdv]][]).map(([tipo, cfg]) => {
-          const count = advertencias.filter(a => a.tipo === tipo).length
-          const pct = advertencias.length > 0 ? (count / advertencias.length) * 100 : 0
+          const count = (advertencias || []).filter(a => a.tipo === tipo).length
+          const pct = (advertencias || []).length > 0 ? (count / (advertencias || []).length) * 100 : 0
           return (
             <button key={tipo} onClick={() => setFiltroTipo(filtroTipo === tipo ? 'todos' : tipo)}
               style={{ padding: '14px 16px', background: filtroTipo === tipo ? cfg.bg : 'hsl(var(--bg-elevated))', border: `1px solid ${filtroTipo === tipo ? cfg.border : 'hsl(var(--border-subtle))'}`, borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.2s' }}>
@@ -303,7 +306,7 @@ export default function AdvertenciasPage() {
         {(busca || filtroTipo !== 'todos' || filtroStatus !== 'todos') && (
           <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: '#f87171' }} onClick={() => { setBusca(''); setFiltroTipo('todos'); setFiltroStatus('todos') }}>✕ Limpar</button>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'hsl(var(--text-muted))' }}>{filtered.length}/{advertencias.length} registro(s)</span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'hsl(var(--text-muted))' }}>{filtered.length}/{(advertencias || []).length} registro(s)</span>
       </div>
 
       {/* Timeline de advertências */}
@@ -311,12 +314,12 @@ export default function AdvertenciasPage() {
         <div className="card" style={{ padding: '52px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Shield size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
-            {advertencias.length === 0 ? 'Nenhuma advertência registrada' : 'Nenhuma advertência com esses filtros'}
+            {(advertencias || []).length === 0 ? 'Nenhuma advertência registrada' : 'Nenhuma advertência com esses filtros'}
           </div>
           <div style={{ fontSize: 13, marginBottom: 20 }}>
-            {advertencias.length === 0 ? 'Registre advertências para manter o histórico disciplinar dos colaboradores.' : 'Tente ajustar os filtros acima.'}
+            {(advertencias || []).length === 0 ? 'Registre advertências para manter o histórico disciplinar dos colaboradores.' : 'Tente ajustar os filtros acima.'}
           </div>
-          {advertencias.length === 0 && (
+          {(advertencias || []).length === 0 && (
             <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Registrar primeiro caso</button>
           )}
         </div>
@@ -429,7 +432,7 @@ export default function AdvertenciasPage() {
                     </div>
                   )}
                 </div>
-                {funcionarios.length === 0 && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>⚠ Cadastre funcionários em RH → Funcionários para busca automática.</div>}
+                {(funcionarios || []).length === 0 && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>⚠ Cadastre funcionários em RH → Funcionários para busca automática.</div>}
               </div>
 
               {/* Cargo + Departamento */}

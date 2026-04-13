@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useRef, useEffect } from 'react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -9,7 +11,7 @@ import { getInitials } from '@/lib/utils'
 
 export default function ColaboradorConversasPage() {
   const { messages, setMessages, chatsList, setChatsList } = useAgendaDigital()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { currentUser } = useApp()
 
   const [chats, setChats] = useState<any[]>([])

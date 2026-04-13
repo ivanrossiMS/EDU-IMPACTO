@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
@@ -20,7 +22,8 @@ export default function EditarAdiantamento() {
   const router = useRouter()
   const params = useParams()
   const idStr = params.id as string
-  const { funcionarios, adiantamentos, setAdiantamentos } = useData()
+  const { adiantamentos = [], setAdiantamentos } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
   const item = adiantamentos.find(a => a.id === idStr)
   const ativos = funcionarios.filter(f => f.status === 'ativo')

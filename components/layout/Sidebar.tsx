@@ -111,8 +111,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
 
       { label: 'Emissão de NF', href: '/financeiro/nf', icon: <Receipt size={16} /> },
       { label: 'Banking & PIX', href: '/financeiro/banking', icon: <PiggyBank size={16} /> },
-      { label: 'DRE Gerencial', href: '/financeiro/dre', icon: <BarChart3 size={16} /> },
-      { label: 'Centro de Custos', href: '/financeiro/custos', icon: <LineChart size={16} /> },
+      { label: 'Validação de Recibo', href: '/financeiro/validacao-recibo', icon: <ShieldCheck size={16} />, badge: 'NOVO', badgeColor: 'green' },
     ],
   },
   {
@@ -160,6 +159,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     defaultOpen: false,
     items: [
+      { label: 'Demonstração Financeira', href: '/administrativo/demonstracao-financeira', icon: <BarChart3 size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'Fornecedores',          href: '/administrativo/fornecedores', icon: <Building2 size={16} /> },
       { label: 'Abertura de Caixa',      href: '/administrativo/caixa',       icon: <DollarSign size={16} /> },
       { label: 'Patrimônio',             href: '/administrativo/patrimonio',  icon: <Package size={16} /> },
@@ -185,7 +185,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       {
         label: 'Config. Financeiro', icon: <DollarSign size={16} />,
         children: [
-          { label: 'Centro de Custo', href: '/configuracoes/financeiro/centro-custo', icon: <Layers size={14} /> },
           { label: 'Cartões', href: '/configuracoes/financeiro/cartoes', icon: <CreditCard size={14} /> },
           { label: 'Eventos Financeiros', href: '/configuracoes/financeiro/eventos', icon: <Tag size={14} /> },
           { label: 'Grupo de Descontos', href: '/configuracoes/financeiro/grupo-desconto', icon: <Percent size={14} /> },
@@ -193,7 +192,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
           { label: 'Padrão de Pagamentos', href: '/configuracoes/financeiro/padrao-pagamento', icon: <DollarSign size={14} /> },
           { label: 'Plano de Contas', href: '/configuracoes/financeiro/plano-contas', icon: <FileText size={14} /> },
           { label: 'Tipos de Documentos', href: '/configuracoes/financeiro/tipo-documentos', icon: <FileText size={14} /> },
-          { label: 'Configuração da DRE', href: '/configuracoes/financeiro/dre-config', icon: <BarChart3 size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
         ],
       },
     ],
@@ -566,8 +564,11 @@ export function Sidebar() {
   const visibleGroups = ALL_NAV_GROUPS.map(g => {
     // 1. Module active global check
     if (g.moduleKey && activeModules[g.moduleKey] === false) return null
-    // 2. RoleKey exact match override
-    if (g.roleKey && g.roleKey !== currentUserPerfil) return null
+    // 2. RoleKey: only restrict if user is NOT Diretor Geral
+    if (g.roleKey && g.roleKey !== currentUserPerfil && !isDiretor) return null
+
+    // 3. Diretor Geral sees ALL items in ALL groups
+    if (isDiretor) return g
 
     // 3. Permissions checks
     const modKey = g.moduleKey || toSlug(g.title)
@@ -581,20 +582,20 @@ export function Sidebar() {
       if (item.children) {
         const filteredChildren = item.children.filter(child => {
           const childKey = child.href || toSlug(child.label)
-          return isPrincipal || userPerms.includes(childKey)
+          return isPrincipal || hasExplicitGroupAccess || userPerms.includes(childKey)
         })
         if (filteredChildren.length > 0) {
           filteredGroup.items.push({ ...item, children: filteredChildren })
         }
       } else {
         const itemKey = item.href || toSlug(item.label)
-        if (isPrincipal || userPerms.includes(itemKey)) {
+        if (isPrincipal || hasExplicitGroupAccess || userPerms.includes(itemKey)) {
           filteredGroup.items.push(item)
         }
       }
     })
 
-    return filteredGroup.items.length > 0 || (g.href && (isPrincipal || userPerms.includes(modKey))) ? filteredGroup : null
+    return filteredGroup.items.length > 0 || (g.href && (isPrincipal || hasExplicitGroupAccess || userPerms.includes(modKey))) ? filteredGroup : null
   }).filter(Boolean) as NavGroup[]
 
   type MergedGroup = { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean; href?: string; icon?: React.ReactNode; target?: string }

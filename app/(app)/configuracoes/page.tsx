@@ -135,48 +135,6 @@ export default function ConfiguracoesPage() {
           {/* ── APARÊNCIA ── */}
           {section === 'aparencia' && (
             <>
-              {/* Logo — persisted to localStorage */}
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🎨 Logo & Identidade Visual</div>
-                <div style={{ fontWeight: 400, fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 16 }}>
-                  A logo aparece na <strong>sidebar</strong> (canto superior) e na <strong>tela de login</strong>. Ela é salva no navegador (localStorage).
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, alignItems: 'start' }}>
-                  <div>
-                    <div style={{ width: 200, height: 120, borderRadius: 12, background: 'hsl(var(--bg-elevated))', border: '2px dashed hsl(var(--border-default))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden', cursor: 'pointer' }}
-                      onClick={() => logoInputRef.current?.click()}>
-                      {logoDataUrl ? (
-                        <img src={logoDataUrl} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                      ) : (
-                        <div style={{ textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-                          <Upload size={24} style={{ marginBottom: 6 }} />
-                          <div style={{ fontSize: 12 }}>Clique para carregar</div>
-                        </div>
-                      )}
-                    </div>
-                    <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
-                    <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={() => logoInputRef.current?.click()}>
-                      <Upload size={12} /> Carregar logo
-                    </button>
-                    {logoDataUrl && (
-                      <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 6, justifyContent: 'center', color: '#f87171' }} onClick={() => setLogoDataUrl(null)}>
-                        <Trash2 size={11} /> Remover
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <label className="form-label">Nome exibido no sistema</label>
-                      <input className="form-input" value={schoolName} onChange={e => setSchoolName(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="form-label">Slogan / tagline</label>
-                      <input className="form-input" value={slogan} onChange={e => setSlogan(e.target.value)} placeholder="Ex: Educação de excelência" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Colors + Theme */}
               <div className="card" style={{ padding: '24px' }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>🖌 Paleta de Cores & Tema</div>
@@ -230,53 +188,6 @@ export default function ConfiguracoesPage() {
                 </div>
               </div>
 
-              {/* Modules */}
-              <div className="card" style={{ padding: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>📦 Módulos Ativos</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                      {isDiretorGeral ? 'Ativar/desativar remove ou adiciona a seção da sidebar imediatamente.' : 'Módulos gerenciados pelo Diretor Geral.'}
-                    </div>
-                  </div>
-                  {/* Simulate perfil switch — for demo purposes */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Perfil ativo:</span>
-                    <select className="form-input" style={{ fontSize: 12, padding: '4px 8px', height: 32 }}
-                      value={currentUserPerfil} onChange={e => setCurrentUserPerfil(e.target.value)}>
-                      {['Diretor Geral','Coordenador','Secretária','Professor','Financeiro','Família'].map(p => (
-                        <option key={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {!isDiretorGeral && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 10, marginBottom: 14, fontSize: 12 }}>
-                    <span style={{ fontSize: 16 }}>🔒</span>
-                    <span style={{ color: '#fbbf24', fontWeight: 600 }}>Apenas o perfil <strong>Diretor Geral</strong> pode ativar ou desativar módulos.</span>
-                  </div>
-                )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-                  {MODULES_CONFIG.map(m => {
-                    const ativo = activeModules[m.key] !== false
-                    return (
-                      <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: ativo ? 'rgba(59,130,246,0.06)' : 'hsl(var(--bg-elevated))', borderRadius: 8, border: `1px solid ${ativo ? 'rgba(59,130,246,0.2)' : 'hsl(var(--border-subtle))'}`, transition: 'all 0.2s' }}>
-                        <span style={{ fontSize: 18, opacity: ativo ? 1 : 0.4 }}>{m.icon}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, flex: 1, color: ativo ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))' }}>{m.nome}</span>
-                        {isDiretorGeral ? (
-                          <div onClick={() => setModuleActive(m.key, !ativo)} style={{ width: 40, height: 22, borderRadius: 100, background: ativo ? '#3b82f6' : 'hsl(var(--bg-overlay))', position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0 }}>
-                            <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: ativo ? 21 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
-                          </div>
-                        ) : (
-                          <span className={`badge ${ativo ? 'badge-success' : 'badge-neutral'}`} style={{ fontSize: 10 }}>
-                            {ativo ? '✓ Ativo' : 'Inativo'}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
             </>
           )}
 

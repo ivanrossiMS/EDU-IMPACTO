@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useEffect } from 'react'
 import { 
@@ -11,7 +13,7 @@ import { useRef } from 'react'
 
 export default function ADAdminConversas() {
   const { chatsList, setChatsList, messages, setMessages, adAlert, adConfirm } = useAgendaDigital()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [activeChat, setActiveChat] = useState<number | string | null>("1")
   const [inputMsg, setInputMsg] = useState('')
   const [showNewChatModal, setShowNewChatModal] = useState(false)

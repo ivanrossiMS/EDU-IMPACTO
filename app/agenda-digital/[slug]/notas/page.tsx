@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useParams } from 'next/navigation'
@@ -7,7 +9,7 @@ import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, BookOp
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 
 export default function ADNotasPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const aluno = alunos.find(a => a.id === resolvedParams.slug)
 

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useEffect, useMemo } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
@@ -443,7 +445,7 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ChamadasContent() {
   const { activeCalls, confirmPickup, cancelCall, recallStudent, revertCall, callStudent } = useSaida()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const isMobile = useIsMobile()
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])

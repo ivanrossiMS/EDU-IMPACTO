@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useCallback, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
 import { type CensoPendencia } from '@/lib/dataContext'
@@ -337,12 +339,9 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 
 // ─── COMPONENTE ──────────────────────────────────────────────────────────────
 export function ValidadorTab() {
-  const {
-    alunos, turmas, funcionarios, mantenedores, censoConfig,
-    setCensoPendencias, censoPendencias, logCensoAction,
-    censoAlunosData, censoTurmasData, censoProfsData,
-    transferencias, frequencias,
-  } = useData()
+  const { turmas = [], mantenedores = [], censoConfig, setCensoPendencias, censoPendencias = [], logCensoAction, censoAlunosData, censoTurmasData, censoProfsData, transferencias = [], frequencias = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
 
   const [running, setRunning]       = useState(false)
   const [phase, setPhase]           = useState(0)          // índice da fase atual
@@ -357,7 +356,7 @@ export function ValidadorTab() {
   const handleValidar = useCallback(async () => {
     setRunning(true); setDone(false); setProgress(0); setPhase(0); setLastResult([])
     
-    const todasUnidades = mantenedores.flatMap(m => m.unidades)
+    const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
     const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
     const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
     const man = mantenedores.find(m => m.unidades.some(u => u.id === escola?.id)) || mantenedores[0]

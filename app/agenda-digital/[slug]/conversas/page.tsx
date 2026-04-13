@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useRef, useEffect, use } from 'react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -10,7 +12,8 @@ import { getInitials } from '@/lib/utils'
 export default function ADConversasPage({ params }: { params: Promise<{ slug: string }>}) {
   const { messages, setMessages, chatsList, setChatsList } = useAgendaDigital()
   const resolvedParams = use(params as Promise<{ slug: string }>)
-  const { turmas, alunos } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { currentUser } = useApp()
 
   const aluno = alunos.find(a => a.id === resolvedParams.slug)

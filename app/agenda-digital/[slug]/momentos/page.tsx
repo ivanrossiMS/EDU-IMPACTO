@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
@@ -10,7 +12,7 @@ import { getInitials } from '@/lib/utils'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   const { momentosFeed } = useAgendaDigital()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
   const { currentUser } = useApp()

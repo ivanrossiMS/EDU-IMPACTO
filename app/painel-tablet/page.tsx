@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useCallback, useMemo, useRef } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
@@ -306,7 +308,7 @@ function StudentCard({
 function PainelTabletContent() {
   const isMobile = useIsMobile()
   const { config, callStudent, blockAttempt, recallStudent, activeCalls } = useSaida()
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   const [mode,              setMode]             = useState<'idle' | 'rfid' | 'manual'>('idle')
   const [rfidCode,          setRfidCode]         = useState<string | undefined>()

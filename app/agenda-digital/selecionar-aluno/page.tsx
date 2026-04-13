@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -9,7 +11,9 @@ import { useEffect } from 'react'
 import { Bell, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
 
 export default function SelecionarAluno() {
-  const { alunos, titulos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
   const { currentUser } = useApp()
   const router = useRouter()
 

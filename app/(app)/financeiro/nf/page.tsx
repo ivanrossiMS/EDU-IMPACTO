@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo } from 'react'
 import { useData, NotaFiscal, UnidadeFiscal } from '@/lib/dataContext'
 import { FileText, Plus, Send, CheckCircle, Clock, XCircle, Download, Settings, Search, AlertCircle, X, Filter, Tag, Check, Pencil, Trash2, ShieldCheck } from 'lucide-react'
@@ -17,7 +19,9 @@ const STATUS_CONFIG: Record<string, { label: string, color: string, badge: strin
 }
 
 export default function NFePage() {
-  const { titulos, setTitulos, alunos, setAlunos, cfgEventos, unidadesFiscais, setUnidadesFiscais, notasFiscais, setNotasFiscais } = useData()
+  const { cfgEventos, unidadesFiscais = [], setUnidadesFiscais, notasFiscais = [], setNotasFiscais } = useData();
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [tab, setTab] = useState<'emissao' | 'historico' | 'config'>('emissao')
 
   // ── Filtros da aba Emissão ──────────────────────────────────────────

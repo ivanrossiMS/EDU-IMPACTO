@@ -1,4 +1,7 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { useApiQuery } from '@/hooks/useApi';
+
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useData, MovimentacaoManual, TipoDocumento, newId } from '@/lib/dataContext'
 import {
@@ -20,7 +23,6 @@ const BLANK_FORM: Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'> = {
   valor: 0, planoContasId: '', planoContasDesc: '',
   tipoDocumento: 'NF' as TipoDocumento, numeroDocumento: '', dataEmissao: new Date().toISOString().slice(0, 10),
   compensadoBanco: false, observacoes: '',
-  centroCustoId: '', centroCustoDesc: '',
 }
 
 // ─── Modal de lançamento ────────────────────────────────────────────
@@ -33,19 +35,17 @@ interface FormModalProps {
   caixas: { id: string; label: string; operador: string }[]
   fornecedores: { id: string; nome: string }[]
   planosContas: { id: string; codPlano: string; descricao: string; grupoConta?: string }[]
-  centrosCusto: { id: string; codigo: string; descricao: string; tipo: string }[]
   metodosPagamento: { id: string; nome: string }[]
   tiposDocumento: string[]
 }
 
-function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, fornecedores, planosContas, centrosCusto, metodosPagamento, tiposDocumento }: FormModalProps) {
+function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, fornecedores, planosContas, metodosPagamento, tiposDocumento }: FormModalProps) {
   const [form, setForm] = useState<Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'>>(initial ? {
     caixaId: initial.caixaId, tipo: initial.tipo,
     fornecedorId: initial.fornecedorId, fornecedorNome: initial.fornecedorNome,
     descricao: initial.descricao, dataLancamento: initial.dataLancamento,
     dataMovimento: initial.dataMovimento, valor: initial.valor,
     planoContasId: initial.planoContasId, planoContasDesc: initial.planoContasDesc,
-    centroCustoId: initial.centroCustoId, centroCustoDesc: initial.centroCustoDesc,
     tipoDocumento: initial.tipoDocumento, numeroDocumento: initial.numeroDocumento,
     dataEmissao: initial.dataEmissao, compensadoBanco: initial.compensadoBanco,
     observacoes: initial.observacoes,
@@ -53,27 +53,17 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
 
   const set = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
 
-  // Typeahead fornecedor
-  const [fornSearch, setFornSearch] = useState(initial?.fornecedorNome || '')
-  const [showFornDrop, setShowFornDrop] = useState(false)
-  const fornFiltrados = useMemo(() => {
-    const q = fornSearch.toLowerCase()
-    return fornecedores.filter(f => f.nome.toLowerCase().includes(q)).slice(0, 8)
-  }, [fornecedores, fornSearch])
-
-  const handleFornecedor = (id: string, nome: string) => {
-    setForm(p => ({ ...p, fornecedorId: id, fornecedorNome: nome }))
-    setFornSearch(nome)
-    setShowFornDrop(false)
-  }
-  const handleFornLivre = (v: string) => {
-    setFornSearch(v)
-    setForm(p => ({ ...p, fornecedorId: '', fornecedorNome: v }))
-  }
+  // Modal seleção Fornecedor
+  const [showFornMov, setShowFornMov] = useState(false)
+  const [fornMovSearch, setFornMovSearch] = useState('')
+  const fornFiltered = useMemo(() => {
+    const q = fornMovSearch.toLowerCase()
+    return fornecedores.filter(f => !q || f.nome.toLowerCase().includes(q))
+  }, [fornecedores, fornMovSearch])
 
   const handlePlano = (id: string) => {
     const pl = planosContas.find(x => x.id === id)
-    setForm(p => ({ ...p, planoContasId: id, planoContasDesc: pl ? `${pl.codPlano} - ${pl.descricao}` : '' }))
+    setForm(p => ({ ...p, planoContasId: id, planoContasDesc: pl ? `${(pl as any).codPlano} - ${pl.descricao}` : '' }))
   }
 
   // Modal seleção Plano de Contas — filtrado por grupoConta
@@ -87,13 +77,14 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
       if (!isTipoValido) return false;
 
       // Filtrar por texto
-      return !q || p.descricao.toLowerCase().includes(q) || (p.codPlano || '').toLowerCase().includes(q)
+      return !q || p.descricao.toLowerCase().includes(q) || ((p as any).codPlano || '').toLowerCase().includes(q)
     })
   }, [planosContas, planoMovSearch, form.tipo])
 
   if (!open) return null
 
   return (
+    <>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
       <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 780, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 100px rgba(0,0,0,0.7)', marginBottom: 24 }}>
 
@@ -142,48 +133,18 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
 
           {/* Linha A: Fornecedor + Descrição */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-            {/* FORNECEDOR — typeahead */}
-            <div style={{ position: 'relative' }}>
+            {/* FORNECEDOR — Modal */}
+            <div>
               <label className="form-label">Fornecedor / Pagador</label>
-              <div style={{ position: 'relative' }}>
-                <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-                <input
-                  className="form-input"
-                  style={{ paddingLeft: 30 }}
-                  value={fornSearch}
-                  onChange={e => handleFornLivre(e.target.value)}
-                  onFocus={() => setShowFornDrop(true)}
-                  onBlur={() => setTimeout(() => setShowFornDrop(false), 150)}
-                  placeholder="Buscar fornecedor ou digitar livremente..."
-                />
-                {fornSearch && (
-                  <button type="button"
-                    onClick={() => { setFornSearch(''); setForm(p => ({ ...p, fornecedorId: '', fornecedorNome: '' })) }}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-              {showFornDrop && fornFiltrados.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', marginTop: 4 }}>
-                  {fornFiltrados.map(f => (
-                    <div key={f.id}
-                      onMouseDown={() => handleFornecedor(f.id, f.nome)}
-                      style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid hsl(var(--border-subtle))' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                      <span style={{ fontWeight: 700 }}>{f.nome}</span>
-                    </div>
-                  ))}
+              {form.fornecedorNome ? (
+                <div style={{ padding: '8px 12px', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, background: 'hsl(var(--bg-elevated))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{form.fornecedorNome}</span>
+                  <button type="button" onClick={() => setForm(p => ({ ...p, fornecedorId: '', fornecedorNome: '' }))} className="btn btn-ghost btn-sm btn-icon"><X size={14} /></button>
                 </div>
-              )}
-              {showFornDrop && fornFiltrados.length === 0 && fornSearch.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Nenhum cadastrado com esse nome — será registrado como digitado</div>
-              )}
-              {form.fornecedorId && (
-                <div style={{ fontSize: 10, color: '#10b981', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <Check size={9} /> Vinculado ao cadastro
-                </div>
+              ) : (
+                <button type="button" className="btn btn-secondary" style={{ width: '100%', justifyContent: 'space-between', background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-muted))' }} onClick={() => setShowFornMov(true)}>
+                   Selecionar ou digitar livremente <Search size={14} />
+                </button>
               )}
             </div>
             <div>
@@ -198,6 +159,7 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
               <label className="form-label">Data de Lançamento</label>
               <input type="date" className="form-input" value={form.dataLancamento} onChange={e => set('dataLancamento', e.target.value)} />
             </div>
+
             <div>
               <label className="form-label">{form.tipo === 'receita' ? 'Data de Recebimento' : 'Data de Pagamento'}</label>
               <input type="date" className="form-input" value={form.dataMovimento} onChange={e => set('dataMovimento', e.target.value)} />
@@ -209,7 +171,6 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
             </div>
           </div>
 
-          {/* Linha C: Plano de Contas e Centro de Custo */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
             {/* Plano de Contas */}
             <div>
@@ -238,21 +199,6 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
                 </button>
                 {form.planoContasId && <button type="button" className="btn btn-ghost btn-icon" onClick={() => handlePlano('')}><X size={12} /></button>}
               </div>
-            </div>
-
-            {/* Centro de Custo */}
-            <div>
-              <label className="form-label">Centro de Custo</label>
-              <select className="form-input" value={form.centroCustoId || ''} onChange={e => {
-                const cId = e.target.value;
-                const cc = centrosCusto.find(x => x.id === cId)
-                setForm(p => ({ ...p, centroCustoId: cId, centroCustoDesc: cc ? `${cc.codigo} - ${cc.descricao}` : '' }))
-              }}>
-                <option value="">Nenhum centro de custo</option>
-                {centrosCusto
-                  .filter(c => c.tipo === 'ambos' || c.tipo === form.tipo)
-                  .map(c => <option key={c.id} value={c.id}>{c.codigo} — {c.descricao}</option>)}
-              </select>
             </div>
           </div>
 
@@ -297,7 +243,7 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
           )}
 
           {/* Linha D: Documento */}
-          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
             <div>
               <label className="form-label">Tipo de Documento</label>
               {/* Select unificado: metodos como tipos de doc, ou fallback */}
@@ -311,10 +257,6 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
             <div>
               <label className="form-label">Nº do Documento</label>
               <input className="form-input" value={form.numeroDocumento} onChange={e => set('numeroDocumento', e.target.value)} placeholder="Ex: NF-0001234" />
-            </div>
-            <div>
-              <label className="form-label">Data de Emissão do Documento</label>
-              <input type="date" className="form-input" value={form.dataEmissao} onChange={e => set('dataEmissao', e.target.value)} />
             </div>
           </div>
 
@@ -359,14 +301,100 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
             <Check size={14} />{initial ? 'Salvar Alterações' : 'Registrar Lançamento'}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+      
+      {/* Modal Sobreposto: Selecionar Fornecedor */}
+      {showFornMov && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>Selecionar Fornecedor</div>
+              <button onClick={() => setShowFornMov(false)} className="btn btn-ghost btn-icon"><X size={18} /></button>
+            </div>
+            <div style={{ padding: 12, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} style={{ position: 'absolute', left: 12, top: 11, color: 'hsl(var(--text-muted))' }} />
+                <input autoFocus className="form-input" style={{ paddingLeft: 34 }} placeholder="Buscar por nome..." value={fornMovSearch} onChange={e => setFornMovSearch(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {fornFiltered.map(f => (
+                <button key={f.id} onClick={() => { setForm(p => ({ ...p, fornecedorId: f.id, fornecedorNome: f.nome })); setShowFornMov(false) }}
+                  style={{ padding: '12px 14px', borderRadius: 8, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', textAlign: 'left' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = '#10b981'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{f.nome}</div>
+                </button>
+              ))}
+              {fornFiltered.length === 0 && (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+                    {fornMovSearch ? (
+                      <>
+                        Nenhum fornecedor encontrado.<br/><br/>
+                        <button className="btn btn-primary btn-sm" onClick={() => { setForm(p => ({ ...p, fornecedorId: '', fornecedorNome: fornMovSearch })); setShowFornMov(false) }}>Usar "{fornMovSearch}" provisoriamente</button>
+                      </>
+                    ) : 'Nenhum fornecedor.'}
+                  </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
 // ─── Página principal ───────────────────────────────────────────────
 export default function MovimentacoesPage() {
-  const { movimentacoesManuais, setMovimentacoesManuais, caixasAbertos, setCaixasAbertos, fornecedoresCad, cfgPlanoContas, cfgCentrosCusto, cfgMetodosPagamento, cfgTiposDocumento } = useData()
+  const { movimentacoesManuais = [], setMovimentacoesManuais, fornecedoresCad = [], cfgPlanoContas = [], cfgMetodosPagamento = [], cfgTiposDocumento = [] } = useData();
+  
+  const { data: respMovs, refetch: refetchMovs } = useApiQuery<any>(['movs-todas'], '/api/financeiro/movimentacoes', { limit: 5000 })
+  const allMovs = respMovs?.data || []
+
+  // Buscando caixas em tempo real do novo backend
+  const { data: respCaixas, refetch: refetchCaixas } = useApiQuery<any>(['caixas'], '/api/financeiro/caixas', {})
+  const caixasAbertos = respCaixas?.data || []
+
+  // Unifica memoria legada com BD nativo de Contas a Pagar/Receber e PDV Automático
+  const movsUnificadas = useMemo(() => {
+    const dbMap = new Map((allMovs || []).map((m:any) => [m.id, m]));
+    const dbRefMap = new Set((allMovs || []).map((m:any) => m.referenciaId || (m.dados && m.dados.referenciaId)).filter(Boolean));
+    const list = [...(allMovs || [])];
+    
+    for (const localM of movimentacoesManuais) {
+      if (!dbMap.has(localM.id) && !dbRefMap.has(localM.id)) {
+        list.push(localM as any);
+      }
+    }
+    return list.map((m: any) => {
+      const pcId = m.planoContasId || m.plano_contas_id || '';
+      const pc = (cfgPlanoContas || []).find(p => p.id === pcId);
+      const pcDesc = pc ? `${(pc as any).codPlano||''} - ${pc.descricao}` : (m.planoContasDesc || m.planoContas || '');
+
+      return {
+        id: m.id,
+        caixaId: m.caixaId || m.caixa_id || '',
+        tipo: (m.tipo === 'entrada' || m.tipo === 'receita') ? 'receita' : 'despesa',
+        fornecedorId: m.fornecedorId || '',
+        fornecedorNome: m.fornecedorNome || m.fornecedor || m.operador || '',
+        descricao: m.descricao || '',
+        dataLancamento: m.dataLancamento || m.data || String(m.criado_em || m.created_at || '').slice(0,10) || new Date().toISOString().slice(0, 10),
+        dataMovimento: m.dataMovimento || m.data || String(m.criado_em || m.created_at || '').slice(0,10) || new Date().toISOString().slice(0, 10),
+        valor: typeof m.valor === 'string' ? parseFloat(m.valor) : (Number(m.valor) || 0),
+        planoContasId: pcId,
+        planoContasDesc: pcDesc,
+        tipoDocumento: m.tipoDocumento || m.forma_pagamento || m.compensadoBanco || 'OUTRO',
+        numeroDocumento: m.numeroDocumento || m.referenciaId || '',
+        dataEmissao: m.dataEmissao || m.data || new Date().toISOString().slice(0, 10),
+        compensadoBanco: typeof m.compensadoBanco === 'boolean' ? m.compensadoBanco : (m.compensadoBanco ? String(m.compensadoBanco).toLowerCase() !== 'não compensado' : true),
+        observacoes: m.observacoes || m.obs || '',
+        origem: m.origem || 'manual',
+        referenciaId: m.referenciaId || ''
+      }
+    }) as typeof movimentacoesManuais // Cast for legacy typing
+  }, [allMovs, movimentacoesManuais, cfgPlanoContas])
+
   const printRef = useRef<HTMLDivElement>(null)
 
   // Métodos e tipos dinâmicos
@@ -380,6 +408,10 @@ export default function MovimentacoesPage() {
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [newDefaultCaixaId, setNewDefaultCaixaId] = useState<string>('')
 
+  // Sessão de caixa
+  const [sessionCaixaId, setSessionCaixaId] = useState<string | null>(null)
+  const [showSessionCaixaModal, setShowSessionCaixaModal] = useState(false)
+
   // Filtros
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'receita' | 'despesa'>('todos')
   const [filtroDataDe, setFiltroDataDe] = useState('')
@@ -388,16 +420,22 @@ export default function MovimentacoesPage() {
   const [filtroCaixa, setFiltroCaixa] = useState('todos')
   const [search, setSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 25
+  const [itemsPerPage, setItemsPerPage] = useState(25)
 
   // Listas derivadas
   const caixasSelect = useMemo(() =>
-    caixasAbertos.map(c => ({ id: c.id, label: new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
+    caixasAbertos.map(c => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
   , [caixasAbertos])
 
   const caixasAbertosAtivos = useMemo(() =>
-    caixasAbertos.filter(c => !c.fechado).map(c => ({ id: c.id, label: new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
+    caixasAbertos.filter(c => c.status === 'aberto' || !c.fechado).map(c => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
   , [caixasAbertos])
+
+  useEffect(() => {
+    if (caixasAbertosAtivos.length > 0 && sessionCaixaId === null) {
+      setShowSessionCaixaModal(true)
+    }
+  }, [caixasAbertosAtivos.length, sessionCaixaId])
 
   const fornecedoresSelect = useMemo(() =>
     fornecedoresCad.filter(f => f.situacao === 'ativo').map(f => ({ id: f.id, nome: f.nomeFantasia || f.razaoSocial }))
@@ -407,14 +445,12 @@ export default function MovimentacoesPage() {
     cfgPlanoContas.filter(p => p.situacao === 'ativo')
   , [cfgPlanoContas])
 
-  const centrosCustoSelect = useMemo(() =>
-    (cfgCentrosCusto || []).filter(c => c.situacao === 'ativo')
-  , [cfgCentrosCusto])
+
 
   // (metodosPagamentoSelect agora vem do DataContext acima)
 
   // Filtros aplicados
-  const filtered = useMemo(() => movimentacoesManuais.filter(m => {
+  const filtered = useMemo(() => movsUnificadas.filter(m => {
     if (filtroTipo !== 'todos' && m.tipo !== filtroTipo) return false
     if (filtroCaixa !== 'todos' && m.caixaId !== filtroCaixa) return false
     if (filtroDataDe && m.dataLancamento < filtroDataDe) return false
@@ -423,7 +459,7 @@ export default function MovimentacoesPage() {
     if (filtroCompensado === 'nao' && m.compensadoBanco) return false
     if (search && !m.descricao.toLowerCase().includes(search.toLowerCase()) && !m.fornecedorNome.toLowerCase().includes(search.toLowerCase()) && !m.numeroDocumento.includes(search)) return false
     return true
-  }).sort((a, b) => b.dataLancamento.localeCompare(a.dataLancamento)), [movimentacoesManuais, filtroTipo, filtroCaixa, filtroDataDe, filtroDataAte, filtroCompensado, search])
+  }).sort((a, b) => b.dataLancamento.localeCompare(a.dataLancamento)), [movsUnificadas, filtroTipo, filtroCaixa, filtroDataDe, filtroDataAte, filtroCompensado, search])
 
   // Reset pagination when filters change
   useEffect(() => setCurrentPage(1), [search, filtroTipo, filtroCaixa, filtroDataDe, filtroDataAte, filtroCompensado])
@@ -435,89 +471,92 @@ export default function MovimentacoesPage() {
     return filtered.slice(start, start + itemsPerPage)
   }, [filtered, currentPage])
 
-  const totalReceitas = filtered.filter(m => m.tipo === 'receita').reduce((s, m) => s + m.valor, 0)
-  const totalDespesas = filtered.filter(m => m.tipo === 'despesa').reduce((s, m) => s + m.valor, 0)
+  const totalReceitas = filtered.filter(m => (m.tipo === 'receita' || (m as any).tipo === 'entrada') && (m as any).origem !== 'baixa_pagar').reduce((s, m) => s + (Number(m.valor) || 0), 0)
+  const totalDespesas = filtered.filter(m => m.tipo === 'despesa' || (m as any).tipo === 'saida' || (m as any).origem === 'baixa_pagar').reduce((s, m) => s + (Number(m.valor) || 0), 0)
   const saldo = totalReceitas - totalDespesas
   const compensados = filtered.filter(m => m.compensadoBanco).length
 
   const openNew = () => {
-    const defaultCaixaId = caixasAbertosAtivos[caixasAbertosAtivos.length - 1]?.id ?? ''
+    const defaultCaixaId = sessionCaixaId || (caixasAbertosAtivos[caixasAbertosAtivos.length - 1]?.id ?? '')
     setEditId(null); setShowForm(true); setNewDefaultCaixaId(defaultCaixaId)
   }
   const openEdit = (m: MovimentacaoManual) => { setEditId(m.id); setShowForm(true); setNewDefaultCaixaId('') }
 
-  const handleSave = (data: Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'>) => {
+  const handleSave = async (data: Omit<MovimentacaoManual, 'id' | 'criadoEm' | 'editadoEm'>) => {
     const now = new Date().toISOString()
-    const hora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     const novId = editId ?? newId('MV')
 
-    // 1. Salva/atualiza na lista de movimentações manuais
+    // 1. Atualização Otimista UI Local
     if (editId) {
       setMovimentacoesManuais(prev => prev.map(m => m.id === editId ? { ...data, id: editId, criadoEm: m.criadoEm, editadoEm: now } : m))
     } else {
       setMovimentacoesManuais(prev => [...prev, { ...data, id: novId, criadoEm: now, editadoEm: now }])
     }
 
-    // 2. Espelha como MovCaixaItem no caixa correspondente (sincroniza bidirecional)
-    if (data.caixaId) {
-      setCaixasAbertos(prev => prev.map(c => {
-        if (c.id !== data.caixaId) return c
-
-        const tipoMov: 'entrada' | 'saida' | 'suprimento' | 'sangria' = data.tipo === 'receita' ? 'entrada' : 'saida'
-        const planoDesc = data.planoContasDesc || ''
-        const banco = typeof data.compensadoBanco === 'string'
-          ? data.compensadoBanco
-          : data.compensadoBanco ? 'Compensado' : 'Não compensado'
-
-        const novMov = {
-          id: novId,
-          tipo: tipoMov,
-          descricao: data.descricao || planoDesc,
-          valor: data.valor,
-          hora,
-          operador: c.operador,
-          planoContas: planoDesc,
-          compensadoBanco: banco,
+    // 2. Sincroniza ativamente com o Banco de Dados Native
+    try {
+      const resp = await fetch('/api/financeiro/movimentacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editId || undefined,
           caixaId: data.caixaId,
-          centroCustoId: data.centroCustoId,
-          centroCustoDesc: data.centroCustoDesc,
-        }
+          tipo: data.tipo === 'receita' ? 'entrada' : 'saida',
+          valor: Number(data.valor),
+          descricao: data.descricao || data.planoContasDesc || '',
+          data: data.dataMovimento,
+          operador: caixasAbertos.find(c => c.id === data.caixaId)?.operador || 'Sistema',
+          planoContasId: data.planoContasId || null,
+          forma_pagamento: data.tipoDocumento || '',
+          compensadoBanco: data.compensadoBanco ? 'Compensado' : 'A Compensar',
+          origem: 'manual',
+          referenciaId: novId,
+          fornecedorId: data.fornecedorId,
+          fornecedorNome: data.fornecedorNome || data.fornecedor || ''
+        })
+      })
+      if (!resp.ok) {
+        const erro = await resp.json()
+        throw new Error(erro.error || 'Erro ao salvar movimentação')
+      }
+      
+      const savedDoc = await resp.json()
 
-        if (editId) {
-          // Atualiza o movimento existente no caixa
-          const jaExiste = c.movimentacoes.some(m => m.id === editId)
-          if (jaExiste) {
-            return { ...c, movimentacoes: c.movimentacoes.map(m => m.id === editId ? novMov : m) }
-          } else {
-            return { ...c, movimentacoes: [...c.movimentacoes, novMov] }
-          }
-        } else {
-          return { ...c, movimentacoes: [...c.movimentacoes, novMov] }
-        }
-      }))
+      // Atualiza o ID do nosso cache otimista para o ID real e unificado do banco, prevenindo duplicidades em tela
+      setMovimentacoesManuais(prev => prev.map(m => m.id === novId ? { ...m, id: savedDoc.id } : m))
+
+      // Atualiza estado do servidor refetching query nativa
+      await refetchMovs()
+      await refetchCaixas()
+      setShowForm(false)
+    } catch (e: any) {
+      alert(`Falha ao salvar: ${e.message}`)
+      console.error('Falha ao sincronizar com banco', e)
     }
-
-    setShowForm(false)
   }
 
-  const handleDelete = (id: string) => {
-    // Remove da lista de movimentações manuais
-    setMovimentacoesManuais(prev => prev.filter(m => m.id !== id))
-    // Remove também do caixa correspondente
-    setCaixasAbertos(prev => prev.map(c => ({
-      ...c,
-      movimentacoes: c.movimentacoes.filter(m => m.id !== id),
-    })))
-    setConfirmId(null)
+  const handleDelete = async (id: string) => {
+    try {
+      setMovimentacoesManuais(prev => prev.filter(m => m.id !== id))
+      
+      const resp = await fetch(`/api/financeiro/movimentacoes/${id}`, { method: 'DELETE' })
+      if (!resp.ok) throw new Error('Falha ao excluir movimentação (Servidor)')
+      
+      await refetchMovs()
+      await refetchCaixas()
+      setConfirmId(null)
+    } catch (e) {
+      console.error('Erro ao excluir movimentação', e)
+      alert('Houve um erro ao tentar excluir.')
+    }
   }
 
-
-  const editingItem = editId ? movimentacoesManuais.find(m => m.id === editId) ?? null : null
+  const editingItem = editId ? movsUnificadas.find(m => m.id === editId) ?? null : null
 
   // Resolução de caixa para exibição
   const nomeCaixa = (caixaId: string) => {
     const c = caixasAbertos.find(x => x.id === caixaId)
-    return c ? `${new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR')} (${c.operador})` : '—'
+    return c ? `${new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR')} (${c.operador})` : '—'
   }
 
   const limparFiltros = () => { setFiltroTipo('todos'); setFiltroCaixa('todos'); setFiltroDataDe(''); setFiltroDataAte(''); setFiltroCompensado('todos'); setSearch(''); setCurrentPage(1); }
@@ -528,7 +567,7 @@ export default function MovimentacoesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Movimentações Financeiras</h1>
-          <p className="page-subtitle">{filtered.length} lançamentos manuais • Vinculado ao caixa do operador</p>
+          <p className="page-subtitle">{filtered.length} lançamentos {sessionCaixaId ? 'neste caixa' : 'totais'} • {sessionCaixaId ? `Caixa selecionado: ${caixasAbertosAtivos.find(c => c.id === sessionCaixaId)?.label || ''}` : 'Geral'}</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><Printer size={13} />Imprimir</button>
@@ -593,7 +632,7 @@ export default function MovimentacoesPage() {
       </div>
 
       {/* Tabela */}
-      {movimentacoesManuais.length === 0 ? (
+      {movsUnificadas.length === 0 ? (
         <div style={{ padding: '64px', textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 14, color: 'hsl(var(--text-muted))' }}>
           <FileText size={52} style={{ opacity: 0.08, marginBottom: 16 }} /><br />
           <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 8 }}>Nenhuma movimentação lançada</div>
@@ -644,7 +683,7 @@ export default function MovimentacoesPage() {
                   <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{fmtDate(m.dataMovimento)}</td>
                   <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {m.tipo === 'receita'
+                      {((m.tipo === 'receita' || (m as any).tipo === 'entrada') && (m as any).origem !== 'baixa_pagar')
                         ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#10b981', fontWeight: 700 }}><ArrowUpCircle size={12} />Receita</span>
                         : <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#ef4444', fontWeight: 700 }}><ArrowDownCircle size={12} />Despesa</span>}
                       {og && <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: og.bg, color: og.color, fontWeight: 700, border: `1px solid ${og.color}40`, whiteSpace: 'nowrap' }}>{og.label}</span>}
@@ -662,19 +701,23 @@ export default function MovimentacoesPage() {
                     </div>
                     {m.dataEmissao && <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Emissão: {fmtDate(m.dataEmissao)}</div>}
                   </td>
-                  <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{m.planoContasDesc || '—'}</td>
+                  <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{m.planoContasDesc || (((m as any).origem === 'baixa_aluno' || (m as any).origem === 'baixa_receber') ? 'Recebimentos / Alunos' : '—')}</td>
                   <td>
                     {m.compensadoBanco
                       ? <span className="badge badge-success" style={{ fontSize: 10 }}>✅ Sim</span>
                       : <span className="badge badge-neutral" style={{ fontSize: 10 }}>❌ Não</span>}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', color: m.tipo === 'receita' ? '#10b981' : '#ef4444' }}>
-                    {m.tipo === 'receita' ? '+' : '-'}{fmt(m.valor)}
+                  <td style={{ textAlign: 'right', fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', color: ((m.tipo === 'receita' || (m as any).tipo === 'entrada') && (m as any).origem !== 'baixa_pagar') ? '#10b981' : '#ef4444' }}>
+                    {((m.tipo === 'receita' || (m as any).tipo === 'entrada') && (m as any).origem !== 'baixa_pagar') ? '+' : '-'}{fmt(Number(m.valor) || 0)}
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      {!og && <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(m)} title="Editar"><Pencil size={12} /></button>}
-                      <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => setConfirmId(m.id)} title="Excluir"><Trash2 size={12} /></button>
+                      {!og && (
+                        <>
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEdit(m)} title="Editar"><Pencil size={12} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => setConfirmId(m.id)} title="Excluir"><Trash2 size={12} /></button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -692,35 +735,48 @@ export default function MovimentacoesPage() {
               <span style={{ color: saldo >= 0 ? '#3b82f6' : '#f59e0b', fontWeight: 900, fontSize: 14 }}>Saldo: {fmt(saldo)}</span>
             </div>
           </div>
-          {totalPages > 1 && (
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 24px', borderTop:'1px solid hsl(var(--border-subtle))' }}>
+            <div style={{ display:'flex', alignItems:'center', gap: 16 }}>
               <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
                 Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, filtered.length)} de {filtered.length} registros
               </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Itens por pág:</span>
+                <select className="form-input" style={{ width: 70, height: 28, fontSize: 11, padding: '0 8px' }} value={itemsPerPage} onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+                  <option value={15}>15</option>
+                  <option value={22}>22</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            {totalPages > 1 && (
               <div style={{ display:'flex', gap:8 }}>
                 <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>Anterior</button>
                 <div style={{ display:'flex', alignItems:'center', padding:'0 10px', fontSize:13, fontWeight:600 }}>Página {currentPage} de {totalPages}</div>
                 <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>Próxima</button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* Modal Formulário */}
-      <FormModal
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        onSave={handleSave}
-        initial={editingItem}
-        defaultCaixaId={newDefaultCaixaId}
-        caixas={editId ? caixasSelect : caixasAbertosAtivos}
-        fornecedores={fornecedoresSelect}
-        planosContas={planosSelect as any}
-        centrosCusto={centrosCustoSelect}
-        metodosPagamento={metodosPagamentoSelect}
-        tiposDocumento={TIPOS_DOC}
-      />
+      {showForm && (
+        <FormModal
+          open={showForm}
+          onClose={() => setShowForm(false)}
+          onSave={handleSave}
+          initial={editingItem}
+          defaultCaixaId={newDefaultCaixaId}
+          caixas={editId ? caixasSelect : caixasAbertosAtivos}
+          fornecedores={fornecedoresSelect}
+          planosContas={planosSelect as any}
+          metodosPagamento={metodosPagamentoSelect}
+          tiposDocumento={TIPOS_DOC}
+        />
+      )}
 
       {/* Confirmar exclusão */}
       {confirmId && (
@@ -735,6 +791,41 @@ export default function MovimentacoesPage() {
             <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'hsl(var(--bg-elevated))' }}>
               <button className="btn btn-secondary" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={() => handleDelete(confirmId)}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Selecionar Caixa na Sessão */}
+      {showSessionCaixaModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 100px rgba(0,0,0,0.7)' }}>
+            <div style={{ padding: '24px 28px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', textAlign: 'center' }}>
+              <div style={{ width: 48, height: 48, background: 'rgba(99,102,241,0.1)', color: '#6366f1', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                <Check size={24} />
+              </div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, fontFamily: 'Outfit,sans-serif' }}>Selecione o seu Caixa</h3>
+              <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 6 }}>Identificamos que você tem caixas abertos. Escolha qual deseja utilizar para os lançamentos de agora.</p>
+            </div>
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '50vh', overflowY: 'auto' }}>
+              {caixasAbertosAtivos.map(c => (
+                <button key={c.id} onClick={() => { setSessionCaixaId(c.id); setFiltroCaixa(c.id); setShowSessionCaixaModal(false); }} 
+                  style={{ width: '100%', textAlign: 'left', padding: '16px', borderRadius: 12, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.transform = 'translateY(0)' }}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(59,130,246,0.15))', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Plus size={20} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Caixa {c.label}</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Operador: <strong style={{ color: 'hsl(var(--text-secondary))' }}>{c.operador}</strong></div>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: '16px 28px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', textAlign: 'center' }}>
+              <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSessionCaixaModal(false)}>Ignorar e ver todos</button>
             </div>
           </div>
         </div>

@@ -66,10 +66,22 @@ export default function SituacaoAlunoPage() {
 
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
+
+    // Guard using closure state for immediate UX feedback
+    if (!editId && cfgSituacaoAluno.some(s => s.codigo === form.codigo)) {
+      alert('Já existe uma situação com este código!')
+      return
+    }
+
     if (editId) {
       setCfgSituacaoAluno(prev => prev.map(s => s.id === editId ? { ...s, ...form } : s))
     } else {
-      setCfgSituacaoAluno(prev => [...prev, { ...form, id: newId('SIT'), createdAt: new Date().toISOString() }])
+      const novoId = newId('SIT')
+      setCfgSituacaoAluno(prev => {
+        // Inner guard: bulletproof against double-clicks/race conditions
+        if (prev.some(s => s.codigo === form.codigo || s.id === novoId)) return prev
+        return [...prev, { ...form, id: novoId, createdAt: new Date().toISOString() }]
+      })
     }
     setShowForm(false)
   }

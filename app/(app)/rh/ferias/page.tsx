@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo } from 'react'
 import { useData, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -105,7 +107,7 @@ function calcProvisaoMensal(salario: number) {
 }
 
 export default function FeriasAfastamentosPage() {
-  const { funcionarios } = useData()
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const [ausencias, setAusencias] = useLocalStorage<Ausencia[]>('edu-rh-ausencias', [])
 
   // Filtros
@@ -124,10 +126,10 @@ export default function FeriasAfastamentosPage() {
   const set = (k: string, v: unknown) => setForm(p => ({ ...p, [k]: v }))
 
   // Dados derivados
-  const ativos = funcionarios.filter(f => f.status === 'ativo')
-  const departamentos = [...new Set(funcionarios.map(f => f.departamento))].filter(Boolean)
+  const ativos = (funcionarios || []).filter(f => f.status === 'ativo')
+  const departamentos = [...new Set((funcionarios || []).map(f => f.departamento))].filter(Boolean)
 
-  const funcById = (id: string) => funcionarios.find(f => f.id === id)
+  const funcById = (id: string) => (funcionarios || []).find(f => f.id === id)
 
   const dias = useMemo(() => diasEntre(form.dataInicio, form.dataFim), [form.dataInicio, form.dataFim])
   const diasUteis = Math.round(dias * 5 / 7)
@@ -138,7 +140,7 @@ export default function FeriasAfastamentosPage() {
     return calcImpacto(func.salario, diasUteis, form.tipo, form.abonoPecuniario)
   }, [form.funcionarioId, diasUteis, form.tipo, form.abonoPecuniario, funcionarios])
 
-  const filtered = useMemo(() => ausencias.filter(a => {
+  const filtered = useMemo(() => (ausencias || []).filter(a => {
     const q = search.toLowerCase()
     const matchQ = !search || a.funcionarioNome.toLowerCase().includes(q) || a.codigo.toLowerCase().includes(q)
     const matchT = filtroTipo === 'todos' || a.tipo === filtroTipo
@@ -148,11 +150,11 @@ export default function FeriasAfastamentosPage() {
   }), [ausencias, search, filtroTipo, filtroStatus, filtroDepto])
 
   // KPIs Financeiros
-  const totalImpacto = ausencias.reduce((s, a) => s + a.impactoFinanceiro, 0)
-  const totalProvisao = ativos.reduce((s, f) => s + calcProvisaoMensal(f.salario), 0)
-  const emCurso = ausencias.filter(a => a.status === 'em_curso').length
-  const aguardandoAprov = ausencias.filter(a => a.status === 'solicitado').length
-  const diasAusentesTotais = ausencias.filter(a => ['aprovado','em_curso','concluido'].includes(a.status)).reduce((s,a) => s + a.diasUteis, 0)
+  const totalImpacto = (ausencias || []).reduce((s, a) => s + a.impactoFinanceiro, 0)
+  const totalProvisao = (ativos || []).reduce((s, f) => s + calcProvisaoMensal(f.salario), 0)
+  const emCurso = (ausencias || []).filter(a => a.status === 'em_curso').length
+  const aguardandoAprov = (ausencias || []).filter(a => a.status === 'solicitado').length
+  const diasAusentesTotais = (ausencias || []).filter(a => ['aprovado','em_curso','concluido'].includes(a.status)).reduce((s,a) => s + a.diasUteis, 0)
 
   // Abertura modal novo
   const openNew = () => {
@@ -171,7 +173,7 @@ export default function FeriasAfastamentosPage() {
     const tipo = form.tipo
     const nova: Ausencia = {
       id: newId('AUS'),
-      codigo: genCod(ausencias, TIPO_CFG[tipo].prefix),
+      codigo: genCod((ausencias || []), TIPO_CFG[tipo].prefix),
       funcionarioId: form.funcionarioId,
       funcionarioNome: func.nome,
       cargo: func.cargo,
@@ -203,7 +205,7 @@ export default function FeriasAfastamentosPage() {
     setAusencias(prev => prev.map(a => a.id === id ? { ...a, status } : a))
   }
 
-  const selectedAus = ausencias.find(a => a.id === selectedId)
+  const selectedAus = (ausencias || []).find(a => a.id === selectedId)
 
   return (
     <div>
@@ -224,8 +226,8 @@ export default function FeriasAfastamentosPage() {
       {/* KPIs Financeiros */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Impacto Total Acumulado', value: fmtCur(totalImpacto), color: '#ef4444', icon: '💸', sub: `${ausencias.length} registros` },
-          { label: 'Provisão Mensal (folha)', value: fmtCur(totalProvisao), color: '#f59e0b', icon: '📊', sub: `${ativos.length} funcionários ativos` },
+          { label: 'Impacto Total Acumulado', value: fmtCur(totalImpacto), color: '#ef4444', icon: '💸', sub: `${(ausencias || []).length} registros` },
+          { label: 'Provisão Mensal (folha)', value: fmtCur(totalProvisao), color: '#f59e0b', icon: '📊', sub: `${(ativos || []).length} funcionários ativos` },
           { label: 'Em Curso Agora', value: emCurso, color: '#06b6d4', icon: '↺', sub: 'funcionários ausentes' },
           { label: 'Dias Úteis Perdidos', value: diasAusentesTotais, color: '#8b5cf6', icon: '📅', sub: 'total aprovados + concluídos' },
           { label: 'Aguardando Aprovação', value: aguardandoAprov, color: aguardandoAprov > 0 ? '#f59e0b' : '#34d399', icon: aguardandoAprov > 0 ? '⏳' : '✅', sub: 'solicitações pendentes' },
@@ -242,7 +244,7 @@ export default function FeriasAfastamentosPage() {
       </div>
 
       {/* Barra de provisão visual */}
-      {ativos.length > 0 && (
+      {(ativos || []).length > 0 && (
         <div className="card" style={{ padding: '14px 18px', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12, flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontWeight: 700, color: 'hsl(var(--text-primary))' }}>📊 Provisão de Férias — Análise Financeira</span>
@@ -300,7 +302,7 @@ export default function FeriasAfastamentosPage() {
       )}
 
       {/* Tabela */}
-      {ausencias.length === 0 ? (
+      {(ausencias || []).length === 0 ? (
         <div className="card" style={{ padding: '72px 24px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Palmtree size={52} style={{ opacity: 0.1, margin: '0 auto 20px' }} />
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Nenhuma ausência registrada</div>
@@ -396,8 +398,8 @@ export default function FeriasAfastamentosPage() {
             </tbody>
           </table>
           <div style={{ padding: '10px 16px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
-            <span>{filtered.length} de {ausencias.length} registros</span>
-            <span style={{ fontWeight: 700, color: '#ef4444' }}>Impacto selecionado: {fmtCur(filtered.reduce((s,a)=>s+a.impactoFinanceiro,0))}</span>
+            <span>{(filtered || []).length} de {(ausencias || []).length} registros</span>
+            <span style={{ fontWeight: 700, color: '#ef4444' }}>Impacto selecionado: {fmtCur((filtered || []).reduce((s,a)=>s+a.impactoFinanceiro,0))}</span>
           </div>
         </div>
       )}
@@ -440,10 +442,10 @@ export default function FeriasAfastamentosPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div>
                   <label className="form-label">Funcionário *</label>
-                  {ativos.length > 0 ? (
+                  {(ativos || []).length > 0 ? (
                     <select className="form-input" value={form.funcionarioId} onChange={e => set('funcionarioId', e.target.value)}>
                       <option value="">Selecionar</option>
-                      {ativos.map(f => <option key={f.id} value={f.id}>{f.nome} — {f.cargo}</option>)}
+                      {(ativos || []).map(f => <option key={f.id} value={f.id}>{f.nome} — {f.cargo}</option>)}
                     </select>
                   ) : (
                     <input className="form-input" placeholder="Nome do funcionário" value={form.funcionarioId} onChange={e => set('funcionarioId', e.target.value)} />
@@ -495,7 +497,7 @@ export default function FeriasAfastamentosPage() {
                   <label className="form-label">Substituto (opcional)</label>
                   <select className="form-input" value={form.substitutoId} onChange={e => set('substitutoId', e.target.value)}>
                     <option value="">Sem substituto definido</option>
-                    {ativos.filter(f => f.id !== form.funcionarioId).map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                    {(ativos || []).filter(f => f.id !== form.funcionarioId).map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                   </select>
                 </div>
                 {form.tipo === 'ferias' && (

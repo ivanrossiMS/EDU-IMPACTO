@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
 import {
@@ -260,7 +262,8 @@ function AlunoModal({ aluno, onClose }: { aluno: any; onClose: () => void }) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function RematriculaPage() {
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [aba, setAba] = useState<AbaKey>('painel')
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState<RStatus|'todos'>('todos')
@@ -273,7 +276,7 @@ export default function RematriculaPage() {
 
   // Inclui todos os alunos ativos (status ativo, matriculado, ou qualquer um que não seja cancelado/transferido/histórico)
   const INATIVOS = ['cancelado','transferido','histórico','historico','inativo','Cancelado','Transferido','Histórico','Inativo']
-  const matriculados = alunos.filter(a => !INATIVOS.includes(a.status || ''))
+  const matriculados = (alunos || []).filter(a => !INATIVOS.includes(a.status || ''))
 
   // Gera rematriculas simuladas com seed estável (index-based)
   const rematriculas = useMemo(() => matriculados.map((a, i) => {

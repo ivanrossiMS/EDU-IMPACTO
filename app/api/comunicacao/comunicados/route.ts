@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const q = searchParams.get('q')
 
-  let query = supabaseServer.from('comunicados').select('*').order('data', { ascending: false })
+  let query = supabase.from('comunicados').select('*').order('data', { ascending: false })
   if (q) query = query.or(`titulo.ilike.%${q}%,autor.ilike.%${q}%`)
 
   const { data, error } = await query
@@ -16,6 +17,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const { id, titulo, texto, autor, data, destino, fixado, ...rest } = body
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
       fixado: fixado || false,
       dados: rest,
     }
-    const { data: saved, error } = await supabaseServer.from('comunicados').upsert(row).select().single()
+    const { data: saved, error } = await supabase.from('comunicados').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(saved, { status: 201 })
   } catch (e: any) {
@@ -36,10 +38,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const { error } = await supabaseServer.from('comunicados').delete().eq('id', id)
+  const { error } = await supabase.from('comunicados').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

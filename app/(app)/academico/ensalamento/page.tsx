@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useCallback } from 'react'
@@ -30,7 +32,8 @@ interface EnsalTurma {
 type OrdemTipo = 'alfa' | 'custom'
 
 export default function EnsalamentoPage() {
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
@@ -53,7 +56,7 @@ export default function EnsalamentoPage() {
 
   const alunosDaTurma = useMemo(() => {
     if (!turmaSel) return []
-    return alunos.filter(a => a.turma === turmaSel)
+    return (alunos || []).filter(a => a.turma === turmaSel)
   }, [alunos, turmaSel])
 
   // Ensalamento atual da turma
@@ -93,7 +96,7 @@ export default function EnsalamentoPage() {
     setLocalSala(ensalTurma.sala)
   }, [turmaSel, ensalTurma])
 
-  const getAluno = (id: string) => alunos.find(a => a.id === id)
+  const getAluno = (id: string) => (alunos || []).find(a => a.id === id)
 
   const setObs = (alunoId: string, obs: string) =>
     setLocalEnsal(prev => prev.map(e => e.alunoId === alunoId ? { ...e, observacao: obs } : e))
@@ -145,11 +148,11 @@ export default function EnsalamentoPage() {
 
   // ── VISTA HOME ────────────────────────────────────────────────────────────
   if (!turmaSel) {
-    const turnosDisponiveis = [...new Set(turmas.map(t => t.turno).filter(Boolean))]
-    const anosDisponiveis = [...new Set(turmas.map(t => String(t.ano)).filter(Boolean))].sort().reverse()
-    const segsDisponiveis = [...new Set(turmas.map(t => t.serie).filter(Boolean))].sort()
+    const turnosDisponiveis = [...new Set((turmas || []).map(t => t.turno).filter(Boolean))]
+    const anosDisponiveis = [...new Set((turmas || []).map(t => String(t.ano)).filter(Boolean))].sort().reverse()
+    const segsDisponiveis = [...new Set((turmas || []).map(t => t.serie).filter(Boolean))].sort()
 
-    const turmasFiltradas = turmas.filter(t => {
+    const turmasFiltradas = (turmas || []).filter(t => {
       const mb = !filtroBuscaHome || t.nome.toLowerCase().includes(filtroBuscaHome.toLowerCase()) || (t.professor || '').toLowerCase().includes(filtroBuscaHome.toLowerCase())
       const ms = filtroSeg === 'todos' || t.serie === filtroSeg
       const mtu = filtroTurno === 'Todos' || t.turno === filtroTurno
@@ -169,7 +172,7 @@ export default function EnsalamentoPage() {
           </div>
         </div>
 
-        {turmas.length === 0 ? (
+        {(turmas || []).length === 0 ? (
           <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
             <Users size={40} style={{ margin:'0 auto 14px', opacity:0.15 }} />
             <div style={{ fontSize:14, fontWeight:600 }}>Nenhuma turma cadastrada</div>
@@ -215,7 +218,7 @@ export default function EnsalamentoPage() {
               )}
 
               {hasFilters && <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={clearFilters}>✕ Limpar</button>}
-              <span style={{ marginLeft:'auto', fontSize:12, color:'hsl(var(--text-muted))' }}>{turmasFiltradas.length}/{turmas.length} turma(s)</span>
+              <span style={{ marginLeft:'auto', fontSize:12, color:'hsl(var(--text-muted))' }}>{turmasFiltradas.length}/{(turmas || []).length} turma(s)</span>
             </div>
 
             {turmasFiltradas.length === 0 ? (
@@ -227,7 +230,7 @@ export default function EnsalamentoPage() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px,1fr))', gap:16 }}>
                 {turmasFiltradas.map(turma => {
                   const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
-                  const alunosTurma = alunos.filter(a => a.turma === turma.nome)
+                  const alunosTurma = (alunos || []).filter(a => a.turma === turma.nome)
                   const saved = ensalData[turma.id]
                   const configurado = saved && saved.ensalamento.length > 0
 

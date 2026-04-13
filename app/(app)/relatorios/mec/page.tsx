@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState } from 'react'
 import { Brain, Download, CheckCircle, Clock, AlertTriangle, Upload } from 'lucide-react'
@@ -23,7 +25,9 @@ const ETAPAS_FIXAS = [
 
 export default function RelatoriosMecPage() {
   const [tab, setTab] = useState<'censo' | 'relatorios' | 'historico'>('censo')
-  const { alunos, turmas, funcionarios } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
 
   const statusOf = (key: string): 'concluido' | 'em_andamento' | 'pendente' => {
     if (key === 'mantenedor') return funcionarios.length > 0 ? 'concluido' : 'pendente'

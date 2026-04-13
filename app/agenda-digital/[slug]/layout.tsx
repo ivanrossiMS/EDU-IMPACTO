@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
@@ -12,7 +14,6 @@ import {
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
   Megaphone, Loader2, CheckCircle2
 } from 'lucide-react'
-import { destroySession } from '@/app/actions/authActions'
 
 function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: any }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
@@ -140,7 +141,8 @@ export default function AgendaDigitalFamilyLayout({
   children: React.ReactNode, 
   params: Promise<{ slug: string }>
 }) {
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { currentUser, setCurrentUser } = useApp()
   const pathname = usePathname()
   
@@ -1008,7 +1010,7 @@ export default function AgendaDigitalFamilyLayout({
             <button 
               onClick={async () => { 
                 setCurrentUser(null); 
-                await destroySession(); 
+                await fetch('/api/auth/logout', { method: 'POST' }); 
                 window.location.href = '/login'; 
               }} 
               className="btn btn-secondary btn-sm" 

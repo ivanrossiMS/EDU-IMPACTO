@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useState, useEffect } from 'react'
@@ -17,7 +19,9 @@ type GrupoDigital = {
 const DEFAULT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#3b82f6'];
 
 export default function ADAdminTurmas() {
-  const { turmas, alunos, funcionarios } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
   const [grupos, setGrupos] = useState<GrupoDigital[]>([])
   const [sysUsers, setSysUsers] = useState<any[]>([])

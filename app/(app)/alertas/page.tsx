@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
@@ -31,7 +33,11 @@ const FILTROS: (string)[] = ['Todos', 'Crítico', 'Alto', 'Médio', 'Info']
 const CATEGORIAS: string[] = ['Todas', 'Acadêmico', 'Financeiro', 'Disciplinar', 'RH', 'Sistema']
 
 export default function AlertasPage() {
-  const { alunos, titulos, contasPagar, ocorrencias, funcionarios } = useData()
+  const { ocorrencias = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [contasPagar, setContasPagar] = useSupabaseArray<any>('contas-pagar');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const [filtroNivel, setFiltroNivel] = useState('Todos')
   const [filtroCategoria, setFiltroCategoria] = useState('Todas')
   const [lidos, setLidos] = useState<Set<string>>(new Set())
@@ -43,7 +49,7 @@ export default function AlertasPage() {
 
     // ── Acadêmico ──────────────────────────────────────────────────
     // Frequência crítica (<60%)
-    const freqCrit = alunos.filter(a => a.frequencia < 60)
+    const freqCrit = (alunos || []).filter(a => a.frequencia < 60)
     freqCrit.forEach(a => {
       alertas.push({
         id: `freq-${a.id}`, nivel: 'critico',
@@ -56,7 +62,7 @@ export default function AlertasPage() {
     })
 
     // Frequência baixa (60-74%)
-    const freqBaixa = alunos.filter(a => a.frequencia >= 60 && a.frequencia < 75)
+    const freqBaixa = (alunos || []).filter(a => a.frequencia >= 60 && a.frequencia < 75)
     if (freqBaixa.length > 0) {
       alertas.push({
         id: 'freq-baixa', nivel: 'alto',
@@ -69,7 +75,7 @@ export default function AlertasPage() {
     }
 
     // Risco alto de evasão
-    const riscoAlto = alunos.filter(a => a.risco_evasao === 'alto')
+    const riscoAlto = (alunos || []).filter(a => a.risco_evasao === 'alto')
     if (riscoAlto.length > 0) {
       alertas.push({
         id: 'risco-alto', nivel: 'medio',
@@ -82,7 +88,7 @@ export default function AlertasPage() {
     }
 
     // ── Financeiro ─────────────────────────────────────────────────
-    const titulosAtrasados = titulos.filter(t => t.status === 'atrasado')
+    const titulosAtrasados = (titulos || []).filter(t => t.status === 'atrasado')
     if (titulosAtrasados.length > 0) {
       const total = titulosAtrasados.reduce((s, t) => s + t.valor, 0)
       alertas.push({
@@ -96,7 +102,7 @@ export default function AlertasPage() {
     }
 
     // Contas a pagar vencendo em 7 dias
-    const contasProximas = contasPagar.filter(c => {
+    const contasProximas = (contasPagar || []).filter(c => {
       if (c.status === 'pago') return false
       const d = new Date(c.vencimento)
       const diff = (d.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)
@@ -115,7 +121,7 @@ export default function AlertasPage() {
     }
 
     // Contas vencidas
-    const contasVencidas = contasPagar.filter(c => {
+    const contasVencidas = (contasPagar || []).filter(c => {
       if (c.status === 'pago') return false
       return new Date(c.vencimento) < hoje
     })
@@ -131,7 +137,7 @@ export default function AlertasPage() {
     }
 
     // ── Disciplinar ────────────────────────────────────────────────
-    const ocGraves = ocorrencias.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel)
+    const ocGraves = (ocorrencias || []).filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel)
     if (ocGraves.length > 0) {
       alertas.push({
         id: 'oc-graves', nivel: 'alto',
@@ -143,7 +149,7 @@ export default function AlertasPage() {
       })
     }
 
-    const ocPendentes = ocorrencias.filter(o => !o.ciencia_responsavel && o.gravidade !== 'grave')
+    const ocPendentes = (ocorrencias || []).filter(o => !o.ciencia_responsavel && o.gravidade !== 'grave')
     if (ocPendentes.length > 0) {
       alertas.push({
         id: 'oc-pendentes', nivel: 'medio',
@@ -156,7 +162,7 @@ export default function AlertasPage() {
     }
 
     // ── RH ─────────────────────────────────────────────────────────
-    if (funcionarios.length === 0 && alunos.length > 0) {
+    if ((funcionarios || []).length === 0 && (alunos || []).length > 0) {
       alertas.push({
         id: 'rh-sem-func', nivel: 'info',
         titulo: 'Nenhum funcionário cadastrado',
@@ -168,7 +174,7 @@ export default function AlertasPage() {
     }
 
     // Info positivo quando tudo está bem
-    if (alertas.filter(a => a.nivel === 'critico' || a.nivel === 'alto').length === 0 && alunos.length > 0) {
+    if (alertas.filter(a => a.nivel === 'critico' || a.nivel === 'alto').length === 0 && (alunos || []).length > 0) {
       alertas.push({
         id: 'info-ok', nivel: 'info',
         titulo: 'Sistema sem alertas críticos',
@@ -240,7 +246,7 @@ export default function AlertasPage() {
 
       {/* Lista de alertas */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {alunos.length === 0 && titulos.length === 0 ? (
+        {(alunos || []).length === 0 && (titulos || []).length === 0 ? (
           <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
             <Bell size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Nenhum dado para gerar alertas</div>

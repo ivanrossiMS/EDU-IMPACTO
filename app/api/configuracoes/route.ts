@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 // GET /api/configuracoes                        → all keys
 // GET /api/configuracoes?chaves=k1,k2,k3       → bulk fetch (NEW — eliminates 16 separate requests)
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const chave = searchParams.get('chave')
   const chaves = searchParams.get('chaves')  // comma-separated bulk
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
     const keys = chaves.split(',').map(k => k.trim()).filter(Boolean)
     if (keys.length === 0) return NextResponse.json({})
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('configuracoes')
       .select('chave, valor')
       .in('chave', keys)
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
 
   // ── Single key ─────────────────────────────────────────────────
   if (chave) {
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('configuracoes')
       .select('valor')
       .eq('chave', chave)
@@ -43,18 +44,19 @@ export async function GET(request: Request) {
   }
 
   // ── All configs ─────────────────────────────────────────────────
-  const { data, error } = await supabaseServer.from('configuracoes').select('*')
+  const { data, error } = await supabase.from('configuracoes').select('*')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data || [])
 }
 
 // POST /api/configuracoes  { chave: 'cfgDisciplinas', valor: [...] }
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const { chave, valor } = await request.json()
     if (!chave) return NextResponse.json({ error: 'chave required' }, { status: 400 })
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabase
       .from('configuracoes')
       .upsert({ chave, valor, updated_at: new Date().toISOString() })
       .select().single()

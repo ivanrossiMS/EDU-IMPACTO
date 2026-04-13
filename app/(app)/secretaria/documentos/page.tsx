@@ -1,15 +1,17 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useState } from 'react'
 import { FileText, Search, Plus, FileCheck, Download } from 'lucide-react'
 
 export default function SecretariaPage() {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [search, setSearch] = useState('')
   const [alunoSel, setAlunoSel] = useState('')
 
-  const filtered = alunos.filter(a =>
+  const filtered = (alunos || []).filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
     a.matricula.includes(search)
   )
@@ -23,7 +25,7 @@ export default function SecretariaPage() {
     { icon: '🔄', label: 'Declaração de Transferência', desc: 'Para transferências entre escolas' },
   ]
 
-  const alunoSelecionado = alunos.find(a => a.id === alunoSel)
+  const alunoSelecionado = (alunos || []).find(a => a.id === alunoSel)
 
   return (
     <div>
@@ -96,7 +98,7 @@ export default function SecretariaPage() {
       </div>
 
       {/* Alunos cadastrados */}
-      {alunos.length === 0 ? (
+      {(alunos || []).length === 0 ? (
         <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <FileText size={40} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Nenhum aluno cadastrado</div>
@@ -104,14 +106,14 @@ export default function SecretariaPage() {
         </div>
       ) : (
         <div className="card" style={{ padding: '20px' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Alunos Elegíveis — {alunos.length} cadastrados</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Alunos Elegíveis — {(alunos || []).length} cadastrados</div>
           <div className="table-container" style={{ border: 'none' }}>
             <table>
               <thead>
                 <tr><th>Aluno</th><th>Matrícula</th><th>Turma</th><th>Status</th><th>Ações</th></tr>
               </thead>
               <tbody>
-                {alunos.slice(0, 20).map(a => (
+                {(alunos || []).slice(0, 20).map(a => (
                   <tr key={a.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

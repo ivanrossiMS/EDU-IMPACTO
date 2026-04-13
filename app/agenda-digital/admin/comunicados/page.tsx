@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useRef } from 'react'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
@@ -18,7 +20,8 @@ import { UserAvatar } from '@/components/UserAvatar'
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { comunicados, setComunicados, adAlert, adConfirm } = useAgendaDigital()
-  const { alunos, turmas } = useData()
+  const { turmas = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   

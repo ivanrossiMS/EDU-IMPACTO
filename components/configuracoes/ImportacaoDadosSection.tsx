@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState } from 'react'
 import {
   Users, Camera, BookOpen, UserCheck, DollarSign,
@@ -34,7 +36,9 @@ const ORDER_STEPS = [
 export default function ImportacaoDadosSection() {
   const [tab, setTab] = useState('dashboard')
   const { logs, addLog } = useImportLog()
-  const { alunos, setAlunos, turmas, setTurmas, titulos, setTitulos } = useData()
+  const { turmas, setTurmas } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
 
   // Coerce setters to the expected signature
   const wrapSetter = <T,>(fn: any): ((upd: (p: T[]) => T[]) => void) => fn

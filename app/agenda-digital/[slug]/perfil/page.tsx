@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData } from '@/lib/dataContext'
 import { useParams } from 'next/navigation'
@@ -7,7 +9,7 @@ import { UserCog, Camera, Phone, Mail, ShieldAlert, GraduationCap, MapPin, Edit3
 import { getInitials, formatDate } from '@/lib/utils'
 
 export default function ADPerfilPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const aluno = alunos.find(a => a.id === resolvedParams.slug)
 

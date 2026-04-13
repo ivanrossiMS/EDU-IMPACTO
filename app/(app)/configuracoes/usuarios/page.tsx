@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo, useEffect } from 'react'
 import { Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers } from 'lucide-react'
@@ -100,7 +102,8 @@ export default function UsuariosPage() {
 
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
-  const { alunos, logSystemAction, perfis, setPerfis } = useData()
+  const { logSystemAction, perfis, setPerfis } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   // Calcula o total virtual de usuários da Família (alunos + responsáveis únicos)
   const totalFamiliaUsuarios = useMemo(() => {

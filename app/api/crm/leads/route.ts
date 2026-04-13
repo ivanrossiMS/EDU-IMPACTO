@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const q = searchParams.get('q')
 
-  let query = supabaseServer.from('leads').select('*').order('data', { ascending: false })
+  let query = supabase.from('leads').select('*').order('data', { ascending: false })
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (q) query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%,telefone.ilike.%${q}%`)
 
@@ -18,6 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     const { id, nome, interesse, origem, status, responsavel, data, telefone, email, score_ia, valor_potencial, notas, ...rest } = body
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
       notas: notas || '', dados: rest,
     }
 
-    const { data: saved, error } = await supabaseServer.from('leads').upsert(row).select().single()
+    const { data: saved, error } = await supabase.from('leads').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(saved, { status: 201 })
   } catch (e: any) {
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -53,7 +56,7 @@ export async function PUT(request: Request) {
       email: email || '', score_ia: score_ia || 0, valor_potencial: valor_potencial || 0,
       notas: notas || '', dados: rest, updated_at: new Date().toISOString(),
     }
-    const { data: saved, error } = await supabaseServer.from('leads').update(row).eq('id', id).select().single()
+    const { data: saved, error } = await supabase.from('leads').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json(saved)
   } catch (e: any) {
@@ -62,10 +65,11 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const { error } = await supabaseServer.from('leads').delete().eq('id', id)
+  const { error } = await supabase.from('leads').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

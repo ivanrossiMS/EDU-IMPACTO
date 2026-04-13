@@ -1,6 +1,8 @@
 'use client'
 
 import { useData } from '@/lib/dataContext'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useApiQuery } from '@/hooks/useApi'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, GraduationCap, UserCheck, Brain, BarChart3, ArrowRight, Activity, Zap, Star, CheckCircle, Clock, XCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -28,60 +30,37 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
 }
 
 export default function DashboardPage() {
-  const {
-    alunos = [], turmas = [], titulos = [], contasPagar = [],
-    funcionarios = [], leads = [], ocorrencias = [], cfgCentrosCusto = []
-  } = useData() || {}
-
   const hoje = new Date()
+  const mesStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+  const mesPrev = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+  const mesPrevStr = `${mesPrev.getFullYear()}-${String(mesPrev.getMonth() + 1).padStart(2, '0')}`
 
-  // ── KPIs computados de dados reais e Memoizados ──────────────────────────────
+  // SWR Backend Server-Side Aggregations
+  // This avoids downloading up to 250,000 JSON rows into the Browser memory, fetching only the aggregated sums & counts
+  const { data: kpiData, isLoading: loadKpis } = useApiQuery<any>(
+    ['dashboard-kpis', mesStr, mesPrevStr],
+    `/api/financeiro/dashboard?mes=${mesStr}&mesPrev=${mesPrevStr}`,
+    {}
+  )
+  const kpis = kpiData || {}
 
+  // Some local logic that still needs small components (e.g., Alertas) will use basic Arrays if fetched regionally
+  // For the actual charts, we will lazily fetch the 6-month array or use the exact sums
   const {
-    totalAlunos, mesStr, mesPrevStr, receitaMes, receitaPrev, varReceita,
-    inadimplentes, inadimplenciaRate, taxaOcupacao, novasMatriculas, nFuncionarios,
-    riscoAlto, riscoMedio, riscoBaixo, totalRisco, RISCO_EVASAO_DIST
-  } = useMemo(() => {
-    const totalAlunos = alunos.filter(a => a.status === 'matriculado').length
-    const mesStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
-    const mesPrev = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
-    const mesPrevStr = `${mesPrev.getFullYear()}-${String(mesPrev.getMonth() + 1).padStart(2, '0')}`
+    totalAlunos = 0, receitaMes = 0, receitaPrev = 0, varReceita = 0,
+    inadimplentes = 0, inadimplenciaRate = 0, taxaOcupacao = 0, novasMatriculas = 0, nFuncionarios = 0,
+    riscoAlto = 0, riscoMedio = 0, riscoBaixo = 0, totalRisco = 0,
+    RISCO_EVASAO_DIST = []
+  } = kpis
 
-    const receitaMes = titulos
-      .filter(t => t.status === 'pago' && t.pagamento?.startsWith(mesStr))
-      .reduce((s, t) => s + t.valor, 0)
-    const receitaPrev = titulos
-      .filter(t => t.status === 'pago' && t.pagamento?.startsWith(mesPrevStr))
-      .reduce((s, t) => s + t.valor, 0)
-    const varReceita = receitaPrev > 0 ? ((receitaMes - receitaPrev) / receitaPrev) * 100 : 0
+  // Optional: keep minimal legacy local stores for the Alertas
+  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos')
+  const [turmas = [], setTurmas] = useSupabaseArray<any>('turmas')
+  const [contasPagar = [], setContasPagar] = useSupabaseArray<any>('contas-pagar')
+  const [ocorrencias = [], setOcorrencias] = useSupabaseArray<any>('ocorrencias')
+  const [titulos = [], setTitulos] = useSupabaseArray<any>('titulos')
+  const [funcionarios = [], setFuncionarios] = useSupabaseArray<any>('rh/funcionarios')
 
-    const inadimplentes = alunos.filter(a => a.inadimplente).length
-    const inadimplenciaRate = alunos.length > 0 ? (inadimplentes / alunos.length) * 100 : 0
-
-    const taxaOcupacao = turmas.length > 0
-      ? turmas.reduce((s, t) => s + (t.capacidade > 0 ? (t.matriculados / t.capacidade) * 100 : 0), 0) / turmas.length
-      : 0
-
-    const novasMatriculas = leads.filter(l => l.status === 'matriculado').length
-    const nFuncionarios = funcionarios.length
-
-    const riscoAlto = alunos.filter(a => a.risco_evasao === 'alto').length
-    const riscoMedio = alunos.filter(a => a.risco_evasao === 'medio').length
-    const riscoBaixo = alunos.filter(a => a.risco_evasao === 'baixo').length
-    const totalRisco = riscoAlto + riscoMedio
-
-    const RISCO_EVASAO_DIST = [
-      { nome: 'Baixo', valor: riscoBaixo, fill: '#10b981' },
-      { nome: 'Médio', valor: riscoMedio, fill: '#f59e0b' },
-      { nome: 'Alto', valor: riscoAlto, fill: '#ef4444' },
-    ]
-
-    return {
-      totalAlunos, mesStr, mesPrevStr, receitaMes, receitaPrev, varReceita,
-      inadimplentes, inadimplenciaRate, taxaOcupacao, novasMatriculas, nFuncionarios,
-      riscoAlto, riscoMedio, riscoBaixo, totalRisco, RISCO_EVASAO_DIST
-    }
-  }, [alunos, titulos, turmas, leads, funcionarios])
 
   // ── Receita vs despesa por mês (últimos 6 meses) ─────────────────
   const getMonthKey = (dateStr: string | null | undefined) => {
@@ -96,6 +75,7 @@ export default function DashboardPage() {
     return `${names[parseInt(m) - 1]}/${y.slice(2)}`
   }
 
+  // Usaremos as coleções já injetadas pelo useSupabaseArray acima.
   const receitaMensal = useMemo(() => {
     const map: Record<string, number> = {}
     titulos.forEach(t => {
@@ -118,14 +98,14 @@ export default function DashboardPage() {
     return map
   }, [contasPagar])
 
-  const despesasPorCentroCusto = useMemo(() => {
+  const despesasPorCategoria = useMemo(() => {
     const map: Record<string, number> = {}
     contasPagar.forEach(c => {
-      if (c.status === 'pago' || c.status === 'pendente' || c.status === 'atrasado') { // Considerando toda a despesa lançada para análise estrutural ou só paga? Vamos pegar tudo do mês atual ou pagas?
+      if (c.status === 'pago' || c.status === 'pendente' || c.status === 'atrasado') { 
         const dStr = c.vencimento
         if (dStr?.startsWith(mesStr)) {
-          const nomeCentro = c.centroCustoId ? cfgCentrosCusto.find(x => x.id === c.centroCustoId)?.descricao || 'Não Classificado' : 'Não Classificado'
-          map[nomeCentro] = (map[nomeCentro] || 0) + c.valor
+          const nomeCategoria = c.categoria || 'Sem Categoria'
+          map[nomeCategoria] = (map[nomeCategoria] || 0) + c.valor
         }
       }
     })
@@ -138,7 +118,7 @@ export default function DashboardPage() {
       .map(([nome, valor], i) => ({
         nome, valor, fill: CORES[i % CORES.length]
       }))
-  }, [contasPagar, cfgCentrosCusto, mesStr])
+  }, [contasPagar, mesStr])
 
   const allMonths = Array.from(new Set([...Object.keys(receitaMensal), ...Object.keys(despesaMensal)])).sort().slice(-6)
 
@@ -362,19 +342,18 @@ export default function DashboardPage() {
 
         {/* Custo Real por Centro (MÊS ATUAL) */}
         <div className="chart-container" style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'hsl(var(--text-primary))', marginBottom: 4 }}>Contas por Centro de Custo</div>
           <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 16 }}>Apuração real no mês atual ({getMonthLabel(mesStr)})</div>
-          {despesasPorCentroCusto.length === 0 ? (
+          {despesasPorCategoria.length === 0 ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
               Sem despesas no mês
             </div>
           ) : (
             <>
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CostCentersPieChartComponent data={despesasPorCentroCusto} />
+                <CostCentersPieChartComponent data={despesasPorCategoria} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {despesasPorCentroCusto.slice(0, 4).map(r => ( // mostra top 4 na legenda pra não quebrar
+                {despesasPorCategoria.slice(0, 4).map(r => ( // mostra top 4 na legenda pra não quebrar
                   <div key={r.nome} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.fill, display: 'inline-block', flexShrink: 0 }} />

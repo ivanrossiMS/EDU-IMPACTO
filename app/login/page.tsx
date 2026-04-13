@@ -35,18 +35,7 @@ function setSenha(uid: string, senha: string) {
 function verificarSenha(uid: string, senha: string): boolean { return getSenhas()[uid] === senha }
 function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
-// ── Buscar todos os usuários ativos ───────────────────────────────────────────
-async function fetchAllUsersFromDB(): Promise<FoundUser[]> {
-  try {
-    const res = await fetch('/api/configuracoes/usuarios', { cache: 'no-store' })
-    if(!res.ok) return [];
-    const sysDb = await res.json();
-    return (sysDb || []).filter((u:any) => u.status === 'ativo').map((u:any) => ({
-      id: u.id, nome: u.nome, email: u.email?.toLowerCase(), login: u.email?.toLowerCase(),
-      cargo: u.cargo || u.perfil, perfil: u.perfil, senha: u.senha
-    }))
-  } catch { return [] }
-}
+// Removed fetchAllUsersFromDB to prevent data enumeration vulnerabilities
 
 export default function LoginPage() {
   const router = useRouter()
@@ -94,8 +83,8 @@ export default function LoginPage() {
     return () => clearInterval(t)
   }, [])
   const [isSystemEmpty, setIsSystemEmpty] = useState(false)
-  const [setupNome, setSetupNome]   = useState('')
-  const [setupEmail, setSetupEmail] = useState('')
+  const [setupNome, setSetupNome]   = useState('Administrador do Sistema')
+  const [setupEmail, setSetupEmail] = useState('direcao@colegioimpacto.net')
   const [setupPass, setSetupPass]   = useState('')
   const [setupLoading, setSetupLoading] = useState(false)
   const [mounted, setMounted]       = useState(false)
@@ -105,13 +94,17 @@ export default function LoginPage() {
     const h = (e: MouseEvent) => setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight })
     window.addEventListener('mousemove', h); 
     
-    // Verifica se sistema está vazio para exibir botão Master
-    fetch('/api/configuracoes/usuarios', { cache: 'no-store' }).then(r => r.json()).then(data => {
-      setIsSystemEmpty(!data || data.length === 0)
-    }).catch(() => {
-      const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-      setIsSystemEmpty(sysUsers.length === 0)
-    })
+    // Verifica se direcao@colegioimpacto.net já existe para exibir botão Master
+    fetch('/api/configuracoes/usuarios?checkMaster=true', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        setIsSystemEmpty(!data.masterExists)
+      })
+      .catch(() => {
+        const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
+        const temDirecao = sysUsers.some((u: any) => u.email?.toLowerCase() === 'direcao@colegioimpacto.net')
+        setIsSystemEmpty(!temDirecao)
+      })
 
     return () => window.removeEventListener('mousemove', h)
   }, [])
@@ -137,39 +130,46 @@ export default function LoginPage() {
     e.preventDefault()
     if (!email || !password) { setLoginError('Preencha e-mail e senha.'); return }
     setLoginLoading(true); setLoginError('')
-    await new Promise(r => setTimeout(r, 600))
-    const q = email.trim().toLowerCase()
-
-    // Busca oficial da API Real
-    const dbUsers = await fetchAllUsersFromDB()
-    const found = dbUsers.find(u => (u.email && u.email === q) || ((u as any).login && (u as any).login === q))
-
-    if (!found) { setLoginLoading(false); setLoginError('Login não cadastrado ou inativo na nuvem.'); return }
     
-    // Verificação de Senha conectada à nuvem primeiro, fallback localStorage mock temporário
-    const dbPass = (found as any).senha;
-    if (dbPass) {
-       if (dbPass !== password) { setLoginLoading(false); setLoginError('Senha incorreta.'); return }
-    } else {
-       if (!temSenha(found.id)) { setLoginLoading(false); setLoginError('Senha não criada.'); return }
-       if (!verificarSenha(found.id, password)) { setLoginLoading(false); setLoginError('Senha local incorreta.'); return }
-    }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
 
-    setLoginLoading(false)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Credenciais inválidas.')
+      }
 
-    // ── Update último acesso
-    const nowStr = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date())
-    fetch(`/api/configuracoes/usuarios/${found.id}`, { method: 'PUT', body: JSON.stringify({ ultimoAcesso: nowStr }) }).catch(()=>null)
+      const authData = await res.json()
+      
+      // Update local context with enriched profile from system_users
+      const meta = authData.user?.user_metadata || {}
+      const nomeReal = meta.nome || email.split('@')[0]
+      const cargoReal = meta.cargo || 'Colaborador'
+      const perfilReal = meta.perfil || 'Usuário'
 
-    // ── Salva o usuário logado no context e gera JWT no Server via Action
-    await createSession({ id: found.id, nome: found.nome, email: found.email, cargo: found.cargo, perfil: found.perfil })
-    setCurrentUser({ id: found.id, nome: found.nome, email: found.email, cargo: found.cargo, perfil: found.perfil })
-    if (found.perfil === 'Família' || found.cargo === 'Aluno' || found.cargo === 'Responsável') {
-      router.push('/agenda-digital')
-    } else if (found.perfil === 'Professor') {
-      router.push('/professor')
-    } else {
-      router.push('/dashboard')
+      setCurrentUser({ 
+        id: authData.user.id, 
+        nome: nomeReal, 
+        email: email, 
+        cargo: cargoReal, 
+        perfil: perfilReal 
+      })
+
+      if (perfilReal === 'Família' || cargoReal === 'Aluno' || cargoReal === 'Responsável') {
+        window.location.href = '/agenda-digital'
+      } else if (perfilReal === 'Professor') {
+        window.location.href = '/professor'
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch (err: any) {
+      setLoginLoading(false)
+      setLoginError(err.message || 'Credenciais inválidas.')
+      console.error(err)
     }
   }
 
@@ -180,19 +180,25 @@ export default function LoginPage() {
     await new Promise(r => setTimeout(r, 900))
     const q = faQuery.trim().toLowerCase()
     
-    let users: FoundUser[] = []
-    try { users = await fetchAllUsersFromDB() } catch(e) {}
-    
-    const found = users.find((u: FoundUser) => (u.email && u.email.toLowerCase() === q) || ((u as any).login && (u as any).login.toLowerCase() === q))
-    setFaLoading(false)
-    if (found) { 
-      if (temSenha(found.id)) {
-        setFaError('Seu acesso já foi configurado. Faça login normalmente.')
-      } else {
-        setFaUser(found); setStep('first_access_create'); setFaRegEmail(found.email || '') 
+    try {
+      const res = await fetch('/api/auth/verify-first-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q })
+      })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Nenhum cadastro encontrado. Verifique com a administração.')
       }
+
+      const { user } = await res.json()
+      setFaUser(user); setStep('first_access_create'); setFaRegEmail(user.email || '') 
+    } catch (err: any) {
+      setFaError(err.message)
+    } finally {
+      setFaLoading(false)
     }
-    else setFaError('Nenhum cadastro encontrado. Verifique com a administração.')
   }
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -201,29 +207,29 @@ export default function LoginPage() {
     if (newPass.length < 6) { setCreateError('Mínimo 6 caracteres.'); return }
     if (newPass !== confirmPass) { setCreateError('As senhas não coincidem.'); return }
     setCreateLoading(true); setCreateError('')
-    await new Promise(r => setTimeout(r, 1200))
-    setSenha(faUser!.id, newPass)
+    
+    try {
+        const passRes = await fetch('/api/auth/update-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIdLegacy: faUser!.id, newPass })
+        })
+        
+        if (!passRes.ok) {
+           const errData = await passRes.json().catch(() => ({}))
+           throw new Error(errData.error || 'Erro ao sincronizar senha com servidor.')
+        }
 
-    const userId = faUser!.id.replace('virtual-', '')
-    const authUsers = JSON.parse(localStorage.getItem('edu-auth-users') ?? '[]')
-    const idx = authUsers.findIndex((u: any) => u.academic_id === userId || u.id === userId)
-    if (idx >= 0) {
-      authUsers[idx].email = faRegEmail
-      localStorage.setItem('edu-auth-users', JSON.stringify(authUsers))
+        setCreateLoading(false); setCreateSuccess(true)
+       await new Promise(r => setTimeout(r, 2200))
+       setStep('login')
+       setEmail(faRegEmail)
+       setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false)
+    } catch (err: any) {
+       console.error("Setup erro:", err)
+       setCreateLoading(false)
+       setCreateError(err.message || 'Erro ao sincronizar senha com servidor.')
     }
-
-    const alunos = JSON.parse(localStorage.getItem('edu-data-alunos') ?? '[]')
-    const alIdx = alunos.findIndex((a: any) => a.id === userId)
-    if (alIdx >= 0) {
-      alunos[alIdx].email = faRegEmail
-      localStorage.setItem('edu-data-alunos', JSON.stringify(alunos))
-    }
-
-    setCreateLoading(false); setCreateSuccess(true)
-    await new Promise(r => setTimeout(r, 2200))
-    setStep('login')
-    setEmail(faRegEmail)
-    setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false)
   }
 
   const goLogin = () => { setStep('login'); setFaError(''); setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateError(''); setCreateSuccess(false); setFaRegEmail('') }
@@ -630,7 +636,7 @@ export default function LoginPage() {
           </div>
           <div suppressHydrationWarning>
             <Label text="E-mail de Login Interno" />
-            <input type="email" value={setupEmail} onChange={e=>setSetupEmail(e.target.value)} placeholder="admin@escola.com.br" required suppressHydrationWarning style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
+            <input type="email" value={setupEmail} disabled suppressHydrationWarning style={{...baseInputStyle, opacity: 0.6, cursor: 'not-allowed'}} />
           </div>
           <div suppressHydrationWarning>
             <Label text="Definir Senha Mestra" />

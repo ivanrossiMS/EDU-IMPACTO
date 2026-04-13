@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState } from 'react'
 import { useData, newId } from '@/lib/dataContext'
@@ -20,7 +22,8 @@ const STATUS_COR: Record<string, { bg: string; cor: string }> = {
 function getToday() { return new Date().toISOString().slice(0, 10) }
 
 export default function PlanosAulaPage() {
-  const { turmas, funcionarios } = useData()
+  const { turmas = [] } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const [planos, setPlanos] = useState<PlanoAula[]>([])
   const [showModal, setShowModal] = useState(false)
   const [selectedPlano, setSelectedPlano] = useState<PlanoAula | null>(null)

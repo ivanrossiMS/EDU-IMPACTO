@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -87,7 +89,7 @@ function calcHoras(entrada: string, saidaAlmoco: string, retornoAlmoco: string, 
 const HORAS_DIA = 8 * 60
 
 export default function PontoEletronicoPage() {
-  const { funcionarios } = useData()
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   const [registros, setRegistros] = useLocalStorage<RegistroPonto[]>('edu-ponto-eletronico', [])
   const [horarios, setHorarios] = useLocalStorage<HorarioRegistro[]>('edu-ponto-eletronico-horarios', [])
   
@@ -122,7 +124,7 @@ export default function PontoEletronicoPage() {
   ), [registros, periodoInicio, periodoFim, filtroFunc])
 
   // Estatísticas por funcionário
-  const stats = useMemo(() => funcionarios
+  const stats = useMemo(() => (funcionarios || [])
     .filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo')
     .map(f => {
       const regs = filtPeriodo.filter(r => r.funcionarioId === f.id)
@@ -144,7 +146,7 @@ export default function PontoEletronicoPage() {
   const totalExtras = stats.reduce((s, r) => s + r.minExtras, 0)
   const totalDias = stats.reduce((s, r) => s + r.dias, 0)
 
-  const funcNome = (id: string) => funcionarios.find(f => f.id === id)?.nome || '—'
+  const funcNome = (id: string) => (funcionarios || []).find(f => f.id === id)?.nome || '—'
 
   const openAdd = () => { setForm({ ...BLANK }); setEditId(null); setModal('add') }
   const openEdit = (r: RegistroPonto) => {
@@ -289,7 +291,7 @@ export default function PontoEletronicoPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Funcionários Ativos', value: funcionarios.filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').length, color: '#3b82f6', icon: '👥' },
+          { label: 'Funcionários Ativos', value: (funcionarios || []).filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').length, color: '#3b82f6', icon: '👥' },
           { label: 'Dias Registrados', value: totalDias, color: '#34d399', icon: '📅' },
           { label: 'Faltas no Período', value: totalFaltas, color: '#f87171', icon: '⚠️' },
           { label: 'Horas Extras', value: hStr(totalExtras), color: '#f59e0b', icon: '⏰' },
@@ -313,13 +315,13 @@ export default function PontoEletronicoPage() {
           </div>
           <select className="form-input" style={{ width: 220 }} value={filtroFunc} onChange={e => setFiltroFunc(e.target.value)}>
             <option value="">Todos os funcionários</option>
-            {funcionarios.filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+            {(funcionarios || []).filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
         </div>
       </div>
 
       {/* Tabela resumo por funcionário */}
-      {funcionarios.filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').length === 0 ? (
+      {(funcionarios || []).filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').length === 0 ? (
         <div className="card" style={{ padding: '60px 24px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Users2 size={48} style={{ opacity: 0.1, margin: '0 auto 16px' }} />
           <div style={{ fontWeight: 700 }}>Nenhum funcionário ativo cadastrado</div>
@@ -433,7 +435,7 @@ export default function PontoEletronicoPage() {
                   <label className="form-label">Funcionário *</label>
                   <select className="form-input" value={form.funcionarioId} onChange={e => set('funcionarioId', e.target.value)}>
                     <option value="">Selecionar</option>
-                    {funcionarios.filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                    {(funcionarios || []).filter(f => f.status.toLowerCase() === 'ativo' || f.status === 'Ativo').map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                   </select>
                 </div>
                 <div>

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -7,7 +9,7 @@ import { Plus, Search, Filter, Settings2, BadgeDollarSign, QrCode, FileText, Che
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 export default function ADAdminCobrancas() {
-  const { titulos } = useData()
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
   const { adAlert } = useAgendaDigital()
   const [activeTab, setActiveTab] = useState<'app' | 'erp'>('app')
 

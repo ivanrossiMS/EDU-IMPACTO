@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData, Ocorrencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
@@ -164,7 +166,13 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
 }
 
 export default function OcorrenciasPage() {
-  const { ocorrencias, setOcorrencias, turmas, alunos, cfgTiposOcorrencia } = useData()
+  const { ocorrencias: rawOcorrencias, setOcorrencias, turmas: rawTurmas, cfgTiposOcorrencia: rawCfgTipos } = useData();
+  const [rawAlunos, setAlunos] = useSupabaseArray<any>('alunos');
+
+  const ocorrencias = rawOcorrencias || [];
+  const turmas = rawTurmas || [];
+  const cfgTiposOcorrencia = rawCfgTipos || [];
+  const alunos = rawAlunos || [];
 
   // Tipos de ocorrência dinâmicos (usa os configurados ou fallback)
   const tiposAtivos = cfgTiposOcorrencia

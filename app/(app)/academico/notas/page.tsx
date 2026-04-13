@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useData, LancamentoNota, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
@@ -16,7 +18,8 @@ function situacaoBadge(m: number) {
 }
 
 export default function NotasPage() {
-  const { alunos, turmas, lancamentosNota, setLancamentosNota, cfgDisciplinas, logSystemAction } = useData()
+  const { turmas = [], lancamentosNota = [], setLancamentosNota, cfgDisciplinas = [], logSystemAction } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
   const [bimestre, setBimestre] = useState('1º Bim')

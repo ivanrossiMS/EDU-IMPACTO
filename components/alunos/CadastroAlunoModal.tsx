@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 
 import { useState, useMemo, useEffect } from 'react'
@@ -269,7 +271,9 @@ function ModalMatricula({
 interface Props { open: boolean; onClose: () => void; editingId?: string | null }
 
 export default function CadastroAlunoModal({ open, onClose, editingId }: Props) {
-  const { alunos, setAlunos, turmas, cfgPadroesPagamento, titulos, setTitulos } = useData()
+  const { turmas, cfgPadroesPagamento } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
 
   const [step, setStep] = useState(1)
 

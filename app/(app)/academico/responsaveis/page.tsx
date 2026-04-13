@@ -1,15 +1,20 @@
 'use client'
+import { useSupabaseCollection } from '@/lib/useSupabaseCollection';
+
+
 
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Users, Search, Phone, Mail, MessageSquare,
-  ChevronRight, AlertTriangle, CheckCircle,
-  Wallet, UserCheck, Download, Plus,
+  ChevronRight, AlertTriangle, CheckCircle, Edit,
+  Wallet, UserCheck, Download, Plus, Settings, MapPin,
   BookOpen, X, TrendingDown, Shield, Heart, User, ChevronDown,
+  Cpu, Briefcase, GraduationCap, ExternalLink, Zap,
 } from 'lucide-react'
 import { getInitials } from '@/lib/utils'
+import { CadastroResponsavelModal } from '@/components/alunos/CadastroResponsavelModal'
 
 interface Responsavel {
   id?: string
@@ -38,10 +43,38 @@ const RISCO_COLOR = { alto: '#ef4444', medio: '#f59e0b', baixo: '#10b981' }
 const RISCO_LABEL = { alto: '⚠ Alto', medio: '⚡ Médio', baixo: '✓ Baixo' }
 
 export default function ResponsaveisPage() {
-  const { alunos } = useData()
-  const [search, setSearch]         = useState('')
-  const [selecionado, setSelecionado] = useState<Responsavel | null>(null)
+  // Persister noop: esta página só LÊ dados via GET. Escrita ocorre via modal (api/responsaveis POST/PUT individual).
+  // Usar useSupabaseArray dispararia POST automático com o array inteiro ao setar estado → 400.
+  const [responsaveisRaw, setResponsaveisRaw] = useSupabaseCollection<any>(
+    'responsaveis?incluir_vinculos=1',
+    [],
+    {
+      fetcher: () =>
+        fetch('/api/responsaveis?incluir_vinculos=1')
+          .then(r => r.ok ? r.json() : [])
+          .then(d => Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : [])),
+      persister: async () => { /* noop — não enviar array para a API */ },
+    }
+  );
+  const [alunos] = useSupabaseCollection<any>(
+    'alunos',
+    [],
+    {
+      fetcher: () =>
+        fetch('/api/alunos?limit=2000')
+          .then(r => r.ok ? r.json() : {})
+          .then(d => Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : [])),
+      persister: async () => { /* noop */ },
+    }
+  );
+  const [search, setSearch] = useState('')
+  const [searchResults, setSearchResults] = useState<Responsavel[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchDone, setSearchDone] = useState(false)
+  const [selecionado, setSelecionado] = useState<Responsavel & { _raw?: any } | null>(null)
   const [showContato, setShowContato] = useState(false)
+  const [showCadastroModal, setShowCadastroModal] = useState(false)
+  const [responsavelEdicao, setResponsavelEdicao] = useState<any>(null)
   const [mounted, setMounted]       = useState(false)
   const [activeKpi, setActiveKpi]   = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -55,107 +88,104 @@ export default function ResponsaveisPage() {
     st.id = id
     st.textContent = `
       @keyframes resp-slide-in { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
+      @keyframes spin { to { transform: rotate(360deg) } }
+      @keyframes resp-card-in { from{opacity:0;transform:translateY(16px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+      @keyframes rfid-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,0.4)} 50%{box-shadow:0 0 0 6px rgba(99,102,241,0)} }
       .resp-kpi-panel { animation: resp-slide-in 0.22s ease; }
+      .resp-card-premium { animation: resp-card-in 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
+      .resp-card-premium:hover .resp-card-glow { opacity:1 !important; }
+      .resp-card-premium:hover .resp-card-inner { transform: translateY(-4px); box-shadow: 0 24px 60px rgba(0,0,0,0.22), 0 8px 20px rgba(0,0,0,0.12) !important; }
+      .resp-card-inner { transition: transform 0.22s cubic-bezier(0.34,1.2,0.64,1), box-shadow 0.22s ease; }
+      .resp-action-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+      .resp-action-btn { transition: all 0.15s; }
+      .rfid-chip { animation: rfid-pulse 2.5s infinite; }
     `
+
     document.head.appendChild(st)
   }, [])
 
-  // ── Agrupar alunos por responsável ────────────────────────────────────────
+  // ── Transformando dados da tabela de responsáveis ───────────────────────
   const responsaveis = useMemo<Responsavel[]>(() => {
-    const mapa: Record<string, Responsavel> = {}
+    return (responsaveisRaw || []).map(r => {
+        const filhos = (r._vinculos || []).map((v:any) => ({
+           id: v.aluno?.id || v.aluno_id,
+           nome: v.aluno?.nome || 'Aluno Desconhecido',
+           turma: v.aluno?.turma || '',
+           serie: v.aluno?.serie || '',
+           frequencia: v.aluno?.frequencia || 0,
+           inadimplente: v.aluno?.inadimplente || false,
+           risco_evasao: v.aluno?.risco_evasao || 'baixo',
+           foto: v.aluno?.foto || v.aluno?.dados?.foto || ''
+        }))
 
-    ;(alunos || []).forEach(aluno => {
-      const respsArray: any[] = Array.isArray((aluno as any).responsaveis)
-        ? (aluno as any).responsaveis : []
-
-      const respsComNome = respsArray.filter(r => r.nome?.trim())
-
-      const respsToProcess = respsComNome.length > 0
-        ? respsComNome
-        : aluno.responsavel?.trim()
-          ? [{ nome: aluno.responsavel.trim(), tipo: 'legado', celular: aluno.telefone, email: aluno.email, parentesco: 'Responsável', respPedagogico: true, respFinanceiro: false }]
-          : []
-
-      respsToProcess.forEach((resp: any, idx: number) => {
-        const nome = resp.nome?.trim()
-        if (!nome) return
-
-        const cpfLimpo = (resp.cpf || '').replace(/\D/g, '')
-        const chave = cpfLimpo.length === 11
-          ? cpfLimpo
-          : `${aluno.id}_${resp.tipo || idx}`
-
-        const parentesco = resp.parentesco
-          || (resp.tipo === 'mae' ? 'Mãe' : resp.tipo === 'pai' ? 'Pai' : resp.tipo === 'legado' ? 'Responsável' : 'Outro')
-
-        let rfidAcesso = resp.rfid || ''
-        if (!rfidAcesso && (aluno as any).saude?.autorizados && Array.isArray((aluno as any).saude.autorizados)) {
-          const authFound = (aluno as any).saude.autorizados.find((a: any) => a.nome?.trim().toLowerCase() === nome.toLowerCase())
-          if (authFound && authFound.rfid) rfidAcesso = authFound.rfid
+        return {
+          id: r.id, codigo: r.codigo, rfid: r.rfid, rg: r.rg, profissao: r.profissao, 
+          enderecoStr: r.endereco?.logradouro ? `${r.endereco.logradouro}, ${r.endereco.numero || 'SN'}` : '',
+          nome: r.nome, telefone: r.celular || r.telefone || 'Não informado', email: r.email || '',
+          cpf: r.cpf, parentesco: r.parentesco, tipo: r.tipo,
+          respPedagogico: r.dados?.respPedagogico || false,
+          respFinanceiro: r.dados?.respFinanceiro || false,
+          inadimplente: filhos.some((f:any) => f.inadimplente),
+          filhos,
+          totalFilhos: filhos.length,
+          _raw: r 
         }
+    }).sort((a:any, b:any) => a.nome.localeCompare(b.nome))
+  }, [responsaveisRaw])
 
-        if (!mapa[chave]) {
-          let endStr = ''
-          if (resp.endereco) {
-            endStr = [resp.endereco.logradouro, resp.endereco.numero, resp.endereco.bairro, resp.endereco.cidade].filter(Boolean).join(', ')
-          }
-          mapa[chave] = {
-            id: resp.id, codigo: resp.codigo, rfid: rfidAcesso,
-            rg: resp.rg, profissao: resp.profissao, enderecoStr: endStr,
-            nome, telefone: resp.celular || resp.telefone || '',
-            email: resp.email || '',
-            cpf: cpfLimpo.length === 11 ? resp.cpf || cpfLimpo : undefined,
-            parentesco, tipo: resp.tipo || 'outro',
-            respPedagogico: !!resp.respPedagogico,
-            respFinanceiro: !!resp.respFinanceiro,
-            filhos: [], inadimplente: false, totalFilhos: 0,
-          }
-        } else {
-          if (!mapa[chave].nome) mapa[chave].nome = nome
-          if (resp.respPedagogico) mapa[chave].respPedagogico = true
-          if (resp.respFinanceiro) mapa[chave].respFinanceiro = true
-          if (resp.codigo && !mapa[chave].codigo) mapa[chave].codigo = resp.codigo
-          if (rfidAcesso && !mapa[chave].rfid) mapa[chave].rfid = rfidAcesso
-        }
-
-        const jaAdicionado = mapa[chave].filhos.some(f => f.id === aluno.id)
-        if (!jaAdicionado) {
-          mapa[chave].filhos.push({
-            id: aluno.id, nome: aluno.nome, turma: aluno.turma, serie: aluno.serie,
-            frequencia: aluno.frequencia, inadimplente: aluno.inadimplente, risco_evasao: aluno.risco_evasao,
-          })
-        }
-        if (aluno.inadimplente) mapa[chave].inadimplente = true
-      })
-    })
-
-    return Object.values(mapa)
-      .map(r => ({ ...r, totalFilhos: r.filhos.length, telefone: r.telefone || 'Não informado' }))
-      .sort((a, b) => a.nome.localeCompare(b.nome))
-  }, [alunos])
-
-  // ── Busca ─────────────────────────────────────────────────────────────────
-  const hasSearch = search.trim().length >= 3
-
-  function matchNome(nome: string, q: string): boolean {
-    const n = nome.toLowerCase()
-    if (n.includes(q)) return true
-    const tokens = n.split(/\s+/).filter(Boolean)
-    const initials = tokens.map(t => t[0]).join('')
-    if (initials.startsWith(q)) return true
-    const qTokens = q.split(/\s+/).filter(Boolean)
-    if (qTokens.length > 1 && qTokens.every(qt => tokens.some(t => t.startsWith(qt)))) return true
-    return false
+  // ── Search-as-you-type: servidor, mínimo 3 chars, debounce 300ms ──────────
+  const transformResp = (r: any): Responsavel => {
+    const filhos = (r._vinculos || []).map((v: any) => ({
+      id: v.aluno?.id || v.aluno_id,
+      nome: v.aluno?.nome || 'Aluno Desconhecido',
+      turma: v.aluno?.turma || '',
+      serie: v.aluno?.serie || '',
+      frequencia: v.aluno?.frequencia || 0,
+      inadimplente: v.aluno?.inadimplente || false,
+      risco_evasao: v.aluno?.risco_evasao || 'baixo',
+      foto: v.aluno?.foto || v.aluno?.dados?.foto || ''
+    }))
+    return {
+      id: r.id, codigo: r.codigo, rfid: r.rfid, rg: r.rg, profissao: r.profissao,
+      enderecoStr: r.endereco?.logradouro ? `${r.endereco.logradouro}, ${r.endereco.numero || 'SN'}` : '',
+      nome: r.nome, telefone: r.celular || r.telefone || 'Não informado', email: r.email || '',
+      cpf: r.cpf, parentesco: r.parentesco, tipo: r.tipo,
+      respPedagogico: r.dados?.respPedagogico || false,
+      respFinanceiro: r.dados?.respFinanceiro || false,
+      inadimplente: filhos.some((f: any) => f.inadimplente),
+      filhos, totalFilhos: filhos.length,
+      _raw: r
+    } as any
   }
 
-  const filtered = useMemo(() => {
-    if (!hasSearch) return []
-    const q = search.toLowerCase().trim()
-    return responsaveis.filter(r =>
-      matchNome(r.nome, q) || r.filhos.some(f => matchNome(f.nome || '', q))
-    )
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 3) {
+      setSearchResults([])
+      setSearchDone(false)
+      setSearchLoading(false)
+      return
+    }
+    setSearchLoading(true)
+    setSearchDone(false)
+    const timer = setTimeout(() => {
+      let cancelled = false
+      fetch(`/api/responsaveis?q=${encodeURIComponent(q)}&incluir_vinculos=1&limit=50`)
+        .then(r => r.json())
+        .then(json => {
+          if (cancelled) return
+          const lista = Array.isArray(json) ? json : (json.data ?? [])
+          setSearchResults(lista.map(transformResp))
+          setSearchDone(true)
+        })
+        .catch(() => { if (!cancelled) { setSearchResults([]); setSearchDone(true) } })
+        .finally(() => { if (!cancelled) setSearchLoading(false) })
+    }, 300)
+    return () => { clearTimeout(timer) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, responsaveis, hasSearch])
+  }, [search])
+
+
 
   // ── KPI data ──────────────────────────────────────────────────────────────
   const totalResp     = mounted ? responsaveis.length : 0
@@ -359,12 +389,19 @@ export default function ResponsaveisPage() {
   return (
     <div>
       {/* ── Header ── */}
-      <div className="page-header" style={{ marginBottom:28 }}>
+      <div className="page-header" style={{ marginBottom:28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Responsáveis</h1>
           <p className="page-subtitle" suppressHydrationWarning>
-            {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? (alunos || []).length : '—'} aluno(s) vinculado(s)
+            {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? (alunos || []).length : '—'} aluno(s) no sistema
           </p>
+        </div>
+        <div>
+          <button 
+             className="btn btn-primary" 
+             onClick={() => { setResponsavelEdicao(null); setShowCadastroModal(true); }}>
+             <Plus size={16}/> Novo Responsável
+          </button>
         </div>
       </div>
 
@@ -388,162 +425,378 @@ export default function ResponsaveisPage() {
 
       {/* ── Hero Search ── */}
       <div style={{
-        display:'flex', flexDirection:'column', alignItems:'center', gap:20,
-        padding:'36px 24px', marginBottom:24,
+        display:'flex', flexDirection:'column', alignItems:'center', gap:16,
+        padding:'28px 24px', marginBottom:24,
         background:'linear-gradient(135deg,rgba(99,102,241,0.04),rgba(16,185,129,0.03))',
         border:'1px solid hsl(var(--border-subtle))', borderRadius:20,
       }}>
         <div style={{ textAlign:'center' }}>
           <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>🔍 Buscar Responsável</div>
           <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            Digite ao menos 3 letras — por nome, sobrenome ou iniciais (ex: &quot;IR&quot; para Ivan Rossi)
+            Digite ao menos <strong>3 letras</strong> para buscar por nome, sobrenome, CPF ou iniciais
           </div>
         </div>
         <div style={{ position:'relative', width:'100%', maxWidth:560 }}>
           <Search size={18} style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))' }}/>
+          {searchLoading && (
+            <div style={{ position:'absolute', right:search?44:16, top:'50%', transform:'translateY(-50%)', width:16, height:16, borderRadius:'50%', border:'2px solid rgba(99,102,241,0.3)', borderTopColor:'#6366f1', animation:'spin 0.7s linear infinite' }}/>
+          )}
           <input
             ref={searchRef}
             className="form-input"
-            style={{ paddingLeft:48, paddingRight:search?44:16, fontSize:15, height:52, borderRadius:14, boxShadow:hasSearch?'0 0 0 3px rgba(99,102,241,0.15)':'none' }}
-            placeholder="Ex: Ivan Rossi, Fra, IR (iniciais)..."
+            style={{ paddingLeft:48, paddingRight:search?44:16, fontSize:15, height:52, borderRadius:14,
+              boxShadow: search.length>=3 ? '0 0 0 3px rgba(99,102,241,0.15)' : 'none',
+              transition:'box-shadow 0.2s'
+            }}
+            placeholder="Ex: Ivan Rossi, Fra, 123.456... (mín. 3 letras)"
             value={search}
             onChange={e => setSearch(e.target.value)}
             autoFocus
           />
           {search && (
-            <button onClick={() => setSearch('')} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex' }}>
+            <button onClick={() => { setSearch(''); setSearchResults([]); setSearchDone(false); }}
+              style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex' }}>
               <X size={16}/>
             </button>
           )}
         </div>
 
-        {!hasSearch && (
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'center' }}>
-            {['Inadimplente', 'Risco Alto', 'Freq. Crítica'].map(tag => (
-              <span key={tag}
-                style={{ fontSize:11, padding:'4px 12px', borderRadius:20, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))', color:'hsl(var(--text-muted))', cursor:'pointer' }}
-                onClick={() => { setSearch(tag); searchRef.current?.focus() }}>
-                {tag}
-              </span>
-            ))}
+        {/* Status da busca */}
+        {search.length === 0 && (
+          <div style={{ fontSize:11, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ width:6, height:6, borderRadius:'50%', background:'#6366f1', display:'inline-block', opacity:.5 }}/>
+            Nenhum responsável exibido antes da busca
           </div>
         )}
-
-        {search.trim().length > 0 && search.trim().length < 3 && (
-          <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            Digite mais {3 - search.trim().length} letra{3 - search.trim().length > 1 ? 's' : ''} para buscar...
+        {search.length > 0 && search.length < 3 && (
+          <div style={{ fontSize:12, color:'#f59e0b', fontWeight:600, display:'flex', alignItems:'center', gap:6 }}>
+            <span>⏳</span> Mais {3 - search.length} letra{3 - search.length > 1 ? 's' : ''} para iniciar a busca…
           </div>
         )}
-        {hasSearch && (
+        {searchDone && !searchLoading && search.length >= 3 && (
           <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            {filtered.length} resultado{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+            {searchResults.length === 0
+              ? '🕵️ Nenhum resultado encontrado'
+              : <><strong style={{ color:'#6366f1' }}>{searchResults.length}</strong> resultado{searchResults.length !== 1 ? 's' : ''} encontrado{searchResults.length !== 1 ? 's' : ''}</>
+            }
           </div>
         )}
       </div>
 
       {/* ── Results ── */}
       <div suppressHydrationWarning>
-        {!mounted ? null : !hasSearch ? (
-          (alunos || []).length === 0 ? (
-            <div className="card" style={{ padding:'48px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-              <Users size={44} style={{ margin:'0 auto 14px', opacity:0.2 }}/>
-              <div style={{ fontSize:15, fontWeight:600, marginBottom:8 }}>Nenhum aluno cadastrado</div>
-              <div style={{ fontSize:13, marginBottom:18 }}>Os responsáveis são derivados dos dados dos alunos.</div>
-              <Link href="/academico/alunos" className="btn btn-primary"><Users size={14}/> Cadastrar Alunos</Link>
+        {!mounted ? null : search.length < 3 ? (
+          /* Estado inicial: aguardando busca */
+          <div style={{ textAlign:'center', padding:'52px 24px', color:'hsl(var(--text-muted))', borderRadius:20, border:'1.5px dashed hsl(var(--border-subtle))', background:'hsl(var(--bg-elevated))' }}>
+            <Search size={40} style={{ margin:'0 auto 16px', opacity:0.15 }}/>
+            <div style={{ fontSize:15, fontWeight:700, marginBottom:8, color:'hsl(var(--text-secondary))' }}>Busque para ver os responsáveis</div>
+            <div style={{ fontSize:13, maxWidth:360, margin:'0 auto' }}>
+              Digite ao menos <strong style={{ color:'#6366f1' }}>3 letras</strong> no campo acima para buscar por nome, sobrenome ou CPF.
             </div>
-          ) : (
-            <div style={{ textAlign:'center', padding:'40px 20px', color:'hsl(var(--text-muted))', fontSize:13 }}>
-              <div style={{ fontSize:36, marginBottom:12 }}>🔎</div>
-              <div style={{ fontWeight:600, marginBottom:4 }}>Use a busca acima para localizar responsáveis</div>
-              <div style={{ fontSize:12 }}>
-                Você tem {responsaveis.length} responsável{responsaveis.length !== 1 ? 'is' : ''} e {(alunos || []).length} aluno{(alunos || []).length !== 1 ? 's' : ''} cadastrado{(alunos || []).length !== 1 ? 's' : ''}
+            {mounted && responsaveis.length > 0 && (
+              <div style={{ marginTop:20, fontSize:12, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#6366f1', display:'inline-block' }}/>
+                {responsaveis.length} responsável(is) no sistema — use os cards acima para filtrar por categoria
               </div>
-            </div>
-          )
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px', color:'hsl(var(--text-muted))' }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>🕵️</div>
-            <div style={{ fontWeight:600 }}>Nenhum responsável encontrado</div>
-            <div style={{ fontSize:12, marginTop:4 }}>Tente outro nome, filho(a) ou turma</div>
+            )}
+          </div>
+        ) : searchLoading ? (
+          /* Carregando */
+          <div style={{ textAlign:'center', padding:'52px 24px', color:'hsl(var(--text-muted))' }}>
+            <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid rgba(99,102,241,0.2)', borderTopColor:'#6366f1', animation:'spin 0.7s linear infinite', margin:'0 auto 16px' }}/>
+            <div style={{ fontSize:13, fontWeight:600 }}>Buscando &quot;{search}&quot;…</div>
+          </div>
+        ) : searchResults.length === 0 ? (
+          /* Sem resultados */
+          <div style={{ textAlign:'center', padding:'48px', color:'hsl(var(--text-muted))' }}>
+            <div style={{ fontSize:36, marginBottom:12 }}>🕵️</div>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Nenhum responsável encontrado</div>
+            <div style={{ fontSize:13 }}>Tente outro nome, sobrenome ou CPF</div>
           </div>
         ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(380px, 1fr))', gap:14 }}>
-            {filtered.map(resp => {
+          /* Resultados */
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(400px, 1fr))', gap:20 }}>
+            {searchResults.map((resp, cardIdx) => {
               const riscoMax = resp.filhos.some(f => f.risco_evasao === 'alto') ? 'alto' : resp.filhos.some(f => f.risco_evasao === 'medio') ? 'medio' : 'baixo'
               const rc = RISCO_COLOR[riscoMax as keyof typeof RISCO_COLOR]
+              const accentColor = resp.inadimplente ? '#ef4444' : riscoMax === 'alto' ? '#ef4444' : riscoMax === 'medio' ? '#f59e0b' : '#6366f1'
+              const gradientBg = resp.inadimplente
+                ? 'linear-gradient(135deg,rgba(239,68,68,0.06) 0%,rgba(239,68,68,0.02) 100%)'
+                : riscoMax === 'medio'
+                  ? 'linear-gradient(135deg,rgba(245,158,11,0.05) 0%,rgba(99,102,241,0.04) 100%)'
+                  : 'linear-gradient(135deg,rgba(99,102,241,0.06) 0%,rgba(16,185,129,0.03) 100%)'
               return (
-                <div key={resp.nome} className="card"
-                  style={{ padding:'18px 20px', borderLeft:`4px solid ${resp.inadimplente ? '#ef4444' : rc}`, cursor:'pointer', transition:'transform 0.15s, box-shadow 0.15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(0,0,0,0.25)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='' }}
-                  onClick={() => setSelecionado(resp)}
+                <div
+                  key={resp.id || resp.nome}
+                  className="resp-card-premium"
+                  style={{ position:'relative', animationDelay:`${cardIdx * 0.04}s` }}
                 >
-                  <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:10 }}>
-                    <div className="avatar" style={{ width:46, height:46, fontSize:16, flexShrink:0, background:resp.inadimplente?'rgba(239,68,68,0.15)':`${rc}20`, color:resp.inadimplente?'#f87171':rc }}>
-                      {getInitials(resp.nome)}
-                    </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:14, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{resp.nome}</div>
-                      <div style={{ display:'flex', gap:5, marginTop:4, flexWrap:'wrap' }}>
-                        {resp.parentesco && <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(99,102,241,0.1)', color:'#818cf8', fontWeight:700 }}>{resp.parentesco}</span>}
-                        {resp.respPedagogico && <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700 }}>📚 Pedagógico</span>}
-                        {resp.respFinanceiro && <span style={{ fontSize:10, padding:'1px 7px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontWeight:700 }}>💰 Financeiro</span>}
-                        <span style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{resp.totalFilhos} filho{resp.totalFilhos > 1 ? 's' : ''}</span>
-                      </div>
-                    </div>
-                    <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                      {resp.inadimplente && <span className="badge badge-danger" style={{ fontSize:10 }}>💳 Inadimplente</span>}
-                      {riscoMax !== 'baixo' && <span style={{ fontSize:10, padding:'2px 6px', borderRadius:6, background:`${rc}20`, color:rc, fontWeight:700 }}>{RISCO_LABEL[riscoMax as keyof typeof RISCO_LABEL]}</span>}
-                    </div>
-                  </div>
+                  {/* Glow layer */}
+                  <div className="resp-card-glow" style={{
+                    position:'absolute', inset:-1, borderRadius:22,
+                    background:`radial-gradient(ellipse at 30% 0%, ${accentColor}25 0%, transparent 65%)`,
+                    opacity:0, transition:'opacity 0.3s', pointerEvents:'none', zIndex:0
+                  }}/>
 
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'hsl(var(--text-secondary))' }}>
-                      <Phone size={11} style={{ flexShrink:0, color:'hsl(var(--text-muted))' }}/>
-                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {resp.telefone !== 'Não informado' ? resp.telefone : <span style={{ color:'hsl(var(--text-muted))', fontStyle:'italic' }}>Não informado</span>}
-                      </span>
-                    </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'hsl(var(--text-secondary))' }}>
-                      <Mail size={11} style={{ flexShrink:0, color:'hsl(var(--text-muted))' }}/>
-                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {resp.email || <span style={{ color:'hsl(var(--text-muted))', fontStyle:'italic' }}>Não informado</span>}
-                      </span>
-                    </div>
-                  </div>
+                  <div className="resp-card-inner" style={{
+                    position:'relative', zIndex:1,
+                    background:`hsl(var(--bg-base))`,
+                    backgroundImage: gradientBg,
+                    borderRadius:20,
+                    border:`1.5px solid ${accentColor}30`,
+                    boxShadow:`0 4px 20px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.06)`,
+                    overflow:'hidden',
+                  }}>
 
-                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                    {resp.filhos.map(filho => {
-                      const rc2 = RISCO_COLOR[filho.risco_evasao as keyof typeof RISCO_COLOR] ?? '#10b981'
-                      return (
-                        <div key={filho.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', background:'hsl(var(--bg-elevated))', borderRadius:8, border:'1px solid hsl(var(--border-subtle))' }} onClick={e => e.stopPropagation()}>
-                          <BookOpen size={12} color="#60a5fa" style={{ flexShrink:0 }}/>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{filho.nome}</div>
-                            <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{filho.turma} · {filho.serie}</div>
-                          </div>
-                          <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-                            <span style={{ fontSize:11, fontWeight:700, color:filho.frequencia < 75 ? '#f87171' : '#34d399' }}>{filho.frequencia}%</span>
-                            <div style={{ width:8, height:8, borderRadius:'50%', background:rc2 }}/>
-                            {filho.inadimplente && <span style={{ fontSize:9, padding:'1px 4px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:'#f87171', fontWeight:700 }}>$</span>}
-                          </div>
-                          <Link href={`/academico/alunos/ficha?id=${filho.id}`} onClick={e => e.stopPropagation()} className="btn btn-ghost btn-sm" style={{ fontSize:10, padding:'3px 8px' }}>
-                            Ficha <ChevronRight size={10}/>
-                          </Link>
+                    {/* ── Top accent bar ── */}
+                    <div style={{ height:3, background:`linear-gradient(90deg, ${accentColor}, ${accentColor}60, transparent)` }}/>
+
+                    {/* ── Main content ── */}
+                    <div style={{ padding:'20px 22px 0' }}>
+
+                      {/* Header Row */}
+                      <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16 }}>
+
+                        {/* Avatar */}
+                        <div style={{
+                          width:56, height:56, borderRadius:16, flexShrink:0,
+                          background:`linear-gradient(135deg, ${accentColor}25, ${accentColor}10)`,
+                          border:`2px solid ${accentColor}35`,
+                          display:'flex', alignItems:'center', justifyContent:'center',
+                          fontSize:18, fontWeight:900, color:accentColor,
+                          fontFamily:'Outfit,sans-serif', letterSpacing:-0.5,
+                          boxShadow:`0 4px 16px ${accentColor}20`,
+                        }}>
+                          {getInitials(resp.nome)}
                         </div>
-                      )
-                    })}
-                  </div>
 
-                  <div style={{ display:'flex', gap:8, marginTop:14, paddingTop:12, borderTop:'1px solid hsl(var(--border-subtle))' }}>
-                    <button className="btn btn-secondary btn-sm" style={{ flex:1, fontSize:11 }} onClick={e => { e.stopPropagation(); window.open(`tel:${resp.telefone}`) }}><Phone size={11}/> Ligar</button>
-                    <button className="btn btn-secondary btn-sm" style={{ flex:1, fontSize:11 }} onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${resp.telefone.replace(/\D/g, '')}`) }}><MessageSquare size={11}/> WhatsApp</button>
-                    <button className="btn btn-secondary btn-sm" style={{ flex:1, fontSize:11 }} onClick={e => { e.stopPropagation(); window.open(`mailto:${resp.email}`) }}><Mail size={11}/> E-mail</button>
-                    {resp.inadimplente && (
-                      <Link href="/financeiro/inadimplencia" className="btn btn-danger btn-sm" style={{ flex:1, fontSize:11 }} onClick={e => e.stopPropagation()}>
-                        <Wallet size={11}/> Cobrar
-                      </Link>
-                    )}
+                        {/* Identity */}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
+                            <span style={{ fontSize:15, fontWeight:800, color:'hsl(var(--text-base))', fontFamily:'Outfit,sans-serif', letterSpacing:-0.3 }}>
+                              {resp.nome}
+                            </span>
+                            {resp.codigo && (
+                              <span style={{ fontSize:10, padding:'2px 6px', borderRadius:6, background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', color:'var(--text-muted)', fontWeight:700, fontFamily:'monospace' }}>
+                                #{resp.codigo}
+                              </span>
+                            )}
+                            {resp.inadimplente && (
+                              <span style={{ fontSize:9, padding:'2px 7px', borderRadius:20, background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.25)', color:'#f87171', fontWeight:800, letterSpacing:0.5 }}>INADIMPLENTE</span>
+                            )}
+                          </div>
+
+                          {/* Badges row */}
+                          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                            {resp.parentesco && (
+                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:`${accentColor}15`, border:`1px solid ${accentColor}30`, color:accentColor, fontWeight:700 }}>
+                                {resp.parentesco}
+                              </span>
+                            )}
+                            {resp.respPedagogico && (
+                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:'rgba(99,102,241,0.1)', border:'1px solid rgba(99,102,241,0.2)', color:'#818cf8', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
+                                <GraduationCap size={9}/> Pedagógico
+                              </span>
+                            )}
+                            {resp.respFinanceiro && (
+                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', color:'#10b981', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
+                                <Wallet size={9}/> Financeiro
+                              </span>
+                            )}
+                            {riscoMax !== 'baixo' && (
+                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:`${rc}15`, border:`1px solid ${rc}30`, color:rc, fontWeight:700 }}>
+                                {RISCO_LABEL[riscoMax as keyof typeof RISCO_LABEL]}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Edit btn */}
+                        <button
+                          onClick={e => { e.stopPropagation(); setResponsavelEdicao((resp as any)._raw); setShowCadastroModal(true) }}
+                          style={{ width:34, height:34, borderRadius:10, border:`1px solid hsl(var(--border-subtle))`, background:'hsl(var(--bg-elevated))', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'hsl(var(--text-muted))', flexShrink:0, transition:'all 0.15s' }}
+                          onMouseEnter={e => { (e.currentTarget as any).style.borderColor=accentColor; (e.currentTarget as any).style.color=accentColor }}
+                          onMouseLeave={e => { (e.currentTarget as any).style.borderColor=''; (e.currentTarget as any).style.color='' }}
+                          title="Editar responsável"
+                        >
+                          <Edit size={14}/>
+                        </button>
+                      </div>
+
+                      {/* ── Info Grid ── */}
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+                        {/* Telefone */}
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
+                          <Phone size={12} color="#60a5fa" style={{ flexShrink:0 }}/>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>Celular</div>
+                            <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))' }}>
+                              {resp.telefone !== 'Não informado' ? resp.telefone : <span style={{ fontStyle:'italic' }}>Não informado</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Email */}
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
+                          <Mail size={12} color="#a78bfa" style={{ flexShrink:0 }}/>
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>E-mail</div>
+                            <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: resp.email ? 'hsl(var(--text-base))' : 'hsl(var(--text-muted))' }}>
+                              {resp.email || <span style={{ fontStyle:'italic' }}>Não informado</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Profissão */}
+                        {resp.profissao && (
+                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
+                            <Briefcase size={12} color="#34d399" style={{ flexShrink:0 }}/>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>Profissão</div>
+                              <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{resp.profissao}</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* RFID */}
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background: resp.rfid ? 'rgba(99,102,241,0.06)' : 'hsl(var(--bg-elevated))', border:`1px solid ${resp.rfid ? 'rgba(99,102,241,0.25)' : 'hsl(var(--border-subtle))'}` }}>
+                          {resp.rfid
+                            ? <Cpu size={12} color="#818cf8" className="rfid-chip" style={{ flexShrink:0 }}/>
+                            : <Cpu size={12} color="hsl(var(--text-muted))" style={{ flexShrink:0 }}/>
+                          }
+                          <div style={{ minWidth:0 }}>
+                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>RFID</div>
+                            <div style={{ fontSize:12, fontWeight:600, fontFamily: resp.rfid ? 'monospace' : 'inherit', color: resp.rfid ? '#818cf8' : 'hsl(var(--text-muted))', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                              {resp.rfid || <span style={{ fontStyle:'italic', fontFamily:'inherit', fontWeight:400 }}>Não cadastrado</span>}
+                            </div>
+                          </div>
+                          {resp.rfid && (
+                            <div style={{ marginLeft:'auto', flexShrink:0 }}>
+                              <Zap size={10} color="#818cf8"/>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── Alunos Vinculados ── */}
+                      {resp.filhos.length > 0 && (
+                        <div style={{ marginBottom:16 }}>
+                          <div style={{ fontSize:10, fontWeight:800, color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:1, marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
+                            <GraduationCap size={11}/>
+                            {resp.filhos.length} Aluno{resp.filhos.length > 1 ? 's' : ''} Vinculado{resp.filhos.length > 1 ? 's' : ''}
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                            {resp.filhos.map(filho => {
+                              const rc2 = RISCO_COLOR[filho.risco_evasao as keyof typeof RISCO_COLOR] ?? '#10b981'
+                              const freqColor = filho.frequencia < 60 ? '#ef4444' : filho.frequencia < 75 ? '#f59e0b' : '#10b981'
+                              const freqPct = Math.min(100, Math.max(0, filho.frequencia))
+                              return (
+                                <div
+                                  key={filho.id}
+                                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12, background:'hsl(var(--bg-elevated))', border:`1px solid ${rc2}20`, borderLeft:`3px solid ${rc2}`, transition:'background 0.15s' }}
+                                  onClick={e => e.stopPropagation()}
+                                  onMouseEnter={e => (e.currentTarget as any).style.background='hsl(var(--bg-overlay))'}
+                                  onMouseLeave={e => (e.currentTarget as any).style.background='hsl(var(--bg-elevated))'}
+                                >
+                                  {/* Avatar Expanded / Ultra Premium */}
+                                  <div style={{
+                                    width:48, height:48, borderRadius:12, flexShrink:0,
+                                    background:`linear-gradient(135deg, ${rc2}20, ${rc2}05)`,
+                                    border:`2px solid ${rc2}30`,
+                                    boxShadow:`0 4px 10px rgba(0,0,0,0.05), inset 0 2px 4px rgba(255,255,255,0.2)`,
+                                    display:'flex', alignItems:'center', justifyContent:'center',
+                                    fontSize:13, fontWeight:900, color:rc2, fontFamily:'Outfit,sans-serif',
+                                    overflow:'hidden'
+                                  }}>
+                                    {(filho as any).foto ? (
+                                      <img src={(filho as any).foto} alt={filho.nome} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                                    ) : (
+                                      getInitials(filho.nome)
+                                    )}
+                                  </div>
+
+                                  {/* Info */}
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:12, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:3 }}>{filho.nome}</div>
+                                    {(filho.turma || filho.serie) && (
+                                      <div style={{ fontSize:9, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', gap:6 }}>
+                                        {filho.turma && <span>{filho.turma}</span>}
+                                        {filho.turma && filho.serie && <span style={{ opacity:.4 }}>·</span>}
+                                        {filho.serie && <span>{filho.serie}</span>}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Freq bar + badge */}
+                                  <div style={{ flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                                      <span style={{ fontSize:11, fontWeight:800, color:freqColor }}>{filho.frequencia}%</span>
+                                      {filho.inadimplente && (
+                                        <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:'#f87171', fontWeight:800, border:'1px solid rgba(239,68,68,0.2)' }}>$</span>
+                                      )}
+                                    </div>
+                                    {/* Mini freq bar */}
+                                    <div style={{ width:52, height:3, borderRadius:3, background:'rgba(0,0,0,0.08)' }}>
+                                      <div style={{ width:`${freqPct}%`, height:'100%', borderRadius:3, background:freqColor, transition:'width 0.5s ease' }}/>
+                                    </div>
+                                  </div>
+
+                                  {/* Ficha link */}
+                                  <Link
+                                    href={`/academico/alunos/ficha?id=${filho.id}`}
+                                    onClick={e => e.stopPropagation()}
+                                    style={{ display:'flex', alignItems:'center', gap:3, fontSize:10, color:'hsl(var(--text-muted))', textDecoration:'none', padding:'4px 8px', borderRadius:7, border:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-base))', transition:'all 0.15s', flexShrink:0 }}
+                                    onMouseEnter={e => { (e.currentTarget as any).style.borderColor=rc2; (e.currentTarget as any).style.color=rc2 }}
+                                    onMouseLeave={e => { (e.currentTarget as any).style.borderColor=''; (e.currentTarget as any).style.color='' }}
+                                  >
+                                    <ExternalLink size={9}/> Ficha
+                                  </Link>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Action Bar ── */}
+                    <div style={{ display:'flex', gap:0, borderTop:`1px solid ${accentColor}15`, background:`${accentColor}05` }}>
+                      <button
+                        className="resp-action-btn"
+                        onClick={e => { e.stopPropagation(); window.open(`tel:${resp.telefone}`) }}
+                        disabled={resp.telefone === 'Não informado'}
+                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: resp.telefone === 'Não informado' ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : '#60a5fa', borderRight:'1px solid hsl(var(--border-subtle))' }}
+                      >
+                        <Phone size={12}/> Ligar
+                      </button>
+                      <button
+                        className="resp-action-btn"
+                        onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${resp.telefone.replace(/\D/g, '')}`) }}
+                        disabled={resp.telefone === 'Não informado'}
+                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: resp.telefone === 'Não informado' ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : '#34d399', borderRight:'1px solid hsl(var(--border-subtle))' }}
+                      >
+                        <MessageSquare size={12}/> WhatsApp
+                      </button>
+                      <button
+                        className="resp-action-btn"
+                        onClick={e => { e.stopPropagation(); resp.email && window.open(`mailto:${resp.email}`) }}
+                        disabled={!resp.email}
+                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: !resp.email ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.email ? '#a78bfa' : 'hsl(var(--text-muted))', borderRight: resp.inadimplente ? '1px solid hsl(var(--border-subtle))' : 'none' }}
+                      >
+                        <Mail size={12}/> E-mail
+                      </button>
+                      {resp.inadimplente && (
+                        <Link
+                          href="/financeiro/inadimplencia"
+                          onClick={e => e.stopPropagation()}
+                          style={{ flex:1, padding:'11px 0', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:800, color:'#f87171', textDecoration:'none', background:'rgba(239,68,68,0.05)', transition:'all 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget as any).style.background='rgba(239,68,68,0.12)'}
+                          onMouseLeave={e => (e.currentTarget as any).style.background='rgba(239,68,68,0.05)'}
+                        >
+                          <Wallet size={12}/> Cobrar
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -569,7 +822,12 @@ export default function ResponsaveisPage() {
                   </div>
                 </div>
               </div>
-              <button className="btn btn-ghost btn-icon" onClick={() => setSelecionado(null)}><X size={16}/></button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                 <button className="btn btn-ghost" onClick={() => { setShowCadastroModal(true); setResponsavelEdicao(selecionado._raw); setSelecionado(null); }}>
+                    <Edit size={16}/> Editar
+                 </button>
+                 <button className="btn btn-ghost btn-icon" onClick={() => setSelecionado(null)}><X size={16}/></button>
+              </div>
             </div>
 
             <div className="card" style={{ padding:'16px', marginBottom:16, background:'hsl(var(--bg-elevated))' }}>
@@ -582,7 +840,7 @@ export default function ResponsaveisPage() {
                   { icon:<Phone size={14}/>, label:'Telefone / WhatsApp', value:selecionado.telefone },
                   { icon:<Mail size={14}/>, label:'E-mail', value:selecionado.email||'Não informado' },
                   { icon:<User size={14}/>, label:'Profissão', value: selecionado.profissao, hide: !selecionado.profissao },
-                  { icon:<User size={14}/>, label:'Endereço', value: selecionado.enderecoStr, hide: !selecionado.enderecoStr },
+                  { icon:<MapPin size={14}/>, label:'Endereço', value: selecionado.enderecoStr, hide: !selecionado.enderecoStr },
                 ].filter(i=>!i.hide).map(item => (
                   <div key={item.label} style={{ display:'flex', alignItems:'center', gap:12 }}>
                     <div style={{ color:'#60a5fa', flexShrink:0 }}>{item.icon}</div>
@@ -677,6 +935,45 @@ export default function ResponsaveisPage() {
           </div>
         </div>
       )}
+
+      <CadastroResponsavelModal 
+         isOpen={showCadastroModal}
+         onClose={() => { setShowCadastroModal(false); setResponsavelEdicao(null); }}
+         responsavelInicial={responsavelEdicao}
+         onSaved={(saved) => {
+            setShowCadastroModal(false)
+            setResponsavelEdicao(null)
+
+            // 1. Atualiza a lista base (KPIs e filtros)
+            setResponsaveisRaw(prev => {
+              const exists = (prev || []).some((r: any) => r.id === saved.id)
+              if (exists) return (prev || []).map((r: any) => r.id === saved.id ? { ...r, ...saved } : r)
+              return [saved, ...(prev || [])]
+            })
+
+            // 2. Atualiza em tempo real os resultados da busca ativa
+            if (search.length >= 3) {
+              setSearchResults(prev => {
+                const exists = prev.some(r => r.id === saved.id)
+                const updated = exists
+                  ? prev.map(r => r.id === saved.id ? transformResp({ ...r._raw, ...saved } as any) : r)
+                  : [transformResp(saved), ...prev]
+                return updated
+              })
+            }
+         }}
+         onDeleted={(id) => {
+            setShowCadastroModal(false)
+            setResponsavelEdicao(null)
+
+            // 1. Remove da lista base
+            setResponsaveisRaw(prev => (prev || []).filter((r: any) => r.id !== id))
+
+            // 2. Remove em tempo real dos resultados da busca ativa
+            setSearchResults(prev => prev.filter(r => r.id !== id))
+         }}
+      />
     </div>
   )
 }
+

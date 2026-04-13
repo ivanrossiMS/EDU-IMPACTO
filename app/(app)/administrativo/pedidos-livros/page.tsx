@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React from 'react'
 import { useData } from '@/lib/dataContext'
@@ -77,7 +79,9 @@ function inferirSegmento(serie?: string, turma?: string): string {
 }
 
 export default function PedidosLivrosPage() {
-  const { titulos, alunos, cfgEventos } = useData()
+  const { cfgEventos } = useData();
+  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [pedidos, setPedidos] = useLocalStorage<PedidoMeta[]>('edu-pedidos-livros', [])
   const [pedidosManuais, setPedidosManuais] = useLocalStorage<ParcelaUnificada[]>('edu-pedidos-livros-manuais', [])
 
@@ -124,7 +128,7 @@ export default function PedidosLivrosPage() {
   // ── Fonte 1: parcelas[] dentro de cada aluno (modo edição) ──────────────
   const parcelasDeAlunos: ParcelaUnificada[] = React.useMemo(() => {
     const result: ParcelaUnificada[] = []
-    for (const alu of alunos) {
+    for (const alu of (alunos || [])) {
       const parcs: any[] = (alu as any).parcelas ?? []
       for (const p of parcs) {
         const desc = resolverDesc(p)
@@ -146,7 +150,7 @@ export default function PedidosLivrosPage() {
 
   // ── Fonte 2: titulos no DataContext (nova matrícula recém-criada) ─────────
   const parcelasDeTitulos: ParcelaUnificada[] = React.useMemo(() => {
-    return titulos
+    return (titulos || [])
       .filter(t => isEventoLivro(resolverDesc({
         eventoDescricao: t.eventoDescricao, descricao: t.descricao, eventoId: t.eventoId
       })))
@@ -186,7 +190,7 @@ export default function PedidosLivrosPage() {
   const grupos: GrupoAluno[] = React.useMemo(() => {
     const map = new Map<string, GrupoAluno>()
     for (const p of todasParcelas) {
-      const alu = alunos.find(a => a.nome === p.aluno || a.id === p.alunoId)
+      const alu = (alunos || []).find(a => a.nome === p.aluno || a.id === p.alunoId)
       const key = `${p.aluno}__${p.eventoDescricao}`
       if (!map.has(key)) {
         map.set(key, {

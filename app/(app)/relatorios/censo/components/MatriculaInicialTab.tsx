@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useMemo, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
 import {
@@ -256,7 +258,8 @@ function EnriquecimentoDrawer({
 
 // ─── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────────
 export function MatriculaInicialTab() {
-  const { alunos, setAlunos, turmas, censoConfig, censoAlunosData, setCensoAlunosData, logCensoAction, mantenedores } = useData()
+  const { turmas = [], censoConfig, censoAlunosData, setCensoAlunosData, logCensoAction, mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [search, setSearch]           = useState('')
   const [filterTurma, setFilterTurma] = useState('')
   const [filterStatus, setFilterStatus] = useState<'todos'|'completo'|'incompleto'|'critico'>('todos')
@@ -265,7 +268,7 @@ export function MatriculaInicialTab() {
   const [editAluno, setEditAluno]     = useState<any | null>(null)
   const PAGE_SIZE = 20
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = todasUnidades.find(u => u.id === unidadeAtivaId) || (todasUnidades[0] as any)
 

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -67,7 +69,7 @@ function ScoreEvasao({ freq, media, risco }: { freq: number; media: number; risc
 }
 
 export default function RetencaoPage() {
-  const { alunos } = useData()
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [filtroRisco, setFiltroRisco] = useState<Risco | ''>('')
   const [filtroTurma, setFiltroTurma] = useState('')
   const [search, setSearch] = useState('')

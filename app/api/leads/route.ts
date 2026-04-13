@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const q = searchParams.get('q')?.toLowerCase()
 
-  let query = supabaseServer.from('leads').select('*').order('data', { ascending: false })
+  let query = supabase.from('leads').select('*').order('data', { ascending: false })
   if (status && status !== 'todos') query = query.eq('status', status)
   if (q) query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%`)
 
@@ -19,17 +20,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       const rows = body.map(l => buildRow(l))
-      const { error } = await supabaseServer.from('leads').upsert(rows)
+      const { error } = await supabase.from('leads').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
-    const { data, error } = await supabaseServer.from('leads').upsert(row).select().single()
+    const { data, error } = await supabase.from('leads').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {

@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import { useState, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
@@ -38,8 +40,9 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode; badge?: string;
 
 export default function CensoEscolarPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
-  const { censoConfig, setCensoConfig, censoPendencias, censoExports, alunos, turmas, mantenedores } = useData()
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const { censoConfig, setCensoConfig, censoPendencias = [], censoExports = [], turmas = [], mantenedores = [] } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   
   // Utiliza a unidade do config, ou se vazio cai para a primeira disponível
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')

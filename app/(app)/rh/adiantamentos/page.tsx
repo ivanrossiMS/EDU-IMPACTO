@@ -12,7 +12,7 @@ function formatMoney(value: number) {
 }
 
 export default function AdiantamentosPage() {
-  const { adiantamentos, setAdiantamentos } = useData()
+  const { adiantamentos = [], setAdiantamentos } = useData()
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
   const [dataInicio, setDataInicio] = useState('')

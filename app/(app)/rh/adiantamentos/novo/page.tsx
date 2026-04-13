@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 
 import React, { useState, useMemo } from 'react'
 import Link from 'next/link'
@@ -18,7 +20,8 @@ function addMonths(date: Date, months: number) {
 
 export default function NovoAdiantamento() {
   const router = useRouter()
-  const { funcionarios, adiantamentos, setAdiantamentos, logSystemAction } = useData()
+  const { adiantamentos = [], setAdiantamentos, logSystemAction } = useData();
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
   const ativos = funcionarios.filter(f => f.status === 'ativo')
 

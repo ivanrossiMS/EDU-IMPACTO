@@ -1,4 +1,6 @@
 'use client'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+
 import { useState, useCallback, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
 import { type CensoExport } from '@/lib/dataContext'
@@ -203,16 +205,14 @@ function gerarArquivoINEP(data: {
 
 // ─── COMPONENTE ──────────────────────────────────────────────────────────────
 export function GeracaoArquivosTab() {
-  const {
-    alunos, turmas, funcionarios, mantenedores, censoConfig, censoPendencias,
-    setCensoExports, censoExports, logCensoAction,
-    censoAlunosData, censoTurmasData, censoProfsData,
-  } = useData()
+  const { turmas = [], mantenedores = [], censoConfig, censoPendencias = [], setCensoExports, censoExports = [], logCensoAction, censoAlunosData, censoTurmasData, censoProfsData } = useData();
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
 
   const [preview, setPreview]       = useState(false)
   const [generating, setGenerating] = useState(false)
 
-  const todasUnidades = mantenedores.flatMap(m => m.unidades)
+  const todasUnidades = (mantenedores || []).flatMap(m => m.unidades || [])
   const unidadeAtivaId = censoConfig.unidadeId || (todasUnidades[0]?.id || '')
   const escola = (todasUnidades.find(u => u.id === unidadeAtivaId) || todasUnidades[0]) as any
 

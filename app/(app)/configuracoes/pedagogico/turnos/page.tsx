@@ -53,11 +53,24 @@ export default function TurnosPage() {
 
   const handleSave = () => {
     if (!form.nome.trim() || !form.codigo.trim()) return
+    
+    // Outer guard (uses closure state, works for normal clicks)
+    if (!editId && cfgTurnos.some(t => t.codigo === form.codigo)) {
+      alert('Já existe um turno com este código!')
+      return
+    }
+
     if (editId) {
       setCfgTurnos(prev => prev.map(t => t.id === editId ? { ...t, ...form } : t))
     } else {
-      setCfgTurnos(prev => [...prev, { ...form, id: newId('TRN'), createdAt: new Date().toISOString() }])
+      const novoId = newId('TRN')
+      setCfgTurnos(prev => {
+        // Inner guard (uses real-time queued state, works against double-click race conditions)
+        if (prev.some(t => t.codigo === form.codigo || t.id === novoId)) return prev
+        return [...prev, { ...form, id: novoId, createdAt: new Date().toISOString() }]
+      })
     }
+    setForm(BLANK)
     setShowForm(false)
   }
 
