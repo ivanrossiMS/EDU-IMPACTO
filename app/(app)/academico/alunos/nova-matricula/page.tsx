@@ -140,58 +140,51 @@ function EnderecoSection({ end, onChange }: { end: Endereco; onChange: (e:Endere
   )
 }
 
-function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { resp: Resp; onChange:(r:Resp)=>void; cpfExistentes:string[]; allResps?: Resp[]; onRemove?: ()=>void }) {
+function RespCard({ resp, onChange, cpfExistentes, onRemove }: { resp: Resp; onChange:(r:Resp)=>void; cpfExistentes:string[]; onRemove?: ()=>void }) {
   const [open, setOpen] = useState(true)
   const [modalBuscaOpen, setModalBuscaOpen] = useState(false)
   const [buscarQ, setBuscarQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
   const [isSearching, setIsSearching] = useState(false)
+  const [respsFiltrados, setRespsFiltrados] = useState<any[]>([])
 
   useEffect(() => {
     setIsSearching(true)
     const timeout = setTimeout(() => {
       setDebouncedQ(buscarQ)
-      setIsSearching(false)
     }, 300)
     return () => clearTimeout(timeout)
   }, [buscarQ])
+
+  useEffect(() => {
+    if (debouncedQ.length < 3) {
+      setRespsFiltrados([])
+      setIsSearching(false)
+      return
+    }
+    let isMounted = true
+    setIsSearching(true)
+    fetch(`/api/responsaveis?q=${encodeURIComponent(debouncedQ)}&limit=15`)
+      .then(r => r.json())
+      .then(payload => {
+        if(isMounted) {
+          const arr = Array.isArray(payload) ? payload : (Array.isArray(payload.data) ? payload.data : [])
+          setRespsFiltrados(arr)
+          setIsSearching(false)
+        }
+      })
+      .catch(err => {
+        console.error(err)
+        if(isMounted) setIsSearching(false)
+      })
+    return () => { isMounted = false }
+  }, [debouncedQ])
 
   const u = (k: keyof Resp, v: any) => onChange({...resp,[k]:v})
   const labels: Record<string,string> = { mae:'👩 Mãe', pai:'👨 Pai', outro1:'👤 Outro 1', outro2:'👤 Outro 2' }
   const cpfOk = resp.cpf.replace(/\D/g,'').length===11 && validarCPF(resp.cpf.replace(/\D/g,''))
 
-  const respsFiltrados = useMemo(() => {
-    if (debouncedQ.length < 3) return []
-    
-    const norm = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-    const rawSearch = debouncedQ.replace(/\s+/g, ' ').trim()
-    const searchTerms = norm(rawSearch).split(' ')
-    const searchNumber = debouncedQ.replace(/\D/g, '')
 
-    const matches = allResps.reduce((acc, r) => {
-       if (!r.nome) return acc
-       const normN = norm(r.nome)
-       const rCpf = (r.cpf || '').replace(/\D/g, '')
-       const rCel = (r.celular || '').replace(/\D/g, '')
-
-       const nameMatch = searchTerms.every(term => normN.includes(term))
-       const numMatch = searchNumber && (rCpf.includes(searchNumber) || rCel.includes(searchNumber))
-
-       if (nameMatch || numMatch) {
-         let score = 0
-         if (normN.startsWith(norm(rawSearch))) score += 10
-         else if (normN.includes(norm(rawSearch))) score += 5
-         else if (nameMatch) score += 2
-         
-         if (numMatch) score += 8
-         
-         acc.push({ item: r, score })
-       }
-       return acc
-    }, [] as {item: Resp, score: number}[])
-
-    return matches.sort((a,b) => b.score - a.score).slice(0, 15).map(m => m.item)
-  }, [allResps, debouncedQ])
 
   const selecionarResp = (r: Resp) => {
     onChange({ ...resp, nome: r.nome, cpf: r.cpf, rg: r.rg, orgEmissor: r.orgEmissor,
@@ -1747,24 +1740,6 @@ export default function NovaMatriculaPage() {
     }
   }, [historico, parcelas])
 
-  // Todos os responsáveis já cadastrados no sistema (para busca)
-  const allResps: Resp[] = useMemo(() => {
-    const found: Resp[] = []
-    const seenCpf = new Set<string>()
-    for (const a of alunos) {
-      const resps = (a as any).responsaveis
-      if (Array.isArray(resps)) {
-        for (const r of resps) {
-          const cpfKey = r.cpf?.replace(/\D/g,'') || r.nome
-          if (cpfKey && !seenCpf.has(cpfKey)) {
-            seenCpf.add(cpfKey)
-            found.push(r as Resp)
-          }
-        }
-      }
-    }
-    return found
-  }, [alunos])
   const stepContent = [
     // STEP 0: Responsáveis
     <div key="s0" style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -1775,14 +1750,14 @@ export default function NovaMatriculaPage() {
            <div style={{color:'#94a3b8',fontSize:12,marginTop:2}}>Preencha os responsáveis legais, indicando as autorizações pedagógicas e financeiras.</div>
         </div>
       </div>
-      <RespCard resp={mae} onChange={setMae} cpfExistentes={cpfsExist} allResps={allResps}/>
-      <RespCard resp={pai} onChange={setPai} cpfExistentes={cpfsExist} allResps={allResps}/>
-      {showOutro1 ? <RespCard resp={outro1} onChange={setOutro1} cpfExistentes={cpfsExist} allResps={allResps} onRemove={() => { setShowOutro1(false); setOutro1(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
+      <RespCard resp={mae} onChange={setMae} cpfExistentes={cpfsExist}/>
+      <RespCard resp={pai} onChange={setPai} cpfExistentes={cpfsExist}/>
+      {showOutro1 ? <RespCard resp={outro1} onChange={setOutro1} cpfExistentes={cpfsExist} onRemove={() => { setShowOutro1(false); setOutro1(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
         <button type="button" onClick={()=>setShowOutro1(true)} style={{display:'flex',width:'100%',justifyContent:'center',alignItems:'center',gap:8,padding:'14px 20px',marginBottom:16,background:'#1c2938',color:'#f8fafc',borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',fontWeight:700,fontSize:13,transition:'all 0.2s',boxShadow:'0 6px 16px rgba(0,0,0,0.08)'}}>
           <Plus size={16} color="#94a3b8"/> Adicionar Outro Responsável
         </button>
       )}
-      {showOutro1 && (showOutro2 ? <RespCard resp={outro2} onChange={setOutro2} cpfExistentes={cpfsExist} allResps={allResps} onRemove={() => { setShowOutro2(false); setOutro2(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
+      {showOutro1 && (showOutro2 ? <RespCard resp={outro2} onChange={setOutro2} cpfExistentes={cpfsExist} onRemove={() => { setShowOutro2(false); setOutro2(p => ({...p, nome:'', cpf:'', rg:'', parentesco:''})) }}/> : (
         <button type="button" onClick={()=>setShowOutro2(true)} style={{display:'flex',width:'100%',justifyContent:'center',alignItems:'center',gap:8,padding:'14px 20px',marginBottom:16,background:'#1c2938',color:'#f8fafc',borderRadius:14,border:'1px solid rgba(255,255,255,0.08)',cursor:'pointer',fontWeight:700,fontSize:13,transition:'all 0.2s',boxShadow:'0 6px 16px rgba(0,0,0,0.08)'}}>
           <Plus size={16} color="#94a3b8"/> Adicionar Outro Responsável 2
         </button>
