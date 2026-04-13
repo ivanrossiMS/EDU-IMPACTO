@@ -6,7 +6,7 @@ import { useData, newId, newEventoId, newParcelaId } from '@/lib/dataContext'
 import {
   User, MapPin, Layers, Users, Baby, Heart, GraduationCap, DollarSign, FileText,
   Check, ChevronRight, ChevronLeft, AlertCircle, CheckCircle,
-  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt, Trash2
+  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt, Trash2, Phone, Mail
 } from 'lucide-react'
 import { ModalEmitirAluno }     from '@/app/(app)/financeiro/boletos/components/ModalEmitirAluno'
 import { ModalHistoricoBoletos } from '@/app/(app)/financeiro/boletos/components/ModalHistoricoBoletos'
@@ -142,7 +142,7 @@ function EnderecoSection({ end, onChange }: { end: Endereco; onChange: (e:Endere
 
 function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { resp: Resp; onChange:(r:Resp)=>void; cpfExistentes:string[]; allResps?: Resp[]; onRemove?: ()=>void }) {
   const [open, setOpen] = useState(true)
-  const [buscarOpen, setBuscarOpen] = useState(false)
+  const [modalBuscaOpen, setModalBuscaOpen] = useState(false)
   const [buscarQ, setBuscarQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
   const [isSearching, setIsSearching] = useState(false)
@@ -198,7 +198,7 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
       sexo: r.sexo, dataNasc: r.dataNasc, estadoCivil: r.estadoCivil, celular: r.celular,
       email: r.email, profissao: r.profissao, naturalidade: r.naturalidade, uf: r.uf,
       nacionalidade: r.nacionalidade, obs: r.obs, endereco: { ...r.endereco } })
-    setBuscarOpen(false); setBuscarQ(''); setOpen(true)
+    setBuscarQ(''); setModalBuscaOpen(false); setOpen(true)
   }
   return (
     <div style={{marginBottom:24,border:'1px solid hsl(var(--border-subtle))',borderRadius:16,background:'hsl(var(--bg-base))',overflow:'visible',boxShadow:'0 10px 40px -10px rgba(0,0,0,0.08)'}}>
@@ -246,52 +246,32 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
           <div style={{display:'flex', flexDirection:'column', gap:20}}>
             <h4 style={{fontSize:12, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:10}}>Identificação e Documentos</h4>
             <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
-              <div style={{flex:2,minWidth:250,position:'relative'}}>
-                <F label="Nome Completo / Buscar Existente">
-                  <div style={{position:'relative'}}>
+              <div style={{flex:2,minWidth:300}}>
+                <F label="Nome Completo">
+                  <div style={{display:'flex',gap:12}}>
                     <input 
-                      style={{...ultraInputStyle, paddingRight:36}} 
+                      style={{...ultraInputStyle, flex:1}} 
                       value={resp.nome} 
-                      onChange={e=>{
-                        u('nome',e.target.value);
-                        setBuscarQ(e.target.value);
-                        if(e.target.value.length >= 3) setBuscarOpen(true);
-                        else setBuscarOpen(false);
-                      }}
-                      onFocus={()=>{
-                        setBuscarQ(resp.nome);
-                        if(resp.nome.length >= 3) setBuscarOpen(true);
-                      }}
-                      onBlur={()=>setTimeout(()=>setBuscarOpen(false), 200)}
+                      onChange={e=>u('nome',e.target.value)}
                       placeholder="Nome completo..."
                     />
-                    <Search size={16} color="#94a3b8" style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',pointerEvents:'none'}}/>
+                    <button 
+                      type="button" 
+                      onClick={()=>setModalBuscaOpen(true)}
+                      style={{
+                        padding:'0 20px', background:'#6366f1', color:'#fff', 
+                        borderRadius:12, fontWeight:700, fontSize:13, 
+                        display:'flex', alignItems:'center', gap:8, 
+                        border:'none', cursor:'pointer', boxShadow:'0 4px 14px rgba(99,102,241,0.3)',
+                        transition:'all 0.2s', flexShrink:0
+                      }}
+                      onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#4f46e5'}
+                      onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='#6366f1'}
+                    >
+                      <Search size={16} strokeWidth={2.5}/> <span>Buscar Existente</span>
+                    </button>
                   </div>
                 </F>
-                {buscarOpen && (
-                  <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:9999,width:'100%',minWidth:340,background:'hsl(var(--bg-base))',border:'1px solid rgba(99,102,241,0.3)',borderRadius:12,boxShadow:'0 16px 48px rgba(0,0,0,0.55)',overflow:'hidden'}}>
-                    <div style={{maxHeight:220,overflowY:'auto'}}>
-                      {buscarQ.length < 3 ? (
-                        <div style={{padding:'14px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>Digite ao menos 3 letras para buscar...</div>
-                      ) : isSearching ? (
-                        <div style={{padding:'14px 16px',color:'hsl(var(--text-muted))',fontSize:12,display:'flex',justifyContent:'center',alignItems:'center',gap:8}}><Loader2 size={14} style={{animation:'spin 1s linear infinite'}}/> Buscando...</div>
-                      ) : respsFiltrados.length === 0 ? (
-                        <div style={{padding:'14px 16px',textAlign:'center',color:'hsl(var(--text-muted))',fontSize:12}}>Nenhum resultado encontrado.</div>
-                      ) : respsFiltrados.map((r,i) => (
-                        <div key={i} style={{padding:'10px 14px',cursor:'pointer',borderBottom:'1px solid hsl(var(--border-subtle))',transition:'background .1s'}} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='rgba(99,102,241,0.08)'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'} onMouseDown={e=>{e.preventDefault(); selecionarResp(r)}}>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                            <div>
-                              <div style={{fontWeight:700,fontSize:13}}>{r.nome}</div>
-                              <div style={{fontSize:10,color:'hsl(var(--text-muted))',marginTop:2,display:'flex',gap:8}}>{r.cpf&&<span>CPF: {r.cpf}</span>}{r.celular&&<span>📱 {r.celular}</span>}</div>
-                              {r.email&&<div style={{fontSize:10,color:'hsl(var(--text-muted))'}}>{r.email}</div>}
-                            </div>
-                            <span style={{fontSize:10,padding:'2px 7px',borderRadius:12,background:'rgba(99,102,241,0.1)',color:'#818cf8',fontWeight:700,flexShrink:0,marginLeft:8}}>{r.parentesco}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
               <div style={{flexShrink:0,width:170}}><F label="CPF"><CPFInput value={resp.cpf} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F></div>
               <div style={{flexShrink:0,width:150}}><F label="Sexo"><select style={ultraInputStyle} value={resp.sexo} onChange={e=>u('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
@@ -328,6 +308,110 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
           </div>
         </div>
       )}
+
+      {/* Modal Extra Premium de Busca */}
+      {modalBuscaOpen && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:999999, display:'flex', alignItems:'center', justifyContent:'center',
+          background:'rgba(15,23,42,0.85)', backdropFilter:'blur(8px)', animation:'fadeIn 0.2s', padding:24
+        }}>
+          <div style={{
+            background:'#fff', borderRadius:24, width:'100%', maxWidth:600, height:'85vh', maxHeight:700,
+            display:'flex', flexDirection:'column', boxShadow:'0 30px 60px rgba(0,0,0,0.4)',
+            overflow:'hidden', position:'relative', border:'1px solid rgba(255,255,255,0.1)'
+          }}>
+            {/* Header */}
+            <div style={{padding:'24px 30px', background:'linear-gradient(135deg, #f8fafc, #f1f5f9)', borderBottom:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <div>
+                 <h2 style={{fontSize:18, fontWeight:800, color:'#0f172a', margin:0}}>Buscar Responsável Existente</h2>
+                 <p style={{fontSize:13, color:'#64748b', margin:'4px 0 0 0'}}>Pesquise por nome, CPF ou celular</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={()=>setModalBuscaOpen(false)}
+                style={{width:36, height:36, borderRadius:18, border:'none', background:'#e2e8f0', color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}
+              >
+                <X size={18}/>
+              </button>
+            </div>
+            {/* Body */}
+            <div style={{padding:30, flex:1, display:'flex', flexDirection:'column', gap:20, overflow:'hidden'}}>
+               <div style={{position:'relative'}}>
+                 <input 
+                   autoFocus
+                   style={{
+                     width:'100%', padding:'16px 20px 16px 48px', fontSize:15, 
+                     border:'2px solid #cbd5e1', borderRadius:16, outline:'none',
+                     color:'#0f172a', fontWeight:600, transition:'all 0.2s'
+                   }}
+                   placeholder="Digite o nome..."
+                   value={buscarQ}
+                   onChange={e=>setBuscarQ(e.target.value)}
+                   onFocus={e=>e.target.style.borderColor='#6366f1'}
+                   onBlur={e=>e.target.style.borderColor='#cbd5e1'}
+                 />
+                 <Search size={20} color="#94a3b8" style={{position:'absolute', left:18, top:'50%', transform:'translateY(-50%)'}}/>
+               </div>
+               
+               <div style={{flex:1, overflowY:'auto', background:'#f8fafc', borderRadius:16, border:'1px solid #e2e8f0'}}>
+                  {debouncedQ.length < 3 ? (
+                    <div style={{padding:40, textAlign:'center', color:'#94a3b8', height:'100%', display:'flex', flexDirection:'column', justifyContent:'center'}}>
+                       <Search size={32} style={{margin:'0 auto 12px', opacity:0.5}}/>
+                       <div style={{fontWeight:600, fontSize:15}}>Busca Rápida</div>
+                       <div style={{fontSize:13, marginTop:4}}>Digite pelo menos 3 letras para pesquisar.</div>
+                    </div>
+                  ) : isSearching ? (
+                    <div style={{padding:40, textAlign:'center', color:'#6366f1', height:'100%', display:'flex', flexDirection:'column', justifyContent:'center'}}>
+                       <Loader2 size={32} style={{animation:'spin 1s linear infinite', margin:'0 auto 12px'}}/>
+                       <div style={{fontWeight:600, fontSize:14}}>Procurando na base de dados...</div>
+                    </div>
+                  ) : respsFiltrados.length === 0 ? (
+                    <div style={{padding:40, textAlign:'center', color:'#94a3b8', height:'100%', display:'flex', flexDirection:'column', justifyContent:'center'}}>
+                       <div style={{fontWeight:600, fontSize:15}}>Nenhum resultado</div>
+                       <div style={{fontSize:13, marginTop:4}}>Não encontramos responsáveis com este termo.</div>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex', flexDirection:'column'}}>
+                       {respsFiltrados.map((r,i) => (
+                         <div 
+                           key={i} 
+                           onClick={()=>{ selecionarResp(r) }}
+                           style={{
+                             padding:'16px 20px', borderBottom:'1px solid #e2e8f0', cursor:'pointer',
+                             display:'flex', justifyContent:'space-between', alignItems:'center', transition:'all 0.15s'
+                           }}
+                           onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#eff6ff'}
+                           onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='transparent'}
+                         >
+                            <div>
+                               <div style={{fontWeight:700, fontSize:15, color:'#0f172a'}}>{r.nome}</div>
+                               <div style={{display:'flex', gap:12, fontSize:12, color:'#64748b', marginTop:4, fontWeight:500}}>
+                                 {r.cpf && <span>CPF: {r.cpf}</span>}
+                                 {r.celular && <span style={{display:'flex',alignItems:'center',gap:4}}><Phone size={12}/> {r.celular}</span>}
+                                 {r.email && <span style={{display:'flex',alignItems:'center',gap:4}}><Mail size={12}/> {r.email}</span>}
+                               </div>
+                            </div>
+                            <button style={{
+                               padding:'6px 14px', background:'#fff', border:'2px solid #e2e8f0', 
+                               borderRadius:10, fontSize:12, fontWeight:700, color:'#6366f1',
+                               cursor:'pointer', transition:'all 0.2s',
+                               boxShadow:'0 2px 4px rgba(0,0,0,0.02)'
+                            }}
+                            onMouseEnter={e=>{ (e.currentTarget as HTMLElement).style.borderColor='#6366f1'; (e.currentTarget as HTMLElement).style.background='#6366f1'; (e.currentTarget as HTMLElement).style.color='#fff'; }}
+                            onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.borderColor='#e2e8f0'; (e.currentTarget as HTMLElement).style.background='#fff'; (e.currentTarget as HTMLElement).style.color='#6366f1'; }}
+                            >
+                               Selecionar
+                            </button>
+                         </div>
+                       ))}
+                    </div>
+                  )}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
