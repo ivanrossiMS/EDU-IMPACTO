@@ -326,42 +326,6 @@ function RespCard({ resp, onChange, cpfExistentes, allResps = [], onRemove }: { 
             
             <EnderecoSection end={resp.endereco} onChange={e=>onChange({...resp,endereco:e})}/>
           </div>
-
-          {/* Responsabilidades */}
-          <div style={{display:'grid',gridTemplateColumns:'minmax(auto, 1fr) minmax(auto, 1fr)',gap:20,marginTop:12}}>
-            <label style={{
-              display:'flex',alignItems:'center',gap:18,padding:'24px',borderRadius:16,cursor:'pointer',
-              border:`2px solid ${resp.respPedagogico ? '#6366f1' : '#e2e8f0'}`,
-              background: resp.respPedagogico ? 'linear-gradient(135deg, rgba(99,102,241,0.06), #fff)' : '#f8fafc',
-              boxShadow: resp.respPedagogico ? '0 12px 30px rgba(99,102,241,0.12)' : 'none',
-              transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-            }}>
-              <div style={{width:28,height:28,borderRadius:10,border:resp.respPedagogico?'none':'2px solid #cbd5e1',background:resp.respPedagogico?'#6366f1':'#fff',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.3s',flexShrink:0,boxShadow:resp.respPedagogico?'0 4px 10px rgba(99,102,241,0.3)':'none'}}>
-                 {resp.respPedagogico && <Check size={18} color="#fff" strokeWidth={3.5}/>}
-              </div>
-              <input type="checkbox" style={{display:'none'}} checked={resp.respPedagogico} onChange={e=>u('respPedagogico',e.target.checked)} />
-              <div style={{display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                 <span style={{color:resp.respPedagogico?'#4f46e5':'#475569',fontWeight:800,fontSize:15,lineHeight:1.3}}>🎯 Responsável Pedagógico</span>
-                 <span style={{fontSize:12,color:'#8492a6',marginTop:4,lineHeight:1.3}}>Detentor dos direitos e acessos acadêmicos para aulas, reuniões e rotina escolar da criança.</span>
-              </div>
-            </label>
-            <label style={{
-              display:'flex',alignItems:'center',gap:18,padding:'24px',borderRadius:16,cursor:'pointer',
-              border:`2px solid ${resp.respFinanceiro ? '#10b981' : '#e2e8f0'}`,
-              background: resp.respFinanceiro ? 'linear-gradient(135deg, rgba(16,185,129,0.06), #fff)' : '#f8fafc',
-              boxShadow: resp.respFinanceiro ? '0 12px 30px rgba(16,185,129,0.12)' : 'none',
-              transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-            }}>
-              <div style={{width:28,height:28,borderRadius:10,border:resp.respFinanceiro?'none':'2px solid #cbd5e1',background:resp.respFinanceiro?'#10b981':'#fff',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.3s',flexShrink:0,boxShadow:resp.respFinanceiro?'0 4px 10px rgba(16,185,129,0.3)':'none'}}>
-                 {resp.respFinanceiro && <Check size={18} color="#fff" strokeWidth={3.5}/>}
-              </div>
-              <input type="checkbox" style={{display:'none'}} checked={resp.respFinanceiro} onChange={e=>u('respFinanceiro',e.target.checked)} />
-              <div style={{display:'flex',flexDirection:'column',justifyContent:'center'}}>
-                 <span style={{color:resp.respFinanceiro?'#059669':'#475569',fontWeight:800,fontSize:15,lineHeight:1.3}}>💵 Responsável Financeiro</span>
-                 <span style={{fontSize:12,color:'#8492a6',marginTop:4,lineHeight:1.3}}>Titular responsável pela assinatura de contratos, cobranças e obrigações monetárias.</span>
-              </div>
-            </label>
-          </div>
         </div>
       )}
     </div>
@@ -428,7 +392,24 @@ export default function NovaMatriculaPage() {
   const editId = searchParams.get('edit')  // ID do aluno a editar (vindo de /alunos)
 
   const sourceAlunos = alunos || []
-  const alunoEditando = editId ? sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) ?? null : null
+  const [fetchedAluno, setFetchedAluno] = useState<any>(null)
+  
+  // Se veio /alunos?edit=ID e não está no contexto rápido, busca da API
+  useEffect(() => {
+    if (editId) {
+      const inSource = sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId))
+      if (!inSource && !fetchedAluno) {
+        fetch(`/api/alunos/${editId}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && !data.error) setFetchedAluno(data)
+          }).catch(console.error)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId])
+
+  const alunoEditando = editId ? (sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) || fetchedAluno || null) : null
   const realEditId = alunoEditando ? (alunoEditando as any).id : null
   const [step, setStep] = useState(0)
   const [salvando, setSalvando] = useState(false)
@@ -1854,6 +1835,64 @@ export default function NovaMatriculaPage() {
             </div>
             <div style={{background:'linear-gradient(135deg, rgba(56,189,248,0.05), #ffffff)',padding:24,borderRadius:20,border:'1px solid rgba(56,189,248,0.2)',boxShadow:'0 8px 24px rgba(56,189,248,0.05)'}}>
               <FiliacaoInput label="Filiação — Pai" respList={todosResp} value={aluno.filiacaoPai||pai.nome} onChange={v=>updA('filiacaoPai',v)}/>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Seção: Responsabilidades (Movido do Step 0) ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:12, display:'flex', alignItems:'center', gap:8}}>
+            <CheckCircle size={16} color="#6366f1"/> Responsabilidades Mestra
+          </h4>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))',gap:24}}>
+            {/* Responsável Pedagógico */}
+            <div style={{background:'linear-gradient(135deg, rgba(99,102,241,0.06), #ffffff)',padding:24,borderRadius:20,border:'1px solid rgba(99,102,241,0.2)',boxShadow:'0 12px 30px rgba(99,102,241,0.12)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16}}>
+                <div style={{width:32,height:32,borderRadius:10,background:'#6366f1',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 10px rgba(99,102,241,0.3)'}}><Check size={18} color="#fff" strokeWidth={3}/></div>
+                <div>
+                  <div style={{color:'#4f46e5',fontWeight:800,fontSize:15}}>🎯 Responsável Pedagógico</div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:2}}>Detentor dos direitos e acessos acadêmicos.</div>
+                </div>
+              </div>
+              <F label="Selecione o Responsável">
+                <select style={ultraInputStyle}
+                  value={todosResp.find(r=>r.respPedagogico)?.id || ''}
+                  onChange={e=>{
+                    const selId = e.target.value
+                    setMae(p => ({...p, respPedagogico: p.id === selId}))
+                    setPai(p => ({...p, respPedagogico: p.id === selId}))
+                    setOutro1(p => ({...p, respPedagogico: p.id === selId}))
+                    setOutro2(p => ({...p, respPedagogico: p.id === selId}))
+                  }}>
+                  <option value="">— Mães/Pais cadastrados no Passo 1 —</option>
+                  {todosResp.filter(r=>r.nome).map(r=><option key={r.id} value={r.id}>{r.nome} ({r.parentesco})</option>)}
+                </select>
+              </F>
+            </div>
+            
+            {/* Responsável Financeiro */}
+            <div style={{background:'linear-gradient(135deg, rgba(16,185,129,0.06), #ffffff)',padding:24,borderRadius:20,border:'1px solid rgba(16,185,129,0.2)',boxShadow:'0 12px 30px rgba(16,185,129,0.12)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16}}>
+                <div style={{width:32,height:32,borderRadius:10,background:'#10b981',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 4px 10px rgba(16,185,129,0.3)'}}><Check size={18} color="#fff" strokeWidth={3}/></div>
+                <div>
+                  <div style={{color:'#059669',fontWeight:800,fontSize:15}}>💵 Responsável Financeiro</div>
+                  <div style={{fontSize:11,color:'#64748b',marginTop:2}}>Titular responsável pela assinatura de contratos.</div>
+                </div>
+              </div>
+              <F label="Selecione o Responsável">
+                <select style={ultraInputStyle}
+                  value={todosResp.find(r=>r.respFinanceiro)?.id || ''}
+                  onChange={e=>{
+                    const selId = e.target.value
+                    setMae(p => ({...p, respFinanceiro: p.id === selId}))
+                    setPai(p => ({...p, respFinanceiro: p.id === selId}))
+                    setOutro1(p => ({...p, respFinanceiro: p.id === selId}))
+                    setOutro2(p => ({...p, respFinanceiro: p.id === selId}))
+                  }}>
+                  <option value="">— Mães/Pais cadastrados no Passo 1 —</option>
+                  {todosResp.filter(r=>r.nome).map(r=><option key={r.id} value={r.id}>{r.nome} ({r.parentesco})</option>)}
+                </select>
+              </F>
             </div>
           </div>
         </div>
