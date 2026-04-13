@@ -152,3 +152,70 @@ export const ZodFinParcela = z.object({
     responsavel_pagamento: z.string().nullable().optional(),
     dados_legados: z.record(z.string(), z.any()).optional()
 }).passthrough()
+
+// ==========================================
+// FASE B: MODELOS ASSISTENTE MATRICULA
+// ==========================================
+
+export const ZodAlunoResponsavel = z.object({
+  id: z.string().optional(),
+  aluno_id: z.string().optional(),
+  responsavel_id: z.string(),
+  parentesco: z.string().nullable().optional(),
+  tipo: z.string().nullable().optional(),
+  resp_financeiro: z.boolean().default(false),
+  resp_pedagogico: z.boolean().default(false),
+  prioridade: z.coerce.number().default(0)
+}).passthrough()
+
+export const ZodAlunoStepDados = z.object({
+  nome: z.string().min(2),
+  cpf: z.string().nullable().optional(),
+  data_nascimento: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  telefone: z.string().nullable().optional(),
+  status: z.string().optional(),
+  ultimo_step: z.coerce.number().optional(),
+  sexo: z.string().nullable().optional(),
+  estado_civil: z.string().nullable().optional(),
+  nacionalidade: z.string().nullable().optional(),
+  naturalidade: z.string().nullable().optional(),
+  uf: z.string().nullable().optional(),
+  cor_raca: z.string().nullable().optional(),
+  id_censo: z.string().nullable().optional(),
+  dados: z.record(z.string(), z.any()).optional()
+}).passthrough()
+
+export const ZodAlunoStepResponsaveis = z.object({
+  ultimo_step: z.coerce.number().optional(),
+  vinculos: z.array(ZodAlunoResponsavel).default([])
+}).passthrough()
+
+export const ZodAlunoStepMatricula = z.object({
+  turma_id: z.string().nullable().optional(),
+  turma: z.string().nullable().optional(),
+  serie: z.string().nullable().optional(),
+  turno: z.string().nullable().optional(),
+  ano_letivo: z.coerce.string(),
+  data_matricula: z.string().nullable().optional(),
+  padrao_pagamento_id: z.string().nullable().optional(),
+  situacao: z.string().nullable().optional(),
+  data_resultado: z.string().nullable().optional(),
+  grupo_alunos: z.string().nullable().optional(),
+  bolsista: z.boolean().optional(),
+  responsavel_financeiro_id: z.string().nullable().optional(),
+  responsavel_pedagogico_id: z.string().nullable().optional(),
+  ultimo_step: z.coerce.number().optional()
+}).passthrough()
+
+export const ZodAlunoStepSaude = z.object({
+  ultimo_step: z.coerce.number().optional(),
+  obs: z.string().nullable().optional(),
+  dados_saude: z.record(z.string(), z.any()).optional()
+}).passthrough()
+
+export const ZodAlunoStepFinanceiro = z.object({
+  ultimo_step: z.coerce.number().optional(),
+  obs_financeira: z.string().nullable().optional(),
+  eventos: z.array(z.any()).default([])
+}).passthrough()
