@@ -13,11 +13,11 @@ export const dynamic = 'force-dynamic'
 // PATCH /api/alunos/[id]/step — Atualiza parcialmente o aluno por step
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createProtectedClient()
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
 
     if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })

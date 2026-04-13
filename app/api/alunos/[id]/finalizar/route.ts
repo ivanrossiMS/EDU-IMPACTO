@@ -6,11 +6,11 @@ export const dynamic = 'force-dynamic'
 // PATCH /api/alunos/[id]/finalizar — Finaliza cadastro, muda status para 'matriculado'
 export async function PATCH(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createProtectedClient()
-    const { id } = params
+    const { id } = await params
 
     if (!id) return NextResponse.json({ error: 'ID obrigatório' }, { status: 400 })
 
