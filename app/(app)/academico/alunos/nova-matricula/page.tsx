@@ -244,7 +244,7 @@ function RespCard({ resp, onChange, cpfExistentes, onRemove }: { resp: Resp; onC
                   <div style={{display:'flex',gap:12}}>
                     <input 
                       style={{...ultraInputStyle, flex:1}} 
-                      value={resp.nome} 
+                      value={resp.nome || ''} 
                       onChange={e=>u('nome',e.target.value)}
                       placeholder="Nome completo..."
                     />
@@ -266,23 +266,23 @@ function RespCard({ resp, onChange, cpfExistentes, onRemove }: { resp: Resp; onC
                   </div>
                 </F>
               </div>
-              <div style={{flexShrink:0,width:170}}><F label="CPF"><CPFInput value={resp.cpf} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F></div>
-              <div style={{flexShrink:0,width:150}}><F label="Sexo"><select style={ultraInputStyle} value={resp.sexo} onChange={e=>u('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
-              <div style={{flex:1,minWidth:170}}><F label="Data de Nascimento"><input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={resp.dataNasc} onChange={e=>u('dataNasc',fmtDateMask(e.target.value))}/></F></div>
-              <div style={{flexShrink:0,width:180}}><F label="Estado Civil"><select style={ultraInputStyle} value={resp.estadoCivil} onChange={e=>u('estadoCivil',e.target.value)}><option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+              <div style={{flexShrink:0,width:170}}><F label="CPF"><CPFInput value={resp.cpf || ''} onChange={v=>u('cpf',v)} existentes={cpfExistentes}/></F></div>
+              <div style={{flexShrink:0,width:150}}><F label="Sexo"><select style={ultraInputStyle} value={resp.sexo || ''} onChange={e=>u('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+              <div style={{flex:1,minWidth:170}}><F label="Data de Nascimento"><input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={resp.dataNasc || ''} onChange={e=>u('dataNasc',fmtDateMask(e.target.value))}/></F></div>
+              <div style={{flexShrink:0,width:180}}><F label="Estado Civil"><select style={ultraInputStyle} value={resp.estadoCivil || ''} onChange={e=>u('estadoCivil',e.target.value)}><option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}</select></F></div>
             </div>
             
             <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
-              <div style={{flexShrink:0,width:160}}><F label="RG"><input style={ultraInputStyle} value={resp.rg} onChange={e=>u('rg',e.target.value)}/></F></div>
-              <div style={{flexShrink:0,width:120}}><F label="Org. Emissor RG"><input style={ultraInputStyle} value={resp.orgEmissor} onChange={e=>u('orgEmissor',e.target.value)} placeholder="SSP/SP"/></F></div>
-              <div style={{flex:2,minWidth:250}}><F label="Profissão"><input style={ultraInputStyle} value={resp.profissao} onChange={e=>u('profissao',e.target.value)}/></F></div>
-              <div style={{flex:2,minWidth:200}}><F label="Naturalidade"><input style={ultraInputStyle} value={resp.naturalidade} onChange={e=>u('naturalidade',e.target.value)}/></F></div>
-              <div style={{flexShrink:0,width:90}}><F label="UF"><select style={ultraInputStyle} value={resp.uf} onChange={e=>u('uf',e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F></div>
-              <div style={{flex:2,minWidth:180}}><F label="Nacionalidade"><input style={ultraInputStyle} value={resp.nacionalidade} onChange={e=>u('nacionalidade',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:160}}><F label="RG"><input style={ultraInputStyle} value={resp.rg || ''} onChange={e=>u('rg',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:120}}><F label="Org. Emissor RG"><input style={ultraInputStyle} value={resp.orgEmissor || ''} onChange={e=>u('orgEmissor',e.target.value)} placeholder="SSP/SP"/></F></div>
+              <div style={{flex:2,minWidth:250}}><F label="Profissão"><input style={ultraInputStyle} value={resp.profissao || ''} onChange={e=>u('profissao',e.target.value)}/></F></div>
+              <div style={{flex:2,minWidth:200}}><F label="Naturalidade"><input style={ultraInputStyle} value={resp.naturalidade || ''} onChange={e=>u('naturalidade',e.target.value)}/></F></div>
+              <div style={{flexShrink:0,width:90}}><F label="UF"><select style={ultraInputStyle} value={resp.uf || ''} onChange={e=>u('uf',e.target.value)}><option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}</select></F></div>
+              <div style={{flex:2,minWidth:180}}><F label="Nacionalidade"><input style={ultraInputStyle} value={resp.nacionalidade || ''} onChange={e=>u('nacionalidade',e.target.value)}/></F></div>
             </div>
             {(resp.tipo==='outro1'||resp.tipo==='outro2') && (
               <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
-                <div style={{flex:1}}><F label="Parentesco"><input style={ultraInputStyle} value={resp.parentesco} onChange={e=>u('parentesco',e.target.value)} placeholder="Avó, Tio..."/></F></div>
+                <div style={{flex:1}}><F label="Parentesco"><input style={ultraInputStyle} value={resp.parentesco || ''} onChange={e=>u('parentesco',e.target.value)} placeholder="Avó, Tio..."/></F></div>
               </div>
             )}
           </div>
@@ -292,9 +292,9 @@ function RespCard({ resp, onChange, cpfExistentes, onRemove }: { resp: Resp; onC
             <h4 style={{fontSize:12, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:10}}>Contato e Localização</h4>
             
             <div style={{display:'flex',flexWrap:'wrap',gap:20}}>
-              <div style={{flexShrink:0,width:200}}><F label="Celular Principal"><input style={ultraInputStyle} value={resp.celular} onChange={e=>u('celular',fmtPhone(e.target.value))}/></F></div>
-              <div style={{flex:2,minWidth:250}}><F label="E-mail Pessoal ou Empresarial"><input style={ultraInputStyle} type="email" value={resp.email} onChange={e=>u('email',e.target.value)}/></F></div>
-              <div style={{flex:3,minWidth:300}}><F label="Observações Cadastrais"><input style={ultraInputStyle} value={resp.obs} onChange={e=>u('obs',e.target.value)} placeholder="Detalhes de saúde, restrições ou horários..."/></F></div>
+              <div style={{flexShrink:0,width:200}}><F label="Celular Principal"><input style={ultraInputStyle} value={resp.celular || ''} onChange={e=>u('celular',fmtPhone(e.target.value))}/></F></div>
+              <div style={{flex:2,minWidth:250}}><F label="E-mail Pessoal ou Empresarial"><input style={ultraInputStyle} type="email" value={resp.email || ''} onChange={e=>u('email',e.target.value)}/></F></div>
+              <div style={{flex:3,minWidth:300}}><F label="Observações Cadastrais"><input style={ultraInputStyle} value={resp.obs || ''} onChange={e=>u('obs',e.target.value)} placeholder="Detalhes de saúde, restrições ou horários..."/></F></div>
             </div>
             
             <EnderecoSection end={resp.endereco} onChange={e=>onChange({...resp,endereco:e})}/>
@@ -1823,20 +1823,20 @@ export default function NovaMatriculaPage() {
             {/* Inputs Principais */}
             <div style={{flex:1, minWidth:300, display:'flex', flexDirection:'column', gap:22}}>
               <div style={{display:'flex', gap:22, flexWrap:'wrap'}}>
-                <div style={{flex:2, minWidth:250}}><F label="Nome Completo"><input style={{...ultraInputStyle, fontSize:15}} value={aluno.nome} onChange={e=>updA('nome',e.target.value)} placeholder="Nome completo do aluno"/></F></div>
-                <div style={{flex:1, minWidth:160}}><F label="Sexo"><select style={ultraInputStyle} value={aluno.sexo} onChange={e=>updA('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
+                <div style={{flex:2, minWidth:250}}><F label="Nome Completo"><input style={{...ultraInputStyle, fontSize:15}} value={aluno.nome || ''} onChange={e=>updA('nome',e.target.value)} placeholder="Nome completo do aluno"/></F></div>
+                <div style={{flex:1, minWidth:160}}><F label="Sexo"><select style={ultraInputStyle} value={aluno.sexo || ''} onChange={e=>updA('sexo',e.target.value)}><option value="">Selecione</option>{SEXOS.map(s=><option key={s}>{s}</option>)}</select></F></div>
               </div>
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:22}}>
                 <div>
                   <F label="Data de Nascimento">
                     <div style={{position:'relative'}}>
-                      <input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={aluno.dataNasc} onChange={e=>updA('dataNasc',fmtDateMask(e.target.value))}/>
+                      <input style={ultraInputStyle} type="text" placeholder="DD/MM/AAAA" maxLength={10} value={aluno.dataNasc || ''} onChange={e=>updA('dataNasc',fmtDateMask(e.target.value))}/>
                       {aluno.dataNasc && <div style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',fontSize:12,color:'#10b981',fontWeight:800,letterSpacing:.5,display:'flex',alignItems:'center',gap:4,background:'rgba(16,185,129,0.1)',padding:'4px 8px',borderRadius:8,pointerEvents:'none'}}><CheckCircle size={14}/> {calcIdade(aluno.dataNasc)}</div>}
                     </div>
                   </F>
                 </div>
-                <div><F label="CPF"><CPFInput value={aluno.cpf} onChange={v=>updA('cpf',v)} existentes={cpfsExist}/></F></div>
-                <div><F label="Celular do Aluno / WhatsApp"><input style={ultraInputStyle} value={aluno.celular} onChange={e=>updA('celular',fmtPhone(e.target.value))} placeholder="(00) 00000-0000"/></F></div>
+                <div><F label="CPF"><CPFInput value={aluno.cpf || ''} onChange={v=>updA('cpf',v)} existentes={cpfsExist}/></F></div>
+                <div><F label="Celular do Aluno / WhatsApp"><input style={ultraInputStyle} value={aluno.celular || ''} onChange={e=>updA('celular',fmtPhone(e.target.value))} placeholder="(00) 00000-0000"/></F></div>
               </div>
             </div>
           </div>
@@ -1846,12 +1846,12 @@ export default function NovaMatriculaPage() {
         <div style={{display:'flex',flexDirection:'column',gap:24}}>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:24,background:'#f8fafc',padding:28,borderRadius:24,border:'1px solid #e2e8f0',boxShadow:'inset 0 4px 14px rgba(0,0,0,0.02)'}}>
             <F label="Código Sistema">
-              <input style={{...ultraInputStyle, background:'rgba(226,232,240,0.5)', color:'#64748b', cursor:'not-allowed', border:'1px solid #e2e8f0', fontFamily:'JetBrains Mono, monospace',letterSpacing:1.5,fontSize:15}} value={aluno.codigo} readOnly/>
+              <input style={{...ultraInputStyle, background:'rgba(226,232,240,0.5)', color:'#64748b', cursor:'not-allowed', border:'1px solid #e2e8f0', fontFamily:'JetBrains Mono, monospace',letterSpacing:1.5,fontSize:15}} value={aluno.codigo || ''} readOnly/>
             </F>
             <F label="RGA (Registro Acadêmico)">
               <input style={{...ultraInputStyle, background:'rgba(226,232,240,0.5)', color:'#64748b', cursor:'not-allowed', border:'1px solid #e2e8f0', fontFamily:'JetBrains Mono, monospace',letterSpacing:1.5,fontSize:15}} value={rgaAluno} readOnly/>
             </F>
-            <F label="ID Censo Escolar"><input style={ultraInputStyle} value={aluno.idCenso} onChange={e=>updA('idCenso',e.target.value)} placeholder="Identificador INEP"/></F>
+            <F label="ID Censo Escolar"><input style={ultraInputStyle} value={aluno.idCenso || ''} onChange={e=>updA('idCenso',e.target.value)} placeholder="Identificador INEP"/></F>
           </div>
         </div>
 
@@ -1861,22 +1861,22 @@ export default function NovaMatriculaPage() {
             <Layers size={16} color="#f59e0b"/> Informações Complementares
           </h4>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:22}}>
-            <div style={{minWidth:220}}><F label="E-mail do Aluno"><input style={ultraInputStyle} type="email" value={aluno.email} onChange={e=>updA('email',e.target.value)} placeholder="aluno@email.com"/></F></div>
+            <div style={{minWidth:220}}><F label="E-mail do Aluno"><input style={ultraInputStyle} type="email" value={aluno.email || ''} onChange={e=>updA('email',e.target.value)} placeholder="aluno@email.com"/></F></div>
             <F label="Estado Civil">
-              <select style={ultraInputStyle} value={aluno.estadoCivil} onChange={e=>updA('estadoCivil',e.target.value)}>
+              <select style={ultraInputStyle} value={aluno.estadoCivil || ''} onChange={e=>updA('estadoCivil',e.target.value)}>
                 <option value="">Selecione</option>{ESTADOS_CIVIS.map(s=><option key={s}>{s}</option>)}
               </select>
             </F>
             <F label="Cor/Raça">
-              <select style={ultraInputStyle} value={aluno.racaCor} onChange={e=>updA('racaCor',e.target.value)}>
+              <select style={ultraInputStyle} value={aluno.racaCor || ''} onChange={e=>updA('racaCor',e.target.value)}>
                 <option value="">Selecione</option>
                 {['Branca','Preta','Parda','Amarela','Indígena','Não Declarada'].map(s=><option key={s}>{s}</option>)}
               </select>
             </F>
-            <F label="Nacionalidade"><input style={ultraInputStyle} value={aluno.nacionalidade} onChange={e=>updA('nacionalidade',e.target.value)}/></F>
-            <F label="Naturalidade"><input style={ultraInputStyle} value={aluno.naturalidade} onChange={e=>updA('naturalidade',e.target.value)}/></F>
+            <F label="Nacionalidade"><input style={ultraInputStyle} value={aluno.nacionalidade || ''} onChange={e=>updA('nacionalidade',e.target.value)}/></F>
+            <F label="Naturalidade"><input style={ultraInputStyle} value={aluno.naturalidade || ''} onChange={e=>updA('naturalidade',e.target.value)}/></F>
             <F label="UF">
-              <select style={ultraInputStyle} value={aluno.uf} onChange={e=>updA('uf',e.target.value)}>
+              <select style={ultraInputStyle} value={aluno.uf || ''} onChange={e=>updA('uf',e.target.value)}>
                 <option value=""></option>{UFS.map(u=><option key={u}>{u}</option>)}
               </select>
             </F>
@@ -2105,7 +2105,7 @@ export default function NovaMatriculaPage() {
                         <option key={r.id} value={`__sel__${r.nome}`}>{r.nome} ({r.parentesco})</option>
                       ))}
                     </select>
-                    <input className="form-input" style={{fontSize:12}} placeholder="Ou digite manualmente..." value={aut.nome}
+                    <input className="form-input" style={{fontSize:12}} placeholder="Ou digite manualmente..." value={aut.nome || ''}
                       onChange={e=>updAut('nome',e.target.value)}/>
                   </div>
 
