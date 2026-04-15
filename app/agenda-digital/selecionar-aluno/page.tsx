@@ -12,8 +12,10 @@ import { Bell, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
 
 export default function SelecionarAluno() {
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [alunosRaw, setAlunos] = useSupabaseArray<any>('alunos');
+  const [titulosRaw, setTitulos] = useSupabaseArray<any>('titulos');
+  const alunos: any[] = Array.isArray(alunosRaw) ? alunosRaw : [];
+  const titulos: any[] = Array.isArray(titulosRaw) ? titulosRaw : [];
   const { currentUser } = useApp()
   const router = useRouter()
 
