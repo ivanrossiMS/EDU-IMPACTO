@@ -843,7 +843,7 @@ export default function DemonstracaoFinanceiraPage() {
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" outerRadius={90} dataKey="value" nameKey="name"
-                  label={({ name, percent }) => `${(percent*100).toFixed(0)}%`} labelLine={false}>
+                  label={({ name, percent }) => `${((percent||0)*100).toFixed(0)}%`} labelLine={false}>
                   {pieData.map((_,i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]}/>)}
                 </Pie>
                 <Tooltip formatter={(v:any) => fmt(v)}/>
@@ -995,9 +995,9 @@ export default function DemonstracaoFinanceiraPage() {
                           {r.origem.toUpperCase().replace('_',' ')}
                         </span>
                       </td>
-                      <td style={{ padding:'9px 12px', fontSize:10, fontFamily:'monospace', color:'hsl(var(--text-muted))', maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.idOrigem || r.id}>
+                      <td style={{ padding:'9px 12px', fontSize:10, fontFamily:'monospace', color:'hsl(var(--text-muted))', maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={(r as any).idOrigem || r.id}>
                         {(()=>{
-                          const str = r.idOrigem || r.id || '';
+                          const str = (r as any).idOrigem || r.id || '';
                           if (str.includes('-') && str.length > 15) {
                             const parts = str.split('-');
                             const last = parts.pop();

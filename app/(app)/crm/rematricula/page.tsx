@@ -521,7 +521,7 @@ export default function RematriculaPage() {
                     <tr><td colSpan={9} style={{padding:'40px',textAlign:'center',color:'hsl(var(--text-muted))'}}>Nenhum resultado encontrado</td></tr>
                   )}
                   {filtradas.map((a,idx) => {
-                    const sc = STATUS_CFG[a.rStatus]
+                    const sc = STATUS_CFG[a.rStatus as keyof typeof STATUS_CFG]
                     const iniciais = a.nome?.split(' ').slice(0,2).map((n:string)=>n[0]).join('').toUpperCase() || '?'
                     return (
                       <tr key={a.id} style={{borderBottom:'1px solid hsl(var(--border-subtle))',background:idx%2===0?'transparent':'hsl(var(--bg-overlay))',transition:'background 0.1s'}}

@@ -12,7 +12,7 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 const nowStr = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
-const MOV_TIPOS: { value: MovCaixaItem['tipo']; label: string; color: string; icon: React.ReactNode }[] = [
+const MOV_TIPOS: any[] = [
   { value: 'entrada',    label: 'Entrada',    color: '#10b981', icon: <TrendingUp size={14} /> },
   { value: 'receita',    label: 'Receita',    color: '#10b981', icon: <TrendingUp size={14} /> },
   { value: 'suprimento', label: 'Suprimento', color: '#3b82f6', icon: <Plus size={14} /> },
@@ -167,7 +167,7 @@ export default function AberturaCaixaPage() {
     const movsFiltradas = movsVisiveis(movsDoCaixa)
     const ent = movsFiltradas.filter(m => ['entrada', 'suprimento', 'receita'].includes(m.tipo)).reduce((s, m) => s + (Number(m.valor) || 0), 0)
     const sai = movsFiltradas.filter(m => ['saida', 'sangria', 'despesa'].includes(m.tipo)).reduce((s, m) => s + (Number(m.valor) || 0), 0)
-    const rawSaldoInicial = c.saldo_inicial ?? c.saldoInicial;
+    const rawSaldoInicial = (c as any).saldo_inicial ?? c.saldoInicial;
     const initialRaw = typeof rawSaldoInicial === 'string' ? rawSaldoInicial.replace(/[R$\s]/g, '').replace(',', '.') : rawSaldoInicial;
     const safeInitial = isNaN(Number(initialRaw)) ? 0 : Number(initialRaw);
     return safeInitial + ent - sai

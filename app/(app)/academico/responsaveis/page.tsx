@@ -949,7 +949,7 @@ export default function ResponsaveisPage() {
               setSearchResults(prev => {
                 const exists = prev.some(r => r.id === saved.id)
                 const updated = exists
-                  ? prev.map(r => r.id === saved.id ? transformResp({ ...r._raw, ...saved } as any) : r)
+                  ? prev.map(r => r.id === saved.id ? transformResp({ ...(r as any)._raw, ...saved } as any) : r)
                   : [transformResp(saved), ...prev]
                 return updated
               })

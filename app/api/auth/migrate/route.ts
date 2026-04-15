@@ -51,7 +51,6 @@ export async function POST(request: Request) {
         await supabaseAdmin.from('system_users')
           .update({ id: cUser.user.id }) // WARNING: Cascading id changes could break Foreign Keys if they exist currently in other tables (e.g., perfis).
           .eq('id', u.id)
-          .catch(() => null)
         
         criados++
       }

@@ -290,7 +290,7 @@ export async function GET(request: Request) {
     if (errAlunos5) console.error(`[DRE-DEBUG] Fatal error fetching alunos:`, errAlunos5)
     console.log(`[DRE-DEBUG] Fetched ${alunos?.length || 0} alunos from DB in Section 5`)
 
-    for (const aluno of (alunos || [])) {
+    for (const aluno of (alunos || []) as any[]) {
       const dados    = aluno.dados || {}
       const parcelas: any[] = dados.parcelas || []
       

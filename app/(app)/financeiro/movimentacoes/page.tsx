@@ -424,11 +424,11 @@ export default function MovimentacoesPage() {
 
   // Listas derivadas
   const caixasSelect = useMemo(() =>
-    caixasAbertos.map(c => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
+    caixasAbertos.map((c: any) => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
   , [caixasAbertos])
 
   const caixasAbertosAtivos = useMemo(() =>
-    caixasAbertos.filter(c => c.status === 'aberto' || !c.fechado).map(c => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
+    caixasAbertos.filter((c: any) => c.status === 'aberto' || !c.fechado).map((c: any) => ({ id: c.id, label: new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR'), operador: c.operador }))
   , [caixasAbertos])
 
   useEffect(() => {
@@ -505,14 +505,14 @@ export default function MovimentacoesPage() {
           valor: Number(data.valor),
           descricao: data.descricao || data.planoContasDesc || '',
           data: data.dataMovimento,
-          operador: caixasAbertos.find(c => c.id === data.caixaId)?.operador || 'Sistema',
+          operador: caixasAbertos.find((c: any) => c.id === data.caixaId)?.operador || 'Sistema',
           planoContasId: data.planoContasId || null,
           forma_pagamento: data.tipoDocumento || '',
           compensadoBanco: data.compensadoBanco ? 'Compensado' : 'A Compensar',
           origem: 'manual',
           referenciaId: novId,
           fornecedorId: data.fornecedorId,
-          fornecedorNome: data.fornecedorNome || data.fornecedor || ''
+          fornecedorNome: data.fornecedorNome || (data as any).fornecedor || ''
         })
       })
       if (!resp.ok) {
@@ -555,7 +555,7 @@ export default function MovimentacoesPage() {
 
   // Resolução de caixa para exibição
   const nomeCaixa = (caixaId: string) => {
-    const c = caixasAbertos.find(x => x.id === caixaId)
+    const c = caixasAbertos.find((x: any) => x.id === caixaId)
     return c ? `${new Date((c.dataAbertura || c.data_abertura || c.criado_em)?.slice(0,10) + 'T12:00').toLocaleDateString('pt-BR')} (${c.operador})` : '—'
   }
 
@@ -567,7 +567,7 @@ export default function MovimentacoesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Movimentações Financeiras</h1>
-          <p className="page-subtitle">{filtered.length} lançamentos {sessionCaixaId ? 'neste caixa' : 'totais'} • {sessionCaixaId ? `Caixa selecionado: ${caixasAbertosAtivos.find(c => c.id === sessionCaixaId)?.label || ''}` : 'Geral'}</p>
+          <p className="page-subtitle">{filtered.length} lançamentos {sessionCaixaId ? 'neste caixa' : 'totais'} • {sessionCaixaId ? `Caixa selecionado: ${caixasAbertosAtivos.find((c: any) => c.id === sessionCaixaId)?.label || ''}` : 'Geral'}</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><Printer size={13} />Imprimir</button>
@@ -608,7 +608,7 @@ export default function MovimentacoesPage() {
           </select>
           <select className="form-input" style={{ width: 170 }} value={filtroCaixa} onChange={e => setFiltroCaixa(e.target.value)}>
             <option value="todos">Todos os caixas</option>
-            {caixasAbertos.map(c => <option key={c.id} value={c.id}>{new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR')} — {c.operador}</option>)}
+            {caixasAbertos.map((c: any) => <option key={c.id} value={c.id}>{new Date(c.dataAbertura + 'T12:00').toLocaleDateString('pt-BR')} — {c.operador}</option>)}
           </select>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>De:</span>
@@ -808,7 +808,7 @@ export default function MovimentacoesPage() {
               <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 6 }}>Identificamos que você tem caixas abertos. Escolha qual deseja utilizar para os lançamentos de agora.</p>
             </div>
             <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '50vh', overflowY: 'auto' }}>
-              {caixasAbertosAtivos.map(c => (
+              {caixasAbertosAtivos.map((c: any) => (
                 <button key={c.id} onClick={() => { setSessionCaixaId(c.id); setFiltroCaixa(c.id); setShowSessionCaixaModal(false); }} 
                   style={{ width: '100%', textAlign: 'left', padding: '16px', borderRadius: 12, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.transform = 'translateY(-1px)' }}

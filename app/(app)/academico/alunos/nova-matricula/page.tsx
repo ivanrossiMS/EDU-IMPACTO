@@ -2134,7 +2134,7 @@ export default function NovaMatriculaPage() {
                           const t = resp.celular || (resp as any).telefone || ''
                           if (t) updAut('telefone', t)
                           if (resp.parentesco) updAut('parentesco', resp.parentesco)
-                          if (resp.rfid) updAut('rfid', resp.rfid)
+                          if ((resp as any).rfid) updAut('rfid', (resp as any).rfid)
                         } else updAut('nome', e.target.value.replace('__sel__',''))
                       }}>
                       <option value="">— Selecionar responsável cadastrado —</option>
@@ -2980,7 +2980,7 @@ export default function NovaMatriculaPage() {
                       const eparcs = (p as any).evento ? parcelas.filter((x:any)=>x.status!=='cancelado'&&(x as any).evento===(p as any).evento) : null
                       const pDen = p.totalParcelas || (eparcs?eparcs.length:parcelas.filter(x=>x.status!=='cancelado').length)
                       const evtIndex = p.numParcela || (eparcs && eparcs.length > 0 ? eparcs.findIndex(x => x.num === p.num) + 1 : p.num)
-                      const tNome = (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId))?.nome || p.turma || mat.turma || ''
+                      const tNome = (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||(mat as any).turmaId))?.nome || (p as any).turma || (mat as any).turma || ''
                       return {...p, loteJuros:fmtMoeda(atr.juros), loteMulta:fmtMoeda(atr.multa), loteDesc:fmtMoeda(atr.descAplicado), loteDias:atr.dias, pDen, evtIndex, tNome}; 
                     });
                     const tl=loteParcs.reduce((s,p)=>s+Math.max(0, p.valor-parseMoeda(p.loteDesc)+parseMoeda(p.loteJuros)+parseMoeda(p.loteMulta)),0);
@@ -3782,7 +3782,7 @@ export default function NovaMatriculaPage() {
           aluno={{
             ...aluno,
             responsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.nome || undefined,
-            cpfResponsavel: todosResp.find(r => r.respFinanceiro)?.cpf || undefined,
+            cpf: todosResp.find(r => r.respFinanceiro)?.cpf || undefined,
             emailResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.email || (aluno as any).email,
             telResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.celular || (aluno as any).celular
           }}
@@ -3850,7 +3850,7 @@ export default function NovaMatriculaPage() {
                 const codigasBaixaPaga = parcelas
                   .filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago'&&p.codBaixa)
                   .map(p=>p.codBaixa as string)
-                setParcelas(prev=>{
+                setParcelas((prev: any[])=>{
                   let next = prev.map(p=>parcelasSelected.includes(p.num)?{...p,status:'cancelado',dataExclusao:new Date().toLocaleDateString('pt-BR'),motivoExclusao:excluirMotivo}:p);
                   const eventosAfetados = new Set<string>();
                   parcelasSelected.forEach(n => {
@@ -4657,7 +4657,7 @@ export default function NovaMatriculaPage() {
                 return pa.getTime()-pb.getTime()
               }).map((p,i)=>({...p,num:i+1}))  // num = índice global de ordenação apenas
               setParcelas(todasOrdenadas);setParcelasConfirmadas(false);setModalEventoFin(false)
-              setEventoForm({turmaId:mat.turmaId,turmaNome:'',eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX',diaVcto:'5',valor:'',descTipo:'%',descValor:'',manterDesconto:false,obs:''})
+              setEventoForm({turmaId:mat.turmaId,turmaNome:'',eventoNome:'',eventoId:'',vencimentoInicial:'',parcelaInicial:'1',parcelaFinal:'1',tipoVencimento:'diaX',diaVcto:'5',valor:'',descTipo:'%',descValor:'',manterDesconto:false,obs:''} as any)
             }}><Check size={14}/> Inserir {Math.max(1,parseInt(eventoForm.parcelaFinal)||1)} Lançamento(s)</button>
           </div>
         </div>
@@ -5478,7 +5478,7 @@ export default function NovaMatriculaPage() {
                         parcelasVinculadas:undefined, baixaPorResponsavel:undefined, nomeResponsavel:undefined }
                     }).filter(Boolean);
                     
-                    setParcelas(prev=>prev.map(p=>{
+                    setParcelas((prev: any[])=>prev.map((p: any)=>{
                       if(!nums.includes(p.num)||p.status==='pago') return p
                       const pFinal = parcelasParaRecibo.find((r:any) => r.num === p.num);
                       return pFinal ? pFinal : p;
@@ -5541,7 +5541,7 @@ export default function NovaMatriculaPage() {
               alunoNome:aluno.nome||'Aluno Atual',
               alunoId:'__novo__',
               alunoAvatar:(aluno.nome||'A')[0].toUpperCase(),
-              turmaShow: (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||mat.turmaId))?.nome || p.turma || mat.turma || '',
+              turmaShow: (p as any).turmaNome || turmas.find((t:any)=>t.id===((p as any).turmaId||(mat as any).turmaId))?.nome || (p as any).turma || (mat as any).turma || '',
               jurosCalc: calc.juros,
               multaCalc: calc.multa,
               diasAtr: calc.dias,

@@ -44,7 +44,7 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   )
   
   if (id.length > 10) {
-    await supabaseAdmin.auth.admin.deleteUser(id).catch(e => console.error(e))
+    await supabaseAdmin.auth.admin.deleteUser(id).catch((e: any) => console.error(e))
   }
 
   if (userRow?.email) {

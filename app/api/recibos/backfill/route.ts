@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     let seqOffset = (countAtual || 0)
     const year = new Date().getFullYear()
 
-    for (const titulo of candidatos) {
+    for (const titulo of candidatos as any[]) {
       try {
         seqOffset++
         const seq = seqOffset.toString().padStart(5, '0')

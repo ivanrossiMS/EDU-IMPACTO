@@ -185,7 +185,7 @@ export default function InadimplenciaPage() {
                   <tr><th>Aluno / Responsável</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Atraso</th><th>Risco</th><th>Ações Cobrança</th></tr>
                 </thead>
                 <tbody>
-                  {filtered.map(t => {
+                  {filtered.map((t: any) => {
                     const diasAtraso = Math.ceil((Date.now()-new Date(t.vencimento).getTime())/86400000)
                     const risco = getRisco(diasAtraso)
                     const rc = RISCO_CFG[risco]
