@@ -16,7 +16,7 @@ export default function SelecionarAluno() {
   const [titulosRaw, setTitulos] = useSupabaseArray<any>('titulos');
   const alunos: any[] = Array.isArray(alunosRaw) ? alunosRaw : [];
   const titulos: any[] = Array.isArray(titulosRaw) ? titulosRaw : [];
-  const { currentUser } = useApp()
+  const { currentUser, hydrated } = useApp()
   const router = useRouter()
 
   useEffect(() => {
@@ -32,6 +32,9 @@ export default function SelecionarAluno() {
       }
     }
   }, [currentUser, alunos, router])
+
+  // Block render until localStorage is hydrated to prevent SSR/client mismatch
+  if (!hydrated) return null
 
   let meusAlunos = (alunos || []).filter(a => {
     const s = a.status?.toLowerCase()
