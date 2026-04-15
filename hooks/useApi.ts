@@ -1,37 +1,64 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
+export interface ApiQueryOptions {
+  /** Tiempo en ms que los datos se consideran "frescos" (sin re-fetch). Default: 30s */
+  staleTime?: number
+  /** Tiempo en ms que el cache se mantiene inactivo antes de ser descartado. Default: 5min */
+  gcTime?: number
+  /** Si true, desactiva el cache y añade timestamp a la URL (só para dados em tempo real crítico) */
+  noCache?: boolean
+  /** Desativa a query completamente enquanto false */
+  enabled?: boolean
+}
+
 /**
- * useApiQuery: Wrapper corporativo sobre o SWR/React Query.
- * Ele permite buscar dados usando cache, fallback seguro e revalidação automática
+ * useApiQuery: Wrapper corporativo com cache real via React Query.
+ * staleTime padrão de 30s garante dados instantâneos em navegação,
+ * com revalidação em background para manter frescor sem travar a UI.
  */
-export function useApiQuery<T>(key: string[], url: string, params?: Record<string, any>) {
+export function useApiQuery<T>(
+  key: string[],
+  url: string,
+  params?: Record<string, any>,
+  options: ApiQueryOptions = {}
+) {
+  const { staleTime = 30_000, gcTime = 300_000, noCache = false, enabled = true } = options
+
   let queryStr = ''
   if (params) {
     const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== '')
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
     )
     if (Object.keys(cleanParams).length > 0) {
       queryStr = '?' + new URLSearchParams(cleanParams as any).toString()
     }
   }
-  
+
   return useQuery<T>({
     queryKey: [...key, params],
+    enabled,
+    staleTime,
+    gcTime,
     queryFn: async () => {
-      // Otimização agressiva contra caches do Next.js e Browsers que ignoram a invalidação do React Query
-      const buster = queryStr ? `&_t=${Date.now()}` : `?_t=${Date.now()}`
-      const res = await fetch(`${url}${queryStr}${buster}`, { cache: 'no-store' })
+      // noCache só para módulos que exigem dados absolutamente ao vivo (ex: caixa, PDV)
+      const cacheBuster = noCache
+        ? (queryStr ? `&_t=${Date.now()}` : `?_t=${Date.now()}`)
+        : ''
+
+      const fetchOptions: RequestInit = noCache
+        ? { cache: 'no-store' }
+        : { cache: 'default' }
+
+      const res = await fetch(`${url}${queryStr}${cacheBuster}`, fetchOptions)
       if (!res.ok) throw new Error('Falha ao processar os dados.')
-      const data = await res.json()
-      return data
+      return res.json()
     }
   })
 }
 
 /**
- * useApiMutation: Utilizado para gerenciar POST/PUT/DELETE.
- * Após a ação ser um sucesso, ele INVALIDA o cache da Query (pelo key)
- * fazendo a tabela atualizar sozinha como mágica, instantaneamente.
+ * useApiMutation: Gerencia POST/PUT/DELETE com invalidação automática de cache.
+ * Após sucesso: invalida as queryKeys especificadas, forçando refetch suave.
  */
 export function useApiMutation<TVariables = any, TData = any>(
   url: string,
@@ -48,8 +75,8 @@ export function useApiMutation<TVariables = any, TData = any>(
         body: JSON.stringify(vars)
       })
       if (!res.ok) {
-        const err = await res.json().catch(()=>({}))
-        throw new Error(err.error || 'Erro na operação do servidor')
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as any).error || 'Erro na operação do servidor')
       }
       return res.json()
     },

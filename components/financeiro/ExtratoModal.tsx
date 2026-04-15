@@ -156,7 +156,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
   
   const alunoId = String((aluno as any)?.id || '')
   const shouldFetch = aberto && !isDraft && alunoId.length > 0
-  const { data: fetchResult, isLoading: loadingDB } = useApiQuery(
+  const { data: fetchResult, isLoading: loadingDB } = useApiQuery<any>(
      ['fin-parcelas', alunoId],
      '/api/financeiro/parcelas',
      shouldFetch ? { aluno_id: alunoId, limit: 1000 } : undefined

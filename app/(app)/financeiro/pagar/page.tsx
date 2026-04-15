@@ -62,7 +62,7 @@ const BLANK_CP = {
 export default function ContasPagarPage() {
   const { fornecedoresCad = [], cfgPlanoContas, setMovimentacoesManuais, cfgEventos, cfgMetodosPagamento, cfgTiposDocumento, cfgCartoes, logSystemAction } = useData();
   const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
-  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-pdv'], '/api/financeiro/caixas', { limit: 200 })
+  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-abertos'], '/api/financeiro/caixas', { status: 'aberto', limit: 200 })
   const caixasAbertos = respCaixas?.data || caixasAbertosLegacy || []
   
   const { registrarBaixa, estornarBaixa } = useBaixaIntegrada()
@@ -1405,3 +1405,4 @@ export default function ContasPagarPage() {
     </div>
   )
 }
+

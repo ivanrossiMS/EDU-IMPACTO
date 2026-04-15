@@ -1,8 +1,7 @@
 'use client'
 
-import { useData } from '@/lib/dataContext'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApiQuery } from '@/hooks/useApi'
+import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton'
 import { formatCurrency, formatNumber } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Users, DollarSign, AlertTriangle, GraduationCap, UserCheck, Brain, BarChart3, ArrowRight, Activity, Zap, Star, CheckCircle, Clock, XCircle } from 'lucide-react'
 import Link from 'next/link'
@@ -29,6 +28,14 @@ const ACTIVITY_ICONS: Record<string, React.ReactNode> = {
   acesso: <Brain size={14} color="#a78bfa" />,
 }
 
+const getMonthLabel = (yyyyMm: string) => {
+  if (!yyyyMm) return ''
+  const [yyyy, mm] = yyyyMm.split('-')
+  const date = new Date(parseInt(yyyy), parseInt(mm) - 1, 1)
+  const month = date.toLocaleDateString('pt-BR', { month: 'long' })
+  return month.charAt(0).toUpperCase() + month.slice(1) + '/' + yyyy
+}
+
 export default function DashboardPage() {
   const hoje = new Date()
   const mesStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
@@ -50,89 +57,41 @@ export default function DashboardPage() {
     totalAlunos = 0, receitaMes = 0, receitaPrev = 0, varReceita = 0,
     inadimplentes = 0, inadimplenciaRate = 0, taxaOcupacao = 0, novasMatriculas = 0, nFuncionarios = 0,
     riscoAlto = 0, riscoMedio = 0, riscoBaixo = 0, totalRisco = 0,
-    RISCO_EVASAO_DIST = []
+    RISCO_EVASAO_DIST = [], alunos = []
   } = kpis
 
-  // Optional: keep minimal legacy local stores for the Alertas
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos')
-  const [turmas = [], setTurmas] = useSupabaseArray<any>('turmas')
-  const [contasPagar = [], setContasPagar] = useSupabaseArray<any>('contas-pagar')
-  const [ocorrencias = [], setOcorrencias] = useSupabaseArray<any>('ocorrencias')
-  const [titulos = [], setTitulos] = useSupabaseArray<any>('titulos')
-  const [funcionarios = [], setFuncionarios] = useSupabaseArray<any>('rh/funcionarios')
+  // Alertas: busca endpoint dedicado (leve, apenas dados críticos)
+  const { data: alertasData } = useApiQuery<any>(
+    ['dashboard-alertas'],
+    `/api/financeiro/dashboard/alertas`,
+    {},
+    { staleTime: 60_000 }
+  )
+  const alertasReais = alertasData?.alertas ?? []
+
+  // Segmentos de ocupação (turmas)
+  const { data: turmasData } = useApiQuery<any>(
+    ['dashboard-turmas'],
+    `/api/turmas`,
+    {},
+    { staleTime: 120_000 }
+  )
+  const turmas: any[] = Array.isArray(turmasData) ? turmasData : (turmasData?.data ?? [])
 
 
-  // ── Receita vs despesa por mês (últimos 6 meses) ─────────────────
-  const getMonthKey = (dateStr: string | null | undefined) => {
-    if (!dateStr) return null
-    const d = dateStr.length >= 7 ? dateStr.slice(0, 7) : null
-    return d
-  }
-
-  const getMonthLabel = (key: string) => {
-    const [y, m] = key.split('-')
-    const names = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-    return `${names[parseInt(m) - 1]}/${y.slice(2)}`
-  }
-
-  // Usaremos as coleções já injetadas pelo useSupabaseArray acima.
-  const receitaMensal = useMemo(() => {
-    const map: Record<string, number> = {}
-    titulos.forEach(t => {
-      if (t.status === 'pago' && t.pagamento) {
-        const k = getMonthKey(t.pagamento)
-        if (k) map[k] = (map[k] ?? 0) + t.valor
-      }
-    })
-    return map
-  }, [titulos])
-
-  const despesaMensal = useMemo(() => {
-    const map: Record<string, number> = {}
-    contasPagar.forEach(c => {
-      if (c.status === 'pago') {
-        const k = getMonthKey(c.vencimento)
-        if (k) map[k] = (map[k] ?? 0) + c.valor
-      }
-    })
-    return map
-  }, [contasPagar])
-
-  const despesasPorCategoria = useMemo(() => {
-    const map: Record<string, number> = {}
-    contasPagar.forEach(c => {
-      if (c.status === 'pago' || c.status === 'pendente' || c.status === 'atrasado') { 
-        const dStr = c.vencimento
-        if (dStr?.startsWith(mesStr)) {
-          const nomeCategoria = c.categoria || 'Sem Categoria'
-          map[nomeCategoria] = (map[nomeCategoria] || 0) + c.valor
-        }
-      }
-    })
-    
-    // Cores modernas fixas baseadas no índice
-    const CORES = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b']
-    
-    return Object.entries(map)
-      .sort((a,b) => b[1] - a[1]) // Ordem de valor
-      .map(([nome, valor], i) => ({
-        nome, valor, fill: CORES[i % CORES.length]
-      }))
-  }, [contasPagar, mesStr])
-
-  const allMonths = Array.from(new Set([...Object.keys(receitaMensal), ...Object.keys(despesaMensal)])).sort().slice(-6)
-
-  const CHART_DATA = allMonths.length > 0
-    ? allMonths.map(k => ({ mes: getMonthLabel(k), receita: receitaMensal[k] ?? 0, despesa: despesaMensal[k] ?? 0 }))
-    : []
+  // ── Dados de gráfico: receita x despesa (6 meses) via KPI endpoint ──
+  // O endpoint /api/financeiro/dashboard já agrega esses dados server-side
+  const CHART_DATA: { mes: string; receita: number; despesa: number }[] = kpis.chartData ?? []
+  const despesasPorCategoria: { nome: string; valor: number; fill: string }[] = kpis.despesasPorCategoria ?? []
 
   // ── Ocupação por segmento ─────────────────────────────────────────
   const SEGMENTO_CORES: Record<string, string> = { EI: '#3b82f6', EF1: '#8b5cf6', EF2: '#10b981', EM: '#f59e0b', EJA: '#06b6d4' }
   const SEGMENTO_LABELS: Record<string, string> = { EI: 'Ed. Infantil', EF1: 'Fund. I', EF2: 'Fund. II', EM: 'Ensino Médio', EJA: 'EJA' }
 
   const OCUPACAO_SEGMENTOS = useMemo(() => {
+    if (!turmas.length) return []
     const segs: Record<string, { total: number; matriculados: number }> = {}
-    turmas.forEach(t => {
+    turmas.forEach((t: any) => {
       if (!segs[t.serie]) segs[t.serie] = { total: 0, matriculados: 0 }
       segs[t.serie].total += t.capacidade
       segs[t.serie].matriculados += t.matriculados
@@ -146,74 +105,8 @@ export default function DashboardPage() {
     }))
   }, [turmas])
 
-  // ── Alertas críticos gerados de dados reais ───────────────────────
-  const ALERTAS_REAIS = useMemo(() => {
-    const alertas: { id: string; nivel: string; titulo: string; descricao: string; acao: string; link: string }[] = []
-
-    // Alunos com frequência crítica (<60%)
-    const criticos = alunos.filter(a => a.frequencia < 60)
-    if (criticos.length > 0) {
-      alertas.push({
-        id: 'auto-freq', nivel: 'critico',
-        titulo: `${criticos.length} aluno${criticos.length > 1 ? 's' : ''} com frequência crítica`,
-        descricao: `Abaixo de 60% — ${criticos.map(a => a.nome.split(' ')[0]).join(', ')}`,
-        acao: 'Ver alunos', link: '/academico/frequencia',
-      })
-    }
-
-    // Inadimplência
-    const titulosAtrasados = titulos.filter(t => t.status === 'atrasado')
-    if (titulosAtrasados.length > 0) {
-      const valorTotal = titulosAtrasados.reduce((s, t) => s + t.valor, 0)
-      alertas.push({
-        id: 'auto-inad', nivel: 'alto',
-        titulo: `${formatCurrency(valorTotal)} em títulos atrasados`,
-        descricao: `${titulosAtrasados.length} título(s) em atraso sem registro de pagamento`,
-        acao: 'Ver inadimplência', link: '/financeiro/inadimplencia',
-      })
-    }
-
-    // Alunos risco alto
-    const riscoAlt = alunos.filter(a => a.risco_evasao === 'alto')
-    if (riscoAlt.length > 0) {
-      alertas.push({
-        id: 'auto-risco', nivel: 'medio',
-        titulo: `${riscoAlt.length} aluno${riscoAlt.length > 1 ? 's' : ''} em risco alto de evasão`,
-        descricao: 'Classificados por frequência, notas e histórico financeiro',
-        acao: 'Ver alunos', link: '/academico/alunos',
-      })
-    }
-
-    // Contas a pagar vencendo em até 7 dias
-    const proxVenc = contasPagar.filter(c => {
-      if (c.status === 'pago') return false
-      const d = new Date(c.vencimento)
-      const diff = (d.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)
-      return diff >= 0 && diff <= 7
-    })
-    if (proxVenc.length > 0) {
-      const val = proxVenc.reduce((s, c) => s + c.valor, 0)
-      alertas.push({
-        id: 'auto-cp', nivel: 'info',
-        titulo: `${proxVenc.length} conta${proxVenc.length > 1 ? 's' : ''} a pagar nos próximos 7 dias`,
-        descricao: `Total: ${formatCurrency(val)}`,
-        acao: 'Ver contas', link: '/financeiro/pagar',
-      })
-    }
-
-    // Ocorrências graves não resolvidas
-    const ocGraves = ocorrencias.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel)
-    if (ocGraves.length > 0) {
-      alertas.push({
-        id: 'auto-oc', nivel: 'alto',
-        titulo: `${ocGraves.length} ocorrência${ocGraves.length > 1 ? 's' : ''} grave${ocGraves.length > 1 ? 's' : ''} sem ciência`,
-        descricao: 'Responsáveis ainda não foram notificados',
-        acao: 'Ver ocorrências', link: '/academico/ocorrencias',
-      })
-    }
-
-    return alertas
-  }, [alunos, titulos, contasPagar, ocorrencias])
+  // ── Alertas: vindos do endpoint dedicado (leve, sem pull de arrays) ─
+  const ALERTAS_REAIS = useMemo(() => alertasReais, [alertasReais])
 
   const KPIITEMS = [
     { label: 'Total de Alunos', value: formatNumber(totalAlunos), var: 0, icon: <Users size={20} />, color: '#3b82f6' },
@@ -222,12 +115,15 @@ export default function DashboardPage() {
     { label: 'Taxa de Ocupação', value: `${taxaOcupacao.toFixed(1)}%`, var: 0, icon: <GraduationCap size={20} />, color: '#8b5cf6' },
     { label: 'Novas Matrículas', value: formatNumber(novasMatriculas), var: 0, icon: <UserCheck size={20} />, color: '#f59e0b' },
     { label: 'Funcionários', value: formatNumber(nFuncionarios), var: 0, icon: <Users size={20} />, color: '#06b6d4' },
-    { label: 'Turmas Ativas', value: formatNumber(turmas.length), var: 0, icon: <Star size={20} />, color: '#ec4899' },
+    { label: 'Turmas Ativas', value: formatNumber(kpis.nTurmas ?? turmas.length), var: 0, icon: <Star size={20} />, color: '#ec4899' },
     { label: 'Risco de Evasão', value: formatNumber(totalRisco), var: 0, icon: <AlertTriangle size={20} />, color: '#f59e0b' },
   ]
 
-  // Empty state quando não há dados
-  if (alunos.length === 0 && turmas.length === 0 && funcionarios.length === 0) {
+  // Skeleton enquanto KPIs carregam — elimina flash de tela vazia
+  if (loadKpis) return <DashboardSkeleton />
+
+  // Empty state real: só exibe quando KPI já carregou e totalAlunos é 0
+  if (!loadKpis && totalAlunos === 0 && nFuncionarios === 0) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -284,7 +180,7 @@ export default function DashboardPage() {
             ✨ Copiloto da Direção — Análise em Tempo Real
           </div>
           <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
-            {alunos.length} alunos cadastrados •{' '}
+            {totalAlunos} alunos cadastrados •{' '}
             {inadimplentes > 0 && <><strong style={{ color: '#f87171' }}>{inadimplentes} inadimplentes </strong>/</>}{' '}
             {riscoAlto > 0 && <><strong style={{ color: '#fbbf24' }}> {riscoAlto} em risco alto</strong> de evasão.</>}
             {' '}Taxa de ocupação: <strong style={{ color: '#34d399' }}>{taxaOcupacao.toFixed(1)}%</strong>.

@@ -80,7 +80,7 @@ function buildReceiptHTML(
 ) {
   const { nomeEscola, cnpj, logo, cidade, issuerName, issuerCargo, hash } = opts
   const ref = rawParcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0) + (p.juros || 0) + (p.multa || 0), 0)
+  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0), 0)
   const rNum = receiptNumber(ref)
   const emissao = today()
   
@@ -255,9 +255,19 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
 
   // ── Flatten if Baixa por Responsável ──
   const parcelas = useMemo(() => {
-    return rawParcelas.flatMap((p: any) => {
+    // Expande parcelasVinculadas (baixa por responsável) e deduplica por num+codBaixa
+    // para evitar duplicação quando parcelas antigas ainda têm vinculadas após estorno
+    const expanded = rawParcelas.flatMap((p: any) => {
       if (p.parcelasVinculadas && p.parcelasVinculadas.length > 0) return p.parcelasVinculadas
       return [p]
+    })
+    // Deduplicar: manter apenas a primeira ocorrência de cada (num + codBaixa)
+    const seen = new Set<string>()
+    return expanded.filter((p: any) => {
+      const key = `${p.num}-${p.codBaixa || 'sem-cod'}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
     })
   }, [rawParcelas])
 
@@ -284,7 +294,7 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
   // ── Hashes & Dynamics ──
   const emissao = today()
   const ref = rawParcelas[0] || {} as ReceiptParcela
-  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0) + (p.juros || 0) + (p.multa || 0), 0)
+  const totalPago = parcelas.reduce((s, p) => s + (p.valorFinal || p.valor || 0), 0)
   const rNum = receiptNumber(ref)
   const hashVal = useMemo(generateUUID, [])
   const validationUrl = `https://impacto-edu.com/validar/${hashVal}`
@@ -440,7 +450,7 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:'#475569' }}>R$ {fmt(p.valor)}</div>
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:p.desconto>0?'#d97706':'#94a3b8' }}>{p.desconto>0?`-R$ ${fmt(p.desconto)}`:'—'}</div>
                     <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:12, color:encargos>0?'#dc2626':'#94a3b8' }}>{encargos>0?`+R$ ${fmt(encargos)}`:'—'}</div>
-                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:13, fontWeight:800, color:'#10b981' }}>R$ {fmt((p.valorFinal || p.valor || 0) + encargos)}</div>
+                    <div style={{ textAlign:'right', fontFamily:'monospace', fontSize:13, fontWeight:800, color:'#10b981' }}>R$ {fmt(p.valorFinal || p.valor || 0)}</div>
                   </div>
                 )
               })}

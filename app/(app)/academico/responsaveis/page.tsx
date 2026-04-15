@@ -1,8 +1,5 @@
 'use client'
-import { useSupabaseCollection } from '@/lib/useSupabaseCollection';
-
-
-
+import { useApiQuery } from '@/hooks/useApi';
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useRef, useEffect } from 'react'
 import Link from 'next/link'
@@ -43,30 +40,26 @@ const RISCO_COLOR = { alto: '#ef4444', medio: '#f59e0b', baixo: '#10b981' }
 const RISCO_LABEL = { alto: '⚠ Alto', medio: '⚡ Médio', baixo: '✓ Baixo' }
 
 export default function ResponsaveisPage() {
-  // Persister noop: esta página só LÊ dados via GET. Escrita ocorre via modal (api/responsaveis POST/PUT individual).
-  // Usar useSupabaseArray dispararia POST automático com o array inteiro ao setar estado → 400.
-  const [responsaveisRaw, setResponsaveisRaw] = useSupabaseCollection<any>(
-    'responsaveis?incluir_vinculos=1',
-    [],
-    {
-      fetcher: () =>
-        fetch('/api/responsaveis?incluir_vinculos=1')
-          .then(r => r.ok ? r.json() : [])
-          .then(d => Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : [])),
-      persister: async () => { /* noop — não enviar array para a API */ },
+  // Data fetching via useApiQuery (modernizado para evitar staleness do localStorage)
+  const [responsaveisRaw, setResponsaveisRaw] = useState<any[]>([])
+  
+  const { data: resResp } = useApiQuery<any>(
+    ['responsaveis'],
+    '/api/responsaveis?incluir_vinculos=1&limit=2000'
+  )
+  
+  useEffect(() => {
+    if (resResp) {
+      setResponsaveisRaw(Array.isArray(resResp.data) ? resResp.data : (Array.isArray(resResp) ? resResp : []))
     }
-  );
-  const [alunos] = useSupabaseCollection<any>(
-    'alunos',
-    [],
-    {
-      fetcher: () =>
-        fetch('/api/alunos?limit=2000')
-          .then(r => r.ok ? r.json() : {})
-          .then(d => Array.isArray(d?.data) ? d.data : (Array.isArray(d) ? d : [])),
-      persister: async () => { /* noop */ },
-    }
-  );
+  }, [resResp])
+
+  const { data: resAlunos } = useApiQuery<any>(
+    ['alunos-raw'],
+    '/api/alunos?limit=2000'
+  )
+  const alunos = Array.isArray(resAlunos?.data) ? resAlunos.data : (Array.isArray(resAlunos) ? resAlunos : [])
+
   const [search, setSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Responsavel[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -976,4 +969,5 @@ export default function ResponsaveisPage() {
     </div>
   )
 }
+
 

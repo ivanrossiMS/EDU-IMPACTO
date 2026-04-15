@@ -2,6 +2,9 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function GET() {
   const cookieStore = await cookies();
   const supabase = createServerClient(
@@ -22,7 +25,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  return NextResponse.json({ user: user.user_metadata }, {
+  return NextResponse.json({ user: user.user_metadata || {} }, {
     headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
   });
 }
+

@@ -287,7 +287,7 @@ export default function AlunosPage() {
         <td>
           <div style={{ display:'flex', gap:3 }}>
             <Link href={`/academico/alunos/ficha?id=${(a as any).codigo || a.matricula}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha"><Eye size={11}/></button></Link>
-            <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${(a as any).codigo || a.matricula}`)}><Pencil size={11}/></button>
+            <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${a.id}`)}><Pencil size={11}/></button>
             <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color:'#f87171' }} onClick={() => setConfirmId(a.id)}><Trash2 size={11}/></button>
           </div>
         </td>
@@ -600,7 +600,7 @@ export default function AlunosPage() {
                       <td>
                         <div style={{ display:'flex', gap:4 }}>
                           <Link href={`/academico/alunos/ficha?id=${(aluno as any).codigo || aluno.matricula}`}><button className="btn btn-ghost btn-icon btn-sm" title="Ver ficha 360°"><Eye size={12}/></button></Link>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${(aluno as any).codigo || aluno.matricula}`)}><Pencil size={12}/></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => router.push(`/academico/alunos/nova-matricula?edit=${aluno.id}`)}><Pencil size={12}/></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color:'#f87171' }} onClick={() => setConfirmId(aluno.id)}><Trash2 size={12}/></button>
                         </div>
                       </td>

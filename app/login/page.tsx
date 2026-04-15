@@ -22,7 +22,7 @@ const TESTIMONIALS = [
 
 
 interface SysUser { id: string; nome: string; email: string; cargo: string; perfil: string; status: string; ultimoAcesso: string }
-type FoundUser  = { id: string; nome: string; email: string; cargo: string; perfil: string }
+type FoundUser  = { id: string; nome: string; email: string; cargo: string; perfil: string; userType?: string; matricula?: string; realId?: string }
 
 // ── Senha storage ─────────────────────────────────────────────────────────────
 const PASS_KEY = 'edu-user-passwords'
@@ -203,7 +203,9 @@ export default function LoginPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return }
+    // For students (aluno type), email is optional but recommended
+    const isAluno = faUser?.cargo === 'Aluno' || faUser?.userType === 'aluno'
+    if (!isAluno && !faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return }
     if (newPass.length < 6) { setCreateError('Mínimo 6 caracteres.'); return }
     if (newPass !== confirmPass) { setCreateError('As senhas não coincidem.'); return }
     setCreateLoading(true); setCreateError('')
@@ -212,7 +214,11 @@ export default function LoginPage() {
         const passRes = await fetch('/api/auth/update-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userIdLegacy: faUser!.id, newPass })
+          body: JSON.stringify({ 
+            userIdLegacy: faUser!.id, 
+            newPass,
+            registeredEmail: faRegEmail.trim() || faUser!.email || ''
+          })
         })
         
         if (!passRes.ok) {
@@ -223,7 +229,9 @@ export default function LoginPage() {
         setCreateLoading(false); setCreateSuccess(true)
        await new Promise(r => setTimeout(r, 2200))
        setStep('login')
-       setEmail(faRegEmail)
+       // For alunos, login is the matricula; for others, the email
+       const loginHint = (faUser?.matricula) ? faUser.matricula : faRegEmail
+       setEmail(loginHint)
        setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false)
     } catch (err: any) {
        console.error("Setup erro:", err)
@@ -393,10 +401,10 @@ export default function LoginPage() {
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:20 }}>
           <div>
-            <Label text="E-mail Institucional ou Login (Celular/CPF)" />
+            <Label text="E-mail, Matrícula (Aluno) ou CPF" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
-              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="E-mail ou CPF/Código do Aluno" autoComplete="username"
+              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="E-mail, matrícula ou CPF" autoComplete="username"
                 suppressHydrationWarning
                 style={{ ...baseInputStyle, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.1)' }} onFocus={focusOn} onBlur={focusOff} />
             </div>
@@ -471,7 +479,7 @@ export default function LoginPage() {
           <span>🔑</span><span style={{ fontSize:11, fontWeight:700, color:'#a78bfa', letterSpacing:'0.06em' }}>PRIMEIRO ACESSO</span>
         </div>
         <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Identificação</h2>
-        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail institucional</strong> cadastrado no sistema para verificar seu acesso.</p>
+        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong>, <strong style={{ color:'rgba(255,255,255,0.6)' }}>matrícula do aluno</strong> ou <strong style={{ color:'rgba(255,255,255,0.6)' }}>CPF</strong> para verificar seu acesso.</p>
       </div>
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleVerify} style={{ display:'flex', flexDirection:'column', gap:20 }}>
@@ -514,7 +522,7 @@ export default function LoginPage() {
   const FirstAccessCreate = (
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:440, position:'relative', zIndex:1, animation:'fadeSlideIn 0.35s ease-out both' }}>
       <button type="button" onClick={()=>setStep('first_access_verify')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:32, fontWeight:600 }}
-        onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}>← Alterar e-mail</button>
+        onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.75)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.4)')}>← Voltar</button>
       <div style={{ marginBottom:28 }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', marginBottom:20 }}>
           <span>✅</span><span style={{ fontSize:11, fontWeight:700, color:'#34d399', letterSpacing:'0.06em' }}>CADASTRO ENCONTRADO</span>
@@ -546,12 +554,15 @@ export default function LoginPage() {
           <form onSubmit={handleCreate} style={{ display:'flex', flexDirection:'column', gap:18 }}>
             {/* E-mail de Registro */}
             <div>
-              <Label text="E-mail de Cadastro" />
+              <Label text={faUser?.cargo === 'Aluno' ? 'E-mail (opcional para recuperação de senha)' : 'E-mail de Cadastro *'} />
               <div style={{ position:'relative' }} suppressHydrationWarning>
                 <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>✉</span>
-                <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder="Preencha seu e-mail principal" required suppressHydrationWarning
+                <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder={faUser?.cargo === 'Aluno' ? 'Opcional — para recuperação de senha' : 'Preencha seu e-mail principal'} required={faUser?.cargo !== 'Aluno'} suppressHydrationWarning
                   style={{ ...baseInputStyle }} onFocus={focusOn} onBlur={focusOff} />
               </div>
+              {faUser?.cargo === 'Aluno' && (
+                <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:6 }}>Seu login na plataforma será: <strong style={{color:'rgba(255,255,255,0.6)'}}>{faUser?.matricula || faUser?.id}</strong></p>
+              )}
             </div>
             {/* Nova senha */}
             <div>
@@ -601,10 +612,10 @@ export default function LoginPage() {
               </div>
             </div>
             <ErrorBox msg={createError} />
-            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail)}
+            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail)} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail))}
               onMouseEnter={e=>{if(!createLoading){e.currentTarget.style.transform='translateY(-2px)'}}}
               onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
-              {!(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail) && <ShimmerOverlay />}
+              {!(createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail)) && <ShimmerOverlay />}
               <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
                 {createLoading ? <><Spinner /><span>Criando acesso...</span></> : <><span>🚀 Criar Minha Senha</span></>}
               </div>

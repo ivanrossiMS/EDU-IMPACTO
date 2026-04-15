@@ -22,7 +22,11 @@ export async function GET(request: Request) {
     let query = supabase.from('movimentacoes').select('*', { count: 'exact' }).order('data', { ascending: false }).order('created_at', { ascending: false })
 
     if (tipo && tipo !== 'todos') query = query.eq('tipo', tipo)
-    if (caixaId) query = query.or(`dados->>caixaId.eq.${caixaId},dados->>caixa_id.eq.${caixaId},caixa_id.eq.${caixaId}`)
+    if (caixaId) {
+      // PostgREST: filtra campos aninhados em JSONB usando OR com dois possíveis nomes de chave
+      // dados->>caixa_id (snake_case, novo padrão) ou dados->>caixaId (camelCase, legado)
+      query = query.or(`dados->>caixa_id.eq.${caixaId},dados->>caixaId.eq.${caixaId}`)
+    }
     if (parsedSearch) query = query.or(`descricao.ilike.%${parsedSearch}%,dados->>operador.ilike.%${parsedSearch}%`)
 
     // Range Pagination
@@ -65,25 +69,11 @@ export async function POST(request: Request) {
 
       const incomingIds = dbRows.map(r => r.id)
 
-      // Upsert
+      // Upsert — apenas insere/atualiza os itens enviados, sem deletar outros
       const { error: upsertErr } = await supabase.from('movimentacoes').upsert(dbRows)
       if (upsertErr) throw new Error(upsertErr.message)
 
-      // Lógica de Sincronismo Lote Automático
-      const { data: existingRows } = await supabase
-        .from('movimentacoes')
-        .select('id, dados')
-        .in('dados->>origem', ['baixa_aluno', 'baixa_pagar', 'baixa_receber'])
-
-      const toDelete = (existingRows || [])
-        .map(r => r.id)
-        .filter(id => !incomingIds.includes(String(id)))
-
-      if (toDelete.length > 0) {
-        await supabase.from('movimentacoes').delete().in('id', toDelete)
-      }
-
-      return NextResponse.json({ ok: true, count: validRows.length, deleted: toDelete.length })
+      return NextResponse.json({ ok: true, count: validRows.length })
     }
 
     // POST Único Seguro

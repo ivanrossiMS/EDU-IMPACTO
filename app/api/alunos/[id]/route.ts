@@ -144,6 +144,81 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
        }
     } catch(e) { console.error("Falha no interceptador ACID de parcelas", e) }
 
+    // =========================================================================
+    // FASE D: NORMALIZAÇÃO DE RESPONSÁVEIS E MATRÍCULAS (Proxy Relacional)
+    // =========================================================================
+    try {
+      const responsaveisArray = rest?.responsaveis || [];
+      const respsGerados: Record<string, string> = {};
+      
+      for (const resp of responsaveisArray) {
+        if (!resp.nome || resp.nome.trim() === '') continue;
+        
+        const respRow = {
+          id: resp.id || crypto.randomUUID(),
+          nome: resp.nome,
+          cpf: resp.cpf ? String(resp.cpf).replace(/\D/g, '') : null,
+          email: resp.email || null,
+          telefone: resp.celular || resp.telefone || null,
+          codigo: resp.codigo || null,
+          rfid: resp.rfid || null,
+          profissao: resp.profissao || null,
+          dados: resp
+        };
+        
+        respsGerados[resp.nome.toLowerCase()] = respRow.id;
+        if (!resp.id) resp.id = respRow.id; 
+        
+        await supabase.from('responsaveis').upsert(respRow);
+        
+        await supabase.from('aluno_responsavel').upsert({
+          aluno_id: data.id,
+          responsavel_id: respRow.id,
+          parentesco: resp.parentesco || resp.tipo || 'Outro',
+          resp_financeiro: !!resp.respFinanceiro,
+          resp_pedagogico: !!resp.respPedagogico
+        });
+      }
+
+      const rawResponsavel = responsavel !== undefined ? responsavel : (existing?.dados?.responsavel || '');
+      const rawResponsavelFinanceiro = responsavelFinanceiro !== undefined ? responsavelFinanceiro : (existing?.dados?.responsavel_financeiro || '');
+
+      if (rawResponsavel && !respsGerados[rawResponsavel.toLowerCase()]) {
+         const defId = crypto.randomUUID();
+         await supabase.from('responsaveis').upsert({
+           id: defId, nome: rawResponsavel, telefone: telefone || null, dados: {}
+         });
+         await supabase.from('aluno_responsavel').upsert({
+           aluno_id: data.id, responsavel_id: defId, parentesco: 'Responsável Primário',
+           resp_financeiro: true, resp_pedagogico: true
+         });
+         respsGerados[rawResponsavel.toLowerCase()] = defId;
+      }
+      
+      let vf_id = null;
+      if (rawResponsavelFinanceiro && respsGerados[rawResponsavelFinanceiro.toLowerCase()]) {
+         vf_id = respsGerados[rawResponsavelFinanceiro.toLowerCase()];
+      } else {
+         const foundFin = responsaveisArray.find((r:any) => r.respFinanceiro);
+         if (foundFin && foundFin.id) vf_id = foundFin.id;
+      }
+
+      const matId = rest?.matricula_id || existing?.dados?.matricula_id;
+      if (matId) {
+         await supabase.from('matriculas').upsert({
+            id: matId,
+            aluno_id: data.id,
+            responsavel_financeiro_id: vf_id,
+            turma: turma !== undefined ? turma : existing?.turma,
+            serie: serie !== undefined ? serie : existing?.serie,
+            turno: turno !== undefined ? turno : existing?.turno,
+            status: status !== undefined ? status : existing?.status,
+            ano_letivo: new Date().getFullYear(),
+            dados_contrato: {}
+         });
+      }
+    } catch(e) { console.error("Falha na Sincronização Relacional de Matrículas/Responsáveis (PUT)", e) }
+
     const { id: _rId, ...putDadosWithoutId } = data.dados || {}
     return NextResponse.json({ ...putDadosWithoutId, ...data })
   } catch (e: any) {

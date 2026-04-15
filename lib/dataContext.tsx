@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useCallback, useEffect } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
@@ -1220,7 +1220,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       localStorage.clear()
       localStorage.setItem(KEYS.version, DATA_VERSION)
       if (currentUser) localStorage.setItem('edu-current-user', currentUser)
-      window.location.reload()
+      
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1468,8 +1468,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const wipeAll = useCallback(() => {
     invalidateAllCache()
     invalidateConfigCache()
-    setAlunos([]); setTurmas([]); setFuncionarios([]); setLeads([])
-    setTitulos([]); setContasPagar([]); setAgendamentos([])
+    
+    // Only keeping the ones that actually exist in the current DataContext implementation
+    setTurmas([]); setLeads([])
+    setAgendamentos([])
     setComunicados([]); setTarefas([]); setMantenedores([])
     setEventosAgenda([]); setRotinaItems([]); setAutorizacoes([])
     setMomentos([]); setEnquetes([])
@@ -1477,79 +1479,139 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
     setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
-    setMovimentacoesManuais([]); setCaixasAbertos([]); setFornecedoresCad([])
+    setMovimentacoesManuais([]); setFornecedoresCad([])
     setUnidadesFiscais([]); setNotasFiscais([])
     setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
     setCensoPendencias([]); setCensoExports([]); setCensoAuditLogs([]); setCensoOperacoes([])
     setCensoAlunosData([]); setCensoTurmasData([]); setCensoProfsData([])
   }, [])
 
+  // Memoize tracked setters to keep stable references
+  const trackedSetters = useMemo(() => ({
+    setTurmas: createTrackedSetter('Acadêmico', 'Turmas', setTurmas),
+    setLeads: createTrackedSetter('Comercial', 'Leads', setLeads),
+    setAgendamentos: createTrackedSetter('Comercial', 'Agendamentos', setAgendamentos),
+    setComunicados: createTrackedSetter('Comunicação', 'Comunicados', setComunicados),
+    setTarefas: createTrackedSetter('Operacional', 'Tarefas', setTarefas),
+    setMantenedores: createTrackedSetter('Configurações', 'Mantenedores', setMantenedores),
+    setEventosAgenda: createTrackedSetter('Agenda', 'Eventos', setEventosAgenda),
+    setRotinaItems: createTrackedSetter('Pedagógico', 'Rotina', setRotinaItems),
+    setAutorizacoes: createTrackedSetter('Agenda', 'Autorizações', setAutorizacoes),
+    setMomentos: createTrackedSetter('Agenda', 'Momentos', setMomentos),
+    setEnquetes: createTrackedSetter('Agenda', 'Enquetes', setEnquetes),
+    setOcorrencias: createTrackedSetter('Operacional', 'Ocorrências', setOcorrencias),
+    setTransferencias: createTrackedSetter('Acadêmico', 'Transferências', setTransferencias),
+    setFrequencias: createTrackedSetter('Acadêmico', 'Frequências', setFrequencias),
+    setLancamentosNota: createTrackedSetter('Acadêmico', 'Notas', setLancamentosNota),
+    setCfgTurnos: createTrackedSetter('Configurações', 'Turnos', setCfgTurnos),
+    setCfgSituacaoAluno: createTrackedSetter('Configurações', 'Situações Aluno', setCfgSituacaoAluno),
+    setCfgGruposAlunos: createTrackedSetter('Configurações', 'Grupos Alunos', setCfgGruposAlunos),
+    setCfgDisciplinas: createTrackedSetter('Configurações', 'Disciplinas', setCfgDisciplinas),
+    setCfgNiveisEnsino: createTrackedSetter('Configurações', 'Níveis de Ensino', setCfgNiveisEnsino),
+    setCfgTiposOcorrencia: createTrackedSetter('Configurações', 'Tipos de Ocorrência', setCfgTiposOcorrencia),
+    setCfgEsquemasAvaliacao: createTrackedSetter('Configurações', 'Esquemas de Avaliação', setCfgEsquemasAvaliacao),
+    setCfgMetodosPagamento: createTrackedSetter('Configurações', 'Métodos de Pagamento', setCfgMetodosPagamento),
+    setCfgCartoes: createTrackedSetter('Configurações', 'Cartões', setCfgCartoes),
+    setCfgEventos: createTrackedSetter('Configurações', 'Eventos Financeiros', setCfgEventos),
+    setCfgGruposDesconto: createTrackedSetter('Configurações', 'Grupos de Desconto', setCfgGruposDesconto),
+    setCfgPadroesPagamento: createTrackedSetter('Configurações', 'Padrões de Pagamento', setCfgPadroesPagamento),
+    setCfgPlanoContas: createTrackedSetter('Configurações', 'Plano de Contas', setCfgPlanoContas),
+    setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
+    setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
+    setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
+    setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
+    setFornecedoresCad: createTrackedSetter('Operacional', 'Fornecedores', setFornecedoresCad),
+    setAdvertencias: createTrackedSetter('RH', 'Advertências', setAdvertencias),
+    setAdiantamentos: createTrackedSetter('RH', 'Adiantamentos', setAdiantamentos),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [])
+
+  // Memoize the full context value — only re-creates when actual data changes
+  const contextValue = useMemo(() => ({
+    // Legacy stubs para não quebrar interface TypeScript TS2740 (Arrays Decoupled para SWR)
+    alunos: [] as any[], setAlunos: NOOP,
+    funcionarios: [] as any[], setFuncionarios: NOOP,
+    titulos: [] as any[], setTitulos: NOOP,
+    contasPagar: [] as any[], setContasPagar: NOOP,
+    caixasAbertos: [] as any[], setCaixasAbertos: NOOP,
+
+    turmas, ...{ setTurmas: trackedSetters.setTurmas },
+    leads, ...{ setLeads: trackedSetters.setLeads },
+    agendamentos, ...{ setAgendamentos: trackedSetters.setAgendamentos },
+    comunicados, ...{ setComunicados: trackedSetters.setComunicados },
+    tarefas, ...{ setTarefas: trackedSetters.setTarefas },
+    mantenedores, ...{ setMantenedores: trackedSetters.setMantenedores },
+    eventosAgenda, ...{ setEventosAgenda: trackedSetters.setEventosAgenda },
+    rotinaItems, ...{ setRotinaItems: trackedSetters.setRotinaItems },
+    autorizacoes, ...{ setAutorizacoes: trackedSetters.setAutorizacoes },
+    momentos, ...{ setMomentos: trackedSetters.setMomentos },
+    enquetes, ...{ setEnquetes: trackedSetters.setEnquetes },
+    ocorrencias, ...{ setOcorrencias: trackedSetters.setOcorrencias },
+    transferencias, ...{ setTransferencias: trackedSetters.setTransferencias },
+    frequencias, ...{ setFrequencias: trackedSetters.setFrequencias },
+    lancamentosNota, ...{ setLancamentosNota: trackedSetters.setLancamentosNota },
+    cfgTurnos, ...{ setCfgTurnos: trackedSetters.setCfgTurnos },
+    cfgSituacaoAluno, ...{ setCfgSituacaoAluno: trackedSetters.setCfgSituacaoAluno },
+    cfgGruposAlunos, ...{ setCfgGruposAlunos: trackedSetters.setCfgGruposAlunos },
+    cfgDisciplinas, ...{ setCfgDisciplinas: trackedSetters.setCfgDisciplinas },
+    cfgNiveisEnsino, ...{ setCfgNiveisEnsino: trackedSetters.setCfgNiveisEnsino },
+    cfgTiposOcorrencia, ...{ setCfgTiposOcorrencia: trackedSetters.setCfgTiposOcorrencia },
+    cfgEsquemasAvaliacao, ...{ setCfgEsquemasAvaliacao: trackedSetters.setCfgEsquemasAvaliacao },
+    cfgMetodosPagamento, ...{ setCfgMetodosPagamento: trackedSetters.setCfgMetodosPagamento },
+    cfgCartoes, ...{ setCfgCartoes: trackedSetters.setCfgCartoes },
+    cfgEventos, ...{ setCfgEventos: trackedSetters.setCfgEventos },
+    cfgGruposDesconto, ...{ setCfgGruposDesconto: trackedSetters.setCfgGruposDesconto },
+    cfgPadroesPagamento, ...{ setCfgPadroesPagamento: trackedSetters.setCfgPadroesPagamento },
+    cfgPlanoContas, ...{ setCfgPlanoContas: trackedSetters.setCfgPlanoContas },
+    cfgTiposDocumento, ...{ setCfgTiposDocumento: trackedSetters.setCfgTiposDocumento },
+    cfgConvenios, ...{ setCfgConvenios: trackedSetters.setCfgConvenios },
+    cfgCalendarioLetivo, ...{ setCfgCalendarioLetivo: trackedSetters.setCfgCalendarioLetivo },
+
+    movimentacoesManuais, ...{ setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais },
+    fornecedoresCad, ...{ setFornecedoresCad: trackedSetters.setFornecedoresCad },
+    unidadesFiscais, setUnidadesFiscais,
+    notasFiscais, setNotasFiscais,
+    advertencias, ...{ setAdvertencias: trackedSetters.setAdvertencias },
+    adiantamentos, ...{ setAdiantamentos: trackedSetters.setAdiantamentos },
+    systemLogs, setSystemLogs, logSystemAction,
+    wipeAll,
+    // Censo Escolar
+    censoConfig, setCensoConfig,
+    censoPendencias, setCensoPendencias,
+    censoExports, setCensoExports,
+    censoAuditLogs, setCensoAuditLogs,
+    censoOperacoes, setCensoOperacoes,
+    logCensoAction,
+    // Enriquecimento Censitário
+    censoAlunosData, setCensoAlunosData,
+    censoTurmasData, setCensoTurmasData,
+    censoProfsData, setCensoProfsData,
+    perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
+    setPerfis: (val: any) => {
+      const resolved = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
+      const next = typeof val === 'function' ? (val as (p: typeof resolved) => typeof resolved)(resolved) : val
+      setPerfisRaw(next)
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [
+    turmas, leads, agendamentos, comunicados, tarefas, mantenedores,
+    eventosAgenda, rotinaItems, autorizacoes, momentos, enquetes,
+    ocorrencias, transferencias, frequencias, lancamentosNota,
+    cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas,
+    cfgNiveisEnsino, cfgTiposOcorrencia, cfgEsquemasAvaliacao,
+    cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto,
+    cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios,
+    cfgCalendarioLetivo, movimentacoesManuais, fornecedoresCad,
+    unidadesFiscais, notasFiscais, advertencias, adiantamentos,
+    systemLogs, logSystemAction, wipeAll,
+    censoConfig, censoPendencias, censoExports, censoAuditLogs,
+    censoOperacoes, logCensoAction,
+    censoAlunosData, censoTurmasData, censoProfsData, perfis,
+    trackedSetters,
+  ])
+
   return (
-    <DataContext.Provider value={{
-      // Legacy stubs para não quebrar interface TypeScript TS2740 (Arrays Decoupled para SWR)
-      alunos: [], setAlunos: NOOP,
-      funcionarios: [], setFuncionarios: NOOP,
-      titulos: [], setTitulos: NOOP,
-      contasPagar: [], setContasPagar: NOOP,
-
-      turmas, setTurmas: createTrackedSetter('Acadêmico', 'Turmas', setTurmas),
-      leads, setLeads: createTrackedSetter('Comercial', 'Leads', setLeads),
-      agendamentos, setAgendamentos: createTrackedSetter('Comercial', 'Agendamentos', setAgendamentos),
-      comunicados, setComunicados: createTrackedSetter('Comunicação', 'Comunicados', setComunicados),
-      tarefas, setTarefas: createTrackedSetter('Operacional', 'Tarefas', setTarefas),
-      mantenedores, setMantenedores: createTrackedSetter('Configurações', 'Mantenedores', setMantenedores),
-      eventosAgenda, setEventosAgenda: createTrackedSetter('Agenda', 'Eventos', setEventosAgenda),
-      rotinaItems, setRotinaItems: createTrackedSetter('Pedagógico', 'Rotina', setRotinaItems),
-      autorizacoes, setAutorizacoes: createTrackedSetter('Agenda', 'Autorizações', setAutorizacoes),
-      momentos, setMomentos: createTrackedSetter('Agenda', 'Momentos', setMomentos),
-      enquetes, setEnquetes: createTrackedSetter('Agenda', 'Enquetes', setEnquetes),
-      ocorrencias, setOcorrencias: createTrackedSetter('Operacional', 'Ocorrências', setOcorrencias),
-      transferencias, setTransferencias: createTrackedSetter('Acadêmico', 'Transferências', setTransferencias),
-      frequencias, setFrequencias: createTrackedSetter('Acadêmico', 'Frequências', setFrequencias),
-      lancamentosNota, setLancamentosNota: createTrackedSetter('Acadêmico', 'Notas', setLancamentosNota),
-      cfgTurnos, setCfgTurnos: createTrackedSetter('Configurações', 'Turnos', setCfgTurnos),
-      cfgSituacaoAluno, setCfgSituacaoAluno: createTrackedSetter('Configurações', 'Situações Aluno', setCfgSituacaoAluno),
-      cfgGruposAlunos, setCfgGruposAlunos: createTrackedSetter('Configurações', 'Grupos Alunos', setCfgGruposAlunos),
-      cfgDisciplinas, setCfgDisciplinas: createTrackedSetter('Configurações', 'Disciplinas', setCfgDisciplinas),
-      cfgNiveisEnsino, setCfgNiveisEnsino: createTrackedSetter('Configurações', 'Níveis de Ensino', setCfgNiveisEnsino),
-      cfgTiposOcorrencia, setCfgTiposOcorrencia: createTrackedSetter('Configurações', 'Tipos de Ocorrência', setCfgTiposOcorrencia),
-      cfgEsquemasAvaliacao, setCfgEsquemasAvaliacao: createTrackedSetter('Configurações', 'Esquemas de Avaliação', setCfgEsquemasAvaliacao),
-      cfgMetodosPagamento, setCfgMetodosPagamento: createTrackedSetter('Configurações', 'Métodos de Pagamento', setCfgMetodosPagamento),
-      cfgCartoes, setCfgCartoes: createTrackedSetter('Configurações', 'Cartões', setCfgCartoes),
-      cfgEventos, setCfgEventos: createTrackedSetter('Configurações', 'Eventos Financeiros', setCfgEventos),
-      cfgGruposDesconto, setCfgGruposDesconto: createTrackedSetter('Configurações', 'Grupos de Desconto', setCfgGruposDesconto),
-      cfgPadroesPagamento, setCfgPadroesPagamento: createTrackedSetter('Configurações', 'Padrões de Pagamento', setCfgPadroesPagamento),
-      cfgPlanoContas, setCfgPlanoContas: createTrackedSetter('Configurações', 'Plano de Contas', setCfgPlanoContas),
-      cfgTiposDocumento, setCfgTiposDocumento: createTrackedSetter('Configurações', 'Tipos de Documento', setCfgTiposDocumento),
-      cfgConvenios, setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
-      cfgCalendarioLetivo, setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
-
-      movimentacoesManuais, setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
-      fornecedoresCad, setFornecedoresCad: createTrackedSetter('Operacional', 'Fornecedores', setFornecedoresCad),
-      unidadesFiscais, setUnidadesFiscais,
-      notasFiscais, setNotasFiscais,
-      advertencias, setAdvertencias: createTrackedSetter('RH', 'Advertências', setAdvertencias),
-      adiantamentos, setAdiantamentos: createTrackedSetter('RH', 'Adiantamentos', setAdiantamentos),
-      systemLogs, setSystemLogs, logSystemAction,
-      wipeAll,
-      // Censo Escolar
-      censoConfig, setCensoConfig,
-      censoPendencias, setCensoPendencias,
-      censoExports, setCensoExports,
-      censoAuditLogs, setCensoAuditLogs,
-      censoOperacoes, setCensoOperacoes,
-      logCensoAction,
-      // Enriquecimento Censitário
-      censoAlunosData, setCensoAlunosData,
-      censoTurmasData, setCensoTurmasData,
-      censoProfsData, setCensoProfsData,
-      perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
-      setPerfis: (val: any) => {
-        const resolved = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
-        const next = typeof val === 'function' ? (val as (p: typeof resolved) => typeof resolved)(resolved) : val
-        setPerfisRaw(next)
-      },
-    }}>
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   )
@@ -1618,3 +1680,4 @@ export function newEventoId(idsExistentes: string[] = []): string {
 export function newParcelaId(eventoId: string, numParcela: number): string {
   return `${eventoId}-${String(numParcela).padStart(2, '0')}`
 }
+

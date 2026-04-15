@@ -56,11 +56,20 @@ export function buildDemonstracaoTree(
   
   // 1. Filtrar as Rows pela data-base do Relatório (Ex: filtrar só o Ano, ou Mês)
   // A API Backend fará um pré-filtro maior, aqui afinamos o que será exibido (Local Cross-filter).
+  // REGRA: parcelas pendentes/vencidas SEMPRE usam dataVencimento como fallback.
+  // No modo 'pagamento', apenas rows já pagas têm dataPagamento; pendentes
+  // ainda precisam aparecer no DRE (como "a receber") usando a data de vencimento.
+  const getRowDate = (r: DemonstracaoRawRow, base: DateBase): string => {
+    if (base === 'pagamento') {
+      // Pago: usa data de pagamento. Pendente: usa vencimento ("previsto no período")
+      return r.dataPagamento || r.dataVencimento || ''
+    }
+    if (base === 'competencia') return r.dataCompetencia || r.dataVencimento || ''
+    return r.dataVencimento || ''
+  }
+
   const validRows = rows.filter(r => {
-    let d = r.dataVencimento
-    if (base === 'competencia') d = r.dataCompetencia || r.dataVencimento
-    if (base === 'pagamento') d = r.dataPagamento || ''
-    
+    const d = getRowDate(r, base)
     if (!d) return false
 
     // Parsing Date
@@ -119,15 +128,23 @@ export function buildDemonstracaoTree(
 
   // 3. Destinar Rows para seus nós Analíticos
   validRows.forEach(r => {
-    let d = r.dataVencimento
-    if (base === 'competencia') d = r.dataCompetencia || r.dataVencimento
-    if (base === 'pagamento') d = r.dataPagamento || ''
+    // Usa a função unificada de data para garantir consistência com o filtro.
+    // Pendentes em modo 'pagamento' usam dataVencimento como referência de coluna.
+    const d = getRowDate(r, base)
     
     const pid = r.planoContasId && nodeMap.has(r.planoContasId) ? r.planoContasId : UNMAPPED
     const node = nodeMap.get(pid)!
     
-    // Valor sendo calculado
-    const v = r.status === 'cancelado' ? 0 : (base === 'pagamento' ? r.valorPago : r.valorEsperado)
+    // Valor sendo calculado:
+    // - Pago em qualquer modo: valorPago (efetivado)
+    // - Pendente em modo vencimento/competencia: valorEsperado (previsto)
+    // - Pendente em modo pagamento: valorEsperado (ainda não recebido, mas previsto no período)
+    const isPago = r.status === 'pago'
+    const v = r.status === 'cancelado'
+      ? 0
+      : (base === 'pagamento' && isPago)
+        ? r.valorPago
+        : r.valorEsperado
     
     node.rows.push(r)
     node.quantidade++
@@ -175,12 +192,15 @@ export function buildDemonstracaoTree(
     }
   })
 
-  // 6. Retirar da raiz os PurosZeros (árvores vazias) para otimizar visualização, exceto se explícito
+  // 6. Retirar da raiz os PurosZeros (árvores vazias) para otimizar visualização.
+  // IMPORTANTE: mantém nós com quantidade > 0 mesmo se total = 0
+  // (ex: pendentes com valor esperado, ou canceladas com valorPago = 0)
   const prune = (nodes: DemNode[]): DemNode[] => {
     const keep: DemNode[] = []
     for (const n of nodes) {
       n.children = prune(n.children)
-      if (n.total !== 0 || n.quantidade > 0 || n.children.length > 0) {
+      // Mantém se tem valor OU tem lançamentos OU tem filhos com dados
+      if (n.quantidade > 0 || n.children.length > 0) {
         keep.push(n)
       }
     }

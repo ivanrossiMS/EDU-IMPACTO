@@ -12,7 +12,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend
 } from 'recharts'
-import * as XLSX from 'xlsx'
 import { useData } from '@/lib/dataContext'
 import { DemonstracaoRawRow, buildDemonstracaoTree, VisionMode, DateBase, DemNode } from '@/lib/financialReports'
 import { DemonstracaoDrillDownModal } from '@/components/financeiro/DemonstracaoDrillDownModal'
@@ -20,6 +19,7 @@ import { hoje } from '@/lib/dateUtils'
 
 // ─── Formatadores ────────────────────────────────────────────────────────────
 const fmt   = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+const fmtNum = (v: number) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
 const fmtK  = (v: number) => v >= 1000 ? `R$${(v/1000).toFixed(1)}k` : fmt(v)
 const fmtPct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
 const parseDateBR = (d?: string | null) => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '-'
@@ -107,13 +107,13 @@ function TreeNode({ node, depth, colKeys, mode, onDrill, totalRef }:
         onMouseLeave={e => (e.currentTarget.style.background = depth===0 ? 'hsl(var(--bg-overlay))' : 'transparent')}
       >
         {/* Descrição */}
-        <td style={{ padding:`${depth === 0 ? 12 : 9}px 12px`, paddingLeft: 12 + depth * 20 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <td style={{ padding:`${depth === 0 ? 8 : 4}px 6px`, paddingLeft: 6 + depth * 12 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:4 }}>
             {hasChildren
               ? (open ? <ChevronDown size={14} color="#6366f1"/> : <ChevronRight size={14} color="#6366f1"/>)
               : <div style={{ width:14 }}/>}
             <span style={{
-              fontSize: depth === 0 ? 13 : 12,
+              fontSize: depth === 0 ? 12 : 11,
               fontWeight: isSintetico ? 700 : 400,
               color: depth === 0 ? 'hsl(var(--text-primary))' : 'hsl(var(--text-secondary))'
             }}>{node.codPlano} — {node.descricao}</span>
@@ -123,25 +123,21 @@ function TreeNode({ node, depth, colKeys, mode, onDrill, totalRef }:
         {colKeys.map(k => {
           const v = node.totaisPeriodos[k]?.total || 0
           return (
-            <td key={k} style={{ textAlign:'right', padding:'9px 10px', fontSize:12,
+            <td key={k} style={{ textAlign:'right', padding:'4px 4px', fontSize:11,
               fontWeight: isSintetico ? 700 : 400, color: v < 0 ? '#f43f5e' : 'hsl(var(--text-secondary))' }}>
-              {v !== 0 ? fmt(v) : <span style={{ color:'hsl(var(--text-muted))', opacity:0.4 }}>—</span>}
+              {v !== 0 ? fmtNum(v) : <span style={{ color:'hsl(var(--text-muted))', opacity:0.4 }}>—</span>}
             </td>
           )
         })}
         {/* Total */}
-        <td style={{ textAlign:'right', padding:'9px 12px', fontWeight:800, fontSize:13,
+        <td style={{ textAlign:'right', padding:'4px 8px', fontWeight:800, fontSize:12,
           color: node.total < 0 ? '#f43f5e' : isReceita ? '#10b981' : '#f43f5e' }}>
           {fmt(node.total)}
         </td>
         {/* % do total */}
-        <td style={{ textAlign:'right', padding:'9px 12px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6, justifyContent:'flex-end' }}>
-            <div style={{ width:60, height:5, borderRadius:3, background:'hsl(var(--bg-overlay))', overflow:'hidden' }}>
-              <div style={{ width:`${Math.min(100,pct)}%`, height:'100%', borderRadius:3,
-                background: isReceita ? '#10b981' : '#f43f5e' }}/>
-            </div>
-            <span style={{ fontSize:11, color:'hsl(var(--text-muted))', width:36, textAlign:'right' }}>
+        <td style={{ textAlign:'right', padding:'4px 8px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:4, justifyContent:'flex-end' }}>
+            <span style={{ fontSize:10, color:'hsl(var(--text-muted))', width:28, textAlign:'right' }}>
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -156,7 +152,7 @@ function TreeNode({ node, depth, colKeys, mode, onDrill, totalRef }:
 
 // ─── Página Principal ─────────────────────────────────────────────────────────
 export default function DemonstracaoFinanceiraPage() {
-  const { cfgPlanoContas, movimentacoesManuais = [] } = useData()
+  const { cfgPlanoContas = [], movimentacoesManuais = [] } = useData()
   const printRef = useRef<HTMLDivElement>(null)
 
   // ── Estado base ───────────────────────────────────────────────────────────
@@ -184,6 +180,10 @@ export default function DemonstracaoFinanceiraPage() {
   const [reconcileMsg, setReconcileMsg] = useState<{type:'ok'|'err', msg:string}|null>(null)
   const [showFilters, setShowFilters]   = useState(false)
   const [expandAll, setExpandAll]       = useState(false)
+  
+  // Pagination Raw Tab
+  const [rawPage, setRawPage]           = useState(1)
+  const [rawLimit, setRawLimit]         = useState(20)
 
   // ── Drill down ────────────────────────────────────────────────────────────
   const [drillInfo, setDrillInfo] = useState<{
@@ -218,6 +218,11 @@ export default function DemonstracaoFinanceiraPage() {
     return list
   }, [rawRows, filterTipo, filterStatus, search])
 
+  // Reset page when filters change
+  useEffect(() => {
+    setRawPage(1)
+  }, [filterTipo, filterStatus, search])
+
   // ── Árvore DRE ────────────────────────────────────────────────────────────
   const tree = useMemo(() => buildDemonstracaoTree(
     filteredRows, cfgPlanoContas, baseServer, modoVisao, mesAnoLocal, anoServer, triLocal
@@ -228,22 +233,34 @@ export default function DemonstracaoFinanceiraPage() {
     let rec = 0, desp = 0, pendRec = 0, pendDesp = 0, qtd = 0
     filteredRows.forEach(r => {
       if (r.status === 'cancelado') return
-      const refDate = baseServer === 'pagamento' ? (r.dataPagamento||'') : baseServer === 'competencia' ? (r.dataCompetencia||r.dataVencimento) : r.dataVencimento
+      
+      const refDate = baseServer === 'pagamento' 
+        ? (r.dataPagamento || r.dataVencimento || '') 
+        : baseServer === 'competencia' 
+          ? (r.dataCompetencia || r.dataVencimento || '') 
+          : (r.dataVencimento || '')
+
       if (!refDate) return
+      
       const yr = parseInt(refDate.substring(0,4))
       const mo = parseInt(refDate.substring(5,7))
+      
       let inside = true
       if (modoVisao === 'anual' && yr !== anoServer) inside = false
       if (modoVisao === 'trimestral' && (yr !== anoServer || Math.ceil(mo/3) !== triLocal)) inside = false
       if (modoVisao === 'mensal' && refDate.substring(0,7) !== mesAnoLocal) inside = false
       if (!inside) return
+      
       qtd++
-      const val = baseServer === 'pagamento' ? r.valorPago : r.valorEsperado
+      
+      const isPago = r.status === 'pago'
+      const val = (baseServer === 'pagamento' && isPago) ? r.valorPago : r.valorEsperado
+      
       if (r.tipo === 'receita') {
-        if (r.status === 'pago') rec += val
+        if (isPago) rec += val
         else pendRec += val
       } else {
-        if (r.status === 'pago') desp += val
+        if (isPago) desp += val
         else pendDesp += val
       }
     })
@@ -262,12 +279,20 @@ export default function DemonstracaoFinanceiraPage() {
     }
     filteredRows.forEach(r => {
       if (r.status === 'cancelado') return
-      const d = baseServer === 'pagamento' ? (r.dataPagamento||'') : r.dataVencimento
+      
+      const d = baseServer === 'pagamento' 
+        ? (r.dataPagamento || r.dataVencimento || '') 
+        : baseServer === 'competencia'
+          ? (r.dataCompetencia || r.dataVencimento || '')
+          : (r.dataVencimento || '')
+          
       if (!d || parseInt(d.substring(0,4)) !== anoServer) return
       const mo = d.substring(5,7)
-      const v  = baseServer === 'pagamento' ? r.valorPago : r.valorEsperado
-      if (r.tipo === 'receita') map[mo].receitas += v
-      else map[mo].despesas += v
+      
+      const val = (baseServer === 'pagamento' && r.status === 'pago') ? r.valorPago : r.valorEsperado
+      
+      if (r.tipo === 'receita') map[mo].receitas += val
+      else map[mo].despesas += val
       map[mo].saldo = map[mo].receitas - map[mo].despesas
     })
     return Object.values(map)
@@ -279,7 +304,7 @@ export default function DemonstracaoFinanceiraPage() {
     filteredRows.forEach(r => {
       if (r.status === 'cancelado') return
       const k = r.planoContasId || 'Sem Classificação'
-      const v = baseServer === 'pagamento' ? r.valorPago : r.valorEsperado
+      const v = (baseServer === 'pagamento' && r.status === 'pago') ? r.valorPago : r.valorEsperado
       map[k] = (map[k]||0) + v
     })
     return Object.entries(map)
@@ -338,9 +363,10 @@ export default function DemonstracaoFinanceiraPage() {
     } finally { setReconciling(false) }
   }
 
-  // ── Exportação Excel ──────────────────────────────────────────────────────
-  const handleExcel = () => {
+  // ── Exportação Excel (lazy-loaded ~300KB only when needed) ──────────────
+  const handleExcel = async () => {
     if (!filteredRows.length) return
+    const XLSX = await import('xlsx')
     const ws = XLSX.utils.json_to_sheet(filteredRows.map(r => ({
       ORIGEM: r.origem.toUpperCase(),
       TIPO: r.tipo.toUpperCase(),
@@ -660,20 +686,20 @@ export default function DemonstracaoFinanceiraPage() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'hsl(var(--bg-overlay))' }}>
-                    <th style={{ padding:'12px 16px', textAlign:'left', fontSize:11, fontWeight:700,
+                    <th style={{ padding:'8px 8px', textAlign:'left', fontSize:10, fontWeight:700,
                       color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:'0.08em',
                       borderBottom:'2px solid hsl(var(--border-subtle))' }}>
                       Plano de Contas / Descrição
                     </th>
                     {colHeaders.map((h, i) => (
-                      <th key={i} style={{ padding:'12px 10px', textAlign:'right', fontSize:11, fontWeight:700,
+                      <th key={i} style={{ padding:'8px 4px', textAlign:'right', fontSize:10, fontWeight:700,
                         color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:'0.08em',
-                        borderBottom:'2px solid hsl(var(--border-subtle))', whiteSpace:'nowrap' }}>{h}</th>
+                        borderBottom:'2px solid hsl(var(--border-subtle))' }}>{h}</th>
                     ))}
-                    <th style={{ padding:'12px 12px', textAlign:'right', fontSize:11, fontWeight:700,
+                    <th style={{ padding:'8px 8px', textAlign:'right', fontSize:10, fontWeight:700,
                       color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:'0.08em',
-                      borderBottom:'2px solid hsl(var(--border-subtle))', whiteSpace:'nowrap' }}>TOTAL</th>
-                    <th style={{ padding:'12px 12px', textAlign:'right', fontSize:11, fontWeight:700,
+                      borderBottom:'2px solid hsl(var(--border-subtle))' }}>TOTAL</th>
+                    <th style={{ padding:'8px 8px', textAlign:'right', fontSize:10, fontWeight:700,
                       color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:'0.08em',
                       borderBottom:'2px solid hsl(var(--border-subtle))' }}>%</th>
                   </tr>
@@ -690,10 +716,10 @@ export default function DemonstracaoFinanceiraPage() {
 
                   {/* Subtotal Receitas */}
                   <tr style={{ background:'rgba(16,185,129,0.1)', borderTop:'2px solid rgba(16,185,129,0.3)' }}>
-                    <td style={{ padding:'11px 16px', fontWeight:900, color:'#10b981', fontSize:13 }}>TOTAL RECEITAS</td>
+                    <td style={{ padding:'8px 8px', fontWeight:900, color:'#10b981', fontSize:12 }}>TOTAL RECEITAS</td>
                     {colKeys.map(k => {
                       const v = recNodes.reduce((s,n) => s + (n.totaisPeriodos[k]?.total||0), 0)
-                      return <td key={k} style={{ textAlign:'right', padding:'11px 10px', fontWeight:700, color:'#10b981', fontSize:12 }}>{v?fmt(v):'—'}</td>
+                      return <td key={k} style={{ textAlign:'right', padding:'8px 4px', fontWeight:700, color:'#10b981', fontSize:11 }}>{v?fmtNum(v):'—'}</td>
                     })}
                     <td style={{ textAlign:'right', padding:'11px 12px', fontWeight:900, color:'#10b981', fontSize:14 }}>{fmt(kpis.rec)}</td>
                     <td/>
@@ -710,10 +736,10 @@ export default function DemonstracaoFinanceiraPage() {
 
                   {/* Subtotal Despesas */}
                   <tr style={{ background:'rgba(244,63,94,0.1)', borderTop:'2px solid rgba(244,63,94,0.3)' }}>
-                    <td style={{ padding:'11px 16px', fontWeight:900, color:'#f43f5e', fontSize:13 }}>TOTAL DESPESAS</td>
+                    <td style={{ padding:'8px 8px', fontWeight:900, color:'#f43f5e', fontSize:12 }}>TOTAL DESPESAS</td>
                     {colKeys.map(k => {
                       const v = despNodes.reduce((s,n) => s + (n.totaisPeriodos[k]?.total||0), 0)
-                      return <td key={k} style={{ textAlign:'right', padding:'11px 10px', fontWeight:700, color:'#f43f5e', fontSize:12 }}>{v?fmt(v):'—'}</td>
+                      return <td key={k} style={{ textAlign:'right', padding:'8px 4px', fontWeight:700, color:'#f43f5e', fontSize:11 }}>{v?fmtNum(v):'—'}</td>
                     })}
                     <td style={{ textAlign:'right', padding:'11px 12px', fontWeight:900, color:'#f43f5e', fontSize:14 }}>{fmt(kpis.desp)}</td>
                     <td/>
@@ -722,7 +748,7 @@ export default function DemonstracaoFinanceiraPage() {
                   {/* RESULTADO LÍQUIDO */}
                   <tr style={{ background: kpis.saldo >= 0 ? 'rgba(99,102,241,0.1)' : 'rgba(244,63,94,0.15)',
                     borderTop:'2px solid hsl(var(--border-subtle))' }}>
-                    <td style={{ padding:'14px 16px', fontWeight:900, fontSize:15, fontFamily:'Outfit,sans-serif',
+                    <td style={{ padding:'10px 8px', fontWeight:900, fontSize:13, fontFamily:'Outfit,sans-serif',
                       color: kpis.saldo >= 0 ? '#6366f1' : '#f43f5e' }}>
                       {kpis.saldo >= 0 ? '📈 RESULTADO LÍQUIDO POSITIVO' : '📉 RESULTADO LÍQUIDO NEGATIVO'}
                     </td>
@@ -730,8 +756,8 @@ export default function DemonstracaoFinanceiraPage() {
                       const r = recNodes.reduce((s,n) => s + (n.totaisPeriodos[k]?.total||0), 0)
                       const d = despNodes.reduce((s,n) => s + (n.totaisPeriodos[k]?.total||0), 0)
                       const s = r - d
-                      return <td key={k} style={{ textAlign:'right', padding:'14px 10px', fontWeight:900, fontSize:13,
-                        color: s >= 0 ? '#6366f1' : '#f43f5e' }}>{s !== 0 ? fmt(s) : '—'}</td>
+                      return <td key={k} style={{ textAlign:'right', padding:'10px 4px', fontWeight:900, fontSize:12,
+                        color: s >= 0 ? '#6366f1' : '#f43f5e' }}>{s !== 0 ? fmtNum(s) : '—'}</td>
                     })}
                     <td style={{ textAlign:'right', padding:'14px 12px', fontWeight:900, fontSize:16,
                       color: kpis.saldo >= 0 ? '#6366f1' : '#f43f5e' }}>
@@ -929,7 +955,6 @@ export default function DemonstracaoFinanceiraPage() {
             display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <span style={{ fontSize:13, fontWeight:700, color:'hsl(var(--text-secondary))' }}>
               Lançamentos compondo a visão atual: <strong>{filteredRows.length} itens</strong>
-              {filteredRows.length > 100 && ' (exibindo últimos 100)'}
             </span>
             <button onClick={handleExcel}
               style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', borderRadius:6,
@@ -951,54 +976,93 @@ export default function DemonstracaoFinanceiraPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.slice(-100).map((r, i) => (
-                  <tr key={r.id || i}
-                    style={{ borderBottom:'1px solid hsl(var(--border-subtle))', cursor:'pointer' }}
-                    onClick={() => handleDrill([r], r.descricao)}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <td style={{ padding:'9px 12px' }}>
-                      <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, fontWeight:700,
-                        background: r.origem==='titulo' ? 'rgba(99,102,241,0.1)' : r.origem==='movimentacao' ? 'rgba(16,185,129,0.1)' : 'rgba(244,63,94,0.1)',
-                        color: r.origem==='titulo' ? '#6366f1' : r.origem==='movimentacao' ? '#10b981' : '#f43f5e' }}>
-                        {r.origem.toUpperCase().replace('_',' ')}
-                      </span>
-                    </td>
-                    <td style={{ padding:'9px 12px', fontSize:10, fontFamily:'monospace', color:'hsl(var(--text-muted))', maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.idOrigem || r.id}>
-                      {(()=>{
-                        const str = r.idOrigem || r.id || '';
-                        if (str.includes('-') && str.length > 15) {
-                          const parts = str.split('-');
-                          const last = parts.pop();
-                          return `${str.substring(0,6)}..-${last}`;
-                        }
-                        return str.length > 10 ? `${str.substring(0,10)}..` : str;
-                      })()}
-                    </td>
-                    <td style={{ padding:'9px 12px', maxWidth:320, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'hsl(var(--text-secondary))' }}>
-                      {r.descricao}
-                    </td>
-                    <td style={{ padding:'9px 12px', color:'hsl(var(--text-muted))', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {r.alunoResponsavel || <span style={{ opacity:0.4 }}>—</span>}
-                    </td>
-                    <td style={{ textAlign:'right', padding:'9px 12px', fontWeight:700,
-                      color: r.tipo==='receita' ? '#10b981' : '#f43f5e' }}>
-                      {r.tipo==='receita' ? '+' : '-'}{fmt(r.valorPago || r.valorEsperado)}
-                    </td>
-                    <td style={{ padding:'9px 12px', color:'hsl(var(--text-muted))', whiteSpace:'nowrap' }}>
-                      {parseDateBR(r.dataPagamento || r.dataVencimento)}
-                    </td>
-                    <td style={{ padding:'9px 12px' }}>
-                      <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, fontWeight:700,
-                        background: r.status==='pago' ? 'rgba(16,185,129,0.1)' : r.status==='cancelado' ? 'rgba(107,114,128,0.1)' : 'rgba(245,158,11,0.1)',
-                        color: r.status==='pago' ? '#10b981' : r.status==='cancelado' ? '#6b7280' : '#f59e0b' }}>
-                        {r.status.toUpperCase()}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {(()=>{
+                   const totalPages = Math.ceil(filteredRows.length / rawLimit) || 1
+                   // Prevent going out of bounds if filters are applied
+                   const currentPage = rawPage > totalPages ? totalPages : rawPage
+                   const startIdx = (currentPage - 1) * rawLimit
+                   const endIdx = startIdx + rawLimit
+                   return filteredRows.slice(startIdx, endIdx).map((r, i) => (
+                    <tr key={r.id || i}
+                      style={{ borderBottom:'1px solid hsl(var(--border-subtle))', cursor:'pointer' }}
+                      onClick={() => handleDrill([r], r.descricao)}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td style={{ padding:'9px 12px' }}>
+                        <span style={{ fontSize:10, padding:'2px 6px', borderRadius:4, fontWeight:700,
+                          background: r.origem==='titulo' ? 'rgba(99,102,241,0.1)' : r.origem==='movimentacao' ? 'rgba(16,185,129,0.1)' : 'rgba(244,63,94,0.1)',
+                          color: r.origem==='titulo' ? '#6366f1' : r.origem==='movimentacao' ? '#10b981' : '#f43f5e' }}>
+                          {r.origem.toUpperCase().replace('_',' ')}
+                        </span>
+                      </td>
+                      <td style={{ padding:'9px 12px', fontSize:10, fontFamily:'monospace', color:'hsl(var(--text-muted))', maxWidth:110, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={r.idOrigem || r.id}>
+                        {(()=>{
+                          const str = r.idOrigem || r.id || '';
+                          if (str.includes('-') && str.length > 15) {
+                            const parts = str.split('-');
+                            const last = parts.pop();
+                            return `${str.substring(0,6)}..-${last}`;
+                          }
+                          return str.length > 10 ? `${str.substring(0,10)}..` : str;
+                        })()}
+                      </td>
+                      <td style={{ padding:'9px 12px', maxWidth:320, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'hsl(var(--text-secondary))' }}>
+                        {r.descricao}
+                      </td>
+                      <td style={{ padding:'9px 12px', color:'hsl(var(--text-muted))', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {r.alunoResponsavel || <span style={{ opacity:0.4 }}>—</span>}
+                      </td>
+                      <td style={{ textAlign:'right', padding:'9px 12px', fontWeight:700,
+                        color: r.tipo==='receita' ? '#10b981' : '#f43f5e' }}>
+                        {r.tipo==='receita' ? '+' : '-'}{fmt(r.valorPago || r.valorEsperado)}
+                      </td>
+                      <td style={{ padding:'9px 12px', color:'hsl(var(--text-muted))', whiteSpace:'nowrap' }}>
+                        {parseDateBR(r.dataPagamento || r.dataVencimento)}
+                      </td>
+                      <td style={{ padding:'9px 12px' }}>
+                        <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, fontWeight:700,
+                          background: r.status==='pago' ? 'rgba(16,185,129,0.1)' : r.status==='cancelado' ? 'rgba(107,114,128,0.1)' : 'rgba(245,158,11,0.1)',
+                          color: r.status==='pago' ? '#10b981' : r.status==='cancelado' ? '#6b7280' : '#f59e0b' }}>
+                          {r.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
+          </div>
+          
+          <div style={{ padding:'12px 16px', borderTop:'1px solid hsl(var(--border-subtle))', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>Itens por página:</span>
+              <select value={rawLimit} onChange={e => { setRawLimit(Number(e.target.value)); setRawPage(1); }}
+                style={{ padding:'6px 10px', borderRadius:6, border:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-base))', color:'hsl(var(--text-secondary))', fontSize:12, cursor:'pointer' }}>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            
+            {(()=>{
+               const totalPages = Math.ceil(filteredRows.length / rawLimit) || 1
+               const currentPage = rawPage > totalPages ? totalPages : rawPage
+               return (
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <button onClick={() => setRawPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                    style={{ padding:'6px 12px', borderRadius:6, border:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-base))', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1, fontSize:12, fontWeight:600, color:'hsl(var(--text-secondary))' }}>
+                    Anterior
+                  </button>
+                  <span style={{ fontSize:12, fontWeight:600, color:'hsl(var(--text-muted))', padding:'0 8px' }}>
+                    Pág {currentPage} de {totalPages}
+                  </span>
+                  <button onClick={() => setRawPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                    style={{ padding:'6px 12px', borderRadius:6, border:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-base))', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1, fontSize:12, fontWeight:600, color:'hsl(var(--text-secondary))' }}>
+                    Próxima
+                  </button>
+                </div>
+               )
+            })()}
           </div>
         </div>
       )}
@@ -1021,3 +1085,4 @@ export default function DemonstracaoFinanceiraPage() {
     </div>
   )
 }
+

@@ -454,7 +454,24 @@ export default function NovaMatriculaPage() {
   const genCodigo = () => String(Math.floor(100000 + Math.random() * 900000))
   const router = useRouter()
   const dlg = useDialog()
-  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], caixasAbertos = [], setCaixasAbertos, movimentacoesManuais = [], setMovimentacoesManuais, transferencias = [], setTransferencias, logSystemAction } = useData() || {}
+  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], movimentacoesManuais = [], setMovimentacoesManuais, transferencias = [], setTransferencias, logSystemAction } = useData() || {}
+
+  const [caixasAbertos, setCaixasAbertos] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch('/api/financeiro/caixas?status=aberto&limit=50')
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : []
+        const mappedList = list.map((c:any) => ({
+          ...c,
+          dataAbertura: c.dataAbertura || c.data_abertura || new Date().toISOString().split('T')[0],
+          nomeCaixa: c.nomeCaixa || c.nome_caixa || 'Caixa Local'
+        }))
+        setCaixasAbertos(mappedList.filter((c:any) => !c.fechado && c.status !== 'Fechado'))
+      })
+      .catch(console.error)
+  }, [])
   // Formas de pagamento dinâmicas com fallback
   const FORMAS_FALLBACK = ['PIX','Boleto','Dinheiro','Cartão de Crédito','Cartão de Débito','Débito Automático','Transferência','Cheque','Bolsa Integral']
   const FORMAS = cfgMetodosPagamento.filter((m: any) => m.situacao === 'ativo').length > 0
@@ -466,28 +483,38 @@ export default function NovaMatriculaPage() {
     ? cfgCartoes.filter((c: any) => c.situacao === 'ativo').map((c: any) => c.nome as string)
     : BANDEIRAS_FALLBACK
   const searchParams = useSearchParams()
-  const editId = searchParams.get('edit')  // ID do aluno a editar (vindo de /alunos)
+  const editId = searchParams.get('edit')  // UUID do aluno a editar
 
   const sourceAlunos = alunos || []
   const [fetchedAluno, setFetchedAluno] = useState<any>(null)
-  
-  // Se veio /alunos?edit=ID e não está no contexto rápido, busca da API
+  const [loadingEdit, setLoadingEdit] = useState(false)
+
+  // Sempre busca da API quando temos um editId (UUID) — garante dados frescos do servidor
   useEffect(() => {
-    if (editId) {
-      const inSource = sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId))
-      if (!inSource && !fetchedAluno) {
-        fetch(`/api/alunos/${editId}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data && !data.error) setFetchedAluno(data)
-          }).catch(console.error)
-      }
+    if (!editId) {
+      setFetchedAluno(null)
+      return
     }
+    setFetchedAluno(null)  // limpa dados de edição anterior
+    setLoadingEdit(true)
+    fetch(`/api/alunos/${editId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && !data.error) setFetchedAluno(data)
+        else console.error('[nova-matricula] Erro ao buscar aluno:', data?.error)
+      })
+      .catch(console.error)
+      .finally(() => setLoadingEdit(false))
+  // editId é estável durante o ciclo de vida da página — não precisa de outras deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId])
 
-  const alunoEditando = editId ? (sourceAlunos.find((a: any) => String(a.codigo) === String(editId) || String(a.id) === String(editId)) || fetchedAluno || null) : null
+  // alunoEditando: prefere dados frescos da API (fetchedAluno), fallback para memória local
+  const alunoEditando = editId
+    ? (fetchedAluno || sourceAlunos.find((a: any) => String(a.id) === String(editId)) || null)
+    : null
   const realEditId = alunoEditando ? (alunoEditando as any).id : null
+
   const [step, setStep] = useState(0)
   const [salvando, setSalvando] = useState(false)
   const isEdicao = !!alunoEditando
@@ -559,27 +586,35 @@ export default function NovaMatriculaPage() {
       setMae(prev => ({ ...prev, nome: respNome, celular: respTel, respPedagogico: true, respFinanceiro: true }))
     }
 
-    // ── Dados extras do aluno ─────────────────────────────────────────────────
-    setAluno(prev => ({ 
-       ...prev, 
-       codigo: a.codigo || prev.codigo,
-       rga: a.rga || prev.rga,
-       cpf: a.cpf || '', 
-       nome: a.nome || '', 
-       dataNasc: a.dataNascimento || '', 
-       sexo: a.sexo || '', 
-       estadoCivil: a.estadoCivil || '', 
-       nacionalidade: a.nacionalidade || 'Brasileira', 
-       naturalidade: a.naturalidade || '', 
-       uf: a.uf || '', 
-       racaCor: a.racaCor || '', 
-       email: a.email || '', 
-       celular: a.telefone || '', 
-       filiacaoMae: a.filiacaoMae || '', 
-       filiacaoPai: a.filiacaoPai || '', 
-       idCenso: a.idCenso || '', 
-       foto: a.foto || '', 
-       endereco: a.endereco || {...EMPTY_END} 
+    // ── Dados do Aluno — normaliza campos snake_case da API e JSONB mesclado ──
+    // A API retorna: { ...dados(JSONB), nome, cpf, email, data_nascimento, telefone,
+    //                  turma, serie, turno, status, inadimplente, risco_evasao ... }
+    const dataNascRaw = a.dataNascimento || a.data_nascimento || ''
+    // Normaliza YYYY-MM-DD → DD/MM/AAAA para o DateMask input
+    const dataNascFormatted = dataNascRaw.includes('-')
+      ? formatDate(dataNascRaw)
+      : dataNascRaw
+
+    setAluno(prev => ({
+      ...prev,
+      codigo: a.codigo || prev.codigo,
+      rga: a.rga || prev.rga,
+      cpf: a.cpf || '',
+      nome: a.nome || '',
+      dataNasc: dataNascFormatted,
+      sexo: a.sexo || '',
+      estadoCivil: a.estadoCivil || a.estado_civil || '',
+      nacionalidade: a.nacionalidade || 'Brasileira',
+      naturalidade: a.naturalidade || '',
+      uf: a.uf || '',
+      racaCor: a.racaCor || a.raca_cor || '',
+      email: a.email || '',
+      celular: a.telefone || a.celular || '',
+      filiacaoMae: a.filiacaoMae || a.filiacao_mae || '',
+      filiacaoPai: a.filiacaoPai || a.filiacao_pai || '',
+      idCenso: a.idCenso || a.id_censo || '',
+      foto: a.foto || '',
+      endereco: a.endereco || { ...EMPTY_END },
     }))
 
     // Sincroniza refs estáticos para não usarem lixo temporário inicial
@@ -947,13 +982,14 @@ export default function NovaMatriculaPage() {
   const [parcelaAtiva, setParcelaAtiva] = useState<any>(null)
   const [baixaForm, setBaixaForm] = useState<{dataPagto:string;formasPagto:{id:string;forma:string;valor:string;cartao:{bandeira:string;numero:string;nome:string;validade:string;parcelas:string;autorizacao:string}|null}[];juros:string;multa:string;desconto:string;obs:string;comprovante:string;codPreview?:string;caixaId:string}>({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:'',cartao:null}],juros:'0',multa:'0',desconto:'',obs:'',comprovante:'',caixaId:''})
   const [modalRecibo, setModalRecibo] = useState(false)
+  const [parcelasReciboLote, setParcelasReciboLote] = useState<any[]>([])
   const [modalBaixaResp, setModalBaixaResp] = useState(false)
   const [baixaRespParcelas, setBaixaRespParcelas] = useState<any[]>([])
   const [modalBaixaRespConfirm, setModalBaixaRespConfirm] = useState(false)
   const [baixaRespForm, setBaixaRespForm] = useState({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'rf1',forma:'PIX',valor:'',cartao:null}],obs:'',comprovante:'',caixaId:''})
   const [modalBaixaLote, setModalBaixaLote] = useState(false)
   const [baixaLoteParcelas, setBaixaLoteParcelas] = useState<any[]>([])
-  const [baixaLoteForm, setBaixaLoteForm] = useState({dataPagto: new Date().toISOString().split('T')[0], formaPagto:'PIX', comprovante:'', obs:'', codPreview:''})
+  const [baixaLoteForm, setBaixaLoteForm] = useState({dataPagto: new Date().toISOString().split('T')[0], formaPagto:'PIX', comprovante:'', obs:'', codPreview:'', caixaId:''})
   const [baixaLoteMultiFormas, setBaixaLoteMultiFormas] = useState<{id:string;forma:string;valor:string;cartao:any}[]>([{id:'f1',forma:'PIX',valor:'',cartao:null}])
   const [modalCartao, setModalCartao] = useState(false)
   const [cartaoFormIdx, setCartaoFormIdx] = useState(0)
@@ -1898,6 +1934,23 @@ export default function NovaMatriculaPage() {
           </div>
         </div>
 
+        {/* ── Seção: Endereço ── */}
+        <div style={{display:'flex',flexDirection:'column',gap:24}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end', borderBottom:'1px solid #f1f5f9', paddingBottom:12}}>
+            <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, display:'flex', alignItems:'center', gap:8, margin:0}}>
+              <MapPin size={16} color="#10b981"/> Endereço do Aluno
+            </h4>
+            <div style={{display:'flex',gap:10}}>
+              {todosResp.filter(r=>r.nome).map(r=>(
+                <button key={r.id} type="button" style={{fontSize:12,fontWeight:700,padding:'8px 16px',background:'#f1f5f9',color:'#475569',borderRadius:12,border:'1px solid #cbd5e1',cursor:'pointer',transition:'all 0.2s',display:'flex',alignItems:'center',gap:6,boxShadow:'0 2px 6px rgba(0,0,0,0.05)'}} onClick={()=>updA('endereco',{...r.endereco})} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#e2e8f0'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='#f1f5f9'}>
+                  <MapPin size={12}/> Copiar {r.parentesco}
+                </button>
+              ))}
+            </div>
+          </div>
+          <EnderecoSection end={aluno.endereco} onChange={e=>updA('endereco',e)}/>
+        </div>
+
         {/* ── Seção: Responsabilidades (Movido do Step 0) ── */}
         <div style={{display:'flex',flexDirection:'column',gap:24}}>
           <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, borderBottom:'1px solid #f1f5f9', paddingBottom:12, display:'flex', alignItems:'center', gap:8}}>
@@ -1955,24 +2008,8 @@ export default function NovaMatriculaPage() {
             </div>
           </div>
         </div>
-
-        {/* ── Seção: Endereço ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:24}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end', borderBottom:'1px solid #f1f5f9', paddingBottom:12}}>
-            <h4 style={{fontSize:13, fontWeight:800, color:'#b4c6db', textTransform:'uppercase', letterSpacing:1.5, display:'flex', alignItems:'center', gap:8, margin:0}}>
-              <MapPin size={16} color="#10b981"/> Endereço do Aluno
-            </h4>
-            <div style={{display:'flex',gap:10}}>
-              {todosResp.filter(r=>r.nome).map(r=>(
-                <button key={r.id} type="button" style={{fontSize:12,fontWeight:700,padding:'8px 16px',background:'#f1f5f9',color:'#475569',borderRadius:12,border:'1px solid #cbd5e1',cursor:'pointer',transition:'all 0.2s',display:'flex',alignItems:'center',gap:6,boxShadow:'0 2px 6px rgba(0,0,0,0.05)'}} onClick={()=>updA('endereco',{...r.endereco})} onMouseEnter={e=>(e.currentTarget as HTMLElement).style.background='#e2e8f0'} onMouseLeave={e=>(e.currentTarget as HTMLElement).style.background='#f1f5f9'}>
-                  <MapPin size={12}/> Copiar {r.parentesco}
-                </button>
-              ))}
-            </div>
-          </div>
-          <EnderecoSection end={aluno.endereco} onChange={e=>updA('endereco',e)}/>
-        </div>
         
+
       </div>
     </div>,
 
@@ -2181,7 +2218,11 @@ export default function NovaMatriculaPage() {
                         const val = e.target.value;
                         updAut('rfid', val);
                         if (aut.nome) {
-                          setTodosResp(prev => prev.map(r => r.nome === aut.nome ? { ...r, rfid: val } : r));
+                          const syncRfid = (r: any) => r.nome === aut.nome ? { ...r, rfid: val } : r;
+                          setMae(syncRfid);
+                          setPai(syncRfid);
+                          setOutro1(syncRfid);
+                          setOutro2(syncRfid);
                         }
                       }}/>
                   </div>
@@ -2929,6 +2970,7 @@ export default function NovaMatriculaPage() {
                       const cxDef=caixasAbertos.filter((c:any)=>!c.fechado).sort((a:any,b:any)=>b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id??'';
                       setBaixaForm({dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'f1',forma:'PIX',valor:fmtMoeda(t),cartao:null}],juros:atr.juros>0?fmtMoeda(atr.juros):'0',multa:atr.multa>0?fmtMoeda(atr.multa):'0',desconto:fmtMoeda(atr.descAplicado),obs:'',comprovante:'',codPreview:c,caixaId:cxDef});
                       setParcelaAtiva({...p});
+                      setParcelasReciboLote([]) // ✅ Limpa recibo anterior
                       setModalBaixarParcela(true)
                     }
                   } else {
@@ -2944,8 +2986,10 @@ export default function NovaMatriculaPage() {
                     const tl=loteParcs.reduce((s,p)=>s+Math.max(0, p.valor-parseMoeda(p.loteDesc)+parseMoeda(p.loteJuros)+parseMoeda(p.loteMulta)),0);
                     const c='BX'+String(Date.now()).slice(-6)+String(Math.floor(Math.random()*100)).padStart(2,'0')+'LL';
                     setBaixaLoteParcelas(loteParcs);
-                    setBaixaLoteForm({dataPagto:dpTarget,formaPagto:'PIX',comprovante:'',obs:'',codPreview:c});
+                    const cxDefault = caixasAbertos.filter(c=>!c.fechado).sort((a:any,b:any)=>(b.dataAbertura||b.data_abertura||'').localeCompare(a.dataAbertura||a.data_abertura||''))[0]?.id||''
+                    setBaixaLoteForm({dataPagto:dpTarget,formaPagto:'PIX',comprovante:'',obs:'',codPreview:c,caixaId:cxDefault});
                     setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:fmtMoeda(tl),cartao:null}]);
+                    setParcelasReciboLote([]) // ✅ Sempre limpa o recibo anterior antes de nova baixa
                     setModalBaixaLote(true)
                   }
                 }}/>
@@ -2965,7 +3009,7 @@ export default function NovaMatriculaPage() {
                   }}/>
               </Row>
               <Row>
-                <Btn full icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>setModalBaixaResp(true)}/>
+                <Btn full icon="🏦" label="Baixa Resp." color="#818cf8" onClick={()=>{ setParcelasReciboLote([]); setModalBaixaResp(true) }}/>
                 <Btn full icon="🗑️" label="Excluir" danger disabled={!temSel||parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')} title={parcelas.some(p=>parcelasSelected.includes(p.num)&&p.status==='pago')?"Parcelas pagas não podem ser excluídas":undefined} onClick={()=>{setExcluirMotivo('');setModalExcluirMotivo(true)}}/>
               </Row>
             </GroupCard>
@@ -3193,22 +3237,22 @@ export default function NovaMatriculaPage() {
                   <table style={{width:'100%',borderCollapse:'separate',borderSpacing:0,fontSize:14,fontFamily:"'Inter',sans-serif"}}>
                     <thead style={{position:'sticky',top:0,zIndex:10}}>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
-                        <th style={{padding:'16px 24px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
+                        <th style={{padding:'12px 10px',width:30,borderBottom:'1px solid hsl(var(--border-subtle))',textAlign:'center'}}>
                           <input type="checkbox" checked={allSel} onChange={e=>setParcelasSelected(e.target.checked?pFilt.map(p=>p.num):[])} style={{cursor:'pointer',width:14,height:14,accentColor:'#6366f1'}}/>
                         </th>
                         {[
-                          {l:'Parc.',w:50,center:true},
+                          {l:'Parc.',w:40,center:true},
                           {l:'Evento / Competência'},
-                          {l:'Dt. Emissão',w:95,center:true},
-                          {l:'Vencimento',w:95},
-                          {l:'Valor Bruto',w:95,r:true},
-                          {l:'Desconto',w:85,r:true},
-                          {l:'Juros / Multa',w:105,r:true},
-                          {l:'Total a Pagar',w:105,r:true},
-                          {l:'Pagamento',w:90},
-                          {l:'Ação',w:86,center:true},
+                          {l:'Dt. Emissão',w:85,center:true},
+                          {l:'Vencimento',w:85},
+                          {l:'Valor Bruto',w:85,r:true},
+                          {l:'Desconto',w:75,r:true},
+                          {l:'Juros / Multa',w:90,r:true},
+                          {l:'Total a Pagar',w:90,r:true},
+                          {l:'Pagamento',w:80},
+                          {l:'Ação',w:70,center:true},
                         ].map((h:any,hi:number)=>(
-                          <th key={hi} style={{padding:'16px 24px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
+                          <th key={hi} style={{padding:'12px 10px',textAlign:h.center?'center':h.r?'right':'left',fontWeight:600,fontSize:11,color:'hsl(var(--text-muted))',borderBottom:'1px solid hsl(var(--border-subtle))',whiteSpace:'nowrap',width:h.w,letterSpacing:1,textTransform:'uppercase',fontFamily:"'Inter',sans-serif",opacity:.8}}>{h.l}</th>
                         ))}
                       </tr>
                     </thead>
@@ -3254,13 +3298,13 @@ export default function NovaMatriculaPage() {
                             }}
                             onClick={e=>{if((e.target as HTMLElement).tagName==='INPUT') return;setParcelasSelected(prev=>prev.includes(p.num)?prev.filter(n=>n!==p.num):[...prev,p.num])}}
                           >
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'14px 10px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{position:'absolute',left:0,top:0,bottom:0,width:3,background:sel?'#6366f1':'transparent',transition:'background 0.2s'}}/>
                               <input type="checkbox" checked={sel} onChange={e=>setParcelasSelected(prev=>e.target.checked?[...prev,p.num]:prev.filter(n=>n!==p.num))} style={{cursor:'pointer',width:16,height:16,accentColor:'#6366f1'}}/>
                             </td>
 
                             {/* Nº da parcela + parcelaId abaixo */}
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'14px 10px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',background:sBg,color:sColor,border:`1px solid ${sColor}20`,width:32,height:32,borderRadius:6,fontWeight:700,fontVariantNumeric:'tabular-nums'}}>
                                 <span style={{fontSize:15}}>{String(pNum).padStart(2, '0')}</span>
                               </div>
@@ -3268,7 +3312,7 @@ export default function NovaMatriculaPage() {
                             </td>
 
                             {/* Evento + competência + badge parcelaId + badge turma + badge status */}
-                            <td style={{padding:'18px 24px',maxWidth:230,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'14px 10px',maxWidth:230,borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               {/* Linha 1: nome do evento — limpo, sem badge */}
                               <div style={{fontWeight:600,fontSize:15,color:'hsl(var(--text-base))',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:-0.2}}>
                                 {getEventoDisp(p)}
@@ -3299,7 +3343,7 @@ export default function NovaMatriculaPage() {
                                 <span style={{display:'inline-flex',alignItems:'center',fontSize:11,padding:'3px 8px',borderRadius:4,fontWeight:600,background:sBg,color:sColor,whiteSpace:'nowrap',lineHeight:'14px'}}>{sLabel}</span>
                               </div>
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'14px 10px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               {(()=>{
                                 const emissao=(p as any).criadoEm||(p as any).dataEmissao
                                 const dtStr=emissao
@@ -3317,15 +3361,15 @@ export default function NovaMatriculaPage() {
                                 )
                               })()}
                             </td>
-                            <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'14px 10px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               <div style={{fontSize:15,fontWeight:isV||isH?600:500,color:isV?'#ef4444':isH?'#f59e0b':'hsl(var(--text-base))',fontVariantNumeric:'tabular-nums'}}
                               >{p.vencimento ? formatDate(p.vencimento) : '—'}</div>
                               {isV&&atr.dias>0&&<div style={{fontSize:11,color:'#f87171',fontWeight:700,marginTop:2}}>{atr.dias}d atraso</div>}
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'right',fontSize:15,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'14px 10px',textAlign:'right',fontSize:15,fontWeight:500,color:'hsl(var(--text-base))',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               <span style={{color:'hsl(var(--text-muted))',fontSize:13,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(p.valor)}
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'14px 10px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {p.desconto>0 ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span style={{
@@ -3349,7 +3393,7 @@ export default function NovaMatriculaPage() {
                                 </div>
                               ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
-                            <td style={{padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
+                            <td style={{padding:'14px 10px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}}>
                               {(jEx>0||mEx>0) ? (
                                 <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                                   {jEx>0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -3364,7 +3408,7 @@ export default function NovaMatriculaPage() {
                               ) : <span style={{color:'hsl(var(--text-muted))',opacity:0.5}}>—</span>}
                             </td>
                             <td style={{
-                              padding:'18px 24px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums', 
+                              padding:'14px 10px',textAlign:'right',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums', 
                               background: p.status === 'pago' ? 'rgba(16,185,129,0.08)' : isV ? 'rgba(239,68,68,0.08)' : 'rgba(99,102,241,0.05)', 
                               boxShadow: p.status === 'pago' ? 'inset 1px 0 0 rgba(16,185,129,0.15), inset -1px 0 0 rgba(16,185,129,0.15)' : isV ? 'inset 1px 0 0 rgba(239,68,68,0.15), inset -1px 0 0 rgba(239,68,68,0.15)' : 'inset 1px 0 0 rgba(99,102,241,0.15), inset -1px 0 0 rgba(99,102,241,0.15)'
                             }}>
@@ -3373,13 +3417,13 @@ export default function NovaMatriculaPage() {
                               </div>
                               {p.status!=='pago'&&(jEx+mEx)>0&&<div style={{fontSize:11,color:'#ef4444',fontWeight:500,marginTop:2,opacity:.8}}>c/ encargos</div>}
                             </td>
-                            <td style={{padding:'18px 24px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                            <td style={{padding:'14px 10px',borderBottom:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                               <span style={{fontSize:14,color:'hsl(var(--text-muted))',fontVariantNumeric:'tabular-nums'}}>
                                 {(p as any).dtPagto?new Date((p as any).dtPagto+'T12:00').toLocaleDateString('pt-BR'):'—'}
                               </span>
                             </td>
 
-                            <td style={{padding:'18px 24px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
+                            <td style={{padding:'14px 10px',textAlign:'center',borderBottom:'1px solid rgba(148,163,184,0.15)'}}>
                               {(()=>{
                                 // Verifica se já tem boleto emitido no DataContext para esta parcela
                                 const tituloEmitido = titulos.find(t =>
@@ -3401,7 +3445,28 @@ export default function NovaMatriculaPage() {
                                         <div style={{position: 'fixed', inset: 0, zIndex: 40}} onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); }} />
                                         <div style={{position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', zIndex: 50, padding: 4, minWidth: 160, display: 'flex', flexDirection: 'column', gap: 2}}>
                                           {p.status === 'pago' ? (
-                                            <button type="button" onClick={(e) => { e.stopPropagation(); setMenuAcaoOpen(null); setParcelaAtiva(p); setModalRecibo(true); }} style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4, color: 'hsl(var(--text-base))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500}} onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                            <button type="button" onClick={(e) => {
+                                              e.stopPropagation();
+                                              setMenuAcaoOpen(null);
+                                              // Se a parcela tem codBaixa, busca TODAS do mesmo lote/responsável
+                                              if ((p as any).codBaixa) {
+                                                const codBaixa = (p as any).codBaixa as string;
+                                                const parcelasDoLote = parcelas.filter(x =>
+                                                  (x as any).codBaixa === codBaixa ||
+                                                  ((x as any).codBaixa && String((x as any).codBaixa).startsWith(codBaixa.replace(/-P\d+$/, '')))
+                                                );
+                                                const comVinculadas = parcelasDoLote.find(x => (x as any).parcelasVinculadas?.length > 0) || parcelasDoLote[0];
+                                                const parcelasRecibo = comVinculadas && (comVinculadas as any).parcelasVinculadas?.length > 0
+                                                  ? [comVinculadas, ...parcelasDoLote.filter(x => x.num !== comVinculadas.num)]
+                                                  : parcelasDoLote;
+                                                setParcelasReciboLote(parcelasRecibo as any);
+                                                setParcelaAtiva(null);
+                                              } else {
+                                                setParcelaAtiva(p);
+                                                setParcelasReciboLote([]);
+                                              }
+                                              setModalRecibo(true);
+                                            }} style={{textAlign: 'left', padding: '8px 12px', fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 4, color: 'hsl(var(--text-base))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500}} onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                               🧾 Ver Recibo
                                             </button>
                                           ) : (
@@ -3443,11 +3508,11 @@ export default function NovaMatriculaPage() {
                     <tfoot>
                       <tr style={{background:'hsl(var(--bg-elevated))'}}>
                         {/* col 1+2: checkbox + Parc. */}
-                        <td colSpan={2} style={{padding:'18px 24px',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderTop:'1px solid rgba(148,163,184,0.15)'}}>
+                        <td colSpan={2} style={{padding:'14px 10px',fontWeight:600,fontSize:12,color:'hsl(var(--text-muted))',borderTop:'1px solid rgba(148,163,184,0.15)'}}>
                           <span style={{opacity:0.8}}>Total · {pFilt.length} parcela{pFilt.length!==1?'s':''}</span>
                         </td>
                         {/* col 3: Evento */}
-                        <td style={{padding:'18px 24px',fontSize:11,borderTop:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
+                        <td style={{padding:'14px 10px',fontSize:11,borderTop:'1px solid rgba(148,163,184,0.15)',whiteSpace:'nowrap'}}>
                           <span style={{padding:'4px 8px',borderRadius:4,background:'rgba(99,102,241,0.06)',color:'#6366f1',marginRight:6, fontWeight:600}}>A Vencer: {aV.length}</span>
                           {ven.length>0&&<span style={{padding:'4px 8px',borderRadius:4,background:'rgba(239,68,68,0.06)',color:'#ef4444', fontWeight:600}}>Vencido: {ven.length}</span>}
                         </td>
@@ -3456,15 +3521,15 @@ export default function NovaMatriculaPage() {
                         {/* col 5: Vencimento — vazio */}
                         <td style={{borderTop:'1px solid rgba(148,163,184,0.15)'}}/>
                         {/* col 5: Valor Bruto */}
-                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:600,color:'hsl(var(--text-base))',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'14px 10px',textAlign:'right',fontSize:13,fontWeight:600,color:'hsl(var(--text-base))',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <span style={{fontSize:11,marginRight:2,opacity:0.6}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+p.valor,0))}
                         </td>
                         {/* col 6: Desconto */}
-                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:13,fontWeight:600,color:'#d97706',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'14px 10px',textAlign:'right',fontSize:13,fontWeight:600,color:'#d97706',borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <span style={{fontSize:11,marginRight:2,opacity:0.6}}>- R$</span>{fmtMoeda(pFilt.reduce((s,p)=>s+(p.desconto||0),0))}
                         </td>
                         {/* col 7: Juros / Multa — merged */}
-                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:12,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
+                        <td style={{padding:'14px 10px',textAlign:'right',fontSize:12,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums'}}>
                           <div style={{display:'inline-flex',flexDirection:'column',alignItems:'flex-end',gap:2}}>
                             <div style={{display:'flex',alignItems:'center',gap:4}}>
                               <span style={{fontSize:9,color:'#ef4444',fontWeight:600,opacity:0.6}}>J</span>
@@ -3477,7 +3542,7 @@ export default function NovaMatriculaPage() {
                           </div>
                         </td>
                         {/* col 8: Total a Pagar */}
-                        <td style={{padding:'18px 24px',textAlign:'right',fontSize:14,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums',fontWeight:700,color:'#10b981'}}>
+                        <td style={{padding:'14px 10px',textAlign:'right',fontSize:14,borderTop:'1px solid rgba(148,163,184,0.15)',fontVariantNumeric:'tabular-nums',fontWeight:700,color:'#10b981'}}>
                           <span style={{fontSize:11,marginRight:3,opacity:0.6,fontWeight:600}}>R$</span>{fmtMoeda(pFilt.reduce((s,p)=>{
                             const j = p.status==='pago'?parseMoeda(String((p as any).juros||0)):calcJurosMulta(p).juros;
                             const m = p.status==='pago'?parseMoeda(String((p as any).multa||0)):calcJurosMulta(p).multa;
@@ -3721,9 +3786,9 @@ export default function NovaMatriculaPage() {
             emailResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.email || (aluno as any).email,
             telResponsavelFinanceiro: todosResp.find(r => r.respFinanceiro)?.celular || (aluno as any).celular
           }}
-          parcelas={parcelasSelected.length > 0 ? parcelas.filter(p => parcelasSelected.includes(p.num)) : (parcelaAtiva ? [parcelaAtiva as any] : [])}
-          onClose={() => setModalRecibo(false)}
-          onBack={modalConsultaBaixa ? () => { setModalRecibo(false); setModalConsultaBaixa(true); } : undefined}
+          parcelas={parcelasReciboLote.length > 0 ? parcelasReciboLote : (parcelasSelected.length > 0 ? parcelas.filter(p => parcelasSelected.includes(p.num)) : (parcelaAtiva ? [parcelaAtiva as any] : []))}
+          onClose={() => { setModalRecibo(false); setParcelasReciboLote([]); }}
+          onBack={modalConsultaBaixa ? () => { setModalRecibo(false); setParcelasReciboLote([]); setModalConsultaBaixa(true); } : undefined}
         />
       )}
 
@@ -3853,16 +3918,42 @@ export default function NovaMatriculaPage() {
                   <button className="btn btn-secondary" onClick={()=>setModalExcluirBaixa(false)}>Cancelar</button>
                   <button className="btn" style={{background:'linear-gradient(135deg,#f97316,#ea580c)',color:'white',fontWeight:700,padding:'8px 20px',borderRadius:10,border:'none',cursor:'pointer'}}
                     onClick={()=>{
-                      const codigosAfetados=parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago').map(p=>p.codBaixa).filter(Boolean)
+                      const codigosAfetados=parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago').map(p=>p.codBaixa).filter(Boolean) as string[]
                       const todosCodigosEstornados=[...new Set([
-                        ...parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago').map(p=>p.codBaixa).filter(Boolean),
+                        ...parcelas.filter(p=>parcelasSelected.includes(p.num)&&p.status==='pago').map(p=>p.codBaixa).filter(Boolean) as string[],
                         ...codigosAfetados
                       ])]
+
+                      // Coleta quais nums de parcela serão afetados
+                      // Cascateia para TODOS com mesmo codBaixa (lote BX...LL, responsável BR..., avulsa BX...)
+                      const numsAfetados = parcelas.filter(p=>{
+                        const isDireto = parcelasSelected.includes(p.num)
+                        const isInLote = p.codBaixa && codigosAfetados.includes(p.codBaixa) // qualquer tipo de baixa
+                        return (isDireto || isInLote) && p.status==='pago'
+                      }).map(p=>p.num)
+
+                      // ── 1. Atualização otimista do estado local ──
                       setParcelas(prev=>prev.map(p=>{
                         const isDireto = parcelasSelected.includes(p.num)
-                        const isInLote = p.codBaixa && codigosAfetados.includes(p.codBaixa) && p.codBaixa.endsWith('LL')
+                        const isInLote = p.codBaixa && codigosAfetados.includes(p.codBaixa) // cascateia sem .endsWith('LL')
                         if((isDireto || isInLote) && p.status==='pago'){
-                          return {...p,status:'pendente',dtPagto:undefined,formaPagto:undefined,codBaixa:undefined,juros:0,multa:0,obsFin:undefined,comprovante:undefined}
+                          return {
+                            ...p,
+                            status: 'pendente',
+                            dtPagto: undefined,
+                            formaPagto: undefined,
+                            codBaixa: undefined,
+                            juros: 0,
+                            multa: 0,
+                            desconto: 0,
+                            valorFinal: p.valor,
+                            obsFin: undefined,
+                            comprovante: undefined,
+                            formasPagto: undefined,
+                            parcelasVinculadas: undefined,
+                            baixaPorResponsavel: undefined,
+                            nomeResponsavel: undefined,
+                          }
                         }
                         return p
                       }))
@@ -3871,6 +3962,23 @@ export default function NovaMatriculaPage() {
                       }
                       setParcelasSelected([])
                       setModalExcluirBaixa(false)
+
+                      // ── 2. Persistência no banco: atualiza parcelas + deleta movimentações ──
+                      if(realEditId && todosCodigosEstornados.length > 0){
+                        fetch('/api/financeiro/estornar-baixa', {
+                          method: 'POST',
+                          headers: {'Content-Type':'application/json'},
+                          body: JSON.stringify({
+                            aluno_id: realEditId,
+                            parcela_nums: numsAfetados,
+                            cod_baixa_codes: todosCodigosEstornados,
+                          })
+                        }).then(async r => {
+                          const data = await r.json().catch(()=>({}))
+                          if(!r.ok) console.warn('[estorno] API retornou erro:', data)
+                          else console.log('[estorno] OK:', data.message)
+                        }).catch(e => console.warn('[estorno] Falha de rede:', e))
+                      }
                     }}>↩️ Estornar Baixa(s)</button>
                 </div>
               </>)
@@ -4973,20 +5081,22 @@ export default function NovaMatriculaPage() {
                         desconto:df,valorFinal:vf,juros:jf,multa:mf,obs:baixaForm.obs||((parcelaAtiva as any).obs||''),
                         formaPagto:fp,comprovante:baixaForm.comprovante,codBaixa:cb,formasPagto:baixaForm.formasPagto}
                       setParcelas((prev:any)=>prev.map((x:any)=>x.num===parcelaAtiva.num?pRec:x))
-                      // Espelhar no caixa como Movimentação Manual
-                      if(baixaForm.caixaId){
-                        const now=new Date().toISOString()
-                        setMovimentacoesManuais((prev:any)=>[...prev,{
-                          id:cb,caixaId:baixaForm.caixaId,tipo:'receita',
-                          fornecedorId:'',fornecedorNome:'',
-                          descricao:`Baixa Parcela ${String((parcelaAtiva as any).numParcela||parcelaAtiva.num).padStart(2,'0')} — ${(parcelaAtiva as any).evento||parcelaAtiva.competencia} (${aluno?.nome||'Aluno'})`,
-                          dataLancamento:baixaForm.dataPagto,dataMovimento:baixaForm.dataPagto,
-                          valor:vf,planoContasId:'',planoContasDesc:'',
-                          tipoDocumento:'REC',numeroDocumento:cb,dataEmissao:baixaForm.dataPagto,
-                          compensadoBanco:false,observacoes:baixaForm.obs||'',
-                          criadoEm:now,editadoEm:now,
-                          origem:'baixa_aluno',referenciaId:cb
-                        }])
+                      // ✅ Persistência no banco via rota /baixar-parcela (cria movimentação individual)
+                      // ✅ Persistir imediatamente no banco para o DRE e Caixa
+                      if(realEditId){
+                        fetch(`/api/alunos/${realEditId}/baixar-parcela`,{
+                          method:'PATCH',
+                          headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify({
+                            parcela_num:parcelaAtiva.num,
+                            parcela_id:(parcelaAtiva as any).parcelaId||'',
+                            caixa_id:baixaForm.caixaId,
+                            valor:vf,data_pagto:baixaForm.dataPagto,
+                            forma_pagto:fp,cod_baixa:cb,
+                            juros:jf,multa:mf,desconto:df,
+                            observacao:baixaForm.obs||'',operador:'Sistema'
+                          })
+                        }).catch(e=>console.warn('[baixa-normal] Persistência falhou:',e))
                       }
                       setParcelaAtiva(pRec as any); setModalBaixarParcela(false); setModalRecibo(true)
                     }}>
@@ -5334,6 +5444,19 @@ export default function NovaMatriculaPage() {
                   <F label="N. Comprovante"><input className="form-input" value={baixaLoteForm.comprovante} onChange={e=>setBaixaLoteForm(f=>({...f,comprovante:e.target.value}))} placeholder="Ex: PIX-12345"/></F>
                   <F label="Observacao"><input className="form-input" value={baixaLoteForm.obs} onChange={e=>setBaixaLoteForm(f=>({...f,obs:e.target.value}))} placeholder="Observacoes..."/></F>
                 </div>
+                <div style={{padding:'10px 14px',background:!baixaLoteForm.caixaId?'rgba(245,158,11,0.08)':'rgba(16,185,129,0.06)',border:`1px solid ${!baixaLoteForm.caixaId?'rgba(245,158,11,0.35)':'rgba(16,185,129,0.25)'}`,borderRadius:10,display:'flex',gap:10,alignItems:'center'}}>
+                  <span style={{fontSize:18}}>🏦</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4}}>CAIXA DE DESTINO *</div>
+                    <select className="form-input" style={{fontSize:12,fontWeight:700}} value={baixaLoteForm.caixaId}
+                      onChange={e=>setBaixaLoteForm(f=>({...f,caixaId:e.target.value}))}>
+                      <option value="">Selecionar caixa...</option>
+                      {caixasAbertos.filter((c:any)=>!c.fechado).map((c:any)=>(
+                        <option key={c.id} value={c.id}>{c.nomeCaixa||c.nome_caixa||c.codigo||c.id}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
               <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'space-between',gap:10,background:'hsl(var(--bg-elevated))'}}>
                 <button className="btn btn-secondary" onClick={()=>setModalBaixaLote(false)}>Cancelar</button>
@@ -5344,18 +5467,49 @@ export default function NovaMatriculaPage() {
                     const formaStr=baixaLoteMultiFormas.map((f:any)=>f.forma).join('+')
                     const nums=baixaLoteParcelas.map(p=>p.num)
                     
-                    setParcelas(prev=>prev.map(p=>{
-                      if(!nums.includes(p.num)||p.status==='pago') return p
-                      const lP = baixaLoteParcelas.find(x => x.num === p.num);
-                      if (!lP) return p;
+                    const parcelasParaRecibo = nums.map(n => {
+                      const lP = baixaLoteParcelas.find(x => x.num === n);
+                      const p = parcelas.find(x => x.num === n);
+                      if (!lP || !p || p.status === 'pago') return null;
                       const jp=parseMoeda(lP.loteJuros); const mp=parseMoeda(lP.loteMulta); const dp=parseMoeda(lP.loteDesc);
                       const vf=Math.max(0, p.valor-dp+jp+mp)
-                      return{...p,status:'pago',dtPagto:baixaLoteForm.dataPagto,formaPagto:formaStr,comprovante:baixaLoteForm.comprovante,codBaixa:codPrv,juros:jp,multa:mp,desconto:dp,valorFinal:vf,formasPagto:baixaLoteMultiFormas}
+                      // ✅ Explicitamente remove parcelasVinculadas para não contaminar recibo com baixas antigas
+                      return {  ...p, status:'pago', dtPagto:baixaLoteForm.dataPagto, formaPagto:formaStr, comprovante:baixaLoteForm.comprovante, codBaixa:codPrv, juros:jp, multa:mp, desconto:dp, valorFinal:vf, formasPagto:baixaLoteMultiFormas,
+                        parcelasVinculadas:undefined, baixaPorResponsavel:undefined, nomeResponsavel:undefined }
+                    }).filter(Boolean);
+                    
+                    setParcelas(prev=>prev.map(p=>{
+                      if(!nums.includes(p.num)||p.status==='pago') return p
+                      const pFinal = parcelasParaRecibo.find((r:any) => r.num === p.num);
+                      return pFinal ? pFinal : p;
                     }))
                     setBaixaLoteMultiFormas([{id:'f1',forma:'PIX',valor:'',cartao:null}])
                     setParcelasSelected([])
                     setModalBaixaLote(false)
-                  }}>Confirmar Baixa Múltipla R$ {fmtMoeda(totalGeral)}</button>
+                    setParcelasReciboLote(parcelasParaRecibo)
+                    setModalRecibo(true)
+                    // ✅ Persistir NO BANCO via rota batch — 1 write atômica, 1 movimentação por parcela
+                    if(realEditId){
+                      const formaStrLote=baixaLoteMultiFormas.map((f:any)=>f.forma).join('+')
+                      const itensBatch = baixaLoteParcelas.map(lP => {
+                        const jp=parseMoeda(lP.loteJuros); const mp=parseMoeda(lP.loteMulta); const dp=parseMoeda(lP.loteDesc);
+                        return { parcela_num:lP.num, parcela_id:(lP as any).parcelaId||'', valor:Math.max(0,lP.valor-dp+jp+mp), juros:jp, multa:mp, desconto:dp }
+                      })
+                      fetch(`/api/alunos/${realEditId}/baixar-parcelas-lote`,{
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({
+                          caixa_id: baixaLoteForm.caixaId || caixasAbertos.filter((c:any)=>!c.fechado)[0]?.id || caixasAbertos[0]?.id || '',
+                          cod_baixa:codPrv,
+                          data_pagto:baixaLoteForm.dataPagto,
+                          forma_pagto:formaStrLote,
+                          observacao:baixaLoteForm.obs||'',
+                          operador:'Sistema',
+                          parcelas:itensBatch
+                        })
+                      }).catch(e=>console.warn('[baixa-lote] Persistência batch falhou:',e))
+                    }
+                  }}>🧾 Confirmar e Gerar Recibo Lote R$ {fmtMoeda(totalGeral)}</button>
               </div>
             </div>
           </div>
@@ -5625,7 +5779,7 @@ export default function NovaMatriculaPage() {
                       style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',fontWeight:800,boxShadow:'0 4px 16px rgba(99,102,241,0.4)',padding:'11px 26px',fontSize:13,borderRadius:12,display:'flex',alignItems:'center',gap:8}}
                       disabled={selResp.length===0}
                       onClick={()=>{
-                        setBaixaRespForm((f:any)=>{const cxDefault=caixasAbertos.filter(c=>!c.fechado).sort((a,b)=>b.dataAbertura.localeCompare(a.dataAbertura))[0]?.id??''; return{dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'rf1',forma:'PIX',valor:fmtMoeda(totalSel),cartao:null}],obs:'',comprovante:'',caixaId:cxDefault}})
+                        setBaixaRespForm((f:any)=>{const cxDefault=caixasAbertos.filter(c=>!c.fechado).sort((a:any,b:any)=>(b.dataAbertura||b.data_abertura||'').localeCompare(a.dataAbertura||a.data_abertura||''))[0]?.id??''; return{dataPagto:new Date().toISOString().split('T')[0],formasPagto:[{id:'rf1',forma:'PIX',valor:fmtMoeda(totalSel),cartao:null}],obs:'',comprovante:'',caixaId:cxDefault}})
                         setModalBaixaRespConfirm(true)
                       }}>
                       <Check size={15}/> Continuar → Pagar {selResp.length} parcela{selResp.length!==1?'s':''} · R$ {fmtMoeda(totalSel)}
@@ -5852,26 +6006,68 @@ export default function NovaMatriculaPage() {
                     setModalBaixaRespConfirm(false)
                     setModalBaixaResp(false)
                     setBaixaRespParcelas([])
-                    // Espelhar no caixa como Movimentação Manual
-                    if(baixaRespForm.caixaId){
-                      const now=new Date().toISOString()
-                      const nomeRespLog=nomeResp||'Responsável'
-                      setMovimentacoesManuais((prev:any)=>[...prev,{
-                        id:codBaixa,caixaId:baixaRespForm.caixaId,tipo:'receita',
-                        fornecedorId:'',fornecedorNome:nomeRespLog,
-                        descricao:`Baixa por Responsável — ${selResp.length} parcela${selResp.length!==1?'s':''} · ${nomeRespLog}`,
-                        dataLancamento:baixaRespForm.dataPagto,dataMovimento:baixaRespForm.dataPagto,
-                        valor:totalBruto,planoContasId:'',planoContasDesc:'',
-                        tipoDocumento:'REC',numeroDocumento:codBaixa,dataEmissao:baixaRespForm.dataPagto,
-                        compensadoBanco:false,observacoes:baixaRespForm.obs||'',
-                        criadoEm:now,editadoEm:now,
-                        origem:'baixa_aluno',referenciaId:codBaixa
-                      }])
-                    }
                     setToastMsg(`✅ ${selResp.length} parcela${selResp.length!==1?'s':''} baixada${selResp.length!==1?'s':''} com sucesso — R$ ${fmtMoeda(totalBruto)}`)
                     setTimeout(()=>setToastMsg(''),3500)
+                    // ✅ Persistência multi-aluno via nova rota atômica
+                    // Agrupa parcelas por alunoId, resolve __novo__ para realEditId
+                    {
+                      const formaStrResp = baixaRespForm.formasPagto.map((f:any)=>f.forma).join('+')
+                      // Monta grupos por aluno — resolve __novo__ → realEditId
+                      const gruposMap = new Map<string, {aluno_id:string; aluno_nome:string; parcelas:any[]}>()
+                      selResp.forEach((s:any) => {
+                        const resolvedId = s.alunoId === '__novo__' ? (realEditId||'') : s.alunoId
+                        if (!resolvedId) return
+                        if (!gruposMap.has(resolvedId)) {
+                          const nomeA = s.alunoId === '__novo__' ? (aluno.nome||'') : (s.alunoNome||s.alunoId||'')
+                          gruposMap.set(resolvedId, { aluno_id: resolvedId, aluno_nome: nomeA, parcelas: [] })
+                        }
+                        gruposMap.get(resolvedId)!.parcelas.push({
+                          parcela_num:  s.num,
+                          parcela_id:   s.parcelaId||'',
+                          valor:        s.totalP||s.valor||0,
+                          juros:        s.jurosCalc||0,
+                          multa:        s.multaCalc||0,
+                          desconto:     Math.max(0,(s.valor||0)-(s.valorFinal||s.valor||0)),
+                          evento:       s.evento||'Mensalidade',
+                          competencia:  s.competencia||'',
+                          aluno_nome:   s.alunoId === '__novo__' ? (aluno.nome||'') : (s.alunoNome||''),
+                        })
+                      })
+                      const gruposArr = Array.from(gruposMap.values()).filter(g => g.aluno_id && g.parcelas.length > 0)
+                      if (gruposArr.length > 0) {
+                        fetch('/api/financeiro/baixar-por-responsavel', {
+                          method: 'POST',
+                          headers: {'Content-Type':'application/json'},
+                          body: JSON.stringify({
+                            caixa_id:   baixaRespForm.caixaId || caixasAbertos.filter((c:any)=>!c.fechado)[0]?.id || '',
+                            cod_baixa:  codBaixa,
+                            data_pagto: baixaRespForm.dataPagto,
+                            forma_pagto: formaStrResp,
+                            observacao: baixaRespForm.obs||'',
+                            operador:   'Sistema',
+                            nome_resp:  nomeResp||'',
+                            alunos:     gruposArr,
+                          })
+                        }).catch(e => console.warn('[baixa-resp] Persistência multi-aluno falhou:', e))
+                      }
+                    }
+                    const pRecibos = selResp.map((s:any) => ({
+                      ...s,
+                      status:'pago',
+                      valorFinal: s.totalP||s.valorFinal||s.valor||0,
+                      juros: s.jurosCalc||0,
+                      multa: s.multaCalc||0,
+                      desconto: Math.max(0,(s.valor||0)-(s.valorFinal||s.valor||0)),
+                      dtPagto: baixaRespForm.dataPagto,
+                      formaPagto: baixaRespForm.formasPagto.map((f:any)=>f.forma).join('+'),
+                      codBaixa: codBaixa,
+                      // ✅ Limpa vínculos de baixas anteriores para não duplicar no recibo
+                      parcelasVinculadas: undefined,
+                    }));
+                    setParcelasReciboLote(pRecibos)
+                    setModalRecibo(true)
                   }}>
-                  ✅ Confirmar Pagamento · R$ {fmtMoeda(totalBruto)}
+                  🧾 Confirmar e Gerar Recibo
                 </button>
               </div>
             </div>
@@ -6139,16 +6335,35 @@ export default function NovaMatriculaPage() {
 
   return (
     <div style={{minHeight:'100%',display:'flex',flexDirection:'column',paddingBottom:40}}>
-      {/* Header */}
+      {/* Loading overlay enquanto busca dados do aluno para edição */}
+      {editId && loadingEdit && (
+        <div style={{
+          position:'fixed', inset:0, zIndex:9999,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          background:'rgba(15,23,42,0.7)', backdropFilter:'blur(6px)',
+        }}>
+          <div style={{
+            background:'hsl(var(--bg-base))', borderRadius:20, padding:'32px 40px',
+            display:'flex', flexDirection:'column', alignItems:'center', gap:16,
+            border:'1px solid hsl(var(--border-subtle))', boxShadow:'0 24px 60px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{width:44,height:44,border:'3px solid rgba(99,102,241,0.2)',borderTopColor:'#6366f1',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+            <div style={{fontWeight:700, fontSize:14}}>Carregando dados do aluno...</div>
+            <div style={{fontSize:12, color:'hsl(var(--text-muted))'}}>Buscando informações do servidor</div>
+          </div>
+        </div>
+      )}
+      {/* Banner: Modo Edição */}
       {isEdicao && (
         <div style={{margin:'12px 32px 0',padding:'10px 16px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:16}}>✏️</span>
           <div>
             <div style={{fontWeight:800,fontSize:13,color:'#fbbf24'}}>Modo Edição — {(alunoEditando as any)?.nome}</div>
-            <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Código {(alunoEditando as any)?.matricula} · Atualize os dados abaixo e clique em Salvar.</div>
+            <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Código {(alunoEditando as any)?.codigo || (alunoEditando as any)?.matricula} · Atualize os dados e clique em Salvar Alterações.</div>
           </div>
         </div>
       )}
+
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',padding:'20px 32px 0',marginBottom:20}}>
         <div>
           <h1 className="page-title" style={{margin:0}}>{isEdicao ? 'Editar Matrícula' : 'Nova Matricula'}</h1>
@@ -6279,3 +6494,4 @@ export default function NovaMatriculaPage() {
     </div>
   )
 }
+

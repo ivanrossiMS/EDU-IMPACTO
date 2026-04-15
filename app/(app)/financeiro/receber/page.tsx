@@ -63,7 +63,7 @@ export default function ContasReceberPage() {
   const { cfgEventos, cfgMetodosPagamento, setMovimentacoesManuais, logSystemAction } = useData();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
-  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-pdv'], '/api/financeiro/caixas', { limit: 200 })
+  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-abertos'], '/api/financeiro/caixas', { status: 'aberto', limit: 200 })
   const caixasAbertos = respCaixas?.data || caixasAbertosLegacy || []
   
   const [ctxTitulos, setTitulos] = useSupabaseArray<any>('titulos');
@@ -1116,3 +1116,4 @@ export default function ContasReceberPage() {
     </div>
   )
 }
+

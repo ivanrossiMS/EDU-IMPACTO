@@ -18,6 +18,9 @@ function brDateToISO(d: string): string {
 
 export async function GET(request: Request) {
   const supabase = await createProtectedClient();
+  const { data: { user }, error: authErr } = await supabase.auth.getUser()
+  console.log(`[DRE-AUTH] DRE API Hit. User: ${user?.id}, AuthError: ${authErr?.message}`)
+  
   try {
     const { searchParams } = new URL(request.url)
     const dataInicio = searchParams.get('inicio')
@@ -29,8 +32,10 @@ export async function GET(request: Request) {
     }
 
     // ── 1. cfgEventos → mapa evento → planoContasId ─────────────────────────
-    const { data: configData } = await supabase
+    const { data: configData, error: errCfg } = await supabase
       .from('configuracoes').select('valor').eq('chave', 'cfgEventos').single()
+
+    console.log(`[DRE-DEBUG] cfgEventos Data: ${configData?true:false}, Err: ${errCfg?.message}`)
 
     const eventos = configData?.valor || []
     const eventoPlanoMap: Record<string, string> = {}
@@ -98,11 +103,11 @@ export async function GET(request: Request) {
     const semanticToBadge = new Map<string, string>()
 
     // Pré-carregamos alunos para injetar o ID exato (eventoId-num) no idOrigem dos Títulos
-    const { data: precoAlunos } = await supabase.from('alunos').select('id, nome, responsavel, dados')
+    const { data: precoAlunos } = await supabase.from('alunos').select('id, nome, dados')
     for (const aluno of (precoAlunos || [])) {
       const dados = aluno.dados || {}
       const parcelas: any[] = dados.parcelas || []
-      const resp = aluno.nome || dados.nome || dados.nomeAluno || aluno.responsavel || dados.responsavel || dados.nomeResponsavel || dados.responsavelFinanceiro || ''
+      const resp = aluno.nome || dados.nome || dados.nomeAluno || dados.responsavel || dados.nomeResponsavel || dados.responsavelFinanceiro || ''
       
       for (const p of parcelas) {
         const vencISO = brDateToISO(p.vencimento||'')
@@ -215,22 +220,49 @@ export async function GET(request: Request) {
     const { data: movs } = await supabase.from('movimentacoes').select('*')
       .gte('data', dataInicio).lte('data', dataFim)
 
+    // Coleta IDs de parcelas JSONB que já foram registradas como baixa_aluno
+    // para evitar duplicidade na Seção 5 (parcelas dos alunos)
     const codBaixasEmMovs = new Set<string>()
+    const referenciaIdsEmMovs = new Set<string>()
     for (const m of (movs || [])) {
       const parsed = { ...m, ...(m.dados || {}) }
-      const rid = parsed.referenciaId || parsed.codBaixa || ''
-      if (rid) codBaixasEmMovs.add(rid)
+      const origem = parsed.origem || ''
+      // Se é uma baixa de aluno, registra o referenciaId/codBaixa para bloquear
+      // a parcela JSONB na seção 5 (evitar duplicidade)
+      if (origem === 'baixa_aluno') {
+        const rid = parsed.referenciaId || parsed.id || ''
+        if (rid) {
+          codBaixasEmMovs.add(rid)
+          referenciaIdsEmMovs.add(rid)
+        }
+      }
+      const rid2 = parsed.codBaixa || ''
+      if (rid2) codBaixasEmMovs.add(rid2)
     }
 
     for (const m of (movs || [])) {
       const parsed = { ...m, ...(m.dados || {}) }
-      // IGNORA movimentacoes geradas por baixas de titulos/contas, pois os próprios títulos
-      // já estão computados na Demonstração como 'pago'. Computá-los de novo causaria duplicidade (Receita Dupla).
-      if (['baixa_receber', 'baixa_pagar', 'baixa_aluno'].includes(parsed.origem)) continue
-      if (parsed.referenciaId && parsed.origem !== 'manual') continue
+      const origem = parsed.origem || ''
+
+      // IGNORA Baixas de Títulos (Contas a Receber) e Contas a Pagar,
+      // pois esses registros já aparecem nas Seções 2 e 3 (titulos e contas_pagar).
+      // Computá-los de novo causaria Receita/Despesa Dupla.
+      if (['baixa_receber', 'baixa_pagar'].includes(origem)) continue
+
+      // Baixas de alunos (baixa_aluno) SÃO incluídas no DRE como receitas efetivadas.
+      // A deduplicação semântica (safePush) garante que a parcela JSONB correspondente
+      // NÃO será duplicada na Seção 5.
+      // Outras movimentações vinculadas a referências (não manuais) são ignoradas
+      // exceto baixa_aluno que é o nosso caso principal.
+      if (parsed.referenciaId && origem !== 'manual' && origem !== 'baixa_aluno') continue
 
       const fTipo = (parsed.tipo === 'receita' || parsed.tipo === 'entrada') ? 'receita' : 'despesa'
       const nomeParenteses = (parsed.descricao || '').match(/\(([^)]+)\)$/)?.[1] || ''
+      const dataRef = parsed.data || parsed.dataMovimento || parsed.dataLancamento || ''
+
+      // Para baixa_aluno, usa a data de pagamento registrada no caixa
+      // Por regime de caixa (pagamento): usa a data da movimentação
+      // Por regime de competência/vencimento: ainda usa a data da movimentação (é o efetivo)
       safePush({
         id:               parsed.id,
         origem:           'movimentacao',
@@ -239,25 +271,32 @@ export async function GET(request: Request) {
         planoContasId:    resolvePlano(parsed),
         valorEsperado:    Number(parsed.valor),
         valorPago:        Number(parsed.valor),
-        dataCompetencia:  parsed.data || parsed.dataMovimento,
-        dataVencimento:   parsed.data || parsed.dataMovimento,
-        dataPagamento:    parsed.data || parsed.dataMovimento,
+        dataCompetencia:  dataRef,
+        dataVencimento:   dataRef,
+        dataPagamento:    dataRef,
         status:           'pago',
-        alunoResponsavel: parsed.fornecedorNome || parsed.aluno || parsed.nomeAluno || nomeParenteses || '',
-        formaPagamento:   parsed.formaPagamento || parsed.metodo || null,
+        alunoResponsavel: parsed.fornecedorNome || parsed.nomeAluno || parsed.aluno || nomeParenteses || '',
+        formaPagamento:   parsed.forma_pagamento || parsed.formaPagamento || parsed.metodo || null,
         documento:        parsed.numeroDocumento || parsed.tipoDocumento || '',
-        idOrigem:         parsed.id
+        idOrigem:         parsed.referenciaId || parsed.id
       })
     }
 
     // ── 5. Parcelas dos Alunos (aluno.dados.parcelas) ─────────────────────────
-    const { data: alunos } = await supabase
+    const { data: alunos, error: errAlunos5 } = await supabase
       .from('alunos')
-      .select('id, nome, responsavel, dados')
+      .select('id, nome, dados')
+
+    if (errAlunos5) console.error(`[DRE-DEBUG] Fatal error fetching alunos:`, errAlunos5)
+    console.log(`[DRE-DEBUG] Fetched ${alunos?.length || 0} alunos from DB in Section 5`)
 
     for (const aluno of (alunos || [])) {
       const dados    = aluno.dados || {}
       const parcelas: any[] = dados.parcelas || []
+      
+      if (parcelas.length > 0) {
+        console.log(`[DRE-DEBUG] Aluno ${aluno.nome} has ${parcelas.length} parcelas`)
+      }
 
       const nomeAluno =
         aluno.nome      ||
@@ -275,23 +314,43 @@ export async function GET(request: Request) {
         const st = p.status || 'pendente'
         if (st === 'cancelado' || st === 'excluido') continue
 
+        // Se a parcela foi paga e a movimentação correspondente JÁ está no DRE
+        // (incluída na Seção 4 como baixa_aluno), NÃO duplicamos ela aqui.
+        // Verificamos via codBaixa = referenciaId da movimentação de baixa_aluno.
         if (st === 'pago' && p.codBaixa && codBaixasEmMovs.has(p.codBaixa)) continue
 
+        // Também verifica parcelaId ou outras referências que podem estar nos títulos
         const candidates = [p.parcelaId, p.codigo, p.codBaixa, p.id].filter(Boolean)
         if (candidates.some(c => fingerprints_titulos.has(c))) continue
 
         const vencISO = brDateToISO(p.vencimento || '')
-        if (!vencISO) continue
+        if (!vencISO) {
+          console.log(`[DRE-DEBUG] Dropped parcela ${p.descricao} because no vencISO`)
+          continue
+        }
 
+        // Filtro de período:
         if (por === 'pagamento') {
-          const dtPagISO = brDateToISO(p.dtPagto || '')
-          if (!dtPagISO || !isInRange(dtPagISO)) continue
+          if (st === 'pago') {
+            const dtPagISO = brDateToISO(p.dtPagto || '')
+            if (!dtPagISO || !isInRange(dtPagISO)) continue
+          } else {
+            if (!isInRange(vencISO)) {
+              console.log(`[DRE-DEBUG] Dropped pending parcela ${p.descricao} - vencISO ${vencISO} not in range ${dataInicio} to ${dataFim}`)
+              continue
+            }
+          }
         } else {
-          if (!isInRange(vencISO)) continue
+          if (!isInRange(vencISO)) {
+             console.log(`[DRE-DEBUG] Dropped parcela ${p.descricao} - vencISO ${vencISO} not in range ${dataInicio} to ${dataFim}`)
+             continue
+          }
         }
 
         const uid = p.parcelaId || `${aluno.id}-p${p.num}-${p.evento || 'ms'}`
         const parteRelacionada = nomeAluno || nomeResponsavel || ''
+        
+        console.log(`[DRE-DEBUG] Pushing raw parcela: ${p.evento || p.descricao} | value: ${p.valorFinal ?? p.valor} | st: ${st} | uid: ${uid}`)
 
         safePush({
           id:               uid,
@@ -301,7 +360,7 @@ export async function GET(request: Request) {
           planoContasId:    resolvePlano(p),
           valorEsperado:    Number(p.valorFinal ?? p.valor ?? 0),
           valorPago:        st === 'pago'
-            ? Number(p.valorFinal ?? p.valor ?? 0) + Number(p.juros || 0) + Number(p.multa || 0) - Number(p.desconto || 0)
+            ? Number(p.valorFinal ?? p.valor ?? 0)
             : 0,
           dataCompetencia:  vencISO,
           dataVencimento:   vencISO,
