@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { 
   BarChart3, Users, BookOpen, Bell, MessageSquare, Image as ImageIcon, 
-  Calendar, FileText, BadgeDollarSign, Settings, FormInput
+  Calendar, FileText, BadgeDollarSign, Settings, FormInput, LogOut
 } from 'lucide-react'
 
 export default function AgendaDigitalAdminLayout({ 
@@ -14,7 +14,18 @@ export default function AgendaDigitalAdminLayout({
   children: React.ReactNode 
 }) {
   const pathname = usePathname()
-  const { currentUserPerfil } = useApp()
+  const { currentUserPerfil, setCurrentUser } = useApp()
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      setCurrentUser(null)
+      window.location.href = '/login'
+    } catch (e) {
+      console.error(e)
+      window.location.href = '/login'
+    }
+  }
 
   const navItems = [
     { label: 'Dashboard', href: '/agenda-digital/admin', icon: <BarChart3 size={18} />, exact: true },
@@ -64,6 +75,11 @@ export default function AgendaDigitalAdminLayout({
              font-size: 13px !important;
              line-height: 1.4 !important;
              padding: 0 8px !important;
+          }
+          .ad-admin-header-actions {
+             width: 100% !important;
+             justify-content: center !important;
+             margin-top: 12px !important;
           }
 
           .ad-admin-nav {
@@ -201,6 +217,39 @@ export default function AgendaDigitalAdminLayout({
               Gestão de comunicação e acompanhamento escolar • {currentUserPerfil}
             </p>
           </div>
+        </div>
+        
+        <div className="ad-admin-header-actions" style={{ display: 'flex', alignItems: 'center' }}>
+          <button 
+            type="button" 
+            onClick={handleLogout}
+            style={{
+              padding: '10px 18px',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              fontFamily: 'Inter, sans-serif'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+              e.currentTarget.style.transform = ''
+            }}
+          >
+            <LogOut size={16} />
+            <span>Sair</span>
+          </button>
         </div>
       </div>
 
