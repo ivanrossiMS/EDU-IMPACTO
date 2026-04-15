@@ -277,7 +277,7 @@ export default function DashboardPage() {
                 <RisksPieChartComponent data={RISCO_EVASAO_DIST} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {RISCO_EVASAO_DIST.map(r => (
+                {RISCO_EVASAO_DIST.map((r: any) => (
                   <div key={r.nome} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: r.fill, display: 'inline-block' }} />
@@ -333,7 +333,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {ALERTAS_REAIS.map(a => (
+              {ALERTAS_REAIS.map((a: any) => (
                 <div key={a.id} style={{ display: 'flex', gap: 10, padding: '10px', borderRadius: 8, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))' }}>
                   <div style={{ flexShrink: 0, marginTop: 2 }}>{ALERT_ICONS[a.nivel]}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -348,7 +348,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Ranking de Risco */}
-      {alunos.filter(a => a.risco_evasao !== 'baixo').length > 0 && (
+      {alunos.filter((a: any) => a.risco_evasao !== 'baixo').length > 0 && (
         <div className="card" style={{ padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
@@ -365,7 +365,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {alunos.filter(a => a.risco_evasao !== 'baixo').slice(0, 10).map((a, i) => (
+                {alunos.filter((a: any) => a.risco_evasao !== 'baixo').slice(0, 10).map((a: any, i: any) => (
                   <tr key={a.id}>
                     <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{i + 1}</td>
                     <td>

@@ -96,14 +96,14 @@ function Ficha360Inner() {
 
   const hasSearch = appliedSearch.trim().length > 0
   const filteredSearch = hasSearch
-    ? (alunos || []).filter(a =>
+    ? (alunos || []).filter((a: any) =>
         a.nome?.toLowerCase().includes(appliedSearch.toLowerCase()) ||
         (a.matricula || '').includes(appliedSearch) ||
         (a.turma || '').toLowerCase().includes(appliedSearch.toLowerCase())
       ).slice(0, 10)
     : []
 
-  const aluno = selectedId ? ((alunos || []).find(a => String(a.id) === String(selectedId) || String((a as any).codigo) === String(selectedId) || String((a as any).matricula) === String(selectedId)) ?? null) : null
+  const aluno = selectedId ? ((alunos || []).find((a: any) => String(a.id) === String(selectedId) || String((a as any).codigo) === String(selectedId) || String((a as any).matricula) === String(selectedId)) ?? null) : null
 
   // ── Responsáveis ──────────────────────────────────────────────────────────
   const responsaveis: any[] = useMemo(() => (aluno as any)?.responsaveis || [], [aluno])
@@ -201,7 +201,7 @@ function Ficha360Inner() {
             <div style={{ width:'100%', maxWidth:560, display:'flex', flexDirection:'column', gap:6 }}>
               {filteredSearch.length === 0
                 ? <div style={{ textAlign:'center', padding:16, color:'hsl(var(--text-muted))', fontSize:13 }}><div style={{ fontSize:24, marginBottom:6 }}>🕵️</div>Nenhum aluno encontrado</div>
-                : filteredSearch.map(a => {
+                : filteredSearch.map((a: any) => {
                     const rc = a.risco_evasao === 'alto' ? '#ef4444' : a.risco_evasao === 'medio' ? '#f59e0b' : '#10b981'
                     
                     const tid = a.turmaId || a.dadosMatricula?.turmaId
@@ -265,7 +265,7 @@ function Ficha360Inner() {
             <div style={{ display:'flex', flexDirection:'column', gap:4, padding:8, background:'hsl(var(--bg-elevated))', borderRadius:12, border:'1px solid hsl(var(--border-subtle))' }}>
               {filteredSearch.length === 0
                 ? <div style={{ padding:12, textAlign:'center', fontSize:12, color:'hsl(var(--text-muted))' }}>Nenhum aluno encontrado</div>
-                : filteredSearch.map(a => {
+                : filteredSearch.map((a: any) => {
                     const rc = a.risco_evasao === 'alto' ? '#ef4444' : a.risco_evasao === 'medio' ? '#f59e0b' : '#10b981'
 
                     const tid = a.turmaId || a.dadosMatricula?.turmaId

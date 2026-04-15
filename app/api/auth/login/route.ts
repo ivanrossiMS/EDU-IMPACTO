@@ -4,6 +4,10 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
+// Valid email: must have TLD of at least 2 chars after last dot, not our internal domain
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && !email.endsWith('@impactoedu.local')
+
 export async function POST(request: NextRequest) {
   try {
     const { email: rawLogin, password } = await request.json()
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest) {
         const matricula   = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
         const storedEmail = (alunoRecord.email || '').trim().toLowerCase()
         // Use virtual email pattern (same one registered at first-access)
-        resolvedEmail = storedEmail && storedEmail.includes('@') && !storedEmail.endsWith('@impactoedu.local')
+        resolvedEmail = isValidEmail(storedEmail)
           ? storedEmail
           : `aluno.${matricula}@impactoedu.local`
         userType = 'aluno'
@@ -126,9 +130,29 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
     
-    if (error || !data?.user) {
+    let user = signInData?.user
+    let session = signInData?.session
+    let error = signInError
+
+    // FALLBACK for students: If login failed and they have a real email, their Auth user might still be on their virtual email
+    if (error && userType === 'aluno' && alunoRecord) {
+      const matricula = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
+      const virtualEmail = `aluno.${matricula}@impactoedu.local`
+      
+      if (resolvedEmail !== virtualEmail) {
+        const fallbackAttempt = await supabase.auth.signInWithPassword({ email: virtualEmail, password })
+        if (!fallbackAttempt.error && fallbackAttempt.data?.user) {
+          user = fallbackAttempt.data.user
+          session = fallbackAttempt.data.session
+          error = null
+          resolvedEmail = virtualEmail // update resolved email for downstream logic
+        }
+      }
+    }
+
+    if (error || !user) {
       // Friendly messages per user type
       if (userType === 'aluno') {
         return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 401 })
@@ -137,9 +161,9 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Enrich metadata based on user type ──────────────────────────
-    let nome   = data.user.user_metadata?.nome   || rawLogin.split('@')[0]
-    let cargo  = data.user.user_metadata?.cargo  || 'Usuário'
-    let perfil = data.user.user_metadata?.perfil || 'Usuário'
+    let nome   = user?.user_metadata?.nome   || rawLogin.split('@')[0]
+    let cargo  = user?.user_metadata?.cargo  || 'Usuário'
+    let perfil = user?.user_metadata?.perfil || 'Usuário'
 
     if (userType === 'aluno' && alunoRecord) {
       nome   = alunoRecord.nome || nome
@@ -154,7 +178,7 @@ export async function POST(request: NextRequest) {
       const { data: byId } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
-        .eq('id', data.user.id)
+        .eq('id', user!.id)
         .maybeSingle()
       
       let sysUser = byId
@@ -193,16 +217,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist enriched metadata
-    supabaseAdmin.auth.admin.updateUserById(data.user.id, {
-      user_metadata: { nome, cargo, perfil }
-    }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
-
-    const enrichedUser = {
-      ...data.user,
-      user_metadata: { ...data.user.user_metadata, nome, cargo, perfil }
+    if (user) {
+      supabaseAdmin.auth.admin.updateUserById(user.id, {
+        user_metadata: { nome, cargo, perfil }
+      }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
     }
 
-    const body = JSON.stringify({ user: enrichedUser, session: data.session })
+    const enrichedUser = {
+      ...user,
+      user_metadata: { ...user?.user_metadata, nome, cargo, perfil }
+    }
+
+    const body = JSON.stringify({ user: enrichedUser, session: session })
     const finalResponse = new NextResponse(body, {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

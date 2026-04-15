@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
+// Consistent with login/update-password: valid email must have TLD of >=2 chars
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && !email.endsWith('@impactoedu.local')
+
 export async function POST(request: Request) {
   try {
     const { query } = await request.json()
@@ -72,8 +76,11 @@ export async function POST(request: Request) {
       // Check if student already set a password in Auth
       const matricula = aluno.matricula || aluno.dados?.codigo || aluno.id
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
+      // Check if student already set a password in Auth (check both virtual and real email)
+      const storedAlunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
+      const authEmail = isValidEmail(storedAlunoEmail) ? storedAlunoEmail : virtualEmail
       const existingAuth = listData?.users?.find(
-        (u: any) => u.email?.toLowerCase() === virtualEmail || u.email?.toLowerCase() === (aluno.email || '').toLowerCase()
+        (u: any) => u.email?.toLowerCase() === virtualEmail || (isValidEmail(storedAlunoEmail) && u.email?.toLowerCase() === storedAlunoEmail)
       )
       if (existingAuth?.last_sign_in_at) {
         return NextResponse.json({ 
@@ -86,7 +93,7 @@ export async function POST(request: Request) {
           id: `aluno-${aluno.id}`,
           realId: aluno.id,
           nome: aluno.nome,
-          email: aluno.email || aluno.dados?.email || '',
+          email: isValidEmail(storedAlunoEmail) ? storedAlunoEmail : '',
           cargo: 'Aluno',
           perfil: 'Família',
           matricula: aluno.matricula || aluno.dados?.codigo || '',

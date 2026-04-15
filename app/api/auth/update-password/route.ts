@@ -3,6 +3,10 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
+// Simple RFC-like email validation — ensures format has a real domain (e.g. user@domain.com)
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && !email.endsWith('@impactoedu.local')
+
 export async function POST(request: Request) {
   try {
     const { userIdLegacy, newPass, registeredEmail } = await request.json()
@@ -50,19 +54,25 @@ export async function POST(request: Request) {
 
       const targetUser = existingByVirtual || existingByRealEmail
 
+      const targetEmail = (registeredEmail || alunoRealEmail || '').trim().toLowerCase()
+      const emailForAuth = isValidEmail(targetEmail) ? targetEmail : virtualEmail
+
       if (targetUser) {
         if (targetUser.last_sign_in_at) {
           return NextResponse.json({ error: 'Senha já definida. Use Login normal.' }, { status: 409 })
         }
-        // Update password
-        const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, { password: newPass })
+        
+        // Update password and ensure email matches what user registered
+        const updatePayload: any = { password: newPass }
+        if (isValidEmail(targetEmail) && targetUser.email !== targetEmail) {
+           updatePayload.email = targetEmail
+           updatePayload.email_confirm = true
+        }
+
+        const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, updatePayload)
         if (upErr) throw upErr
       } else {
-        // Create auth user for student (use virtual email as Supabase identifier)
-        const emailForAuth = alunoRealEmail && alunoRealEmail.includes('@') && !alunoRealEmail.endsWith('@impactoedu.local')
-          ? alunoRealEmail
-          : virtualEmail
-
+        // Create auth user for student (using registered email if valid, else virtual)
         const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: emailForAuth,
           password: newPass,
