@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -229,10 +230,11 @@ export function AuthAlunosTab() {
         </table>
       </div>
 
-      {/* Edit Modal */}
+      <AnimatePresence>
+{/* Edit Modal */}
       {editModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: 440, padding: 0, overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 440, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))' }}>
               <div style={{ fontWeight: 700 }}>Contatos de Acesso do Aluno</div>
               <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{editModal.aluno.nome}</div>
@@ -259,14 +261,16 @@ export function AuthAlunosTab() {
               <button className="btn btn-ghost" onClick={() => setEditModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveEdit}>Salvar Contatos</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Reset Modal */}
+      <AnimatePresence>
+{/* Reset Modal */}
       {resetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: 440, padding: 0, overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 440, padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))' }}>
               <div style={{ fontWeight: 700 }}>Reiniciar Acesso do Aluno</div>
               <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{resetModal.aluno.nome}</div>
@@ -284,9 +288,10 @@ export function AuthAlunosTab() {
               <button className="btn btn-ghost" onClick={() => setResetModal(null)}>Cancelar</button>
               <button className="btn btn-primary" style={{ background: '#ef4444', borderColor: '#ef4444', color: '#fff' }} onClick={handleResetPassword}>Reiniciar Acesso</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
       {/* Links (Guardians) Modal */}
       {linksModal && (() => {

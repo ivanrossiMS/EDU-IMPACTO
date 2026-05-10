@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react'
 import { useData } from '@/lib/dataContext'
 import { type CensoOperacaoEnvio } from '@/lib/dataContext'
@@ -118,10 +119,11 @@ export function HistoricoEnviosTab() {
         </div>
       )}
 
-      {/* WIZARD MODAL */}
+      <AnimatePresence>
+{/* WIZARD MODAL */}
       {showWizard && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, backdropFilter:'blur(4px)' }}>
-          <div style={{ background:'hsl(var(--bg-surface))', borderRadius:20, width:'90%', maxWidth:620, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', border:'1px solid hsl(var(--border-subtle))' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999, backdropFilter:'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background:'hsl(var(--bg-surface))', borderRadius:20, width:'90%', maxWidth:620, maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column', border:'1px solid hsl(var(--border-subtle))' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid hsl(var(--border-subtle))', background:'linear-gradient(135deg,rgba(99,102,241,0.08),rgba(16,185,129,0.04))' }}>
               <div style={{ fontWeight:800, fontSize:16 }}>Nova Operação de Envio</div>
               <div style={{ fontSize:12, color:'hsl(var(--text-muted))', marginTop:4 }}>Siga o checklist e registre o resultado do envio ao Educacenso</div>
@@ -186,9 +188,10 @@ export function HistoricoEnviosTab() {
                 <Save size={14}/> Registrar Operação
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

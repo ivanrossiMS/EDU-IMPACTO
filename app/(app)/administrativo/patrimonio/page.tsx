@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState } from 'react'
 import { Package, Plus, Search, Download, Pencil, Trash2, X, Save } from 'lucide-react'
@@ -119,10 +120,11 @@ export default function PatrimonioPage() {
         </div>
       )}
 
-      {/* Add/Edit Modal */}
+      <AnimatePresence>
+{/* Add/Edit Modal */}
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, width: '100%', maxWidth: 560, border: '1px solid hsl(var(--border-default))' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, width: '100%', maxWidth: 560, border: '1px solid hsl(var(--border-default))' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{modal === 'add' ? 'Cadastrar Bem' : 'Editar Bem'}</div>
               <button onClick={() => setModal(null)} className="btn btn-ghost btn-icon"><X size={16} /></button>
@@ -146,14 +148,16 @@ export default function PatrimonioPage() {
               <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={save}><Save size={13} />{modal === 'add' ? 'Cadastrar' : 'Salvar'}</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Confirm Delete */}
+      <AnimatePresence>
+{/* Confirm Delete */}
       {del && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, padding: 28, maxWidth: 420, border: '1px solid hsl(var(--border-default))', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, padding: 28, maxWidth: 420, border: '1px solid hsl(var(--border-default))', textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🗑️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir bem?</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 20 }}>Esta ação não pode ser desfeita.</div>
@@ -161,9 +165,10 @@ export default function PatrimonioPage() {
               <button className="btn btn-ghost" onClick={() => setDel(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={remove}><Trash2 size={13} />Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

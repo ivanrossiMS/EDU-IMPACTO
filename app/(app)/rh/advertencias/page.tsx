@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -385,10 +386,11 @@ export default function AdvertenciasPage() {
         </div>
       )}
 
-      {/* ── MODAL DE CRIAÇÃO/EDIÇÃO ─────────────────────────────────────────── */}
+      <AnimatePresence>
+{/* ── MODAL DE CRIAÇÃO/EDIÇÃO ─────────────────────────────────────────── */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', padding: 28, boxShadow: '0 32px 80px rgba(0,0,0,0.5)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', padding: 28, boxShadow: '0 32px 80px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
               <div>
                 <div style={{ fontWeight: 900, fontSize: 17 }}>{editId ? 'Editar Advertência' : 'Nova Advertência'}</div>
@@ -528,9 +530,10 @@ export default function AdvertenciasPage() {
                 <CheckCircle size={13} />{editId ? 'Salvar Alterações' : 'Registrar Advertência'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

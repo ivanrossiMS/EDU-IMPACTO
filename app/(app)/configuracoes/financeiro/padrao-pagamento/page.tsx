@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { formatDate } from '@/lib/utils'
 import { useData, ConfigPadraoPagamento, ParcelaPadrao, newId, ConfigEvento } from '@/lib/dataContext'
@@ -191,10 +192,11 @@ export default function PadraoPagamentoPage() {
 
   return (
     <>
-      {/* Modal seletor de evento — overlay global */}
+      <AnimatePresence>
+{/* Modal seletor de evento — overlay global */}
       {showEventoPicker && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '60px 20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 560, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1000, padding: '60px 20px', backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 560, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 80px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'hsl(var(--bg-elevated))' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -247,9 +249,10 @@ export default function PadraoPagamentoPage() {
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setForm(p => ({ ...p, eventoId: '', eventoDescricao: '' })); setShowEventoPicker(false) }}><X size={12} />Limpar seleção</button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowEventoPicker(false)}>Fechar</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
       <div>
       <div className="page-header">
         <div>

@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -639,10 +640,11 @@ export default function UsuariosPage() {
         </Modal>
       )}
 
-      {/* Confirm delete user */}
+      <AnimatePresence>
+{/* Confirm delete user */}
       {deleteUserId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir usuário?</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 20 }}>O usuário será removido permanentemente.</div>
@@ -650,14 +652,16 @@ export default function UsuariosPage() {
               <button className="btn btn-ghost" onClick={() => setDeleteUserId(null)}>Cancelar</button>
               <button style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 700, cursor: 'pointer' }} onClick={deleteUser}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Confirm delete perfil */}
+      <AnimatePresence>
+{/* Confirm delete perfil */}
       {deletePerfilId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir perfil?</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 20 }}>O perfil será removido. Usuários com este perfil não serão afetados.</div>
@@ -665,9 +669,10 @@ export default function UsuariosPage() {
               <button className="btn btn-ghost" onClick={() => setDeletePerfilId(null)}>Cancelar</button>
               <button style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontWeight: 700, cursor: 'pointer' }} onClick={deletePerfil}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

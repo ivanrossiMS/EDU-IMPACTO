@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useState, useCallback, useMemo, useRef } from 'react'
@@ -467,9 +468,10 @@ function PainelTabletContent() {
       {config.rfidEnabled && <RFIDInput ref={rfidRef} onRead={handleRFID} enabled={mode === 'idle' || mode === 'rfid'}
 />}
 
-      {/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
+      <AnimatePresence>
+{/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
       {blockInfo && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', inset: 0,
           background: blockInfo.type === 'proibido'
             ? 'linear-gradient(160deg, #1a0000 0%, #2d0000 60%, #1a0000 100%)'
@@ -481,7 +483,7 @@ function PainelTabletContent() {
           animation: 'slideUp 0.3s ease',
         }}>
           {/* Icon */}
-          <div style={{
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{
             width: 120, height: 120, borderRadius: '50%',
             background: blockInfo.type === 'proibido' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.12)',
             border: `3px solid ${blockInfo.type === 'proibido' ? 'rgba(239,68,68,0.5)' : 'rgba(245,158,11,0.4)'}`,
@@ -490,7 +492,7 @@ function PainelTabletContent() {
             animation: 'urgentRingCenter 1.5s ease infinite',
           }}>
             {blockInfo.type === 'proibido' ? '🚫' : '📅'}
-          </div>
+          </motion.div>
 
           {/* Title */}
           <div style={{
@@ -540,12 +542,14 @@ function PainelTabletContent() {
           }}>
             Cancelar agora
           </button>
-        </div>
-      )}
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* ── Toast ─────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+{/* ── Toast ─────────────────────────────────────────────────────── */}
       {toast && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', top: 24, left: '50%',
           transform: 'translateX(-50%)',
           padding: '12px 28px', borderRadius: 100, fontSize: 14, fontWeight: 800,
@@ -554,8 +558,9 @@ function PainelTabletContent() {
           animation: 'slideDown 0.3s ease', whiteSpace: 'nowrap',
         }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
-        </div>
-      )}
+        
+</motion.div>
+)}</AnimatePresence>
 
       {/* ── HEADER ────────────────────────────────────────────────────── */}
       <div style={{

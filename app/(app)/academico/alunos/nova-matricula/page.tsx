@@ -6,7 +6,7 @@ import { useData, newId, newEventoId, newParcelaId } from '@/lib/dataContext'
 import {
   User, MapPin, Layers, Users, Baby, Heart, GraduationCap, DollarSign, FileText,
   Check, ChevronRight, ChevronLeft, AlertCircle, CheckCircle,
-  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt, Trash2, Phone, Mail
+  Copy, Plus, PlusCircle, Loader2, X, Search, Printer, Download, Eye, Pencil, Camera, Receipt, Trash2, Phone, Mail, BookOpen
 } from 'lucide-react'
 import { ModalEmitirAluno }     from '@/app/(app)/financeiro/boletos/components/ModalEmitirAluno'
 import { ModalHistoricoBoletos } from '@/app/(app)/financeiro/boletos/components/ModalHistoricoBoletos'
@@ -454,7 +454,7 @@ export default function NovaMatriculaPage() {
   const genCodigo = () => String(Math.floor(100000 + Math.random() * 900000))
   const router = useRouter()
   const dlg = useDialog()
-  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], movimentacoesManuais = [], setMovimentacoesManuais, transferencias = [], setTransferencias, logSystemAction } = useData() || {}
+  const { alunos = [], setAlunos, titulos = [], setTitulos, turmas = [], cfgNiveisEnsino = [], cfgDisciplinas = [], cfgPadroesPagamento = [], cfgGruposDesconto = [], cfgEventos = [], cfgMetodosPagamento = [], cfgCartoes = [], cfgConvenios = [], setCfgConvenios, cfgSituacaoAluno = [], cfgTurnos = [], cfgGruposAlunos = [], movimentacoesManuais = [], setMovimentacoesManuais, transferencias = [], setTransferencias, logSystemAction } = useData() || {}
 
   const [caixasAbertos, setCaixasAbertos] = useState<any[]>([])
 
@@ -640,6 +640,9 @@ export default function NovaMatriculaPage() {
     if (a.historicoMatriculas && Array.isArray(a.historicoMatriculas)) {
       setHistorico(a.historicoMatriculas)
     }
+    if ((a.dados as any)?.progressaoParcial && Array.isArray((a.dados as any).progressaoParcial)) {
+      setProgressaoParcial((a.dados as any).progressaoParcial)
+    }
 
     // ── Financeiro (configuração) ─────────────────────────────────────────────
     if (a.configFinanceiro) {
@@ -814,6 +817,23 @@ export default function NovaMatriculaPage() {
   }
   const [formHist, setFormHist] = useState<HistoricoItem>(novoHistItem)
   const fH = (k: keyof HistoricoItem, v: string) => setFormHist(h=>({...h,[k]:v}))
+
+  // Progressão Parcial
+  interface ProgressaoParcial {
+    id: string; ano: string; serie: string; disciplina: string;
+    tipo: string; resultado: string; dataResultado: string; turno: string;
+    cargaHoraria: string; numeroChamada: string;
+  }
+  const novoProgParcial = (): ProgressaoParcial => ({
+    id: Date.now().toString(), ano: String(new Date().getFullYear()), serie: '', disciplina: '',
+    tipo: 'Progressão Parcial', resultado: 'Cursando', dataResultado: new Date().toISOString().split('T')[0],
+    turno: 'Matutino', cargaHoraria: '', numeroChamada: ''
+  })
+  const [progressaoParcial, setProgressaoParcial] = useState<ProgressaoParcial[]>([])
+  const [modalProgressao, setModalProgressao] = useState(false)
+  const [editProgId, setEditProgId] = useState<string|null>(null)
+  const [formProg, setFormProg] = useState<ProgressaoParcial>(novoProgParcial)
+  const fP = (k: keyof ProgressaoParcial, v: string) => setFormProg(p=>({...p,[k]:v}))
 
   // Financeiro
   const [fin, setFin] = useState({
@@ -1546,6 +1566,7 @@ export default function NovaMatriculaPage() {
       parcelas: parcelas,
       obsFinanceiro: obsAlunoFin,
       turmaId:turmaIdEfetivo2,
+      progressaoParcial: progressaoParcial,
     }
     if (isEdicao) {
       setAlunos(prev => prev.map(a => a.id === realEditId ? { ...a, ...payload } : a))
@@ -1651,7 +1672,7 @@ export default function NovaMatriculaPage() {
       ))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turmas, isEdicao, editId])
+  }, [turmas, isEdicao, editId, aluno, todosResp, mat, historico, fin, parcelas, saude, obsAlunoFin, progressaoParcial])
 
   const autoSalvar = useCallback(() => {
     // ── Guard: não salvar registros sem nome do aluno E sem responsável ──────
@@ -1694,6 +1715,7 @@ export default function NovaMatriculaPage() {
       parcelas:parcelas,
       obsFinanceiro:obsAlunoFin,
       turmaId:turmaIdEfetivo,
+      progressaoParcial: progressaoParcial,
     }
     if (isEdicao && realEditId) {
       setAlunos(prev => prev.map(a => a.id === realEditId ? {...a, ...payload} : a))
@@ -1774,7 +1796,7 @@ export default function NovaMatriculaPage() {
     if (temNomeAluno || temNomeResp) {
       autoSalvarRef.current()
     }
-  }, [historico, parcelas])
+  }, [historico, parcelas, progressaoParcial])
 
   const stepContent = [
     // STEP 0: Responsáveis
@@ -2355,6 +2377,194 @@ export default function NovaMatriculaPage() {
           </div>
         )}
       </div>
+
+            {/* ── Progressão Parcial ── */}
+      <div style={{marginTop:24}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div style={{fontWeight:800,fontSize:15,display:'flex',alignItems:'center',gap:8}}>
+            <BookOpen size={16} color="#8b5cf6"/> Progressão Parcial
+          </div>
+          <button className="btn btn-sm" style={{background:'linear-gradient(135deg,#8b5cf6,#6366f1)',color:'#fff',fontWeight:700,border:'none',boxShadow:'0 4px 14px rgba(139,92,246,0.3)',borderRadius:8}} 
+            onClick={()=>{
+              setFormProg(novoProgParcial())
+              setEditProgId(null)
+              setModalProgressao(true)
+            }}>
+            + Adicionar Progressão
+          </button>
+        </div>
+
+        {progressaoParcial.length === 0 ? (
+          <div style={{background:'hsl(var(--bg-base))',border:'1px dashed hsl(var(--border-subtle))',borderRadius:12,padding:'24px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:8}}>
+            <div style={{width:40,height:40,borderRadius:10,background:'rgba(139,92,246,0.1)',display:'flex',alignItems:'center',justifyContent:'center',color:'#8b5cf6'}}><BookOpen size={20}/></div>
+            <div style={{fontWeight:700,fontSize:14}}>Nenhuma progressão cadastrada</div>
+            <div style={{fontSize:13,color:'hsl(var(--text-muted))',maxWidth:300}}>Insira disciplinas que o aluno cursará ou cursou em regime de progressão parcial.</div>
+          </div>
+        ) : (
+          <div style={{border:'1px solid hsl(var(--border-subtle))',borderRadius:12,overflow:'hidden',background:'hsl(var(--bg-base))'}}>
+            <table className="table" style={{width:'100%',textAlign:'left',fontSize:13}}>
+              <thead>
+                <tr style={{background:'linear-gradient(90deg,rgba(139,92,246,0.05),transparent)'}}>
+                  <th>Ano</th>
+                  <th>Série</th>
+                  <th>Disciplina</th>
+                  <th>Tipo</th>
+                  <th>Resultado</th>
+                  <th>Data</th>
+                  <th>Turno</th>
+                  <th>Carga Hor.</th>
+                  <th>Nº.</th>
+                  <th style={{textAlign:'right'}}>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {progressaoParcial.map(p => (
+                  <tr key={p.id} style={{borderBottom:'1px solid hsl(var(--border-subtle))', background: p.resultado === 'Cursando' ? 'rgba(16,185,129,0.08)' : 'transparent'}}>
+                    <td style={{fontWeight:600}}>{p.ano}</td>
+                    <td>{p.serie}</td>
+                    <td><strong style={{color:'#6366f1'}}>{p.disciplina}</strong></td>
+                    <td>{p.tipo}</td>
+                    <td><span className={`badge ${p.resultado==='Cursando'?'badge-warning':p.resultado==='Aprovado(a)'?'badge-success':'badge-danger'}`}>{p.resultado}</span></td>
+                    <td style={{color:'hsl(var(--text-muted))'}}>{p.dataResultado ? p.dataResultado.split('-').reverse().join('/') : '-'}</td>
+                    <td>{p.turno}</td>
+                    <td>{p.cargaHoraria || '-'}</td>
+                    <td>{p.numeroChamada || '-'}</td>
+                    <td>
+                      <div style={{display:'flex',justifyContent:'flex-end',gap:4}}>
+                        <button className="btn btn-ghost btn-icon btn-sm" style={{color:'#3b82f6'}} onClick={()=>{
+                          setFormProg(p)
+                          setEditProgId(p.id)
+                          setModalProgressao(true)
+                        }}><Pencil size={11}/></button>
+                        <button className="btn btn-ghost btn-icon btn-sm" style={{color:'#f87171'}} onClick={()=>{
+                          dlg.confirm('Excluir esta disciplina?', {title:'Atenção',confirmLabel:'Excluir',type:'error'}).then(y=>{
+                            if(y) setProgressaoParcial(prev=>prev.filter(x=>x.id!==p.id))
+                          })
+                        }}><X size={11}/></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {modalProgressao && (
+<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:3500,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+  <div style={{background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:600,maxHeight:'90vh',overflowY:'auto',border:'1px solid hsl(var(--border-subtle))',boxShadow:'0 40px 120px rgba(0,0,0,0.8)',display:'flex',flexDirection:'column'}}>
+    <div style={{padding:'18px 24px',borderBottom:'1px solid hsl(var(--border-subtle))',background:'linear-gradient(135deg,rgba(139,92,246,0.1),rgba(99,102,241,0.05))',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:40,height:40,borderRadius:10,background:'rgba(139,92,246,0.15)',display:'flex',alignItems:'center',justifyContent:'center',color:'#8b5cf6'}}><BookOpen size={18}/></div>
+        <div>
+          <div style={{fontWeight:800,fontSize:15}}>{editProgId ? 'Editar Progressão Parcial' : 'Nova Progressão Parcial'}</div>
+          <div style={{fontSize:11,color:'hsl(var(--text-muted))'}}>Aluno(a): {(alunoEditando as any)?.nome || aluno?.nome || 'Em cadastro'}</div>
+        </div>
+      </div>
+      <button className="btn btn-ghost btn-icon" onClick={()=>setModalProgressao(false)}><X size={18}/></button>
+    </div>
+    <div style={{padding:'24px', display:'flex', flexDirection:'column', gap:16}}>
+      <div style={{display:'grid', gridTemplateColumns:'1fr', gap:16}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Ano Letivo</label>
+          <select className="form-input" value={formProg.ano} onChange={(e)=>fP('ano', e.target.value)}>
+             {[new Date().getFullYear()+1, new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(a=><option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Série</label>
+        <select className="form-input" value={formProg.serie} onChange={(e)=>fP('serie', e.target.value)}>
+          <option value="">Selecione uma Série...</option>
+          {cfgNiveisEnsino.flatMap((n:any)=>n.series||[]).map((s:any)=>(
+            <option key={s.id} value={s.nome}>{s.nome}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Disciplina</label>
+        <select className="form-input" value={formProg.disciplina} onChange={(e)=>fP('disciplina', e.target.value)}>
+          <option value="">Selecione uma Disciplina...</option>
+          {cfgDisciplinas.map((d:any)=>(
+            <option key={d.id} value={d.nome}>{d.nome}</option>
+          ))}
+        </select>
+      </div>
+      
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Tipo</label>
+          <select className="form-input" value={formProg.tipo} onChange={(e)=>fP('tipo', e.target.value)}>
+            <option value="Progressão Parcial">Progressão Parcial</option>
+            <option value="Dependência">Dependência</option>
+            <option value="Adaptação">Adaptação</option>
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Resultado</label>
+          <select className="form-input" value={formProg.resultado} onChange={(e)=>fP('resultado', e.target.value)}>
+            <option value="Cursando">Cursando</option>
+            <option value="Aprovado(a)">Aprovado(a)</option>
+            <option value="Reprovado(a)">Reprovado(a)</option>
+            <option value="Acel. Estudos">Acel. Estudos</option>
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Data Resultado</label>
+          <input type="date" className="form-input" value={formProg.dataResultado} onChange={(e)=>fP('dataResultado', e.target.value)} />
+        </div>
+      </div>
+
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16}}>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Turno</label>
+          <select className="form-input" value={formProg.turno} onChange={(e)=>fP('turno', e.target.value)}>
+            <option value="">Selecione...</option>
+            {cfgTurnos.map((t:any)=><option key={t.id} value={t.nome}>{t.nome}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Carga Horária</label>
+          <input type="text" className="form-input" value={formProg.cargaHoraria} onChange={(e)=>fP('cargaHoraria', e.target.value)} />
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'hsl(var(--text-muted))',marginBottom:4,display:'block'}}>Número Chamada</label>
+          <input type="number" className="form-input" value={formProg.numeroChamada} onChange={(e)=>fP('numeroChamada', e.target.value)} />
+        </div>
+      </div>
+
+    </div>
+    <div style={{padding:'14px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'flex-end',gap:10,background:'hsl(var(--bg-elevated))'}}>
+      <button className="btn btn-secondary" onClick={()=>setModalProgressao(false)}><X size={15}/> Fechar</button>
+      <button className="btn btn-primary" style={{background:'linear-gradient(135deg,#8b5cf6,#6366f1)'}} onClick={()=>{
+        if(!formProg.serie || !formProg.disciplina) return dlg.alert('Preencha Série e Disciplina.', {title:'Atenção',type:'warning'});
+        
+        let finalProg = { ...formProg };
+        if (!finalProg.numeroChamada && !editProgId) {
+          let count = 1;
+          for (const al of alunos) {
+            try {
+              const pObj = typeof al.dados === 'string' ? JSON.parse(al.dados) : (al.dados || {});
+              const par = pObj?.progressaoParcial;
+              if (Array.isArray(par)) {
+                if (par.some((px:any) => px.ano === finalProg.ano && px.serie === finalProg.serie && px.disciplina === finalProg.disciplina)) count++;
+              }
+            } catch(e) {}
+          }
+          finalProg.numeroChamada = String(count);
+        }
+
+        setProgressaoParcial(prev => editProgId ? prev.map(p => p.id === editProgId ? finalProg : p) : [...prev, finalProg]);
+        setModalProgressao(false);
+      }}><Check size={15}/> Gravar</button>
+    </div>
+  </div>
+</div>
+)}
+
+
+      
 
       {modalMatricula && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>

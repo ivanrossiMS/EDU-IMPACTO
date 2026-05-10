@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useState } from 'react'
@@ -206,12 +207,13 @@ export default function ColaboradorMomentosPage() {
         </div>
       )}
 
-      {showComposer && (
-        <div style={{
+      <AnimatePresence>
+{showComposer && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
           zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          <div className="card" style={{ width: 500, display: 'flex', flexDirection: 'column' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 500, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 18, fontWeight: 700 }}>Publicar Novo Momento</h3>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowComposer(false)}><X size={18} /></button>
@@ -248,9 +250,10 @@ export default function ColaboradorMomentosPage() {
             <div style={{ padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', display: 'flex', justifyContent: 'flex-end', borderRadius: '0 0 16px 16px' }}>
                <button className="btn btn-primary" onClick={handlePostarMomento}>Enviar p/ Moderação</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

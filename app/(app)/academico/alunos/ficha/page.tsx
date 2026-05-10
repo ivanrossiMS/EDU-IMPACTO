@@ -130,9 +130,9 @@ function Ficha360Inner() {
     const mapa: Record<string, { soma: number; count: number }> = {}
     lancamentosNota.forEach(l => {
       l.notas.forEach(n => {
-        if (n.alunoId !== aluno.id) return
+        if (n.alunoId !== aluno.id || n.mediaParcial === null) return
         if (!mapa[l.disciplina]) mapa[l.disciplina] = { soma: 0, count: 0 }
-        mapa[l.disciplina].soma += n.media
+        mapa[l.disciplina].soma += n.mediaParcial
         mapa[l.disciplina].count += 1
       })
     })

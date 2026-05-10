@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useState, useMemo, useRef, useEffect } from 'react'
@@ -274,10 +275,11 @@ export default function FornecedoresPage() {
         </div>
       )}
 
-      {/* Modal */}
+      <AnimatePresence>
+{/* Modal */}
       {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 760, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 760, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))' }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{editId ? 'Editar Fornecedor' : 'Novo Fornecedor'}</div>
               <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Código: {form.codigo}</div>
@@ -424,22 +426,25 @@ export default function FornecedoresPage() {
               <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancelar</button>
               <button className="btn btn-primary" onClick={handleSave} disabled={!form.razaoSocial.trim()}><Check size={14} />{editId ? 'Salvar' : 'Cadastrar'}</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 380, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
+      <AnimatePresence>
+{confirmId && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 380, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', fontWeight: 700, color: '#f87171' }}>Excluir Fornecedor</div>
             <div style={{ padding: '20px 24px', fontSize: 13, color: 'hsl(var(--text-muted))' }}>O fornecedor será removido permanentemente. Esta ação não pode ser desfeita.</div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 10, background: 'hsl(var(--bg-elevated))' }}>
               <button className="btn btn-secondary" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={() => { setFornecedoresCad(prev => prev.filter(f => f.id !== confirmId)); setConfirmId(null) }}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

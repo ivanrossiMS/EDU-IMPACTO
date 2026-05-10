@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -406,10 +407,11 @@ export default function CalendarioPage() {
         </div>
       </div>
 
-      {/* Modal novo evento */}
+      <AnimatePresence>
+{/* Modal novo evento */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
-          <div className="card" style={{ width: '100%', maxWidth: 580, padding: '24px' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: '100%', maxWidth: 580, padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16 }}>{editingId ? 'Editar Evento' : 'Novo Evento'}</div>
               <button className="btn btn-ghost btn-icon" onClick={() => { setShowModal(false); setEditingId(null); }}><X size={16} /></button>
@@ -467,9 +469,10 @@ export default function CalendarioPage() {
                 <Save size={13} /> {editingId ? 'Salvar Alterações' : 'Salvar Evento'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useMemo } from 'react'
 import { useData } from '@/lib/dataContext'
 import { type CensoPendencia, type CensoPendenciaTipo, type CensoPendenciaStatus } from '@/lib/dataContext'
@@ -221,10 +222,11 @@ export function PendenciasTab() {
         />
       )}
 
-      {/* DRAWER DETAIL */}
+      <AnimatePresence>
+{/* DRAWER DETAIL */}
       {detail && (
-        <div style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={() => setDetail(null)}>
-          <div style={{ position:'fixed', right:0, top:0, bottom:0, width:420, background:'hsl(var(--bg-surface))', border:'1px solid hsl(var(--border-subtle))', borderRadius:'16px 0 0 16px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-10px 0 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position:'fixed', inset:0, zIndex:9998 }} onClick={() => setDetail(null)}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ position:'fixed', right:0, top:0, bottom:0, width:420, background:'hsl(var(--bg-surface))', border:'1px solid hsl(var(--border-subtle))', borderRadius:'16px 0 0 16px', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'-10px 0 40px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
             <div style={{ padding:'16px 20px', borderBottom:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-overlay))', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div style={{ fontWeight:800 }}>Detalhes da Pendência</div>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setDetail(null)}><X size={16}/></button>
@@ -270,9 +272,10 @@ export function PendenciasTab() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

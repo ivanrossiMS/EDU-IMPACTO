@@ -1,0 +1,63 @@
+.next/dev/types/validator.ts(1566,31): error TS2344: Type 'typeof import("/Users/ivanrossi/Desktop/Documentos-Backup/A\u0301rea de Trabalho/EDU-IMPACTO/impacto-edu-app/app/api/alunos/[id]/evasao/route")' does not satisfy the constraint 'RouteHandlerConfig<"/api/alunos/[id]/evasao">'.
+  Types of property 'PATCH' are incompatible.
+    Type '(req: Request, { params }: { params: { id: string; }; }) => Promise<NextResponse<{ success: boolean; }> | NextResponse<{ error: any; }>>' is not assignable to type '(request: NextRequest, context: { params: Promise<{ id: string; }>; }) => void | Response | Promise<void | Response>'.
+      Types of parameters '__1' and 'context' are incompatible.
+        Type '{ params: Promise<{ id: string; }>; }' is not assignable to type '{ params: { id: string; }; }'.
+          Types of property 'params' are incompatible.
+            Property 'id' is missing in type 'Promise<{ id: string; }>' but required in type '{ id: string; }'.
+app/(app)/academico/alunos/ficha/page.tsx(135,38): error TS2339: Property 'media' does not exist on type '{ alunoId: string; valores: Record<string, string | number | null>; mediaParcial: number | null; faltas: number; situacao?: string | undefined; }'.
+app/(app)/academico/alunos/nova-matricula/page.tsx(2548,38): error TS2339: Property 'dados' does not exist on type 'Aluno'.
+app/(app)/academico/alunos/nova-matricula/page.tsx(2548,73): error TS2339: Property 'dados' does not exist on type 'Aluno'.
+app/(app)/academico/alunos/nova-matricula/page.tsx(2548,86): error TS2339: Property 'dados' does not exist on type 'Aluno'.
+app/(app)/academico/conselho/page.tsx(274,86): error TS2339: Property 'media' does not exist on type '{ alunoId: string; valores: Record<string, string | number | null>; mediaParcial: number | null; faltas: number; situacao?: string | undefined; }'.
+app/(app)/academico/conselho/page.tsx(275,84): error TS2339: Property 'media' does not exist on type '{ alunoId: string; valores: Record<string, string | number | null>; mediaParcial: number | null; faltas: number; situacao?: string | undefined; }'.
+app/(app)/relatorios/mapa-turmas/page.tsx(130,76): error TS2551: Property 'serie_id' does not exist on type 'Turma'. Did you mean 'serieId'?
+app/(app)/relatorios/mapa-turmas/page.tsx(369,19): error TS2322: Type '(value: any, name: string) => [any, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(value: any, name: string) => [any, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'name' and 'name' are incompatible.
+      Type 'NameType | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+app/(app)/relatorios/nao-rematriculados/page.tsx(155,16): error TS2345: Argument of type '{ title: string; data: { Nome: string; Matricula: string; 'S\u00E9rie Anterior': string; 'Turma Anterior': string; 'Sit. Anterior': string; 'D\u00EDvida R$': number; 'Resp. Fin': string; 'Resp. Ped': string; Contato: string; Motivo: string; }[]; columns: ({ ...; } | { ...; })[]; }' is not assignable to parameter of type 'ExportXLSXOptions'.
+  Property 'userName' is missing in type '{ title: string; data: { Nome: string; Matricula: string; 'S\u00E9rie Anterior': string; 'Turma Anterior': string; 'Sit. Anterior': string; 'D\u00EDvida R$': number; 'Resp. Fin': string; 'Resp. Ped': string; Contato: string; Motivo: string; }[]; columns: ({ ...; } | { ...; })[]; }' but required in type 'ExportXLSXOptions'.
+app/(app)/relatorios/ocorrencias/page.tsx(503,183): error TS2322: Type '(v: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+app/(app)/relatorios/ocorrencias/page.tsx(542,198): error TS2322: Type '(v: number) => [string | number, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number) => [string | number, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+app/(app)/relatorios/relacao-alunos/page.tsx(704,7): error TS2322: Type '({ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; })[] | ({ ...; } | ... 1 more ... | { ...; })[]' is not assignable to type 'ColumnDef[]'.
+  Type '({ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; })[]' is not assignable to type 'ColumnDef[]'.
+    Type '{ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; }' is not assignable to type 'ColumnDef'.
+      Type '{ key: string; label: string; type: "signature"; align?: undefined; width?: undefined; }' is not assignable to type 'ColumnDef'.
+        Types of property 'type' are incompatible.
+          Type '"signature"' is not assignable to type '"number" | "boolean" | "date" | "text" | "percent" | "currency" | "badge"'.
+app/(app)/relatorios/relacao-alunos/page.tsx(719,7): error TS2322: Type '({ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; })[] | ({ ...; } | ... 1 more ... | { ...; })[]' is not assignable to type 'ColumnDef[]'.
+  Type '({ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; })[]' is not assignable to type 'ColumnDef[]'.
+    Type '{ key: string; label: string; type: "text"; align: "center"; width: number; } | { key: string; label: string; type: "text"; width: number; align?: undefined; } | { key: string; label: string; type: "text"; align?: undefined; width?: undefined; } | { ...; }' is not assignable to type 'ColumnDef'.
+      Type '{ key: string; label: string; type: "signature"; align?: undefined; width?: undefined; }' is not assignable to type 'ColumnDef'.
+        Types of property 'type' are incompatible.
+          Type '"signature"' is not assignable to type '"number" | "boolean" | "date" | "text" | "percent" | "currency" | "badge"'.
+app/(app)/relatorios/rematriculas/page.tsx(128,54): error TS2339: Property 'label' does not exist on type 'SerieEnsino'.
+app/(app)/relatorios/ticket-medio/page.tsx(79,58): error TS2339: Property 'dados' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(86,37): error TS2339: Property 'nivel_ensino_id' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(86,66): error TS2339: Property 'nivelId' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(86,87): error TS2339: Property 'dados' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(86,123): error TS2339: Property 'dados' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(86,151): error TS2339: Property 'nivel_id' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(94,25): error TS2339: Property 'nivel' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(95,30): error TS2339: Property 'nivel' does not exist on type 'Turma'.
+app/(app)/relatorios/ticket-medio/page.tsx(471,25): error TS2322: Type '(v: number, n: string) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number, n: string) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+lib/reports/exportPDF.ts(26,7): error TS2367: This comparison appears to be unintentional because the types '"number" | "boolean" | "date" | "text" | "percent" | "currency" | "badge"' and '"signature"' have no overlap.
+lib/reports/exportXLSX.ts(18,7): error TS2367: This comparison appears to be unintentional because the types '"number" | "boolean" | "date" | "text" | "percent" | "currency" | "badge"' and '"signature"' have no overlap.
+lib/reports/reportEngine.ts(837,55): error TS2304: Cannot find name 'QueryFilters'.
+lib/reports/reportEngine.ts(923,22): error TS2304: Cannot find name 'resolveNivelDeTurma'.
+lib/reports/reportEngine.ts(938,22): error TS2304: Cannot find name 'getPhone'.
+lib/reports/reportEngine.ts(938,38): error TS2304: Cannot find name 'getPhone'.

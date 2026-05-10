@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useData, ConfigNivelEnsino, SerieEnsino, newId } from '@/lib/dataContext'
 import { useState } from 'react'
 import { Plus, Edit2, Trash2, Check, GraduationCap, ChevronDown, ChevronUp, X, BookOpen, Hash, Sparkles, Building2 } from 'lucide-react'
@@ -377,10 +378,11 @@ export default function NiveisEnsinoPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      <AnimatePresence>
+{/* Modal */}
       {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 660, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)', marginBottom: 24 }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 660, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.6)', marginBottom: 24 }}>
 
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -576,9 +578,10 @@ export default function NiveisEnsinoPage() {
                 <Check size={13} />{editId ? 'Salvar Alterações' : 'Cadastrar Nível'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

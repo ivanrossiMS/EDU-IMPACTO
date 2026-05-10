@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import React, { useState } from 'react'
 import { useFormularios, FormSubmission } from '@/lib/formulariosContext'
@@ -169,9 +170,10 @@ export function FormFiller({ formId, onNavigate }: Props) {
         </div>
       </div>
 
-      {isSignModalOpen && (
-         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-            <div className="card" style={{ width: 400, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+      <AnimatePresence>
+{isSignModalOpen && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+            <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                <div style={{ width: 64, height: 64, background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
                   <Lock size={32} />
                </div>
@@ -194,9 +196,10 @@ export function FormFiller({ formId, onNavigate }: Props) {
                    finishSubmission()
                  }}><CheckCircle2 size={16}/> Comfirmar</button>
                </div>
-            </div>
-         </div>
-      )}
+            </motion.div>
+         
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

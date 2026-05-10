@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import React from 'react'
 import { Aluno, Titulo } from '@/lib/dataContext'
@@ -273,9 +274,10 @@ export function AbaHistorico({ titulos, alunos, onReprint }: Props) {
         </div>
       )}
 
-      {/* ── Popup detalhe de boleto com múltiplos eventos ── */}
+      <AnimatePresence>
+{/* ── Popup detalhe de boleto com múltiplos eventos ── */}
       {popupGrupo && (
-        <div
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
           style={{
             position: 'fixed', inset: 0, zIndex: 9000,
             background: 'rgba(0,0,0,0.72)',
@@ -283,7 +285,7 @@ export function AbaHistorico({ titulos, alunos, onReprint }: Props) {
           }}
           onClick={() => setPopupGrupo(null)}
         >
-          <div
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
             style={{
               background: 'hsl(var(--bg-base))',
               borderRadius: 20, width: '100%', maxWidth: 560,
@@ -371,9 +373,10 @@ export function AbaHistorico({ titulos, alunos, onReprint }: Props) {
                 Total: {fmtMoeda(popupGrupo.valorTotal)}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

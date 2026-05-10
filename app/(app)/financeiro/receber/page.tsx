@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useState, useMemo, useEffect } from 'react'
@@ -705,10 +706,11 @@ export default function ContasReceberPage() {
         </div>
       )}
 
-      {/* ─── Modal de Seleção de Evento ─── */}
+      <AnimatePresence>
+{/* ─── Modal de Seleção de Evento ─── */}
       {showEventoModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
             {/* Header */}
             <div style={{ padding: '16px 24px', background: 'linear-gradient(135deg,rgba(59,130,246,0.08),rgba(16,185,129,0.04))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -755,9 +757,10 @@ export default function ContasReceberPage() {
                 ))
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
       {/* ─── Modal Novo / Editar ─── */}
       {(modal === 'new' || modal === 'edit') && (
@@ -1098,10 +1101,11 @@ export default function ContasReceberPage() {
         </div>
       )}
 
-      {/* ─── Confirm Delete ─── */}
+      <AnimatePresence>
+{/* ─── Confirm Delete ─── */}
       {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 360, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 360, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
             <div style={{ padding: '14px 24px', background: 'rgba(239,68,68,0.06)', borderBottom: '1px solid hsl(var(--border-subtle))', fontWeight: 700, color: '#f87171', display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
               <AlertTriangle size={15} />Excluir Título
             </div>
@@ -1110,9 +1114,10 @@ export default function ContasReceberPage() {
               <button className="btn btn-secondary" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={13} />Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

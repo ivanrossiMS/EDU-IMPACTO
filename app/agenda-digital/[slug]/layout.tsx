@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -202,10 +203,11 @@ export default function AgendaDigitalFamilyLayout({
 
   return (
     <>
-    {/* Student Switcher Overlay */}
+    <AnimatePresence>
+{/* Student Switcher Overlay */}
     {switcherOpen && (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
-        <div className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
+        <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
             <button onClick={() => setSwitcherOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
@@ -229,9 +231,10 @@ export default function AgendaDigitalFamilyLayout({
               </div>
             ))}
           </div>
-        </div>
-      </div>
-    )}
+        </motion.div>
+      
+</motion.div>
+)}</AnimatePresence>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `

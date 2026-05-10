@@ -26,9 +26,14 @@ function isConfigCacheFresh(): boolean {
 // All known config chaves — updated centrally so we batch them
 const ALL_CONFIG_CHAVES = [
   'cfgTurnos', 'cfgSituacaoAluno', 'cfgGruposAlunos',
-  'cfgDisciplinas', 'cfgNiveisEnsino', 'cfgTiposOcorrencia', 'cfgEsquemasAvaliacao',
+  'cfgDisciplinas', 'cfgNiveisEnsino', 'cfgSeries', 'cfgTiposOcorrencia', 'cfgEsquemasAvaliacao',
+  'cfgGruposAvaliacao', 'cfgArredondamentos',
+  // Esquema de Notas — was missing from bulk fetch (data lost on reload/cross-browser)
+  'esquemaNota',
+  'cfgFormulasNotas',
   'cfgCentrosCusto', 'cfgMetodosPagamento', 'cfgCartoes', 'cfgEventos',
-  'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas', 'cfgTiposDocumento'
+  'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas', 'cfgTiposDocumento',
+  'cfgConvenios', 'cfgCalendarioLetivo',
 ]
 
 /**

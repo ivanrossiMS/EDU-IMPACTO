@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -812,14 +813,15 @@ export default function PedidosLivrosPage() {
         </div>
       )}
 
-      {/* Modal de Observação */}
+      <AnimatePresence>
+{/* Modal de Observação */}
       {obsModal && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)',
         }}>
-          <div style={{
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{
             background: 'hsl(var(--bg-surface))', borderRadius: 18,
             width: '100%', maxWidth: 480,
             border: '1px solid hsl(var(--border-default))',
@@ -877,16 +879,18 @@ export default function PedidosLivrosPage() {
                 <MessageSquare size={13} /> Salvar
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {/* ════════════ MODAL PARCELAS ════════════ */}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
+      <AnimatePresence>
+{/* ════════════ MODAL PARCELAS ════════════ */}
       {modalParcelas && (
-        <div
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
           style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:6000,display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}
           onClick={() => setModalParcelas(null)}
         >
-          <div
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
             style={{ background:'hsl(var(--bg-base))',borderRadius:20,width:'100%',maxWidth:560,maxHeight:'85vh',overflowY:'auto',border:'1px solid hsl(var(--border-subtle))',boxShadow:'0 40px 120px rgba(0,0,0,0.8)' }}
             onClick={e => e.stopPropagation()}
           >
@@ -948,14 +952,16 @@ export default function PedidosLivrosPage() {
             <div style={{ padding:'12px 24px',borderTop:'1px solid hsl(var(--border-subtle))',display:'flex',justifyContent:'flex-end' }}>
               <button className="btn btn-ghost" onClick={() => setModalParcelas(null)}>Fechar</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* ════════════ MODAL NOVO PEDIDO MANUAL ════════════ */}
+      <AnimatePresence>
+{/* ════════════ MODAL NOVO PEDIDO MANUAL ════════════ */}
       {modalNovoPedido && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>Novo Pedido Manual</div>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalNovoPedido(false)}><X size={15} /></button>
@@ -1056,9 +1062,10 @@ export default function PedidosLivrosPage() {
                  <Check size={14}/> Inserir Pedido
                </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

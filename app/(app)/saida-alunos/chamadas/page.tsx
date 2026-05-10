@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useState, useEffect, useMemo } from 'react'
@@ -518,9 +519,10 @@ function ChamadasContent() {
 
   return (
     <div>
-      {/* Toast */}
+      <AnimatePresence>
+{/* Toast */}
       {toast && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
           padding: '10px 22px', borderRadius: 12, fontSize: 13, fontWeight: 700, zIndex: 9999,
           background: toast.ok ? 'rgba(16,185,129,0.95)' : 'rgba(239,68,68,0.95)',
@@ -528,8 +530,9 @@ function ChamadasContent() {
           animation: 'slideDown 0.3s ease',
         }}>
           {toast.ok ? '✓' : '✗'} {toast.msg}
-        </div>
-      )}
+        
+</motion.div>
+)}</AnimatePresence>
 
       {/* Header */}
       <div style={{ marginBottom: 20 }}>

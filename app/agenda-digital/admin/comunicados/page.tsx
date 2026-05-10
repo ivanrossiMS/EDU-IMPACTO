@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -341,18 +342,19 @@ export default function ADAdminComunicados() {
         </table>
       </div>
 
-      {/* Drawer: Comunicado Details */}
+      <AnimatePresence>
+{/* Drawer: Comunicado Details */}
       {selectedCom && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, width: 450,
           backgroundColor: '#ffffff', boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
           borderLeft: '1px solid hsl(var(--border-subtle))', zIndex: 9999,
           display: 'flex', flexDirection: 'column'
         }}>
-          <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3 style={{ fontSize: 18, fontWeight: 700 }}>Relatório do Comunicado</h3>
             <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCom(null)}><X size={18} /></button>
-          </div>
+          </motion.div>
           
           <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
             <div style={{ marginBottom: 24 }}>
@@ -425,8 +427,9 @@ export default function ADAdminComunicados() {
               <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 8 }}>Ver Lista Completa</button>
             </div>
           </div>
-        </div>
-      )}
+        
+</motion.div>
+)}</AnimatePresence>
 
       {/* Modal Composer */}
       {showComposer && (
@@ -541,13 +544,14 @@ export default function ADAdminComunicados() {
         onAdd={(res) => setSelectedDest(res as any)}
       />
 
-      {/* Cobranca Modal */}
+      <AnimatePresence>
+{/* Cobranca Modal */}
       {showCobrancaModal && (
-        <div style={{
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
           zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          <div className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                <div>
                   <h3 style={{ fontSize: 18, fontWeight: 800 }}>Criar Nova Cobrança</h3>
@@ -604,14 +608,16 @@ export default function ADAdminComunicados() {
                   }}>Gerar Cobrança e Inserir no Texto</button>
                </div>
              </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Forms/Reports Selection Modals */}
+      <AnimatePresence>
+{/* Forms/Reports Selection Modals */}
       {showFormsModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                <h3 style={{ fontWeight: 800 }}>Anexar um Formulário</h3>
                <button className="btn btn-ghost btn-sm" onClick={() => setShowFormsModal(false)}><X size={16}/></button>
@@ -622,13 +628,15 @@ export default function ADAdminComunicados() {
                 ))}
                 {forms.filter(f => f.status !== 'arquivado').length === 0 && <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum formulário ativo encontrado. Crie um novo formulário na aba de Formulários.</span>}
              </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {showRelsModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+      <AnimatePresence>
+{showRelsModal && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                <h3 style={{ fontWeight: 800 }}>Anexar um Relatório</h3>
                <button className="btn btn-ghost btn-sm" onClick={() => setShowRelsModal(false)}><X size={16}/></button>
@@ -639,9 +647,10 @@ export default function ADAdminComunicados() {
                 ))}
                 {relatoriosTemplates.filter(r => r.status !== 'arquivado').length === 0 && <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum modelo de relatório ativo foi encontrado.</span>}
              </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

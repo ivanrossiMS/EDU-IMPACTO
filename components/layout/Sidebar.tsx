@@ -88,6 +88,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
         children: [
           { label: 'Frequência', href: '/academico/frequencia', icon: <ClipboardList size={14} /> },
           { label: 'Lançamento de Notas', href: '/academico/notas', icon: <Star size={14} /> },
+          { label: 'Boletim Escolar', href: '/academico/boletim', icon: <FileText size={14} />, badge: 'NOVO', badgeColor: 'green' },
           { label: 'Ocorrências', href: '/academico/ocorrencias', icon: <ClipboardCheck size={14} /> },
         ],
       },
@@ -145,11 +146,27 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     defaultOpen: false,
     items: [
-      { label: 'Painel Tablet',  href: '/painel-tablet',              icon: <Scan size={16} />, badge: 'NOVO', badgeColor: 'cyan', target: '_blank' },
-      { label: 'Monitor TV',     href: '/saida-alunos/monitor',        icon: <Monitor size={16} /> },
-      { label: 'Chamadas',       href: '/saida-alunos/chamadas',       icon: <DoorOpen size={16} /> },
-      { label: 'Relatórios',     href: '/saida-alunos/relatorios',     icon: <ListChecks size={16} /> },
-      { label: 'Configurações',  href: '/saida-alunos/configuracoes',  icon: <Settings size={16} /> },
+      {
+        label: 'Entrada iDFace', icon: <Scan size={16} />,
+        children: [
+          { label: 'Dashboard',          href: '/portaria',                 icon: <LayoutDashboard size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
+          { label: 'Entradas Hoje',      href: '/portaria/entradas',        icon: <Clock3 size={14} /> },
+          { label: 'Alunos Liberados',   href: '/portaria/alunos-liberados',icon: <UserCheck size={14} /> },
+          { label: 'Dispositivos',       href: '/portaria/dispositivos',    icon: <Monitor size={14} /> },
+          { label: 'Logs / Auditoria',   href: '/portaria/logs',            icon: <ListChecks size={14} /> },
+          { label: 'Configurações',      href: '/portaria/configuracoes',   icon: <Settings size={14} /> },
+        ],
+      },
+      {
+        label: 'Saída de Alunos', icon: <DoorOpen size={16} />,
+        children: [
+          { label: 'Painel Tablet',  href: '/painel-tablet',              icon: <Scan size={14} />, target: '_blank' },
+          { label: 'Monitor TV',     href: '/saida-alunos/monitor',        icon: <Monitor size={14} /> },
+          { label: 'Chamadas',       href: '/saida-alunos/chamadas',       icon: <DoorOpen size={14} /> },
+          { label: 'Relatórios',     href: '/saida-alunos/relatorios',     icon: <ListChecks size={14} /> },
+          { label: 'Configurações',  href: '/saida-alunos/configuracoes',  icon: <Settings size={14} /> },
+        ],
+      },
     ],
   },
 
@@ -159,6 +176,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     defaultOpen: false,
     items: [
+      { label: 'Razão de Contas', href: '/administrativo/razao-contas', icon: <BookOpen size={16} />, badge: 'NOVO', badgeColor: 'blue' },
       { label: 'Demonstração Financeira', href: '/administrativo/demonstracao-financeira', icon: <BarChart3 size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'Fornecedores',          href: '/administrativo/fornecedores', icon: <Building2 size={16} /> },
       { label: 'Abertura de Caixa',      href: '/administrativo/caixa',       icon: <DollarSign size={16} /> },
@@ -176,10 +194,18 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
           { label: 'Disciplinas', href: '/configuracoes/pedagogico/disciplinas', icon: <BookOpen size={14} /> },
           { label: 'Níveis de Ensino', href: '/configuracoes/pedagogico/niveis-ensino', icon: <GraduationCap size={14} /> },
           { label: 'Tipo de Ocorrências', href: '/configuracoes/pedagogico/tipo-ocorrencias', icon: <ClipboardCheck size={14} /> },
-          { label: 'Esquema de Avaliações', href: '/configuracoes/pedagogico/esquema-avaliacao', icon: <Star size={14} /> },
           { label: 'Horário de Aulas', href: '/configuracoes/pedagogico/horario', icon: <CalendarDays size={14} /> },
-          { label: 'Config. de Notas', href: '/configuracoes/pedagogico/config-notas', icon: <FlaskConical size={14} /> },
           { label: 'Documentos Escolares', href: '/configuracoes/pedagogico/documentos', icon: <FileText size={14} /> },
+        ],
+      },
+      {
+        label: 'Config. de Notas', icon: <Star size={16} />,
+        children: [
+          { label: 'Esquema de Notas', href: '/configuracoes/notas/esquema-notas', icon: <Layers size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
+          { label: 'Componentes Curriculares', href: '/configuracoes/notas/componentes-curriculares', icon: <BookOpen size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
+          { label: 'Grupo de Avaliações', href: '/configuracoes/notas/grupos-avaliacao', icon: <Star size={14} /> },
+          { label: 'Fórmulas', href: '/configuracoes/notas/formulas', icon: <FlaskConical size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
+          { label: 'Arredondamentos', href: '/configuracoes/notas/arredondamento', icon: <Percent size={14} /> },
         ],
       },
       {
@@ -209,12 +235,15 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: 'Governo',
+    title: 'Relatórios',
     moduleKey: 'relatorios',
     collapsible: true,
     defaultOpen: false,
     items: [
+      { label: 'Central de Relatórios', href: '/relatorios', icon: <BarChart3 size={16} />, badge: 'NOVO', badgeColor: 'green' },
+      { label: 'Relatório Personalizado', href: '/relatorios/personalizado', icon: <ClipboardPenLine size={16} /> },
       { label: 'Censo Escolar', href: '/relatorios/censo', icon: <Database size={16} /> },
+      { label: 'Novos & Rematriculados', href: '/relatorios/rematriculas', icon: <UserPlus size={16} />, badge: 'NOVO', badgeColor: 'blue' },
       { label: 'Relatórios MEC/INEP', href: '/relatorios/mec', icon: <FileText size={16} /> },
     ],
   },

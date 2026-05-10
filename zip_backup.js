@@ -2,7 +2,9 @@ const fs = require('fs');
 const archiver = require('archiver');
 const path = require('path');
 
-const outputName = `backup-edu-impacto-2026-04-14-${new Date().getHours()}-${new Date().getMinutes()}.zip`;
+const d = new Date();
+const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const outputName = `backup-edu-impacto-${dateStr}-${d.getHours()}-${d.getMinutes()}.zip`;
 const output = fs.createWriteStream(path.join(__dirname, outputName));
 const archive = archiver('zip', {
   zlib: { level: 9 }

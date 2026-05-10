@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import React from 'react'
 import { ConfigConvenio } from '@/lib/dataContext'
@@ -207,10 +208,11 @@ export function AbaConvenios({ convenios, onSave, onDelete, onToggle }: Props) {
         </div>
       )}
 
-      {/* Confirm delete */}
+      <AnimatePresence>
+{/* Confirm delete */}
       {confirmDelete && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ padding: 32, maxWidth: 400, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: 32, maxWidth: 400, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
             <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir Convênio?</h3>
             <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 24 }}>Esta ação não pode ser desfeita.</p>
@@ -218,9 +220,10 @@ export function AbaConvenios({ convenios, onSave, onDelete, onToggle }: Props) {
               <button className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={() => { onDelete(confirmDelete); setConfirmDelete(null) }}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

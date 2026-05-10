@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState } from 'react'
 import { Image as ImageIcon, Check, X, Filter, MoreHorizontal, MessageSquare, AlertCircle, Plus, ChevronLeft, ChevronRight, Heart, Trash2, Video } from 'lucide-react'
@@ -321,9 +322,10 @@ export default function ADAdminMomentos() {
         </div>
       )}
 
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-           <div className="card ad-momentos-modal" style={{ width: 540, padding: 24, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+      <AnimatePresence>
+{showModal && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card ad-momentos-modal" style={{ width: 540, padding: 24, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
                <h3 style={{ fontSize: 18, fontWeight: 700 }}>Novo Momento Corporativo</h3>
                <button className="btn btn-ghost btn-sm" onClick={() => setShowModal(false)}><X size={16} /></button>
@@ -378,9 +380,10 @@ export default function ADAdminMomentos() {
                 <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
                 <button className="btn btn-primary" onClick={submitPost}>Publicar no Feed</button>
              </div>
-           </div>
-        </div>
-      )}
+           </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
       
       {/* Universal Target Selector */}
       <DestinatariosModal 

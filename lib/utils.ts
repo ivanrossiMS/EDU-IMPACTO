@@ -53,6 +53,24 @@ export function formatDate(date: string | Date | null | undefined, style: 'short
   return d.toLocaleDateString('pt-BR')
 }
 
+/**
+ * Converte qualquer string de data para o formato brasileiro DD/MM/YYYY.
+ * Aceita: YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss (ISO), DD/MM/YYYY (passthrough).
+ * Uso seguro para células de tabela sem risco de erro de timezone.
+ */
+export function fmtIsoDate(v: string | null | undefined): string {
+  if (!v) return '—'
+  const s = String(v)
+  // Já está em DD/MM/YYYY
+  if (s.includes('/')) return s.length >= 10 ? s.slice(0, 10) : s
+  // ISO: YYYY-MM-DD ou YYYY-MM-DDTHH:mm
+  const clean = s.length > 10 ? s.slice(0, 10) : s
+  const parts = clean.split('-')
+  if (parts.length !== 3) return s
+  const [y, m, d] = parts
+  return `${d}/${m}/${y}`
+}
+
 export function formatDateTime(date: string | Date | null | undefined): string {
   if (!date) return '—'
   let d: Date

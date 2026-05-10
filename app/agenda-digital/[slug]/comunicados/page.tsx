@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart } from 'lucide-react'
@@ -209,10 +210,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
         )}
       </div>
 
-      {/* Modal do Comunicado Expandido */}
+      <AnimatePresence>
+{/* Modal do Comunicado Expandido */}
       {selectedComunicado && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedComunicado(null)}>
-          <div className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', padding: 40, borderRadius: 24, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedComunicado(null)}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', padding: 40, borderRadius: 24, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                  <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} size={64} />
@@ -291,14 +293,16 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Formulário/Relatório Simulado */}
+      <AnimatePresence>
+{/* Formulário/Relatório Simulado */}
       {openedFormStr && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setOpenedFormStr(null)}>
-           <div className="card" style={{ padding: 40, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setOpenedFormStr(null)}>
+           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: 40, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 16 }}>
                  <div style={{ width: 48, height: 48, borderRadius: 24, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FileText color="#3b82f6" />
@@ -423,9 +427,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                    }}>Enviar Respostas Seguras</button>
                  )}
               </div>
-           </div>
-        </div>
-      )}
+           </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

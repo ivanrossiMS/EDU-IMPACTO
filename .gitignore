@@ -88,3 +88,7 @@ tmp-full-search.txt
 tmp-upda.txt
 tmp-grep.txt
 
+# Agent scratch and test files
+tsc*.txt
+scratch*.js
+.agent/scripts/

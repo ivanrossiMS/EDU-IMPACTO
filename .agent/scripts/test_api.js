@@ -1,10 +1,20 @@
-require('dotenv').config({ path: '.env.local' });
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const fs = require('fs');
+const envStr = fs.readFileSync('.env.local', 'utf8');
+const env = envStr.split('\n').reduce((acc, line) => {
+  const [k, ...rest] = line.split('=');
+  let v = rest.join('=');
+  if (k && v) acc[k.trim()] = v.trim().replace(/^['"]|['"]$/g, '');
+  return acc;
+}, {});
 
-fetch(`${url}/rest/v1/aluno_responsavel?select=*&limit=1`, {
-  headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
+const url = env.NEXT_PUBLIC_SUPABASE_URL;
+const key = env.SUPABASE_SERVICE_ROLE_KEY;
+
+fetch(`${url}/rest/v1/turmas?select=*&limit=1`, {
+  headers: { apikey: key, Authorization: 'Bearer ' + key }
 })
 .then(r => r.json())
-.then(console.log)
+.then(d => {
+  console.log("TURMAS COLUMNS:", Object.keys(d[0] || {}));
+})
 .catch(console.error);

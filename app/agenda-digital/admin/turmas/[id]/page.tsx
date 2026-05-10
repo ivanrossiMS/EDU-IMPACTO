@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -137,9 +138,10 @@ export default function ADAdminTurmaDetail() {
             </div>
          </div>
       </div>
-      {showProfModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ width: 400, padding: 24 }}>
+      <AnimatePresence>
+{showProfModal && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 24 }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                 <h3 style={{ fontSize: 18, fontWeight: 700 }}>Alocar Professor (ERP)</h3>
                 <button className="btn btn-ghost btn-sm" onClick={() => setShowProfModal(false)}><X size={16}/></button>
@@ -157,9 +159,10 @@ export default function ADAdminTurmaDetail() {
                 <button className="btn btn-secondary" onClick={() => setShowProfModal(false)}>Cancelar</button>
                 <button className="btn btn-primary" onClick={() => { adAlert('Professor vinculado com sucesso!', 'Sucesso'); setShowProfModal(false); }}>Vincular</button>
              </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

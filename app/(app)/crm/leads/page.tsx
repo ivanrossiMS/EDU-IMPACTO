@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState, useMemo, useEffect } from 'react'
 import { useData, Lead, newId } from '@/lib/dataContext'
@@ -513,10 +514,11 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Confirm delete */}
+      <AnimatePresence>
+{/* Confirm delete */}
       {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🗑️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir lead?</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 20 }}>Este lead será removido permanentemente do funil.</div>
@@ -524,9 +526,10 @@ export default function LeadsPage() {
               <button className="btn btn-ghost" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={13} />Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

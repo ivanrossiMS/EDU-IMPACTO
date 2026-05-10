@@ -239,13 +239,14 @@ function AccessDeniedPage({ pathname }: { pathname: string }) {
 
 export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { perfis } = useData()
+  const { perfis, perfisLoading } = useData()
   const { currentUserPerfil, hydrated } = useApp()
 
   // ── Wait for localStorage hydration ───────────────────────────────────────
   // Before hydration, currentUserPerfil = 'Diretor Geral' (false default).
   // We MUST wait to avoid incorrectly granting/denying access.
-  if (!hydrated) {
+  // Wait for perfisLoading to ensure custom role definitions are loaded before evaluating access.
+  if (!hydrated || perfisLoading) {
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 9998,

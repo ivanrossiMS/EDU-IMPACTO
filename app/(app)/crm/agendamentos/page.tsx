@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState, useMemo } from 'react'
 import { useData, newId, Agendamento, Lead } from '@/lib/dataContext'
@@ -339,10 +340,11 @@ export default function AgendamentosPage() {
         </div>
       )}
 
-      {/* ── Modal Add/Edit ── */}
+      <AnimatePresence>
+{/* ── Modal Add/Edit ── */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 640, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.6)', marginBottom: 24 }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto', backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 640, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.6)', marginBottom: 24 }}>
             <div style={{ padding: '20px 28px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(79,70,229,0.03))' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CalendarCheck size={20} color="#6366f1" /></div>
@@ -432,14 +434,16 @@ export default function AgendamentosPage() {
                 <Check size={14} />{editingId ? 'Salvar Alterações' : 'Criar Agendamento'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Confirm delete */}
+      <AnimatePresence>
+{/* Confirm delete */}
       {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: '28px', maxWidth: 380, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>🗑️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Excluir agendamento?</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 20 }}>Este agendamento será removido permanentemente.</div>
@@ -447,9 +451,10 @@ export default function AgendamentosPage() {
               <button className="btn btn-ghost" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleDelete}><Trash2 size={13} />Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

@@ -1,12 +1,12 @@
-﻿'use client'
+'use client'
 
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 
-import { useData, Turma, newId } from '@/lib/dataContext'
+import { useData, Turma, DisciplinaTurma, SlotHorarioTurma, newId } from '@/lib/dataContext'
 import {
   X, Check, Users, BookOpen, Clock, DollarSign, Settings,
-  Plus, Trash2, Search, UserPlus, AlertCircle, ChevronDown
+  Plus, Trash2, Search, UserPlus, AlertCircle, Info
 } from 'lucide-react'
 
 const DIAS = ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta', 'Sabado']
@@ -23,14 +23,7 @@ const gerarCodigoTurma = (serie: string, turno: string): string => {
   return `${serie}-${num}${t}`
 }
 
-interface SlotHorario {
-  id: string; dia: string; horaInicio: string; horaFim: string
-  disciplina: string; professor: string
-}
-
-interface DisciplinaTurma {
-  id: string; nome: string; professor: string; cargaHoraria: number; codigo: string
-}
+// Types are re-exported from dataContext (DisciplinaTurma, SlotHorarioTurma)
 
 type Aba = 'geral' | 'alunos' | 'disciplinas' | 'horarios' | 'financeiro'
 
@@ -62,7 +55,7 @@ interface Props {
 }
 
 export default function TurmaModal({ open, onClose, editingId }: Props) {
-  const { turmas: _turmas, setTurmas, cfgDisciplinas: _cfgDisc, cfgPadroesPagamento: _cfgPadroes, mantenedores: _mantenedores, cfgNiveisEnsino: _cfgNiveis, cfgTurnos: _cfgTurnos, logSystemAction } = useData()
+  const { turmas: _turmas, setTurmas, cfgDisciplinas: _cfgDisc, cfgPadroesPagamento: _cfgPadroes, mantenedores: _mantenedores, cfgNiveisEnsino: _cfgNiveis, cfgSeries: _cfgSeries, cfgTurnos: _cfgTurnos, logSystemAction } = useData()
   const [_alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [_funcs, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
@@ -73,18 +66,19 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   const cfgPadroesPagamento = Array.isArray(_cfgPadroes) ? _cfgPadroes : []
   const mantenedores  = Array.isArray(_mantenedores)? _mantenedores: []
   const cfgNiveisEnsino = Array.isArray(_cfgNiveis) ? _cfgNiveis   : []
+  const cfgSeries     = Array.isArray(_cfgSeries)   ? _cfgSeries   : []
   const cfgTurnos     = Array.isArray(_cfgTurnos)   ? _cfgTurnos   : []
 
   // Mapear segmentos do ERP
   const SEGMENTOS = useMemo(() => {
     if (!cfgNiveisEnsino || cfgNiveisEnsino.length === 0) return [
-      { codigo: 'EI', nome: 'Educação Infantil' }, 
-      { codigo: 'EF1', nome: 'Ensino F. I' }, 
-      { codigo: 'EF2', nome: 'Ensino F. II' }, 
-      { codigo: 'EM', nome: 'Ensino Médio' }, 
-      { codigo: 'EJA', nome: 'EJA' }
+      { id: 'NEI', codigo: 'EI', nome: 'Educação Infantil' }, 
+      { id: 'NEF1', codigo: 'EF1', nome: 'Ensino F. I' }, 
+      { id: 'NEF2', codigo: 'EF2', nome: 'Ensino F. II' }, 
+      { id: 'NEM', codigo: 'EM', nome: 'Ensino Médio' }, 
+      { id: 'NEJA', codigo: 'EJA', nome: 'EJA' }
     ]
-    return cfgNiveisEnsino.filter(n => n.situacao === 'ativo').map(n => ({ codigo: n.codigo, nome: n.nome }))
+    return cfgNiveisEnsino.filter(n => n.situacao === 'ativo').map(n => ({ id: n.id, codigo: n.codigo, nome: n.nome, series: n.series }))
   }, [cfgNiveisEnsino])
 
   // Mapear turnos do ERP
@@ -99,9 +93,9 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   const [aba, setAba] = useState<Aba>('geral')
   const [searchAluno, setSearchAluno] = useState('')
   const [disciplinas, setDisciplinas] = useState<DisciplinaTurma[]>([])
-  const [horarios, setHorarios] = useState<SlotHorario[]>([])
+  const [horarios, setHorarios] = useState<SlotHorarioTurma[]>([])
   const [addHorario, setAddHorario] = useState(false)
-  const [slotForm, setSlotForm] = useState({ dia: 'Segunda', horaInicio: '07:00', horaFim: '08:00', disciplina: '', professor: '' })
+  const [slotForm, setSlotForm] = useState<Omit<SlotHorarioTurma, 'id'>>({ dia: 'Segunda', horaInicio: '07:00', horaFim: '08:00', disciplina: '', professor: '' })
   const [addDisciplina, setAddDisciplina] = useState(false)
   const [discForm, setDiscForm] = useState({ nome: '', professor: '', cargaHoraria: 2, codigo: '' })
   const [padraoPagamentoIds, setPadraoPagamentoIds] = useState<string[]>([])
@@ -109,7 +103,7 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   const editing = editingId ? turmas.find(t => t.id === editingId) : null
 
   const [form, setForm] = useState<Omit<Turma, 'id'>>({
-    codigo: '', nome: '', serie: 'EF1', turno: '', professor: '',
+    codigo: '', nome: '', serie: 'EF1', serieId: '', turno: '', professor: '',
     sala: '', capacidade: 35, matriculados: 0,
     unidade: '', ano: ANOATUAL,
   })
@@ -118,13 +112,18 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
     if (!open) return
     setAba('geral')
     setSearchAluno('')
+    setAddDisciplina(false)
+    setAddHorario(false)
     if (editing) {
-      setForm({ codigo: editing.codigo || gerarCodigoTurma(editing.serie, editing.turno), nome: editing.nome, serie: editing.serie, turno: editing.turno, professor: editing.professor, sala: editing.sala, capacidade: editing.capacidade, matriculados: editing.matriculados, unidade: editing.unidade, ano: editing.ano })
+      setForm({ codigo: editing.codigo || gerarCodigoTurma(editing.serie, editing.turno), nome: editing.nome, serie: editing.serie, serieId: editing.serieId || '', turno: editing.turno, professor: editing.professor, sala: editing.sala, capacidade: editing.capacidade, matriculados: editing.matriculados, unidade: editing.unidade, ano: editing.ano })
+      // Load disciplinas and horarios saved on the turma
+      setDisciplinas(Array.isArray(editing.disciplinas) ? editing.disciplinas : [])
+      setHorarios(Array.isArray(editing.horarios) ? editing.horarios : [])
       // Suporte a migração: se tiver padraoPagamentoId (singular), converte para lista
       const ids = (editing as any).padraoPagamentoIds || ((editing as any).padraoPagamentoId ? [(editing as any).padraoPagamentoId] : [])
       setPadraoPagamentoIds(ids)
     } else {
-      setForm({ codigo: '', nome: '', serie: 'EF1', turno: TURNOS[0] ?? 'Matutino', professor: '', sala: '', capacidade: 35, matriculados: 0, unidade: '', ano: ANOATUAL })
+      setForm({ codigo: '', nome: '', serie: 'EF1', serieId: '', turno: TURNOS[0] ?? 'Matutino', professor: '', sala: '', capacidade: 35, matriculados: 0, unidade: '', ano: ANOATUAL })
       setDisciplinas([]); setHorarios([])
       setPadraoPagamentoIds([])
     }
@@ -195,8 +194,42 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   // Professores disponíveis
   const professores = useMemo(() => funcionarios.filter(f => f.cargo?.toLowerCase().includes('prof') || f.departamento?.toLowerCase().includes('pedagog')), [funcionarios])
 
-  // Disciplinas do segmento
-  const disciplinasConfig = useMemo(() => cfgDisciplinas?.filter(d => d.situacao === 'ativa' && (d.niveisEnsino?.includes(form.serie) || !d.niveisEnsino?.length)) ?? [], [cfgDisciplinas, form.serie])
+  // All active disciplines from configuration — show ALL, no segment filter
+  // (segment is shown as a badge for reference only, not a hard filter)
+  const disciplinasConfig = useMemo(() =>
+    (cfgDisciplinas ?? []).filter(d => d.situacao === 'ativa')
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+  , [cfgDisciplinas])
+
+  // IDs of disciplines already added to the turma (to prevent duplicates)
+  const disciplinasAdicionadasNomes = useMemo(() => new Set(disciplinas.map(d => d.nome)), [disciplinas])
+
+  // Disciplines available to add (not yet added)
+  const disciplinasDisponiveis = useMemo(() =>
+    disciplinasConfig.filter(d => !disciplinasAdicionadasNomes.has(d.nome))
+  , [disciplinasConfig, disciplinasAdicionadasNomes])
+
+  const availableSeries = useMemo(() => {
+    const isLooseSeries = (cfgSeries || []).filter(s => {
+      const isAtivo = s.situacao === 'ativo'
+      const segmentoId = SEGMENTOS.find((seg: any) => seg.codigo === form.serie)?.id
+      const isSegmentoMatch = s.nivelEnsinoId === segmentoId
+      const isUnidadeMatch = !s.unidadeIds || s.unidadeIds.length === 0 || s.unidadeIds.includes(form.unidade)
+      return isAtivo && isSegmentoMatch && isUnidadeMatch
+    })
+
+    if (isLooseSeries.length === 0) {
+      const segmentoAtual = SEGMENTOS.find((seg: any) => seg.codigo === form.serie) as any
+      if (segmentoAtual && Array.isArray(segmentoAtual.series)) {
+        return segmentoAtual.series.map((s: any) => ({
+          id: s.id || s.codigo,
+          nome: s.nome
+        }))
+      }
+    }
+
+    return isLooseSeries
+  }, [cfgSeries, form.serie, form.unidade, SEGMENTOS])
 
   const addSlot = () => {
     if (!slotForm.disciplina) return
@@ -215,7 +248,8 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
   const handleSave = async () => {
     if (!form.nome.trim()) return
     const codigo = form.codigo || gerarCodigoTurma(form.serie, form.turno)
-    const payload = { ...form, codigo, padraoPagamentoIds } as any
+    // Include disciplinas and horarios in the saved payload
+    const payload = { ...form, codigo, padraoPagamentoIds, disciplinas, horarios } as any
     if (editingId) {
       setTurmas(prev => prev.map(t => t.id === editingId
         ? { ...payload, id: editingId }
@@ -245,10 +279,10 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
     setPadraoPagamentoIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
-  const textMuted = 'hsl(var(--text-muted))'
-  const bgElevated = 'hsl(var(--bg-elevated))'
   const borderSubtle = '1px solid hsl(var(--border-subtle))'
   const segColor = SEG_COLORS[form.serie] ?? '#3b82f6'
+  const textMuted = 'hsl(var(--text-muted))'
+  const bgElevated = 'hsl(var(--bg-elevated))'
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px', overflowY: 'auto' }}>
@@ -332,18 +366,18 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
                 </div>
               )}
 
-              {/* Linha 1: Código (auto) + Nome (maior) + Segmento + Turno */}
-              <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 120px 130px', gap: 14, marginBottom: 14 }}>
+              {/* Linha 1: Código (auto) + Nome (maior) + Segmento + Série + Turno */}
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 120px 150px 130px', gap: 14, marginBottom: 14 }}>
                 {/* Código auto-gerado */}
                 <div>
                   <label className="form-label">Código da Turma</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 0, height: 38, borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', background: 'hsl(var(--bg-elevated))' }}>
-                    <span style={{ padding: '0 10px', fontSize: 11, color: 'hsl(var(--text-muted))', borderRight: '1px solid hsl(var(--border-subtle))', height: '100%', display: 'flex', alignItems: 'center' }}>AUTO</span>
-                    <span style={{ padding: '0 10px', fontWeight: 800, fontSize: 14, fontFamily: 'Outfit, monospace', color: segColor, letterSpacing: '0.03em' }}>
+                    <span style={{ padding: '0 8px', fontSize: 10, color: 'hsl(var(--text-muted))', borderRight: '1px solid hsl(var(--border-subtle))', height: '100%', display: 'flex', alignItems: 'center' }}>AUTO</span>
+                    <span style={{ padding: '0 10px', fontWeight: 800, fontSize: 13, fontFamily: 'Outfit, monospace', color: segColor, letterSpacing: '0.03em' }}>
                       {form.codigo || (form.nome ? gerarCodigoTurma(form.serie, form.turno) : '—')}
                     </span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>Gerado automaticamente</div>
+                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>Gerado auto</div>
                 </div>
                 {/* Nome — campo maior */}
                 <div>
@@ -354,13 +388,24 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
                     if (!editingId) setForm(p => ({ ...p, nome, codigo: nome ? gerarCodigoTurma(form.serie, form.turno) : '' }))
                     else set('nome', nome)
                   }}
-                  placeholder="Ex: 9A, Turma Azul, EF1-Manhã..." style={{ fontWeight: 700, fontSize: 15 }} />
+                  placeholder="Ex: 9A, Turma Azul, EF1-Manhã..." style={{ fontWeight: 700, fontSize: 14 }} />
                 </div>
                 {/* Segmento — menor */}
                 <div>
                   <label className="form-label" style={{ fontSize: 10 }}>SEGMENTO *</label>
-                  <select className="form-input" value={form.serie} onChange={e => set('serie', e.target.value)}>
+                  <select className="form-input" value={form.serie} onChange={e => {
+                    set('serie', e.target.value)
+                    set('serieId', '') // Reseta série ao trocar segmento
+                  }}>
                     {SEGMENTOS.map((s: any) => <option key={s.codigo} value={s.codigo}>{s.nome}</option>)}
+                  </select>
+                </div>
+                {/* Série — Intermediário */}
+                <div>
+                  <label className="form-label" style={{ fontSize: 10 }}>SÉRIE / ANO *</label>
+                  <select className="form-input" value={form.serieId} onChange={e => set('serieId', e.target.value)}>
+                    <option value="">Selecionar série...</option>
+                    {availableSeries.map((s: any) => <option key={s.id} value={s.id}>{s.nome}</option>)}
                   </select>
                 </div>
                 {/* Turno — menor */}
@@ -514,73 +559,150 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
               </div>
 
               {addDisciplina && (
-                <div style={{ padding: '16px', background: bgElevated, borderRadius: 10, border: borderSubtle, marginBottom: 14 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 80px', gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <label className="form-label" style={{ fontSize: 10 }}>Codigo</label>
-                      <input className="form-input" value={discForm.codigo} onChange={e => setDiscForm(p => ({ ...p, codigo: e.target.value }))} placeholder="MAT" />
+                <div style={{ padding: '16px', background: bgElevated, borderRadius: 12, border: borderSubtle, marginBottom: 14 }}>
+                  {/* Info: sem disciplinas cadastradas */}
+                  {disciplinasConfig.length === 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8, marginBottom: 12, fontSize: 12, color: '#b45309' }}>
+                      <Info size={14} />
+                      Nenhuma disciplina cadastrada. Crie em <strong>Configurações → Pedagógico → Disciplinas</strong>.
                     </div>
+                  )}
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 80px', gap: 10, marginBottom: 10 }}>
+                    {/* Disciplina — sempre select das cfgDisciplinas */}
                     <div>
-                      <label className="form-label" style={{ fontSize: 10 }}>Disciplina *</label>
-                      {disciplinasConfig.length > 0 ? (
-                        <select className="form-input" value={discForm.nome} onChange={e => { const d = disciplinasConfig.find(x => x.nome === e.target.value); setDiscForm(p => ({ ...p, nome: e.target.value, codigo: d?.codigo ?? p.codigo })) }}>
-                          <option value="">Selecionar</option>
-                          {disciplinasConfig.map(d => <option key={d.id} value={d.nome}>{d.nome}</option>)}
-                        </select>
-                      ) : (
-                        <input className="form-input" value={discForm.nome} onChange={e => setDiscForm(p => ({ ...p, nome: e.target.value }))} placeholder="Ex: Matematica" />
-                      )}
+                      <label className="form-label" style={{ fontSize: 10 }}>DISCIPLINA *</label>
+                      <select
+                        className="form-input"
+                        value={discForm.nome}
+                        disabled={disciplinasConfig.length === 0}
+                        onChange={e => {
+                          const d = disciplinasConfig.find(x => x.nome === e.target.value)
+                          setDiscForm(p => ({
+                            ...p,
+                            nome: e.target.value,
+                            codigo: d?.codigo ?? p.codigo,
+                            // Auto-fill carga horária from config
+                            cargaHoraria: d?.cargaHoraria ?? p.cargaHoraria,
+                          }))
+                        }}
+                      >
+                        <option value="">{disciplinasConfig.length === 0 ? 'Sem disciplinas cadastradas' : '— Selecionar disciplina —'}</option>
+                        {disciplinasDisponiveis.map(d => {
+                          const doSegmento = d.niveisEnsino?.includes(form.serie)
+                          return (
+                            <option key={d.id} value={d.nome}>
+                              {d.nome}{doSegmento ? ' ★' : ''}
+                            </option>
+                          )
+                        })}
+                        {/* Show already-added disciplines as disabled */}
+                        {disciplinasConfig.filter(d => disciplinasAdicionadasNomes.has(d.nome)).map(d => (
+                          <option key={`added-${d.id}`} value={d.nome} disabled>✓ {d.nome} (já adicionada)</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: 10, color: textMuted, marginTop: 3 }}>★ = recomendada para {form.serie}</div>
                     </div>
+
+                    {/* Professor */}
                     <div>
-                      <label className="form-label" style={{ fontSize: 10 }}>Professor</label>
+                      <label className="form-label" style={{ fontSize: 10 }}>PROFESSOR</label>
                       {professores.length > 0 ? (
                         <select className="form-input" value={discForm.professor} onChange={e => setDiscForm(p => ({ ...p, professor: e.target.value }))}>
-                          <option value="">Selecionar</option>
+                          <option value="">— Selecionar —</option>
                           {professores.map(p => <option key={p.id} value={p.nome}>{p.nome}</option>)}
                         </select>
                       ) : (
-                        <input className="form-input" value={discForm.professor} onChange={e => setDiscForm(p => ({ ...p, professor: e.target.value }))} placeholder="Professor" />
+                        <input className="form-input" value={discForm.professor} onChange={e => setDiscForm(p => ({ ...p, professor: e.target.value }))} placeholder="Nome do professor" />
                       )}
                     </div>
+
+                    {/* h/semana — auto-filled from config, editable */}
                     <div>
-                      <label className="form-label" style={{ fontSize: 10 }}>h/semana</label>
-                      <input type="number" className="form-input" value={discForm.cargaHoraria} onChange={e => setDiscForm(p => ({ ...p, cargaHoraria: +e.target.value }))} min={1} max={40} />
+                      <label className="form-label" style={{ fontSize: 10 }}>H/SEM</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={discForm.cargaHoraria}
+                        onChange={e => setDiscForm(p => ({ ...p, cargaHoraria: +e.target.value }))}
+                        min={1} max={40}
+                        style={{ textAlign: 'center', fontWeight: 700 }}
+                      />
                     </div>
                   </div>
+
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setAddDisciplina(false)}>Cancelar</button>
-                    <button className="btn btn-primary btn-sm" onClick={addDisc} disabled={!discForm.nome}><Check size={13} />Adicionar</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => { setAddDisciplina(false); setDiscForm({ nome: '', professor: '', cargaHoraria: 2, codigo: '' }) }}>
+                      Cancelar
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={addDisc}
+                      disabled={!discForm.nome}
+                    >
+                      <Check size={13} /> Adicionar
+                    </button>
                   </div>
                 </div>
               )}
 
-              {disciplinas.length === 0 ? (
-                <div style={{ padding: '36px', textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 10, color: textMuted }}>
+              {disciplinas.length === 0 && !addDisciplina ? (
+                <div style={{ padding: '40px', textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 10, color: textMuted }}>
                   <BookOpen size={36} style={{ opacity: 0.15, marginBottom: 8 }} /><br />
-                  <div style={{ fontSize: 13 }}>Nenhuma disciplina adicionada</div>
+                  <div style={{ fontSize: 13, marginBottom: 10 }}>Nenhuma disciplina adicionada</div>
+                  {disciplinasConfig.length > 0 && (
+                    <div style={{ fontSize: 11, color: textMuted }}>
+                      {disciplinasConfig.length} disciplina(s) disponível(is) em Configurações.
+                      Clique em <strong>+ Adicionar</strong> para vincular.
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="table-container">
-                  <table>
-                    <thead><tr><th>Codigo</th><th>Disciplina</th><th>Professor</th><th>h/sem</th><th></th></tr></thead>
+              ) : disciplinas.length > 0 ? (
+                <div style={{ border: borderSubtle, borderRadius: 10, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: 'hsl(var(--bg-elevated))', borderBottom: borderSubtle }}>
+                        <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: textMuted, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Código</th>
+                        <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: textMuted, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Disciplina</th>
+                        <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: textMuted, textAlign: 'left', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Professor</th>
+                        <th style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>h/sem</th>
+                        <th style={{ width: 40 }}></th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {disciplinas.map(d => (
-                        <tr key={d.id}>
-                          <td><code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>{d.codigo || '—'}</code></td>
-                          <td style={{ fontWeight: 600, fontSize: 13 }}>{d.nome}</td>
-                          <td style={{ fontSize: 12, color: textMuted }}>{d.professor || '—'}</td>
-                          <td><span style={{ fontSize: 12, fontWeight: 700, color: segColor }}>{d.cargaHoraria}h</span></td>
-                          <td><button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => setDisciplinas(prev => prev.filter(x => x.id !== d.id))}><Trash2 size={12} /></button></td>
+                      {disciplinas.map((d, idx) => (
+                        <tr key={d.id} style={{ borderBottom: idx < disciplinas.length - 1 ? borderSubtle : 'none', transition: 'background 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-overlay))')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                        >
+                          <td style={{ padding: '11px 14px' }}>
+                            <code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>{d.codigo || '—'}</code>
+                          </td>
+                          <td style={{ padding: '11px 14px', fontWeight: 600, fontSize: 13 }}>{d.nome}</td>
+                          <td style={{ padding: '11px 14px', fontSize: 12, color: textMuted }}>{d.professor || '—'}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 800, color: segColor }}>{d.cargaHoraria}h</span>
+                          </td>
+                          <td style={{ padding: '11px 10px' }}>
+                            <button
+                              className="btn btn-ghost btn-icon btn-sm"
+                              style={{ color: '#f87171' }}
+                              title="Remover disciplina"
+                              onClick={() => setDisciplinas(prev => prev.filter(x => x.id !== d.id))}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <div style={{ padding: '8px 16px', borderTop: borderSubtle, fontSize: 12, color: textMuted, display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{disciplinas.length} disciplina(s)</span>
-                    <span style={{ fontWeight: 700, color: segColor }}>Total: {totalCargaHoraria}h/semana</span>
+                  <div style={{ padding: '10px 16px', borderTop: borderSubtle, fontSize: 12, color: textMuted, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{disciplinas.length} disciplina(s) vinculada(s)</span>
+                    <span style={{ fontWeight: 800, color: segColor }}>Total: {totalCargaHoraria}h/semana</span>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 

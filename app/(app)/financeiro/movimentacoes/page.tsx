@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useApiQuery } from '@/hooks/useApi';
 
@@ -202,10 +203,11 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
             </div>
           </div>
 
-          {/* Mini-modal seleção plano de contas */}
+          <AnimatePresence>
+{/* Mini-modal seleção plano de contas */}
           {showPlanoMov && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-              <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 32px 100px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+              <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '70vh', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 32px 100px rgba(0,0,0,0.7)', overflow: 'hidden' }}>
                 <div style={{ padding: '14px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'hsl(var(--bg-elevated))', flexShrink: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: 14 }}>Plano de Contas — {form.tipo === 'receita' ? 'Receitas' : 'Despesas'}</div>
                   <button type="button" className="btn btn-ghost btn-icon" onClick={() => setShowPlanoMov(false)}><X size={14} /></button>
@@ -238,9 +240,10 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
                     ))
                   )}
                 </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            
+</motion.div>
+)}</AnimatePresence>
 
           {/* Linha D: Documento */}
           <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 14, marginBottom: 14 }}>
@@ -304,10 +307,11 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
         </div>
       </div>
       
-      {/* Modal Sobreposto: Selecionar Fornecedor */}
+      <AnimatePresence>
+{/* Modal Sobreposto: Selecionar Fornecedor */}
       {showFornMov && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 800, fontSize: 15 }}>Selecionar Fornecedor</div>
               <button onClick={() => setShowFornMov(false)} className="btn btn-ghost btn-icon"><X size={18} /></button>
@@ -338,9 +342,10 @@ function FormModal({ open, onClose, onSave, initial, defaultCaixaId, caixas, for
                   </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </>
   )
 }
@@ -778,10 +783,11 @@ export default function MovimentacoesPage() {
         />
       )}
 
-      {/* Confirmar exclusão */}
+      <AnimatePresence>
+{/* Confirmar exclusão */}
       {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 400, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 14, width: 400, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', fontWeight: 800, fontSize: 15, color: '#ef4444', display: 'flex', gap: 10, alignItems: 'center' }}>
               <AlertCircle size={18} />Confirmar Exclusão
             </div>
@@ -792,14 +798,16 @@ export default function MovimentacoesPage() {
               <button className="btn btn-secondary" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={() => handleDelete(confirmId)}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* Modal Selecionar Caixa na Sessão */}
+      <AnimatePresence>
+{/* Modal Selecionar Caixa na Sessão */}
       {showSessionCaixaModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 100px rgba(0,0,0,0.7)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 32px 100px rgba(0,0,0,0.7)' }}>
             <div style={{ padding: '24px 28px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', textAlign: 'center' }}>
               <div style={{ width: 48, height: 48, background: 'rgba(99,102,241,0.1)', color: '#6366f1', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                 <Check size={24} />
@@ -827,9 +835,10 @@ export default function MovimentacoesPage() {
             <div style={{ padding: '16px 28px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', textAlign: 'center' }}>
               <button className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSessionCaixaModal(false)}>Ignorar e ver todos</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

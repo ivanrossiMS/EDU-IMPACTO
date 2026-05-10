@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface ModalProps {
   open: boolean
@@ -20,18 +21,25 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
-
   const widths = { sm: 440, md: 580, lg: 780 }
 
   return (
-    <div
+    <AnimatePresence>
+      {open && (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       className="modal-overlay"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
       style={{ zIndex: 1000 }}
     >
-      <div
+      <motion.div
         ref={ref}
+        initial={{ scale: 0.95, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 20 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
         className="modal"
         style={{ maxWidth: widths[size], width: '100%', padding: 0, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
       >
@@ -44,8 +52,10 @@ export function Modal({ open, onClose, title, size = 'md', children }: ModalProp
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
           {children}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

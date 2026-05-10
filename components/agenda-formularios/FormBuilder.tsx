@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import React, { useState, useEffect } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
@@ -359,9 +360,10 @@ export function FormBuilder({ formId, onNavigate }: Props) {
 
       </div>
 
-      {editingField && (
-         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-            <div className="card" style={{ width: 500, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+      <AnimatePresence>
+{editingField && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+            <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 500, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
                <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                  <div>
                    <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Configurar Pergunta</h3>
@@ -387,9 +389,10 @@ export function FormBuilder({ formId, onNavigate }: Props) {
                  <button className="btn btn-secondary" onClick={() => setEditingField(null)}>Cancelar</button>
                  <button className="btn btn-primary" onClick={saveFieldSettings}>Confirmar</button>
                </div>
-            </div>
-         </div>
-      )}
+            </motion.div>
+         
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

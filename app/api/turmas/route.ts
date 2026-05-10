@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 }
 
 function buildRow(body: any) {
-  const { id, codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, ...rest } = body
+  const { id, codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, dados, ...rest } = body
   return {
     id: id || `T${Date.now()}`,
     codigo: codigo || '',
@@ -67,6 +67,6 @@ function buildRow(body: any) {
     matriculados: matriculados || 0,
     unidade: unidade || '',
     ano: ano || new Date().getFullYear(),
-    dados: rest,
+    dados: { ...rest, ...(dados || {}) },
   }
 }

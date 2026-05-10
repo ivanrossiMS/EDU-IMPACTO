@@ -16,13 +16,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   try {
     const body = await request.json()
-    const { codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, ...rest } = body
+    const { codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, dados, ...rest } = body
     const row = {
       codigo: codigo || '', nome, serie: serie || '', turno: turno || '',
       professor: professor || '', sala: sala || '',
       capacidade: capacidade || 30, matriculados: matriculados || 0,
       unidade: unidade || '', ano: ano || new Date().getFullYear(),
-      dados: rest, updated_at: new Date().toISOString(),
+      dados: { ...rest, ...(dados || {}) }, updated_at: new Date().toISOString(),
     }
     const { data, error } = await supabase.from('turmas').update(row).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })

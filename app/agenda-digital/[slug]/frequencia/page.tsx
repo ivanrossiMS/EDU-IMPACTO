@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -116,10 +117,11 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         </div>
       </div>
 
-      {/* Modal Atestado */}
+      <AnimatePresence>
+{/* Modal Atestado */}
       {atestadoModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAtestadoModal(false)}>
-          <div style={{ background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, width: '100%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setAtestadoModal(false)}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, width: '100%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16 }}>Enviar Atestado Médico</h3>
             {!atestadoSent ? (
               <form onSubmit={handleUpload}>
@@ -147,9 +149,10 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
                 <p style={{ fontSize: 14, color: 'hsl(var(--text-muted))', marginTop: 8 }}>A nossa secretaria irá analisar o documento em breve.</p>
               </div>
             )}
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

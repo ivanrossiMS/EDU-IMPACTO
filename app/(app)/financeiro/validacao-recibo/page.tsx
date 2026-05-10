@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
@@ -963,12 +964,13 @@ export default function ValidacaoReciboPage() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════
+      <AnimatePresence>
+{/* ══════════════════════════════════════════════════════════════
           MODAL DE DETALHES
       ══════════════════════════════════════════════════════════════ */}
       {selectedReceipt && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 800, maxHeight: '92vh', overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 800, maxHeight: '92vh', overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column' }}>
 
             {/* Header do modal */}
             <div style={{ padding: '18px 24px', background: 'linear-gradient(135deg,rgba(59,130,246,0.08),rgba(16,185,129,0.04))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -1123,16 +1125,18 @@ export default function ValidacaoReciboPage() {
               </a>
               <button className="btn btn-ghost btn-sm" onClick={closeDetail}>Fechar</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
-      {/* ══════════════════════════════════════════════════════════════
+      <AnimatePresence>
+{/* ══════════════════════════════════════════════════════════════
           MODAL DE CANCELAMENTO
       ══════════════════════════════════════════════════════════════ */}
       {cancelModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 500, border: '1px solid rgba(239,68,68,0.3)', boxShadow: '0 40px 100px rgba(0,0,0,0.7)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 16, width: '100%', maxWidth: 500, border: '1px solid rgba(239,68,68,0.3)', boxShadow: '0 40px 100px rgba(0,0,0,0.7)' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Ban size={18} color="#ef4444" />
@@ -1166,9 +1170,10 @@ export default function ValidacaoReciboPage() {
                 {canceling ? <><RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} />Cancelando...</> : <><Ban size={13} />Confirmar Cancelamento</>}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
 
       <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
     </div>

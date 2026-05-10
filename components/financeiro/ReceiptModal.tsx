@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useRef } from 'react'
 import { X, Printer, Download, Mail, MessageCircle, ShieldCheck } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
+import QRCode from 'qrcode'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ export interface ReceiptProps {
     responsavel?: string
     cpf?: string
   }
+  /** Unidade da turma do aluno (para resolver nomeEscola/CNPJ correto) */
+  turmaUnidade?: string
   onClose: () => void
   onBack?: () => void
 }
@@ -76,7 +79,7 @@ function buildReceiptHTML(
   parcelas: ReceiptParcela[],
   rawParcelas: ReceiptParcela[],
   aluno: ReceiptProps['aluno'],
-  opts: { nomeEscola: string; cnpj: string; logo: string | null; cidade: string; issuerName: string; issuerCargo: string; hash: string }
+  opts: { nomeEscola: string; cnpj: string; logo: string | null; cidade: string; issuerName: string; issuerCargo: string; hash: string; qrCodeUrl?: string }
 ) {
   const { nomeEscola, cnpj, logo, cidade, issuerName, issuerCargo, hash } = opts
   const ref = rawParcelas[0] || {} as ReceiptParcela
@@ -85,7 +88,7 @@ function buildReceiptHTML(
   const emissao = today()
   
   const validationUrl = `https://impacto-edu.com/validar/${hash}`
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(validationUrl)}&color=0f172a`
+  const qrCodeUrl = opts.qrCodeUrl || `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(validationUrl)}&chld=M|1`
 
   const respNome = aluno.responsavelFinanceiro || aluno.responsavel || aluno.nome || '—'
   const cpf = (aluno as any).cpfResponsavel || aluno.cpf || (aluno as any).cpfRespFin || '—'
@@ -250,8 +253,9 @@ const DataField = ({ label, value, highlight = false }: { label: string; value: 
   </div>
 )
 
-export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: ReceiptProps) {
+export function ReceiptModal({ parcelas: rawParcelas, aluno, turmaUnidade, onClose, onBack }: ReceiptProps) {
   const { mantenedores } = useData()
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null)
 
   // ── Flatten if Baixa por Responsável ──
   const parcelas = useMemo(() => {
@@ -271,10 +275,15 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
     })
   }, [rawParcelas])
 
-  // ── Resolve institution data ──
+  // ── Resolve institution data — prioriza unidade da turma ──
   const mantenedor = (mantenedores as any)?.[0]
-  const unidades = mantenedor?.unidades || []
-  const unidade = unidades.find((u: any) => u.id === aluno.unidade || u.nome === aluno.unidade) || unidades[0]
+  const unidades: any[] = mantenedor?.unidades || []
+  // Ordem de prioridade: turmaUnidade → aluno.unidade → primeira unidade
+  const unidade = (
+    (turmaUnidade ? unidades.find((u: any) => u.id === turmaUnidade || u.nome === turmaUnidade || u.nomeFantasia === turmaUnidade) : null) ||
+    (aluno.unidade ? unidades.find((u: any) => u.id === aluno.unidade || u.nome === aluno.unidade || u.nomeFantasia === aluno.unidade) : null) ||
+    unidades[0]
+  )
 
   const nomeEscola = unidade?.nomeFantasia || unidade?.razaoSocial || mantenedor?.nome || 'Impacto Edu'
   const cnpj = unidade?.cnpj || mantenedor?.cnpj || '—'
@@ -298,7 +307,8 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
   const rNum = receiptNumber(ref)
   const hashVal = useMemo(generateUUID, [])
   const validationUrl = `https://impacto-edu.com/validar/${hashVal}`
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(validationUrl)}&color=0f172a`
+  // Usa Google Charts API como URL para o QR no HTML impresso (mais estável que api.qrserver)
+  const qrCodeUrlForPrint = `https://chart.googleapis.com/chart?cht=qr&chs=120x120&chl=${encodeURIComponent(validationUrl)}&chld=M|1`
 
   const respNome = aluno.responsavelFinanceiro || aluno.responsavel || aluno.nome || '—'
   const cpf = (aluno as any).cpfResponsavel || aluno.cpf || (aluno as any).cpfRespFin || '—'
@@ -306,9 +316,22 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
   const formaPagto = ref.formaPagto || (ref.formasPagto?.map((f:any)=>f.forma).join(', ')) || '—'
   const idFatura = ref.codBaixa || ref.comprovante || String(ref.num ?? '') || '—'
 
+  // ── Gera QR Code local via canvas (sem serviço externo) ──
+  useEffect(() => {
+    if (!qrCanvasRef.current) return
+    QRCode.toCanvas(qrCanvasRef.current, validationUrl, {
+      width: 80,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    }).catch(() => {
+      // fallback silencioso: canvas fica em branco
+    })
+  }, [validationUrl])
+
   // ── Handlers ──
   const openPrintWindow = (autoprint = false) => {
-    const html = buildReceiptHTML(parcelas, rawParcelas, aluno, { nomeEscola, cnpj, logo, cidade, issuerName: issuer.nome, issuerCargo: issuer.cargo, hash: hashVal })
+    const html = buildReceiptHTML(parcelas, rawParcelas, aluno, { nomeEscola, cnpj, logo, cidade, issuerName: issuer.nome, issuerCargo: issuer.cargo, hash: hashVal, qrCodeUrl: qrCodeUrlForPrint })
     const win = window.open('', '_blank', 'width=900,height=800,scrollbars=yes')
     if (!win) { alert('Permita popups para imprimir o recibo.'); return }
     win.document.open()
@@ -457,9 +480,15 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, onClose, onBack }: 
             </div>
           </div>
 
-          {/* VERIFICATION & QR CODE ZONE */}
+            {/* VERIFICATION & QR CODE ZONE */}
           <div style={{ display:'flex', marginTop:32, gap:24, alignItems:'center', background:'#f1f5f9', borderRadius:20, padding:20, border:'1px dashed #cbd5e1' }}>
-            <img src={qrCodeUrl} width="80" height="80" style={{ borderRadius:12, background:'#fff', padding:4, border:'1px solid #e2e8f0' }} alt="QR Validação"/>
+            <canvas
+              ref={qrCanvasRef}
+              width={80}
+              height={80}
+              style={{ borderRadius:12, background:'#fff', padding:4, border:'1px solid #e2e8f0', flexShrink:0, imageRendering:'pixelated' }}
+              title="QR Code de Validação"
+            />
             <div>
               <div style={{ fontSize:11, fontWeight:800, color:'#3b82f6', textTransform:'uppercase', letterSpacing:1 }}>Garantia Digital</div>
               <div style={{ fontSize:14, fontWeight:700, color:'#0f172a', marginTop:4 }}>Validação via Infraestrutura ERP</div>

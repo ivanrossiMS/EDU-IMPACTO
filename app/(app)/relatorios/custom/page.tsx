@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState } from 'react'
 import { Brain, Plus, BarChart2, FileText, Trash2, Save, X, Zap } from 'lucide-react'
@@ -112,18 +113,20 @@ export default function CustomReportsPage() {
         </div>
       )}
 
-      {del && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, padding: 28, maxWidth: 380, border: '1px solid hsl(var(--border-default))', textAlign: 'center' }}>
+      <AnimatePresence>
+{del && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 16, padding: 28, maxWidth: 380, border: '1px solid hsl(var(--border-default))', textAlign: 'center' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🗑️</div>
             <div style={{ fontWeight: 700, marginBottom: 20 }}>Excluir relatório?</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button className="btn btn-ghost" onClick={() => setDel(null)}>Cancelar</button>
               <button className="btn btn-danger" onClick={remove}><Trash2 size={13} />Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { useState, useRef, useEffect } from 'react'
 import { Building2, Plus, Edit2, Trash2, ChevronDown, ChevronRight, MapPin, Phone, Mail, Globe, Users, BookOpen, Save, X, Upload, CheckCircle } from 'lucide-react'
@@ -415,10 +416,11 @@ export default function MultiUnidadesPage() {
         />
       )}
 
-      {/* ── Confirm Delete ── */}
+      <AnimatePresence>
+{/* ── Confirm Delete ── */}
       {confirmId && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ padding: '32px', maxWidth: 400, width: '90%', textAlign: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: '32px', maxWidth: 400, width: '90%', textAlign: 'center' }}>
             <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Confirmar exclusão</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 22 }}>
@@ -428,9 +430,10 @@ export default function MultiUnidadesPage() {
               <button className="btn btn-ghost" onClick={() => setConfirmId(null)}>Cancelar</button>
               <button style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 24px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }} onClick={executeDelete}>Excluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }

@@ -27,10 +27,21 @@ export interface Aluno {
   senhaApp?: string
 }
 
+export interface DisciplinaTurma {
+  id: string; nome: string; codigo: string; professor: string; cargaHoraria: number
+}
+
+export interface SlotHorarioTurma {
+  id: string; dia: string; horaInicio: string; horaFim: string; disciplina: string; professor: string
+}
+
 export interface Turma {
   id: string; codigo: string; nome: string; serie: string; turno: string; professor: string
   sala: string; capacidade: number; matriculados: number; unidade: string; ano: number
   padraoPagamentoIds?: string[]
+  serieId?: string
+  disciplinas?: DisciplinaTurma[]
+  horarios?: SlotHorarioTurma[]
 }
 
 export interface Funcionario {
@@ -235,8 +246,29 @@ export interface RegistroFrequencia {
 
 export interface LancamentoNota {
   id: string; turmaId: string; disciplina: string; bimestre: number
-  notas: { alunoId: string; n1: number; n2: number; n3: number; media: number }[]
+  esquemaId?: string
+  notas: { 
+    alunoId: string; 
+    valores: Record<string, number | string | null>; 
+    mediaParcial: number | null; 
+    faltas: number;
+    situacao?: string;
+  }[]
   criadoPor: string; createdAt: string
+  // ── Auditoria de lançamento ───────────────────────────────────────────────
+  ultimoSalvoPor?: string        // Nome do usuário que fez o último salvamento
+  ultimoSalvoEm?: string         // ISO timestamp do último salvamento
+  // ── Travamento (finalizando para entrega) ─────────────────────────────────
+  travado?: boolean              // true = planilha bloqueada para edição
+  travadoPor?: string            // Nome de quem travou
+  travadoEm?: string             // ISO timestamp do travamento
+  // ── Histórico de ações (audit log) ────────────────────────────────────────
+  historico?: {
+    acao: 'salvo' | 'travado' | 'destravado'
+    por: string
+    em: string
+    obs?: string
+  }[]
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -299,10 +331,21 @@ export interface ConfigNivelEnsino {
   faixaEtaria: string           // '0-5 anos'
   duracaoAnos: number
   situacao: 'ativo' | 'inativo'
-  series: SerieEnsino[]         // séries/anos do segmento
+  series: SerieEnsino[]         // séries/anos do segmento (LEGACY - Mantido por Retrocompatibilidade)
   unidadeIds: string[]          // unidades que oferecem este nível
   createdAt: string
 }
+
+export interface ConfigSerie {
+  id: string
+  codigo: string
+  nome: string
+  nivelEnsinoId: string
+  unidadeIds: string[]
+  situacao: 'ativo' | 'inativo'
+  createdAt: string
+}
+
 
 export interface ConfigTipoOcorrencia {
   id: string
@@ -313,6 +356,32 @@ export interface ConfigTipoOcorrencia {
   pontosEscalonamento: number   // pontos até escalar
   situacao: 'ativo' | 'inativo'
   createdAt: string
+}
+
+export interface ConfigGrupoAvaliacao {
+  id: string
+  codigo: string
+  descricao: string
+  createdAt?: string
+}
+
+export type OperadorMatematico = '>=' | '>' | '<=' | '<' | '=' | ''
+
+export interface RegraArredondamento {
+  id: string
+  op1: OperadorMatematico
+  v1: number
+  op2: OperadorMatematico
+  v2: number | null
+  res: number
+}
+
+export interface ConfigArredondamento {
+  id: string
+  codigo: string
+  descricao: string
+  regras: RegraArredondamento[]
+  createdAt?: string
 }
 
 export interface ComponenteAvaliacao {
@@ -330,6 +399,159 @@ export interface ConfigEsquemaAvaliacao {
   mediaRecuperacao: number       // ex: 5.0
   situacao: 'ativo' | 'inativo'
   createdAt: string
+}
+
+// ─── ESQUEMA DE NOTAS (Config. Pedagógico) ────────────────────────
+export type TipoDadoNota =
+  | 'Nota'
+  | 'Conceito'
+  | 'Falta'
+  | 'Média Parcial 1'
+  | 'Média Parcial 2'
+  | 'Média Parcial 3'
+  | 'Média Parcial 4'
+  | 'Média Parcial 5'
+  | 'Recuperação 1'
+  | 'Recuperação 2'
+  | 'Recuperação 3'
+  | 'Recuperação 4'
+  | 'Recuperação 5'
+  | 'Nota de Estágio'
+  | 'Conselho de Classe'
+  | 'Média Final'
+  | 'Média Geral'
+  | 'Avaliação Online'
+  | 'Avaliação Dissertativa'
+  | 'Recuperação Online'
+  | 'Ponto Extra'
+  | 'Ponto Bônus'
+
+export type EscopoLancamento = 'bimestral' | 'resultado_final'
+
+export interface DetalheEsquemaNota {
+  id: string
+  sequencial: number
+  nomeAvaliacao: string           // ex: AVM, AVB, MediaF, RecBim, MediaG
+  tipoDado: TipoDadoNota
+  /** Define em qual contexto este detalhe aparece no lançamento:
+   *  - 'bimestral': aparece nos 4 bimestres/períodos
+   *  - 'resultado_final': aparece apenas na aba de fechamento anual
+   *  Default: 'bimestral' (garante backward compatibility com registros antigos)
+   */
+  escopoLancamento: EscopoLancamento
+  grupoAvaliacaoId: string        // referência a ConfigGrupoAvaliacao
+  grupoAvaliacaoDesc: string      // descrição snapshot para exibição
+  peso: number                    // ex: 1
+  valorMin: number                // ex: -1 (sem mínimo definido)
+  valorMax: number                // ex: 10
+  exibeBoletimAdm: boolean
+  exibeBoletimAluno: boolean
+  ultimaAlteracao: string         // ISO date
+  alteradoPor: string
+}
+
+export interface EsquemaNota {
+  id: string
+  sequencial: number
+  descricao: string
+  situacao: 'Ativo' | 'Inativo'
+  ano: number
+  formulaConfigurada: boolean     // true quando tem detalhes cadastrados
+  protocolo: string               // ex: 'Copiado do esquema 50 – Esquema 2º ao 5ºANO -2025'
+  homologado: boolean
+  turmaIds: string[]              // turmas vinculadas
+  disciplinaIds: string[]         // disciplinas vinculadas (opcional)
+  detalhes: DetalheEsquemaNota[]
+  alteradoPor: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ─── FÓRMULAS DE NOTAS ───────────────────────────────────────────
+export interface FormulaNotas {
+  id: string
+  codigo: number                  // sequencial auto
+  descricao: string               // ex: 'Fórmula 2026'
+  situacao: 'Ativo' | 'Inativo'
+  nivel: string                   // ex: 'Curso Regular', 'EJA'
+  ano: number
+
+  // ── Dados da Fórmula ─────────────────────────────────────────────
+  nomeAvaliacaoFinal: string      // ex: 'Exame Final'
+  media: number                   // média mínima de aprovação, ex: 7.0
+  nomeFases: string               // ex: 'Bimestre', 'Trimestre', 'Semestre'
+  nFases: number                  // 1..6
+  recuperacaoFinal: string        // ex: '2 - É Obrigatório Fazer...'
+
+  // ── Média Final (Cálculo) ─────────────────────────────────────────
+  mediaAnualVezes: number         // fator da média anual
+  mediaRecuperacaoVezes: number   // fator da recuperação
+  divididoPor: number             // divisor
+  igualA: number                  // resultado esperado (=)
+  calculoMediaAnual: string       // ex: 'Soma os 4 bimestres e divide por 4'
+  relacaoConselho: string         // ex: 'Média Final = (Conselho + Média Final)'
+
+  // ── Média Final (Recuperação) ─────────────────────────────────────
+  mediaAposRecuperacao: number    // ex: 5.0
+  recFinalIgualMediaFinal: string // 'Sim' | 'Não'
+  maxComponentesRecuperacao: number
+  reprovaSeAcimaFaltasPct: number // ex: 25
+  ateDisciplinasAbaixoMedia: number
+  resultadoAprovadoPP: string     // ex: 'Aprovado Com P.P.'
+  aposResultado: string           // ex: 'Reprovado(a)'
+
+  // ── Frentes ──────────────────────────────────────────────────────
+  calculoMediaAnualFrentes: string // ex: 'Calcula na Vertical'
+  recuperacaoExameFrentes: string  // ex: 'Lança nas Frentes'
+
+  // ── Notas Por Peso ────────────────────────────────────────────────
+  notasPorPeso: string             // 'Sim' | 'Não'
+  calculoMediaPeso: string         // ex: 'Lança sem multiplicar os pesos'
+  pesoNota1: number
+  pesoNota2: number
+  pesoNota3: number
+  pesoNota4: number
+
+  // ── Visualização de Notas (Arredondamento) ────────────────────────
+  usarArredondamento: string       // ex: 'Médias'
+  qualArredondamento: string       // ex: 'ARREDONDAMENTO PADRÃO'
+  casasVirgula: string             // ex: '2 Casas'
+  desconsiderarDemaisCasas: string // 'Sim' | 'Não'
+  dividirNumAvaliacoes: string     // 'Sim' | 'Não'
+  dividirArredondamentoPor: number
+  arredondaAntesCalculo: string    // 'Sim' | 'Não'
+
+  // ── Apresentação de Notas ─────────────────────────────────────────
+  mostrarAsteriscoAbaixoMedia: string // 'Sim' | 'Não'
+  trocarCorFonte: string           // 'Sim' | 'Não'
+  corAcimaDaMedia: string          // ex: 'Preto'
+  corAbaixoDaMedia: string         // ex: 'Vermelho'
+  valorNotaDispensa: number        // ex: 999
+  nota00Extenso: string            // ex: 'Extenso'
+  nota05Extenso: string
+  nota10Extenso: string
+  nota100Extenso: string
+
+  // ── Recuperação Bimestral / Trimestral ────────────────────────────
+  mostrarRecBimBoletim: string     // 'Sim' | 'Não'
+  notaAbaixoObrigRec: string       // 'Sim' | 'Não'
+  calculoMediaBimTrimestre: string // ex: '3 - Se a nota da Rec. for maior...'
+
+  // ── Recuperação Semestral ─────────────────────────────────────────
+  possuiRecSemestral: string       // 'Sim' | 'Não'
+  notaAbaixoObrigRecSem: string    // 'Sim' | 'Não'
+  lancamentoRecSem: string         // ex: 'Lança nas Frentes'
+  calculoRecuperacaoSem: string    // ex: '2 - Soma média semestral...'
+  calculoNasFrentes: string        // ex: 'Lança nas frentes e não mostra...'
+
+  // ── Log ──────────────────────────────────────────────────────────
+  dataInclusao: string
+  usuarioIncluiu: string
+  dataAlteracao: string
+  usuarioAlterou: string
+
+  createdAt: string
+  updatedAt: string
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -889,8 +1111,13 @@ const KEYS = {
   cfgGruposAlunos: 'edu-cfg-grupos-alunos',
   cfgDisciplinas: 'edu-cfg-disciplinas',
   cfgNiveisEnsino: 'edu-cfg-niveis-ensino',
+  cfgSeries: 'edu-cfg-series',
   cfgTiposOcorrencia: 'edu-cfg-tipos-ocorrencia',
+  cfgGruposAvaliacao: 'edu-cfg-grupos-avaliacao',
+  cfgArredondamentos: 'edu-cfg-arredondamentos',
   cfgEsquemasAvaliacao: 'edu-cfg-esquemas-avaliacao',
+  esquemaNota: 'edu-cfg-esquema-nota',
+  cfgFormulasNotas: 'edu-cfg-formulas-notas',
   // Config Financeiro
   cfgMetodosPagamento: 'edu-cfg-metodos-pagamento',
   cfgCartoes: 'edu-cfg-cartoes',
@@ -1100,8 +1327,13 @@ interface DataState {
   cfgGruposAlunos: ConfigGrupoAluno[]; setCfgGruposAlunos: Setter<ConfigGrupoAluno[]>
   cfgDisciplinas: ConfigDisciplina[]; setCfgDisciplinas: Setter<ConfigDisciplina[]>
   cfgNiveisEnsino: ConfigNivelEnsino[]; setCfgNiveisEnsino: Setter<ConfigNivelEnsino[]>
+  cfgSeries: ConfigSerie[]; setCfgSeries: Setter<ConfigSerie[]>
   cfgTiposOcorrencia: ConfigTipoOcorrencia[]; setCfgTiposOcorrencia: Setter<ConfigTipoOcorrencia[]>
+  cfgGruposAvaliacao: ConfigGrupoAvaliacao[]; setCfgGruposAvaliacao: Setter<ConfigGrupoAvaliacao[]>
+  cfgArredondamentos: ConfigArredondamento[]; setCfgArredondamentos: Setter<ConfigArredondamento[]>
   cfgEsquemasAvaliacao: ConfigEsquemaAvaliacao[]; setCfgEsquemasAvaliacao: Setter<ConfigEsquemaAvaliacao[]>
+  esquemaNota: EsquemaNota[]; setEsquemaNota: Setter<EsquemaNota[]>
+  cfgFormulasNotas: FormulaNotas[]; setCfgFormulasNotas: Setter<FormulaNotas[]>
   // Config Financeiro
   cfgMetodosPagamento: MetodoPagamento[]; setCfgMetodosPagamento: Setter<MetodoPagamento[]>
   cfgCartoes: ConfigCartao[]; setCfgCartoes: Setter<ConfigCartao[]>
@@ -1136,10 +1368,11 @@ interface DataState {
   censoTurmasData: CensoTurmaData[]; setCensoTurmasData: Setter<CensoTurmaData[]>
   censoProfsData: CensoProfissionalData[]; setCensoProfsData: Setter<CensoProfissionalData[]>
   perfis: Perfil[]; setPerfis: Setter<Perfil[]>
+  perfisLoading: boolean
 }
 
 export const DEFAULT_PERFIS: Perfil[] = [
-  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/esquema-avaliacao','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/config-notas','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade'] },
@@ -1174,7 +1407,12 @@ const DataContext = createContext<DataState>({
   cfgGruposAlunos: [], setCfgGruposAlunos: NOOP,
   cfgDisciplinas: [], setCfgDisciplinas: NOOP,
   cfgNiveisEnsino: [], setCfgNiveisEnsino: NOOP,
+  cfgSeries: [], setCfgSeries: NOOP,
   cfgTiposOcorrencia: [], setCfgTiposOcorrencia: NOOP,
+  cfgGruposAvaliacao: [], setCfgGruposAvaliacao: NOOP,
+  cfgArredondamentos: [], setCfgArredondamentos: NOOP,
+  esquemaNota: [], setEsquemaNota: NOOP,
+  cfgFormulasNotas: [], setCfgFormulasNotas: NOOP,
   cfgEsquemasAvaliacao: [], setCfgEsquemasAvaliacao: NOOP,
   cfgMetodosPagamento: [], setCfgMetodosPagamento: NOOP,
   cfgCartoes: [], setCfgCartoes: NOOP,
@@ -1194,6 +1432,7 @@ const DataContext = createContext<DataState>({
   adiantamentos: [], setAdiantamentos: NOOP,
   systemLogs: [], setSystemLogs: NOOP,
   perfis: [], setPerfis: NOOP,
+  perfisLoading: false,
   censoAuditLogs: [], setCensoAuditLogs: NOOP,
   censoOperacoes: [], setCensoOperacoes: NOOP,
   censoAlunosData: [], setCensoAlunosData: NOOP,
@@ -1250,8 +1489,42 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgGruposAlunos, setData: setCfgGruposAlunos } = useConfigDb<ConfigGrupoAluno>('cfgGruposAlunos')
   const { data: cfgDisciplinas, setData: setCfgDisciplinas } = useConfigDb<ConfigDisciplina>('cfgDisciplinas')
   const { data: cfgNiveisEnsino, setData: setCfgNiveisEnsino } = useConfigDb<ConfigNivelEnsino>('cfgNiveisEnsino')
+  const { data: cfgSeries, setData: setCfgSeries } = useConfigDb<ConfigSerie>('cfgSeries')
   const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia')
+  const { data: cfgGruposAvaliacao, setData: setCfgGruposAvaliacao } = useConfigDb<ConfigGrupoAvaliacao>('cfgGruposAvaliacao')
+  const { data: cfgArredondamentos, setData: setCfgArredondamentos } = useConfigDb<ConfigArredondamento>('cfgArredondamentos')
+
+  // MIGRATION / INITIALIZATION: Auto-extract independent Series from internal Niveis Ensino nested array
+  useEffect(() => {
+    if (cfgSeries.length === 0 && cfgNiveisEnsino.length > 0) {
+      let counter = 1
+      const extracted: ConfigSerie[] = []
+      cfgNiveisEnsino.forEach(n => {
+        if (n.series && n.series.length > 0) {
+          n.series.forEach(s => {
+            const sequenceCode = String(counter++).padStart(2, '0')
+            extracted.push({
+              id: newId('SER'),
+              codigo: sequenceCode,
+              nome: s.nome,
+              nivelEnsinoId: n.id,
+              unidadeIds: n.unidadeIds || [],
+              situacao: s.ativo ? 'ativo' : 'inativo',
+              createdAt: new Date().toISOString()
+            })
+          })
+        }
+      })
+      if (extracted.length > 0) {
+        setCfgSeries(extracted)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfgSeries.length, cfgNiveisEnsino])
+
   const { data: cfgEsquemasAvaliacao, setData: setCfgEsquemasAvaliacao } = useConfigDb<ConfigEsquemaAvaliacao>('cfgEsquemasAvaliacao')
+  const { data: esquemaNota, setData: setEsquemaNota } = useConfigDb<EsquemaNota>('esquemaNota')
+  const { data: cfgFormulasNotas, setData: setCfgFormulasNotas } = useConfigDb<FormulaNotas>('cfgFormulasNotas')
   // ── CONFIGURAÇÕES FINANCEIRAS — persistidas em Supabase (tabela configuracoes) ──
   const { data: cfgMetodosPagamento, setData: setCfgMetodosPagamento } = useConfigDb<MetodoPagamento>('cfgMetodosPagamento')
   const { data: cfgCartoes, setData: setCfgCartoes } = useConfigDb<ConfigCartao>('cfgCartoes')
@@ -1292,7 +1565,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
   const [systemLogs, setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
 
-  const [perfis, setPerfisRaw] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
+  const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
 
   // Censo Escolar
   const CENSO_CONFIG_DEFAULT: CensoConfig = {
@@ -1476,7 +1749,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setEventosAgenda([]); setRotinaItems([]); setAutorizacoes([])
     setMomentos([]); setEnquetes([])
     setOcorrencias([]); setTransferencias([]); setFrequencias([]); setLancamentosNota([])
-    setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
+    setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgSeries([]); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgGruposAvaliacao([]); setCfgArredondamentos([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
     setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
     setMovimentacoesManuais([]); setFornecedoresCad([])
@@ -1508,8 +1781,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgGruposAlunos: createTrackedSetter('Configurações', 'Grupos Alunos', setCfgGruposAlunos),
     setCfgDisciplinas: createTrackedSetter('Configurações', 'Disciplinas', setCfgDisciplinas),
     setCfgNiveisEnsino: createTrackedSetter('Configurações', 'Níveis de Ensino', setCfgNiveisEnsino),
+    setCfgSeries: createTrackedSetter('Configurações', 'Séries', setCfgSeries),
     setCfgTiposOcorrencia: createTrackedSetter('Configurações', 'Tipos de Ocorrência', setCfgTiposOcorrencia),
+    setCfgGruposAvaliacao: createTrackedSetter('Configurações', 'Grupos de Avaliação', setCfgGruposAvaliacao),
+    setCfgArredondamentos: createTrackedSetter('Configurações', 'Arredondamentos', setCfgArredondamentos),
     setCfgEsquemasAvaliacao: createTrackedSetter('Configurações', 'Esquemas de Avaliação', setCfgEsquemasAvaliacao),
+    setEsquemaNota: createTrackedSetter('Configurações', 'Esquema de Notas', setEsquemaNota),
+    setCfgFormulasNotas: createTrackedSetter('Configurações', 'Fórmulas de Notas', setCfgFormulasNotas),
     setCfgMetodosPagamento: createTrackedSetter('Configurações', 'Métodos de Pagamento', setCfgMetodosPagamento),
     setCfgCartoes: createTrackedSetter('Configurações', 'Cartões', setCfgCartoes),
     setCfgEventos: createTrackedSetter('Configurações', 'Eventos Financeiros', setCfgEventos),
@@ -1555,8 +1833,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     cfgGruposAlunos, ...{ setCfgGruposAlunos: trackedSetters.setCfgGruposAlunos },
     cfgDisciplinas, ...{ setCfgDisciplinas: trackedSetters.setCfgDisciplinas },
     cfgNiveisEnsino, ...{ setCfgNiveisEnsino: trackedSetters.setCfgNiveisEnsino },
+    cfgSeries, ...{ setCfgSeries: trackedSetters.setCfgSeries },
     cfgTiposOcorrencia, ...{ setCfgTiposOcorrencia: trackedSetters.setCfgTiposOcorrencia },
+    cfgGruposAvaliacao, ...{ setCfgGruposAvaliacao: trackedSetters.setCfgGruposAvaliacao },
+    cfgArredondamentos, ...{ setCfgArredondamentos: trackedSetters.setCfgArredondamentos },
     cfgEsquemasAvaliacao, ...{ setCfgEsquemasAvaliacao: trackedSetters.setCfgEsquemasAvaliacao },
+    esquemaNota, ...{ setEsquemaNota: trackedSetters.setEsquemaNota },
+    cfgFormulasNotas, ...{ setCfgFormulasNotas: trackedSetters.setCfgFormulasNotas },
     cfgMetodosPagamento, ...{ setCfgMetodosPagamento: trackedSetters.setCfgMetodosPagamento },
     cfgCartoes, ...{ setCfgCartoes: trackedSetters.setCfgCartoes },
     cfgEventos, ...{ setCfgEventos: trackedSetters.setCfgEventos },
@@ -1586,6 +1869,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     censoAlunosData, setCensoAlunosData,
     censoTurmasData, setCensoTurmasData,
     censoProfsData, setCensoProfsData,
+    perfisLoading,
     perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
     setPerfis: (val: any) => {
       const resolved = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
@@ -1598,7 +1882,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     eventosAgenda, rotinaItems, autorizacoes, momentos, enquetes,
     ocorrencias, transferencias, frequencias, lancamentosNota,
     cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas,
-    cfgNiveisEnsino, cfgTiposOcorrencia, cfgEsquemasAvaliacao,
+    cfgNiveisEnsino, cfgSeries, cfgTiposOcorrencia, cfgEsquemasAvaliacao, cfgGruposAvaliacao, cfgArredondamentos, esquemaNota, cfgFormulasNotas,
     cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto,
     cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios,
     cfgCalendarioLetivo, movimentacoesManuais, fornecedoresCad,
@@ -1607,6 +1891,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     censoConfig, censoPendencias, censoExports, censoAuditLogs,
     censoOperacoes, logCensoAction,
     censoAlunosData, censoTurmasData, censoProfsData, perfis,
+    perfisLoading,
     trackedSetters,
   ])
 

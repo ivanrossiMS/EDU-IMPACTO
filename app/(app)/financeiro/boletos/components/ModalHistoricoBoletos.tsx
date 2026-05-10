@@ -1,4 +1,5 @@
 'use client'
+import { motion, AnimatePresence } from 'framer-motion';
 
 /**
  * ModalHistoricoBoletos
@@ -219,13 +220,14 @@ export function ModalHistoricoBoletos({ aluno, titulos, onSolicitarVia, onClose 
         </div>
       </div>
 
-      {/* Popup detalhes multi-evento */}
+      <AnimatePresence>
+{/* Popup detalhes multi-evento */}
       {popupGrupo && (
-        <div
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
           style={{ position: 'fixed', inset: 0, zIndex: 6000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={() => setPopupGrupo(null)}
         >
-          <div
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
             style={{ background: 'hsl(var(--bg-base))', borderRadius: 18, width: '100%', maxWidth: 500, boxShadow: '0 30px 80px rgba(0,0,0,0.6)', border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
@@ -261,9 +263,10 @@ export function ModalHistoricoBoletos({ aluno, titulos, onSolicitarVia, onClose 
                 Total: {fmtMoeda(popupGrupo.valorTotal)}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        
+</motion.div>
+)}</AnimatePresence>
     </div>
   )
 }
