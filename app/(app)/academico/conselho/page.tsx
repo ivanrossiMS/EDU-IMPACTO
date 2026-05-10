@@ -272,8 +272,9 @@ export default function ConselhoPage() {
             const cfg = sit ? SIT_CONFIG[sit] : null
             const freqBad = freq !== null && freq < 75
             const lancsAluno = lancamentosNota.filter(l => l.turmaId === turmaId).flatMap(l => l.notas.filter((n: any) => n.alunoId === aluno.id && n.mediaParcial !== null))
-            const melhorNota = lancsAluno.length ? Math.max(...lancsAluno.map(n => n.mediaParcial)) : null
-            const piorNota = lancsAluno.length ? Math.min(...lancsAluno.map(n => n.mediaParcial)) : null
+            const notasValidas = lancsAluno.map(n => n.mediaParcial).filter((v): v is number => v !== null)
+            const melhorNota = notasValidas.length ? Math.max(...notasValidas) : null
+            const piorNota = notasValidas.length ? Math.min(...notasValidas) : null
 
             return (
               <div key={aluno.id} style={{ display:'grid', gridTemplateColumns:'1fr 90px 90px 140px 180px', gap:12, padding:'14px 20px', background:'hsl(var(--bg-elevated))', borderRadius:12, border:`1px solid ${cfg ? cfg.border : 'hsl(var(--border-subtle))'}`, marginBottom:8, alignItems:'center', transition:'box-shadow 0.2s' }}
