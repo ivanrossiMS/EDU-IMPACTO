@@ -70,7 +70,7 @@ export default function TicketMedioPage() {
     alunosAtivos.forEach(a => {
       // Identificar turma
       const tId = a.turmaId || a.turma_id
-      const turmaObj = turmas?.find((t: any) => t.id === tId) || turmas?.find((t: any) => t.nome === a.turma)
+      const turmaObj = (turmas?.find((t: any) => t.id === tId) || turmas?.find((t: any) => t.nome === a.turma)) as any
       const tNome = turmaObj ? turmaObj.nome : (a.turma || 'Sem Turma')
       
       if (!turmaMap[tNome]) {
@@ -468,7 +468,7 @@ export default function TicketMedioPage() {
                         contentStyle={{ background: 'hsl(var(--bg-overlay))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, boxShadow: '0 12px 24px rgba(0,0,0,0.2)' }}
                         labelStyle={{ color: 'hsl(var(--text-muted))', fontWeight: 800, fontSize: 11, marginBottom: 4 }}
                         itemStyle={{ fontSize: 13, fontWeight: 700 }}
-                        formatter={(v: number, n: string) => [ `R$ ${fmtMoeda(v)}`, n === 'receita' ? (isContratual ? 'Receita Bruta' : isComercial ? 'Receita Base' : 'Receita Líquida') : 'Ticket Médio' ]}
+                        formatter={((v: number, n: string) => [ `R$ ${fmtMoeda(v)}`, n === 'receita' ? (isContratual ? 'Receita Bruta' : isComercial ? 'Receita Base' : 'Receita Líquida') : 'Ticket Médio' ]) as any}
                       />
                       <Bar yAxisId="left" dataKey={isContratual ? "receitaCheia" : (isComercial ? "receitaComercial" : "receitaLiquida")} fill={modeTheme} radius={[6,6,0,0]} barSize={40} name="receita" />
                       <Bar yAxisId="right" dataKey={isContratual ? "ticketContratual" : (isComercial ? "ticketComercial" : "ticketFinanceiro")} fill={`${modeTheme}80`} radius={[6,6,0,0]} barSize={20} name="ticketMedio" />

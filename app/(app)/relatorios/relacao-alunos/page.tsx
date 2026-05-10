@@ -659,7 +659,7 @@ export default function RelacaoAlunosPage() {
         { key: 'codigo',               label: 'Matrícula',        type: 'text'   as const, width: 80 },
         { key: 'nome',                 label: 'Nome',              type: 'text'   as const },
         { key: 'situacaoNome',         label: 'Situação',          type: 'text'   as const, width: 120 },
-        { key: '_assinatura',          label: 'Assinatura',        type: 'signature' as const },
+        { key: '_assinatura',          label: 'Assinatura',        type: 'signature' as any },
       ]
     }
     return [

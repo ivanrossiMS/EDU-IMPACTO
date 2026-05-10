@@ -125,7 +125,10 @@ export default function RematriculasPage() {
     for (const nivel of cfgNiveisEnsino) {
       if (Array.isArray(nivel.series)) {
         const s = nivel.series.find((x: any) => x.id === serieId || x.value === serieId || x.codigo === serieId)
-        if (s) return `${nivel.nome} - ${s.nome || s.label || serieId}`
+        if (s) {
+          const sAny = s as any;
+          return `${nivel.nome} - ${sAny.nome || sAny.label || serieId}`
+        }
       }
     }
     return String(serieId)

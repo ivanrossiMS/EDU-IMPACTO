@@ -500,7 +500,7 @@ export default function OcorrenciasDashboardPage() {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border-subtle))" />
                         <XAxis dataKey="nome" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--text-muted))', fontSize: 11 }} dy={10} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#dc2626', fontSize: 11 }} tickFormatter={v => `R$${(v/1000).toFixed(1)}k`} />
-                        <Tooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'hsl(var(--bg-overlay))', border: '1px solid #dc262640', borderRadius: 12 }} formatter={(v:number) => [`R$ ${fmtMoeda(v)}`, "Recurrent Revenue (MRR) Ameaçado"]} />
+                        <Tooltip cursor={{ fill: 'rgba(128,128,128,0.05)' }} contentStyle={{ background: 'hsl(var(--bg-overlay))', border: '1px solid #dc262640', borderRadius: 12 }} formatter={((v:number) => [`R$ ${fmtMoeda(v)}`, "Recurrent Revenue (MRR) Ameaçado"]) as any} />
                         <Bar dataKey="mrrAmeacado" fill="#dc2626" radius={[6,6,0,0]} barSize={32} name="Capital em Risco" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -539,7 +539,7 @@ export default function OcorrenciasDashboardPage() {
                             <Cell key="2" fill="#f59e0b" />
                           </Pie>
                         )}
-                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-base))', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }} formatter={(v:number) => [isSec ? v : `R$ ${fmtMoeda(v)}`, isSec ? 'Ocorrências' : 'R$']} />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: 'none', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-base))', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }} formatter={((v:number) => [isSec ? v : `R$ ${fmtMoeda(v)}`, isSec ? 'Ocorrências' : 'R$']) as any} />
                       </PieChart>
                     </ResponsiveContainer>
                 </div>

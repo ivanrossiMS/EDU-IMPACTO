@@ -127,7 +127,7 @@ export default function MapaTurmasPremiumPage() {
       // Encontrar nome descritivo do Segmento (Nível) e da Série
       const nivelDesc = cfgNiveisEnsino?.find(n => n.codigo === t.serie)?.nome || t.serie
       
-      let serieObj = cfgSeries?.find(s => s.id === t.serieId || s.id === t.serie_id || s.id === (t as any).dados?.serieId) || null
+      let serieObj = cfgSeries?.find(s => s.id === t.serieId || s.id === (t as any).serie_id || s.id === (t as any).dados?.serieId) || null
       if (!serieObj && t.nome && cfgSeries) {
         // Fallback de string matching decrescente garantindo o nome da série mais longo primeiro 
         const matched = [...cfgSeries]
@@ -366,7 +366,7 @@ export default function MapaTurmasPremiumPage() {
                 <Tooltip 
                   contentStyle={{ background: 'hsl(var(--bg-elevated))', border: 'none', borderRadius: 12, boxShadow: '0 10px 25px rgba(0,0,0,0.1)', color: 'hsl(var(--text-primary))' }}
                   itemStyle={{ fontSize: 12 }}
-                  formatter={(value: any, name: string) => [name === 'Ocupação %' ? `${value}%` : value, name]}
+                  formatter={((value: any, name: string) => [name === 'Ocupação %' ? `${value}%` : value, name]) as any}
                 />
                 <Bar dataKey="Ocupação %" radius={[6, 6, 0, 0]} maxBarSize={60}>
                   {chartData.map((entry, idx) => (

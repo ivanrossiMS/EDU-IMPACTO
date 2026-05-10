@@ -15,7 +15,7 @@ interface ExportXLSXOptions {
 }
 
 function fmtVal(value: unknown, col: ColumnDef): string | number {
-  if (col.type === 'signature') return ''
+  if ((col.type as string) === 'signature') return ''
   if (value === null || value === undefined || value === '') return ''
   if (col.type === 'currency' || col.type === 'number' || col.type === 'percent') return Number(value) || 0
   if (col.type === 'boolean') return value ? 'Sim' : 'Não'

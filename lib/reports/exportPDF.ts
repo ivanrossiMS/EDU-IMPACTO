@@ -23,7 +23,7 @@ function fmt(v: number): string {
 }
 
 function fmtCell(value: unknown, col: ColumnDef): string {
-  if (col.type === 'signature') return `<div style="border-bottom: 1px solid #94a3b8; height: 20px; margin-top: 6px; width: 100%; min-width: 180px;"></div>`
+  if ((col.type as string) === 'signature') return `<div style="border-bottom: 1px solid #94a3b8; height: 20px; margin-top: 6px; width: 100%; min-width: 180px;"></div>`
   
   if (value === null || value === undefined || value === '') return '—'
   if (col.type === 'currency') return `R$ ${fmt(Number(value) || 0)}`

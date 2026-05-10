@@ -595,6 +595,45 @@ async function resolveAlunosProgressao(filters: Record<string, string>): Promise
   return rawRows;
 }
 
+// ─── Shared Helpers for Reports ────────────────────────────────────────────
+
+const NIVEL_CODIGO_MAP: Record<string, string> = {
+  'EI': 'Educação Infantil',
+  'EI01': 'Educação Infantil',
+  'EI02': 'Educação Infantil',
+  '1': 'Educação Infantil',
+  'EF1': 'Ensino Fundamental I',
+  'EF01': 'Ensino Fundamental I',
+  '2': 'Ensino Fundamental I',
+  'EF2': 'Ensino Fundamental II',
+  'EF02': 'Ensino Fundamental II',
+  '3': 'Ensino Fundamental II',
+  'EM': 'Ensino Médio',
+  '4': 'Ensino Médio',
+  'EJA': 'EJA',
+  '5': 'EJA',
+  'TEC': 'Técnico',
+  'TECNICO': 'Técnico',
+}
+
+const resolveNivelDeTurma = (turmaObj: any): string => {
+  if (!turmaObj) return ''
+  const serie = (turmaObj.serie || '').toString().trim().toUpperCase()
+  if (!serie) return ''
+  if (NIVEL_CODIGO_MAP[serie]) return NIVEL_CODIGO_MAP[serie]
+  for (const [codigo, nome] of Object.entries(NIVEL_CODIGO_MAP)) {
+    if (serie.startsWith(codigo)) return nome
+  }
+  const seg = turmaObj.dados?.segmento || turmaObj.dados?.nivel || ''
+  if (seg) return seg
+  return ''
+}
+
+const getPhone = (r: any): string => {
+  if (!r) return ''
+  return r.celular || r.telefone || r.dados?.celular || r.dados?.telefone || ''
+}
+
 async function resolveAlunosRelacao(filters: Record<string, string>): Promise<Record<string, unknown>[]> {
   // ── 1. Fetch all base tables in parallel ──────────────────────────────────
   const [
@@ -634,56 +673,7 @@ async function resolveAlunosRelacao(filters: Record<string, string>): Promise<Re
   const respMap = new Map<string, any>()
   ;(resps || []).forEach((r: any) => respMap.set(r.id, r))
 
-  // ── 3. nivelEnsino: código da turma → nome completo ──────────────────────
-  // O campo turmas.serie armazena o CÓDIGO do nível (EI, EF1, EF2, EM, EJA, etc.)
-  // Mapeamento baseado nos padrões do sistema (INEP/LDB)
-  const NIVEL_CODIGO_MAP: Record<string, string> = {
-    // Educação Infantil
-    'EI': 'Educação Infantil',
-    'EI01': 'Educação Infantil',
-    'EI02': 'Educação Infantil',
-    '1': 'Educação Infantil',
-    // Ensino Fundamental I (Anos Iniciais)
-    'EF1': 'Ensino Fundamental I',
-    'EF01': 'Ensino Fundamental I',
-    '2': 'Ensino Fundamental I',
-    // Ensino Fundamental II (Anos Finais)
-    'EF2': 'Ensino Fundamental II',
-    'EF02': 'Ensino Fundamental II',
-    '3': 'Ensino Fundamental II',
-    // Ensino Médio
-    'EM': 'Ensino Médio',
-    '4': 'Ensino Médio',
-    // EJA
-    'EJA': 'EJA',
-    '5': 'EJA',
-    // Técnico
-    'TEC': 'Técnico',
-    'TECNICO': 'Técnico',
-  }
-
-  const resolveNivelDeTurma = (turmaObj: any): string => {
-    if (!turmaObj) return ''
-    const serie = (turmaObj.serie || '').toString().trim().toUpperCase()
-    if (!serie) return ''
-    // Direct lookup first
-    if (NIVEL_CODIGO_MAP[serie]) return NIVEL_CODIGO_MAP[serie]
-    // Prefix match: EF105 → EF1, EI3 → EI etc.
-    for (const [codigo, nome] of Object.entries(NIVEL_CODIGO_MAP)) {
-      if (serie.startsWith(codigo)) return nome
-    }
-    // Fallback: if turma dados.segmento ou dados.nivel exists, use it
-    const seg = turmaObj.dados?.segmento || turmaObj.dados?.nivel || ''
-    if (seg) return seg
-    return ''
-  }
-
-  // ── 4. Helpers ────────────────────────────────────────────────────────────
-  const getPhone = (r: any): string => {
-    if (!r) return ''
-    // responsaveis.dados JSONB may store celular/telefone
-    return r.celular || r.telefone || r.dados?.celular || r.dados?.telefone || ''
-  }
+  // Helpers moved to file level
 
   const normalizeStatus = (s: string): string => {
     if (!s) return ''
@@ -834,7 +824,7 @@ async function resolveAlunosRelacao(filters: Record<string, string>): Promise<Re
 
 // ─── Resolver: Não Rematriculados / Retenção ───────────────────────────
 
-async function resolveRetencaoAlunos(filters: Partial<QueryFilters>): Promise<Record<string, unknown>[]> {
+async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<Record<string, unknown>[]> {
   const { data: alunos } = await supabase.from('alunos').select('*')
   const { data: arLinks } = await supabase.from('alunos_responsaveis').select('*')
   const { data: respDb } = await supabase.from('responsaveis').select('*')

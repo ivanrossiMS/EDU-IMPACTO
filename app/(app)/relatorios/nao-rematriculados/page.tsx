@@ -152,7 +152,7 @@ export default function NaoRematriculadosPage() {
       'Contato': d.telefonesStr,
       'Motivo': getMotivoName(d.motivoPrincipal)
     }))
-    exportXLSX({ title: 'Alunos Não Rematriculados', data: list, columns: [
+    exportXLSX({ title: 'Alunos Não Rematriculados', data: list, userName: 'Usuário', columns: [
       { key: 'Nome', label: 'Nome', type: 'text' },
       { key: 'Matricula', label: 'MA', type: 'text' },
       { key: 'Série Anterior', label: 'Série Anterior', type: 'text' },
