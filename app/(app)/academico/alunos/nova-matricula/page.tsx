@@ -2545,7 +2545,8 @@ export default function NovaMatriculaPage() {
           let count = 1;
           for (const al of alunos) {
             try {
-              const pObj = typeof al.dados === 'string' ? JSON.parse(al.dados) : (al.dados || {});
+              const alAny = al as any;
+              const pObj = typeof alAny.dados === 'string' ? JSON.parse(alAny.dados) : (alAny.dados || {});
               const par = pObj?.progressaoParcial;
               if (Array.isArray(par)) {
                 if (par.some((px:any) => px.ano === finalProg.ano && px.serie === finalProg.serie && px.disciplina === finalProg.disciplina)) count++;
