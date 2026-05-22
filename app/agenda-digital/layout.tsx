@@ -132,6 +132,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
           }
 
+          .ad-content-inner.ad-has-banner {
+            margin-top: -80px;
+          }
+
           .ad-fin-sticky-footer {
             bottom: 32px !important;
           }
@@ -155,6 +159,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               bottom: 95px !important; /* well above the 72px mobile nav */
               z-index: 9998 !important;
             }
+            .ad-content-inner.ad-has-banner {
+              margin-top: 0 !important;
+            }
           }
         `}} />
         
@@ -172,7 +179,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           )}
 
-          <main className="ad-content-inner" style={{ marginTop: bannerUrl ? '-80px' : 0 }}>
+          <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
           <FloatingChat />
