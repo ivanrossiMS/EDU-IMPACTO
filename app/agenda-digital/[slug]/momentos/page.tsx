@@ -210,7 +210,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               WebkitTextFillColor: 'transparent',
               filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.04))'
             }}>
-              Momentos da Turma
+              Fotos/Vídeos da Turma
             </h2>
             <p style={{ 
               fontSize: 15, 

@@ -253,12 +253,12 @@ export default function AgendaDigitalFamilyLayout({
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/${aluno?.id}/comunicados`, icon: <Bell size={18} /> },
     { label: 'Mensagens', href: `/agenda-digital/${aluno?.id}/conversas`, icon: <MessageSquare size={18} /> },
-    { label: 'Momentos', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
+    { label: 'Fotos/Vídeos', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: `/agenda-digital/${aluno?.id}/calendario`, icon: <Calendar size={18} /> },
+    { label: 'Financeiro', href: `/agenda-digital/${aluno?.id}/financeiro`, icon: <DollarSign size={18} /> },
     { label: 'Frequência', href: `/agenda-digital/${aluno?.id}/frequencia`, icon: <BarChart2 size={18} /> },
     { label: 'Ocorrências', href: `/agenda-digital/${aluno?.id}/ocorrencias`, icon: <AlertTriangle size={18} /> },
     { label: 'Notas', href: `/agenda-digital/${aluno?.id}/notas`, icon: <GraduationCap size={18} /> },
-    { label: 'Financeiro', href: `/agenda-digital/${aluno?.id}/financeiro`, icon: <DollarSign size={18} /> },
     { label: 'Meu Perfil', href: `/agenda-digital/${aluno?.id}/perfil`, icon: <UserCog size={18} /> },
   ]
 
@@ -1389,7 +1389,7 @@ export default function AgendaDigitalFamilyLayout({
       </div>
 
       {/* Mobile Bottom Navigation (Glassmorphic overlay) */}
-      <div className="ad-mobile-nav-bar" style={{
+      <div className="ad-mobile-nav-bar hide-scrollbar" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
@@ -1399,24 +1399,32 @@ export default function AgendaDigitalFamilyLayout({
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderTop: '1px solid rgba(0, 0, 0, 0.08)',
-        justifyContent: 'space-around',
-        alignItems: 'center',
         zIndex: 9999,
-        padding: '0 12px',
-        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)'
+        padding: '0 4px',
+        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        display: 'flex',
+        alignItems: 'center'
       }}>
-        {filteredNavItems.slice(0, 5).map((item, idx) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#4f46e5' : '#94a3b8', flex: 1, minWidth: 0 }}>
-              <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {React.cloneElement(item.icon, { size: 22, color: isActive ? '#4f46e5' : '#94a3b8' })}
-              </div>
-              <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
-            </Link>
-          )
-        })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '0 12px', minWidth: 'min-content', margin: '0 auto' }}>
+          {filteredNavItems.map((item, idx) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#4f46e5' : '#94a3b8', width: 64, flexShrink: 0 }}>
+                <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {React.cloneElement(item.icon, { size: 22, color: isActive ? '#4f46e5' : '#94a3b8' })}
+                </div>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+              </Link>
+            )
+          })}
+        </div>
       </div>
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
     </>
   )

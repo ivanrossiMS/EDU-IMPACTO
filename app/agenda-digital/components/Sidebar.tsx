@@ -263,10 +263,10 @@ export function ADSidebar() {
                     },
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
+                    { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
                     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
                     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
-                    { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)
