@@ -1,19 +1,20 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
+import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
 
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
 import { useApp } from '@/lib/context'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { use, useState, useEffect } from 'react'
+import { usePathname, useRouter, useParams } from 'next/navigation'
+import React, { use, useState, useEffect } from 'react'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
-  Megaphone, Loader2, CheckCircle2
+  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck
 } from 'lucide-react'
 
 function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: any }) {
@@ -21,7 +22,6 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => c.studentId === aluno.id && c.status !== 'cancelled')
 
-  // Se o call foi confirmado mas estávamos esperando, segura o confirmed localmente por 5 segundos antes de resetar.
   useEffect(() => {
     if (call?.status === 'confirmed') {
       setLocalConfirmed(true)
@@ -41,58 +41,79 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
     callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
   }
 
-  // Se não tem call e nem confirmed, estado default
+  const baseBtnStyle: React.CSSProperties = {
+    height: 56,
+    borderRadius: 24,
+    fontWeight: 800,
+    fontSize: 16,
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    whiteSpace: 'nowrap',
+    width: '100%',
+    padding: '0 24px',
+    fontFamily: 'Outfit, Inter, sans-serif',
+  }
+
   if (!call && !localConfirmed) {
     return (
       <button 
-        className="ad-chamar-btn"
+        className="ad-premium-cta-btn"
         onClick={handleCall}
         style={{
-          height: 48, padding: '0 24px', borderRadius: 100,
-          background: 'var(--gradient-primary)',
-          color: 'white', fontWeight: 800, fontSize: 15,
-          border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 10,
-          boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          whiteSpace: 'nowrap'
+          ...baseBtnStyle,
+          background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
+          color: 'white',
+          boxShadow: '0 12px 28px rgba(99,102,241,0.25)',
         }}
-        onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-        onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = '0 16px 36px rgba(99,102,241,0.35)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = '0 12px 28px rgba(99,102,241,0.25)'
+        }}
       >
-        <Megaphone size={18} />
+        <Megaphone size={20} style={{ strokeWidth: 2.2 }} />
         Chamar Aluno na Portaria
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        </span>
       </button>
     )
   }
 
   if (isActive) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div className="ad-chamar-btn" style={{
-          height: 48, padding: '0 24px', borderRadius: 100,
-          background: 'rgba(245, 158, 11, 0.1)',
-          border: '2px solid rgba(245, 158, 11, 0.4)',
-          color: '#f59e0b', fontWeight: 800, fontSize: 15,
-          display: 'flex', alignItems: 'center', gap: 10,
-          boxShadow: '0 0 20px rgba(245,158,11,0.15)',
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+        <div style={{
+          ...baseBtnStyle,
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '2px dashed rgba(245, 158, 11, 0.4)',
+          color: '#d97706',
+          cursor: 'default'
         }}>
-          <Loader2 size={18} className="spin-anim" />
-          Aluno chamado
+          <Loader2 size={20} className="spin-anim" />
+          Chamando na Portaria...
         </div>
         <button 
           onClick={() => cancelCall(call.id)}
           title="Cancelar chamada"
           style={{
-            width: 48, height: 48, borderRadius: 24, cursor: 'pointer',
-            background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444',
+            width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
+            background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s', flexShrink: 0
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.2)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
         >
-          <X size={20} />
+          <X size={24} />
         </button>
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes spin-anim { 100% { transform: rotate(360deg); } }
@@ -104,26 +125,25 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
 
   if (isBlocked) {
     return (
-      <div className="ad-chamar-btn" style={{
-        height: 48, padding: '0 24px', borderRadius: 100,
-        background: 'rgba(239, 68, 68, 0.1)',
-        border: '2px solid rgba(239, 68, 68, 0.4)',
-        color: '#ef4444', fontWeight: 800, fontSize: 15,
-        display: 'flex', alignItems: 'center', gap: 10,
+      <div style={{
+        ...baseBtnStyle,
+        background: 'rgba(239, 68, 68, 0.08)',
+        border: '2px solid rgba(239, 68, 68, 0.3)',
+        color: '#ef4444',
+        cursor: 'default'
       }}>
-        <AlertTriangle size={18} />
+        <AlertTriangle size={20} />
         Acesso Bloqueado
       </div>
     )
   }
 
   return (
-    <div className="ad-chamar-btn" style={{
-      height: 48, padding: '0 24px', borderRadius: 100,
-      background: 'linear-gradient(135deg, #10b981, #059669)',
-      color: 'white', fontWeight: 800, fontSize: 15,
-      display: 'flex', alignItems: 'center', gap: 10,
-      boxShadow: '0 8px 24px rgba(16,185,129,0.3)',
+    <div style={{
+      ...baseBtnStyle,
+      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      color: 'white',
+      boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
       animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
     }}>
       <CheckCircle2 size={20} />
@@ -142,54 +162,97 @@ export default function AgendaDigitalFamilyLayout({
   children: React.ReactNode, 
   params: Promise<{ slug: string }>
 }) {
-  const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const { currentUser, setCurrentUser } = useApp()
-  const pathname = usePathname()
-  
-  // Resolve (unwrap) o promise params
-  const resolvedParams = use(params as Promise<{ slug: string }>)
-  
-  // Find the student
-  const aluno = (alunos || []).find(a => a.id === resolvedParams.slug) || (alunos || [])[0]
+  const [profileData, setProfileData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+
+  const { turmas = [] } = useData();
+  const { adConfig, setAdLoading } = useAgendaDigital();
+  const { currentUser, hydrated, setCurrentUser } = useApp()
+  const pathname = usePathname()
   const router = useRouter()
+  const paramsHook = useParams<{ slug: string }>()
+  const resolvedParams = paramsHook || (params as any)
 
-  // Real fetching of family's linked students
-  let meusAlunos = (alunos || []).filter(a => {
-    const s = a.status?.toLowerCase()
-    return s === 'matriculado' || s === 'ativo' || s === 'em_cadastro' || s === 'pendente'
-  })
+  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
+  const isAlunoLogado = currentUser?.cargo === 'Aluno'
 
-  if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
-    const nomeBusca = (currentUser.nome || '').toLowerCase().trim()
-    const emailBusca = (currentUser.email || '').toLowerCase().trim()
+  useEffect(() => {
+     if (!hydrated || !currentUser) return
+     if (!resolvedParams?.slug) return
 
-    meusAlunos = meusAlunos.filter(a => {
-      if (a.responsavel && a.responsavel.toLowerCase().trim() === nomeBusca) return true
-      if (a.emailResponsavel && emailBusca && a.emailResponsavel.toLowerCase().trim() === emailBusca) return true
-      if (a.responsavelFinanceiro && a.responsavelFinanceiro.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavelPedagogico && a.responsavelPedagogico.toLowerCase().trim() === nomeBusca) return true
+     if (isAlunoLogado) {
+        const directId = (currentUser as any).aluno_id || (currentUser as any).user_metadata?.aluno_id
+        if (directId && String(resolvedParams.slug) !== String(directId)) {
+          const currentPath = pathname || ''
+          const newPath = currentPath.replace(`/agenda-digital/${resolvedParams.slug}`, `/agenda-digital/${directId}`)
+          router.replace(newPath)
+          return
+        }
+     }
 
-      // Checa array de responsáveis se existir (novo padrão de matrícula)
-      const respArr = (a as any).responsaveis || (a as any)._responsaveis || []
-      if (Array.isArray(respArr)) {
-        return respArr.some(r => 
-          (r.nome && r.nome.toLowerCase().trim() === nomeBusca) ||
-          (r.email && emailBusca && r.email.toLowerCase().trim() === emailBusca) ||
-          (r.emailResponsavel && emailBusca && r.emailResponsavel.toLowerCase().trim() === emailBusca)
-        )
-      }
+     setIsLoading(true)
+     const loadProfile = async () => {
+        try {
+           const res = await fetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
+           const data = await res.json()
+           if (res.ok) {
+              setProfileData(data)
+           } else {
+              console.error(data.error)
+           }
+        } catch(e) {
+           console.error(e)
+        } finally {
+           setIsLoading(false)
+        }
+     }
+     loadProfile()
+  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, pathname, router])
 
-      return false
-    })
-  } else if (!currentUser || (currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável')) {
-    meusAlunos = meusAlunos.slice(0, 3) 
-  }
+  useEffect(() => {
+    if (setAdLoading) setAdLoading(isLoading);
+    return () => { if (setAdLoading) setAdLoading(false); }
+  }, [isLoading, setAdLoading]);
 
+  const aluno = profileData?.aluno || null
+  const vinculo = profileData?.vinculo || null
+  const meusAlunos = profileData?.meusAlunos || []
+
+  const cleanTurma = (() => {
+    if (!aluno) return 'S/T'
+    // 1. Tenta usar o nome já resolvido pela API de perfil
+    if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
+      return aluno.turma_nome.split('-')[0].trim()
+    }
+    // 2. Fallback para o turmas em cache
+    const turmaObj = (turmas || []).find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'S/T'
+    return nomeTurma.split('-')[0].trim()
+  })()
+
+  const cleanTurno = (() => {
+    if (!aluno) return 'Vespertino'
+    if (aluno.turno_nome) return aluno.turno_nome
+    if (aluno.turno && aluno.turno.trim() !== '') return aluno.turno
+    const turmaObj = (turmas || []).find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    return turmaObj?.turno || 'Vespertino'
+  })()
+
+  const userAccessRole = React.useMemo(() => {
+    if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
+      return { isFin: true, isPed: true, parentesco: currentUser.perfil }
+    }
+    if (!vinculo) return { isFin: false, isPed: false, parentesco: 'Responsável' }
+    return {
+      isFin: !!vinculo.resp_financeiro,
+      isPed: !!vinculo.resp_pedagogico,
+      parentesco: vinculo.parentesco || 'Responsável'
+    }
+  }, [vinculo, currentUser])
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/${aluno?.id}/comunicados`, icon: <Bell size={18} /> },
-    { label: 'Conversas', href: `/agenda-digital/${aluno?.id}/conversas`, icon: <MessageSquare size={18} /> },
+    { label: 'Mensagens', href: `/agenda-digital/${aluno?.id}/conversas`, icon: <MessageSquare size={18} /> },
     { label: 'Momentos', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: `/agenda-digital/${aluno?.id}/calendario`, icon: <Calendar size={18} /> },
     { label: 'Frequência', href: `/agenda-digital/${aluno?.id}/frequencia`, icon: <BarChart2 size={18} /> },
@@ -199,7 +262,129 @@ export default function AgendaDigitalFamilyLayout({
     { label: 'Meu Perfil', href: `/agenda-digital/${aluno?.id}/perfil`, icon: <UserCog size={18} /> },
   ]
 
-  if (!aluno) return null
+  const filteredNavItems = navItems.filter(item => {
+    if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
+    if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
+    if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
+    if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+    return true
+  })
+
+  if (isLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '80vh',
+        width: '100%',
+        gap: '24px',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes spin-gradient {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @keyframes pulse-glow {
+            0%, 100% { opacity: 0.7; transform: scale(0.96); filter: drop-shadow(0 0 12px rgba(0, 210, 255, 0.3)); }
+            50% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 25px rgba(121, 40, 202, 0.6)); }
+          }
+          .loader-ring {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            padding: 4px;
+            background: linear-gradient(135deg, #00D2FF, #7928CA, #FF0080);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: spin-gradient 1.2s linear infinite;
+          }
+          .pulse-logo {
+            animation: pulse-glow 2s ease-in-out infinite;
+          }
+        `}} />
+        
+        <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Animated gradient spinning loader ring */}
+          <div className="loader-ring" style={{ position: 'absolute' }} />
+          
+          {/* Pulsing inner glow logo / icon */}
+          <div className="pulse-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF' }}>
+            <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+              <path d="M10 32L18 8L26 32" stroke="#FF0080" strokeWidth="4.5" strokeLinecap="round" />
+              <path d="M24 32L32 8L40 32" stroke="#00D2FF" strokeWidth="4.5" strokeLinecap="round" />
+            </svg>
+          </div>
+        </div>
+        
+        <p style={{
+          fontSize: '15px',
+          fontWeight: 600,
+          background: 'linear-gradient(135deg, #ffffff, rgba(255,255,255,0.7))',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          margin: 0
+        }}>
+          Carregando Agenda...
+        </p>
+      </div>
+    )
+  }
+
+  if (!aluno) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '80vh',
+        width: '100%',
+        gap: '24px',
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes spin-gradient {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .loader-ring {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            padding: 4px;
+            background: linear-gradient(135deg, #00D2FF, #7928CA, #FF0080);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: spin-gradient 1.2s linear infinite;
+          }
+        `}} />
+        
+        <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="loader-ring" style={{ position: 'absolute' }} />
+        </div>
+        
+        <p style={{
+          fontSize: '15px',
+          fontWeight: 600,
+          background: 'linear-gradient(135deg, #ffffff, rgba(255,255,255,0.7))',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          margin: 0
+        }}>
+          Carregando Agenda...
+        </p>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -215,7 +400,7 @@ export default function AgendaDigitalFamilyLayout({
             </button>
           </div>
           <div style={{ display: 'grid', gap: 12 }}>
-            {meusAlunos.map(a => (
+            {meusAlunos.map((a: any) => (
               <div key={a.id} className="ad-switcher-item" onClick={() => {
                 const newPath = pathname.replace(aluno.id, a.id)
                 router.push(newPath)
@@ -226,7 +411,13 @@ export default function AgendaDigitalFamilyLayout({
                   </div>
                   <div>
                     <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
-                    <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {(a as any).turma}</div>
+                    {(() => {
+                      const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
+                      const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
+                      return (
+                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {nomeTurma}</div>
+                      )
+                    })()}
                   </div>
               </div>
             ))}
@@ -240,9 +431,164 @@ export default function AgendaDigitalFamilyLayout({
       <style dangerouslySetInnerHTML={{__html: `
         .ad-main-grid {
           display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 32px;
+          grid-template-columns: 1fr;
+          gap: 0px;
           align-items: start;
+          position: relative;
+          z-index: 2;
+        }
+
+        @keyframes twinkle {
+          0%, 100% { opacity: 0.25; transform: scale(0.9); }
+          50% { opacity: 0.95; transform: scale(1.15); }
+        }
+        @keyframes floatPlanet1 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(-10px, -15px) rotate(12deg); }
+        }
+        @keyframes floatPlanet2 {
+          0%, 100% { transform: translate(0, 0) rotate(0deg); }
+          50% { transform: translate(12px, 10px) rotate(-8deg); }
+        }
+
+        .ad-premium-card-wrapper {
+          margin-top: -16px;
+          position: relative;
+          z-index: 1;
+          width: 100%;
+        }
+
+        .ad-premium-card {
+          background: #ffffff;
+          border-radius: 24px;
+          box-shadow: 0 12px 40px rgba(15, 12, 36, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+          border: 1px solid rgba(0, 0, 0, 0.04);
+          padding: 24px 32px;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 24px;
+          align-items: center;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .ad-premium-card:hover {
+          transform: translateY(-5px) scale(1.005);
+          box-shadow: 0 30px 60px rgba(99, 102, 241, 0.12), 0 10px 20px rgba(0, 0, 0, 0.04);
+          border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        @keyframes neonSlide {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+
+        .ad-premium-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 6px;
+          background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #3b82f6, #6366f1);
+          background-size: 200% 100%;
+          animation: neonSlide 3s linear infinite;
+          box-shadow: 0 0 12px rgba(168, 85, 247, 0.6), inset 0 0 8px rgba(99, 102, 241, 0.4);
+        }
+
+        .ad-mini-cards-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 8px;
+        }
+
+        .ad-mini-card {
+          background: #f8fafc;
+          border: 1px solid rgba(0, 0, 0, 0.04);
+          border-radius: 12px;
+          padding: 8px 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ad-mini-card:hover {
+          background: #ffffff;
+          border-color: rgba(99,102,241,0.22);
+          box-shadow: 0 8px 20px rgba(99,102,241,0.06);
+          transform: translateY(-2px);
+        }
+
+        .ad-right-section {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .ad-btn-side {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          height: 30px;
+          padding: 0 10px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%;
+          justify-content: center;
+          font-family: 'Outfit', sans-serif;
+        }
+
+        .ad-btn-side:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #0f172a;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        }
+
+        .ad-btn-side.logout {
+          border-color: #fecaca;
+          color: #ef4444;
+        }
+
+        .ad-btn-side.logout:hover {
+          background: #fef2f2;
+          border-color: #fca5a5;
+          color: #dc2626;
+        }
+
+        @media (max-width: 1200px) {
+          .ad-premium-card {
+            grid-template-columns: 1fr;
+            gap: 28px;
+          }
+          .ad-middle-section {
+            border-left: none !important;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            padding-left: 0 !important;
+            padding-top: 28px;
+          }
+        }
+        
+        @media (max-width: 640px) {
+          .ad-premium-card {
+            padding: 24px 16px;
+            border-radius: 24px;
+          }
+          .ad-premium-hero {
+            padding: 32px 16px 90px 16px;
+            border-radius: 24px;
+          }
         }
         .ad-student-banner {
           background: hsl(var(--bg-surface));
@@ -265,8 +611,25 @@ export default function AgendaDigitalFamilyLayout({
           flex-direction: column;
           gap: 4px;
         }
+        .ad-desktop-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .ad-mobile-nav-bar {
+          display: none;
+        }
         /* Somente Modificacoes Mobile, intocavel no Desktop */
         @media (max-width: 768px) {
+          .ad-desktop-sidebar {
+            display: none !important;
+          }
+          .ad-mobile-nav-bar {
+            display: flex !important;
+          }
+          .ad-content-page-area {
+            padding-bottom: 80px !important;
+          }
           .ad-main-grid {
             grid-template-columns: 1fr !important;
             gap: 0px !important;
@@ -910,167 +1273,149 @@ export default function AgendaDigitalFamilyLayout({
           }
         }
       `}} />
-      {/* Top Banner specific to the student */}
-      <div className="ad-student-banner">
-        <div className="ad-banner-left" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div className="avatar ad-banner-avatar-wrapper" style={{ width: 64, height: 64, fontSize: 24, background: 'var(--gradient-purple)', color: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', transition: 'transform 0.3s ease' }}
-               onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-               onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'} >
-            {aluno?.foto ? (
-               <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {getInitials(aluno.nome)}
-               </div>
-            )}
+      {/* Dynamic Header floating profile card */}
+      <div className="ad-premium-card-wrapper">
+        <div className="ad-premium-card">
+          {/* AREA 1: PERFIL ALUNO (À esquerda) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+            <div style={{ 
+              width: 96, 
+              height: 96, 
+              borderRadius: 24, 
+              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)', 
+              boxShadow: '0 8px 24px rgba(168,85,247,0.3)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'white', 
+              fontWeight: 900, 
+              fontSize: 30, 
+              fontFamily: 'Outfit, sans-serif',
+              flexShrink: 0,
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              {aluno?.foto ? (
+                 <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                 getInitials(aluno.nome)
+              )}
+              {/* Soft gradient glass reflection gloss */}
+              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0))' }} />
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
+              <h2 style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                {aluno.nome}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              </h2>
+
+              {/* Row of 3 mini cards */}
+              <div className="ad-mini-cards-grid" style={{ marginTop: 0 }}>
+                {/* Mini Card 1: Turma */}
+                <div className="ad-mini-card">
+                  <div style={{ color: '#6366f1', background: 'rgba(99,102,241,0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <GraduationCap size={14} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turma</div>
+                    <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
+                      {cleanTurma}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini Card 2: Turno */}
+                <div className="ad-mini-card">
+                  <div style={{ color: '#a855f7', background: 'rgba(168,85,247,0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Calendar size={14} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turno</div>
+                    <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
+                      {cleanTurno}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini Card 3: Responsável */}
+                {currentUser?.cargo !== 'Aluno' && (
+                  <div className="ad-mini-card">
+                    <div style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Users size={14} />
+                    </div>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Responsável</div>
+                      <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {currentUser?.nome || (aluno as any).responsavel || 'Responsável'}
+                        </span>
+                        <span style={{ fontSize: 8, background: '#3b82f6', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>{userAccessRole.parentesco}</span>
+                        {userAccessRole.isFin && (
+                          <span style={{ fontSize: 8, background: '#10b981', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(16,185,129,0.3)' }}>Financeiro</span>
+                        )}
+                        {userAccessRole.isPed && (
+                          <span style={{ fontSize: 8, background: '#4f46e5', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(79,70,229,0.3)' }}>Pedagógico</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="ad-student-name" style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
-              {aluno.nome}
-            </div>
-            <div className="ad-student-details" style={{ fontSize: 14, color: 'hsl(var(--text-muted))' }}>
-              {(() => {
-                const unidadeAluno = turmas.find(t => t.nome === aluno.turma || t.codigo === aluno.turma)?.unidade || (aluno as any).unidade
-                return (
-                  <>
-                    Turma {(aluno as any).turma} {(aluno as any).serie ? `• ${(aluno as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
-                  </>
-                )
-              })()}
-            </div>
-          </div>
-        </div>
 
-        <div className="ad-banner-actions">
-          
-          {currentUser && currentUser.cargo !== 'Aluno' && (
-            <StudentCallButton aluno={aluno} currentUser={currentUser} />
-          )}
-
-          {currentUser && (
-            <div className="ad-banner-actions-right" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', textAlign: 'right' }}>
-               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1, color: 'hsl(var(--text-muted))', fontWeight: 700, marginBottom: 2 }}>
-                 Logado como
-               </div>
-               <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-main))', marginBottom: 6 }}>
-                 {currentUser.nome}
-               </div>
-               <div style={{ display: 'flex', gap: 6 }}>
-                 {(() => {
-                    if (currentUser?.cargo === 'Aluno') {
-                      return <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 12, background: 'linear-gradient(135deg, #a855f7, #6366f1)', color: 'white', letterSpacing: 0.5 }}>ALUNO</span>
-                    }
-
-                    const myName = (currentUser?.nome || '').toLowerCase().trim();
-                    const myEmail = (currentUser?.email || '').toLowerCase().trim();
-                    let isFin = false;
-                    let isPed = false;
-                    
-                    if ((aluno.responsavelFinanceiro || '').toLowerCase().trim() === myName) isFin = true;
-                    if ((aluno.responsavelPedagogico || '').toLowerCase().trim() === myName) isPed = true;
-                    if (aluno.emailResponsavelFinanceiro === myEmail) isFin = true;
-                    
-                    const respArr = (aluno as any).responsaveis || (aluno as any)._responsaveis || [];
-                    if (Array.isArray(respArr)) {
-                       const eu = respArr.find((r: any) => 
-                         (r.nome && r.nome.toLowerCase().trim() === myName) || 
-                         (r.email && myEmail && r.email.toLowerCase().trim() === myEmail)
-                       );
-                       if (eu) {
-                         if (eu.respFinanceiro || eu.financeiro || eu.tipo === 'Financeiro' || eu.tipo === 'Ambos') isFin = true;
-                         if (eu.respPedagogico || eu.pedagogico || eu.tipo === 'Pedagógico' || eu.tipo === 'Ambos') isPed = true;
-                       }
-                    }
-
-                    if (!isFin && !isPed && (currentUser.perfil === 'Administrador' || currentUser.perfil === 'Gestor')) {
-                       isFin = true; isPed = true;
-                    }
-
-                    return (
-                      <>
-                        {isFin ? (
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Resp. Financeiro</span>
-                        ) : null}
-                        {isPed ? (
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: 'rgba(56, 189, 248, 0.1)', color: '#0ea5e9' }}>Resp. Pedagógico</span>
-                        ) : null}
-                        {!isFin && !isPed ? (
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: 'rgba(107, 114, 128, 0.1)', color: '#6b7280' }}>Acompanhante</span>
-                        ) : null}
-                      </>
-                    )
-                 })()}
-               </div>
-            </div>
-          )}
-          <div className="ad-banner-btn-group" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {currentUser?.cargo !== 'Aluno' && (
-              <button onClick={() => setSwitcherOpen(true)} className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
-                <Users size={16} />
-                <span style={{ whiteSpace: 'nowrap' }}>Trocar Aluno</span>
-              </button>
+          {/* AREA 3: AÇÕES LATERAIS (À direita) - Botão Portaria */}
+          <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
+            {currentUser && currentUser.cargo !== 'Aluno' && adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
+              <div style={{ width: '100%' }}>
+                <StudentCallButton aluno={aluno} currentUser={currentUser} />
+              </div>
             )}
-            <button 
-              onClick={async () => { 
-                setCurrentUser(null); 
-                await fetch('/api/auth/logout', { method: 'POST' }); 
-                window.location.href = '/login'; 
-              }} 
-              className="btn btn-secondary btn-sm" 
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#ef4444' }}
-            >
-              <LogOut size={16} />
-              <span>Sair da Conta</span>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Content Area with Navigation */}
-      <div className="ad-main-grid">
-        {/* Sub-NavigationBar (Desktop Side, Mobile Bottom conceptual) */}
-        <nav className="ad-mobile-nav">
-          {navItems.map(item => {
-            const isActive = pathname.includes(item.href)
-            return (
-              <Link key={item.label} href={item.href} style={{ textDecoration: 'none' }}>
-                <div 
-                  className="ad-mobile-nav-item"
-                  style={{
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
-                  color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-secondary))',
-                  fontWeight: isActive ? 600 : 500,
-                  transition: 'background 0.2s',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={e => {
-                  if (!isActive) e.currentTarget.style.background = 'hsl(var(--bg-surface))'
-                  e.currentTarget.style.color = 'hsl(var(--primary))'
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'hsl(var(--text-secondary))'
-                  }
-                }}
-                >
-                  {item.icon}
-                  {item.label}
-                </div>
-              </Link>
-            )
-          })}
-        </nav>
 
-        {/* Page Content */}
-        <div style={{ minHeight: 400 }}>
-          {children}
+      {/* Main Grid containing Page Content */}
+      <div className="ad-main-grid" style={{ marginTop: 24 }}>
+
+        {/* Page Content Area */}
+        <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
+          <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole }}>
+            {children}
+          </SelectedStudentProvider>
         </div>
+      </div>
+
+      {/* Mobile Bottom Navigation (Glassmorphic overlay) */}
+      <div className="ad-mobile-nav-bar" style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 68,
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        zIndex: 9999,
+        padding: '0 12px',
+        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)'
+      }}>
+        {filteredNavItems.slice(0, 5).map((item, idx) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#4f46e5' : '#94a3b8', flex: 1, minWidth: 0 }}>
+              <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {React.cloneElement(item.icon, { size: 22, color: isActive ? '#4f46e5' : '#94a3b8' })}
+              </div>
+              <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+            </Link>
+          )
+        })}
       </div>
     </div>
     </>

@@ -15,7 +15,17 @@ export async function GET(request: Request) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data || []).map(r => ({ ...r, ...(r.dados || {}) })))
+  return NextResponse.json((data || []).map(({ dados, ...r }) => {
+    const { data_nascimento, tipo_contrato, carga_horaria, perfil_sistema, ...rest } = r
+    return {
+      ...rest,
+      dataNascimento: data_nascimento,
+      tipoContrato: tipo_contrato,
+      cargaHoraria: carga_horaria,
+      perfilSistema: perfil_sistema,
+      ...(dados || {})
+    }
+  }))
 }
 
 export async function POST(request: Request) {
@@ -58,25 +68,89 @@ export async function POST(request: Request) {
       if (body.length > 0) {
         const rowsToUpsert = body.map(item => {
            const { id, nome, cargo, departamento, salario, status, email, admissao, unidade, dados, created_at, ...rest } = item
+           
+           // Extrai campos conhecidos que agora são colunas
+           const {
+             codigo, cpf, rg, dataNascimento, telefone, celular,
+             tipoContrato, escolaridade, cargaHoraria, bonus,
+             pis, banco, agencia, conta, observacoes, perfilSistema, horario,
+             ...outrosExtras
+           } = rest as any
+
            return {
              id: id || `F${Date.now()}-${Math.random().toString(36).substr(2,9)}`,
              nome: nome || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
              salario: salario || 0, status: status || 'ativo',
              email: email || '', admissao: admissao || '',
-             unidade: unidade || '', dados: dados || rest,
+             unidade: unidade || '',
+             codigo: codigo || '',
+             cpf: cpf || '',
+             rg: rg || '',
+             data_nascimento: dataNascimento || null,
+             telefone: telefone || '',
+             celular: celular || '',
+             tipo_contrato: tipoContrato || '',
+             escolaridade: escolaridade || '',
+             carga_horaria: cargaHoraria || 0,
+             bonus: bonus || 0,
+             pis: pis || '',
+             banco: banco || '',
+             agencia: agencia || '',
+             conta: conta || '',
+             observacoes: observacoes || '',
+             perfil_sistema: perfilSistema || '',
+             horario: horario || null,
+             dados: dados || outrosExtras,
            }
         })
         const { error } = await supabase.from('funcionarios').upsert(rowsToUpsert)
         if (error) throw new Error(error.message)
 
-        // SYNC: Refletir o status na tabela do controle de acesso (system_users)
+        // SYNC: Refletir o status e perfil na tabela do controle de acesso (system_users)
         const supabaseAdmin = require('@supabase/supabase-js').createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!
         );
+        
         for (const row of rowsToUpsert) {
           if (row.email) {
-            await supabaseAdmin.from('system_users').update({ status: row.status }).eq('email', row.email);
+            // 1. Verificar se já existe em system_users
+            const { data: existing } = await supabaseAdmin.from('system_users').select('id, auth_id').eq('email', row.email).maybeSingle();
+            
+            if (row.perfil_sistema) {
+              if (existing) {
+                // Update existing
+                await supabaseAdmin.from('system_users').update({ 
+                  status: row.status, 
+                  perfil: row.perfil_sistema,
+                  nome: row.nome,
+                  cargo: row.cargo
+                }).eq('email', row.email);
+              } else {
+                // Create new system_user + Auth provisioning
+                const tempPass = `Impacto@${Math.random().toString(36).slice(-8)}`;
+                const { data: authData } = await supabaseAdmin.auth.admin.createUser({
+                  email: row.email,
+                  password: tempPass,
+                  email_confirm: true
+                });
+                
+                if (authData?.user) {
+                  await supabaseAdmin.from('system_users').insert({
+                    id: authData.user.id,
+                    auth_id: authData.user.id,
+                    email: row.email,
+                    nome: row.nome,
+                    cargo: row.cargo,
+                    perfil: row.perfil_sistema,
+                    status: row.status
+                  });
+                }
+              }
+            } else if (existing) {
+              // Just update status if no profile but user exists
+              await supabaseAdmin.from('system_users').update({ status: row.status }).eq('email', row.email);
+            }
           }
         }
       }
@@ -125,7 +199,41 @@ export async function PUT(request: Request) {
 
     if (data.email) {
       const supabaseAdmin = require('@supabase/supabase-js').createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-      await supabaseAdmin.from('system_users').update({ status: data.status }).eq('email', data.email);
+      
+      // Sync update or create if perfil_sistema is present
+      const { data: existing } = await supabaseAdmin.from('system_users').select('id').eq('email', data.email).maybeSingle();
+      
+      if (data.perfil_sistema) {
+        if (existing) {
+          await supabaseAdmin.from('system_users').update({ 
+            status: data.status, 
+            perfil: data.perfil_sistema,
+            nome: data.nome,
+            cargo: data.cargo 
+          }).eq('email', data.email);
+        } else {
+          // Provision new access
+          const tempPass = `Impacto@${Math.random().toString(36).slice(-8)}`;
+          const { data: authData } = await supabaseAdmin.auth.admin.createUser({
+            email: data.email,
+            password: tempPass,
+            email_confirm: true
+          });
+          if (authData?.user) {
+            await supabaseAdmin.from('system_users').insert({
+              id: authData.user.id,
+              auth_id: authData.user.id,
+              email: data.email,
+              nome: data.nome,
+              cargo: data.cargo,
+              perfil: data.perfil_sistema,
+              status: data.status
+            });
+          }
+        }
+      } else if (existing) {
+        await supabaseAdmin.from('system_users').update({ status: data.status }).eq('email', data.email);
+      }
     }
 
     return NextResponse.json(data)

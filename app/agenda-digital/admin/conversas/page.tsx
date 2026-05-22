@@ -3,29 +3,41 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Users, MessageSquare, Search, Filter, Phone, Video, MoreVertical, 
-  Paperclip, Send, CheckCircle2, Smile, Plus, X, User, CheckCheck
+  Paperclip, Send, CheckCircle2, Smile, Plus, X, User, CheckCheck, Mail, Reply, Trash2
 } from 'lucide-react'
-import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useAgendaDigital, ADChat } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import { useRef } from 'react'
+import { useApp } from '@/lib/context'
+import { getInitials } from '@/lib/utils'
 
 export default function ADAdminConversas() {
-  const { chatsList, setChatsList, messages, setMessages, adAlert, adConfirm } = useAgendaDigital()
+  const { chatsList, setChatsList, messages, setMessages, adAlert, adConfirm, chatGroups } = useAgendaDigital()
+  const { currentUser, currentUserPerfil } = useApp()
+  const isDiretorGeral = currentUserPerfil === 'Diretor Geral'
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [activeChat, setActiveChat] = useState<number | string | null>("1")
+  const [activeChat, setActiveChat] = useState<number | string | null>(null)
   const [inputMsg, setInputMsg] = useState('')
   const [showNewChatModal, setShowNewChatModal] = useState(false)
   const [newChatSearch, setNewChatSearch] = useState('')
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [filterMode, setFilterMode] = useState<'abertos' | 'resolvidos'>('abertos')
+  const [selectedRecipient, setSelectedRecipient] = useState<{id: string, nome: string} | null>(null)
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  const [showEmojiTarget, setShowEmojiTarget] = useState<string | null>(null) // 'compose' | 'reply' | null
+  const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️', '🙌', '🎉', '💡', '🚀']
+
+  const insertText = (target: 'compose' | 'reply', text: string) => {
+    if (target === 'compose') setComposeBody(prev => prev + text)
+    else setInputMsg(prev => prev + text)
+    setShowEmojiTarget(null)
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -51,23 +63,68 @@ export default function ADAdminConversas() {
       ...prev,
       [String(activeChat)]: [
         ...(prev[String(activeChat)] || []),
-        { id: Date.now(), text: inputMsg, sender: 'us', time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }
+        { 
+          id: Date.now(), 
+          text: inputMsg, 
+          sender: 'us', 
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date().toLocaleDateString('pt-BR'),
+          author: currentUser?.nome || 'Administrativo',
+          authorRole: 'Equipe Escolar'
+        }
       ]
     }))
-    setChatsList(prev => prev.map(c => String(c.id) === String(activeChat) ? { ...c, preview: inputMsg, time: 'Agora' } : c))
+    setChatsList(prev => prev.map(c => String(c.id) === String(activeChat) ? { 
+      ...c, 
+      preview: inputMsg, 
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('pt-BR'),
+      startDate: c.startDate || new Date().toLocaleDateString('pt-BR'),
+      startTime: c.startTime || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    } : c))
     setInputMsg('')
   }
 
   const startNewChat = (id: string, name: string) => {
-    setChatsList(prev => {
-      if (!prev.find(c => String(c.id) === id)) {
-        return [{ id, name, status: 'online', preview: 'Iniciou uma nova conversa...', time: 'Agora', unread: 0, tag: 'Geral' }, ...prev]
-      }
-      return prev
-    })
-    setMessages(prev => prev[id] ? prev : { ...prev, [id]: [] })
-    setActiveChat(id)
+    setSelectedRecipient({ id, nome: name })
+    setComposeSubject('')
+    setComposeBody('')
+  }
+
+  const finalSendAdminTicket = () => {
+    if (!composeSubject.trim() || !composeBody.trim() || !selectedRecipient) return
+
+    const newChatId = `TKT-${Date.now()}`
+    const novo: ADChat = { 
+      id: newChatId, 
+      name: selectedRecipient.nome, 
+      status: 'active', 
+      preview: composeBody.substring(0, 30) + '...', 
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('pt-BR'),
+      unread: 0, 
+      tag: composeSubject,
+      startDate: new Date().toLocaleDateString('pt-BR'),
+      startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+    }
+    
+    setMessages(prev => ({
+      ...prev,
+      [newChatId]: [{
+        id: Date.now(),
+        text: composeBody,
+        sender: 'us',
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('pt-BR'),
+        author: currentUser?.nome || 'Administrativo',
+        authorRole: 'Equipe Escolar'
+      }]
+    }))
+
+    setChatsList(prev => [novo, ...prev])
+    setActiveChat(newChatId)
     setShowNewChatModal(false)
+    setSelectedRecipient(null)
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -77,12 +134,67 @@ export default function ADAdminConversas() {
         ...prev,
         [String(activeChat)]: [
           ...(prev[String(activeChat)] || []),
-          { id: Date.now(), text: `📎 Arquivo Anexado: ${file.name}`, sender: 'us', time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }
+          { 
+            id: Date.now(), 
+            text: `📎 Arquivo Anexado: ${file.name}`, 
+            sender: 'us', 
+            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            date: new Date().toLocaleDateString('pt-BR'),
+            author: currentUser?.nome || 'Administrativo',
+            authorRole: 'Equipe Escolar'
+          }
         ]
       }))
-      setChatsList(prev => prev.map(c => String(c.id) === String(activeChat) ? { ...c, preview: `📎 Anexo enviado`, time: 'Agora' } : c))
+      setChatsList(prev => prev.map(c => String(c.id) === String(activeChat) ? { ...c, preview: `📎 Anexo enviado`, time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) } : c))
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const handleDeleteMessage = (msgId: number | string) => {
+    adConfirm('Deseja excluir esta mensagem permanentemente?', 'Excluir Mensagem', () => {
+      setMessages(prev => {
+        const chatMsgs = prev[String(activeChat)] || []
+        const updatedMsgs = chatMsgs.filter(m => m.id !== msgId)
+        
+        if (updatedMsgs.length > 0) {
+          const lastMsg = updatedMsgs[updatedMsgs.length - 1]
+          setChatsList(chats => chats.map(c => String(c.id) === String(activeChat) ? {
+            ...c,
+            preview: lastMsg.text,
+            time: lastMsg.time,
+            date: lastMsg.date
+          } : c))
+        } else {
+          setChatsList(chats => chats.map(c => String(c.id) === String(activeChat) ? {
+            ...c,
+            preview: 'Sem mensagens',
+            time: '',
+            date: ''
+          } : c))
+        }
+
+        return {
+          ...prev,
+          [String(activeChat)]: updatedMsgs
+        }
+      })
+      adAlert('Mensagem excluída com sucesso!', 'Sucesso')
+    })
+  }
+
+  const handleDeleteChat = () => {
+    if (!activeChat) return
+    adConfirm('Deseja excluir toda esta conversa e todas as suas mensagens permanentemente?', 'Excluir Conversa', () => {
+      setChatsList(prev => prev.filter(c => String(c.id) !== String(activeChat)))
+      setMessages(prev => {
+        const copy = { ...prev }
+        delete copy[String(activeChat)]
+        return copy
+      })
+      setActiveChat(null)
+      setShowOptionsMenu(false)
+      adAlert('Conversa excluída com sucesso!', 'Sucesso')
+    })
   }
 
   return (
@@ -208,11 +320,40 @@ export default function ADAdminConversas() {
       {/* Exibe o header s&oacute; se n&atilde;o estiver com chat ativo no mobile (no desktop aparece sempre) */}
       <div className="ad-chat-page-header" style={{ display: activeChat ? 'none' : 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Atendimento (Chats)</h2>
-          <p style={{ color: 'hsl(var(--text-muted))' }}>Responda rapidamente responsáveis.</p>
+          <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
+             <Mail size={28} color="#4f46e5" /> Mensagens (Inbox)
+          </h2>
+          <p style={{ color: 'hsl(var(--text-muted))' }}>Gerencie comunicações oficiais com alunos e responsáveis.</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn btn-primary" style={{ padding: '0 16px' }} onClick={() => setShowNewChatModal(true)}><Plus size={16} /> Nova Conversa</button>
+          <button 
+            style={{ 
+              padding: '12px 32px', 
+              borderRadius: 40, 
+              background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', 
+              color: 'white',
+              border: 'none', 
+              boxShadow: '0 8px 20px -6px rgba(79, 70, 229, 0.6)', 
+              fontSize: 15, 
+              fontWeight: 800, 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 12,
+              cursor: 'pointer',
+              transition: 'transform 0.2s, box-shadow 0.2s'
+            }} 
+            onClick={() => setShowNewChatModal(true)}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 12px 25px -8px rgba(79, 70, 229, 0.7)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 8px 20px -6px rgba(79, 70, 229, 0.6)'
+            }}
+          >
+             <Plus size={20} strokeWidth={3} /> Nova Mensagem
+          </button>
         </div>
       </div>
       <style dangerouslySetInnerHTML={{__html: `
@@ -256,16 +397,18 @@ export default function ADAdminConversas() {
               >
                 <div className="avatar ad-chat-avatar" style={{ width: 48, height: 48, background: '#e2e8f0', color: '#64748b', fontSize: 16 }}>
                   {chat.name.charAt(0)}
-                  {chat.status === 'online' && <div style={{ position: 'absolute', bottom: 0, right: 0, width: 12, height: 12, background: '#10b981', borderRadius: '50%', border: '2px solid white' }}/>}
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: activeChat === chat.id || chat.unread ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.name}</h4>
-                    <span style={{ fontSize: 11, color: chat.unread ? '#4f46e5' : 'hsl(var(--text-muted))', fontWeight: chat.unread ? 700 : 500 }}>{chat.time}</span>
+                    <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{chat.date || ''} {chat.time}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                     <p style={{ margin: 0, fontSize: 12, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '85%' }}>{chat.preview}</p>
                     {chat.unread > 0 && <span className="ad-chat-badge" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span>}
+                  </div>
+                  <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 6, display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
+                     <span>Início: {chat.startDate || chat.date || (messages[String(chat.id)]?.[0]?.date) || '--/--'} às {chat.startTime || chat.startTime || (messages[String(chat.id)]?.[0]?.time) || '--:--'}</span>
                   </div>
                 </div>
               </div>
@@ -291,7 +434,9 @@ export default function ADAdminConversas() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{chatsList.find(c => c.id === activeChat)?.name}</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                    <span style={{ fontSize: 11, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{width: 6, height: 6, borderRadius: '50%', background: '#10b981'}}></span> Online</span>
+                    <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 4 }}>
+                       Tópico Oficial de Atendimento
+                    </span>
                   </div>
                 </div>
               </div>
@@ -319,71 +464,122 @@ export default function ADAdminConversas() {
                       <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start' }} onClick={() => { adAlert('Buscando histórico do aluno...', 'Histórico'); setShowOptionsMenu(false); }}>Ver Histórico Escolar</button>
                       <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
                       <button className="btn btn-ghost btn-sm" style={{ justifyContent: 'flex-start', color: '#ef4444' }} onClick={() => { adConfirm('Deseja bloquear este contato temporariamente?', 'Bloqueio', () => { adAlert('Contato Bloqueado'); setShowOptionsMenu(false); }) }}>Bloquear Contato</button>
+                      {isDiretorGeral && (
+                        <>
+                          <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
+                          <button 
+                            className="btn btn-ghost btn-sm" 
+                            style={{ justifyContent: 'flex-start', color: '#dc2626', fontWeight: 'bold' }} 
+                            onClick={handleDeleteChat}
+                          >
+                            Excluir Conversa Completa
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Messages Area */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16, background: 'hsl(var(--bg-main))' }}>
-              <div className="ad-chat-date-pill" style={{ background: '#fef3c7', color: '#92400e', fontSize: 12, padding: 8, borderRadius: 8, textAlign: 'center', width: 'fit-content', margin: '0 auto' }}>
-                Atendimento iniciado hoje.
+            {/* Messages Area (Ticket Style) */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, background: 'rgba(0,0,0,0.02)' }}>
+              
+              <div style={{ width: '100%', borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 16, marginBottom: 8 }}>
+                 <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px 0', color: '#1e293b' }}>
+                    Tópico: {chatsList.find(c => c.id === activeChat)?.tag || 'Atendimento Geral'}
+                 </h2>
+                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-muted))' }}>
+                       Iniciado em <strong>{chatsList.find(c => c.id === activeChat)?.startDate || chatsList.find(c => c.id === activeChat)?.date || (messages[String(activeChat)]?.[0]?.date) || 'Data N/D'}</strong> às <strong>{chatsList.find(c => c.id === activeChat)?.startTime || chatsList.find(c => c.id === activeChat)?.time}</strong>
+                    </p>
+                    <span style={{ fontSize: 12, background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>
+                       Iniciado por: {messages[String(activeChat)]?.[0]?.authorRole || 'Remetente'} ({messages[String(activeChat)]?.[0]?.author || 'Usuário'})
+                    </span>
+                 </div>
               </div>
 
               {(messages[activeChat] || []).map(msg => (
-                <div key={msg.id} className="ad-chat-msg-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: msg.sender === 'us' ? 'flex-end' : 'flex-start', maxWidth: '75%', alignSelf: msg.sender === 'us' ? 'flex-end' : 'flex-start' }}>
-                   <div className="ad-chat-msg-bubble" style={{ 
-                     background: msg.sender === 'us' ? 'var(--gradient-purple)' : 'hsl(var(--bg-surface))', 
-                     color: msg.sender === 'us' ? 'white' : 'inherit',
-                     border: msg.sender === 'us' ? 'none' : '1px solid hsl(var(--border-subtle))', 
-                     padding: '12px 16px', 
-                     borderRadius: msg.sender === 'us' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', 
-                     fontSize: 14,
-                     lineHeight: 1.4
-                   }}>
-                     {msg.text}
+                <div key={msg.id} style={{ 
+                    background: 'white', 
+                    border: '1px solid hsl(var(--border-subtle))',
+                    borderRadius: 16, 
+                    padding: 24,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+                    marginLeft: msg.sender === 'us' ? 40 : 0,
+                    marginRight: msg.sender === 'us' ? 0 : 40,
+                    position: 'relative'
+                }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                         <div style={{ width: 32, height: 32, borderRadius: 16, background: msg.sender === 'us' ? '#4f46e5' : '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12 }}>
+                            {getInitials(msg.author || (msg.sender === 'us' ? 'Equipe Escolar' : (chatsList.find(c => c.id === activeChat)?.name || 'Usuário')))}
+                         </div>
+                         <div>
+                            <div style={{ fontWeight: 700, fontSize: 14 }}>{msg.author || (msg.sender === 'us' ? 'Equipe Escolar' : chatsList.find(c => c.id === activeChat)?.name)}</div>
+                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{msg.authorRole || (msg.sender === 'us' ? 'Resposta Oficial' : 'Mensagem do Cliente')}</div>
+                         </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{msg.date || ''} às {msg.time}</span>
+                        {isDiretorGeral && (
+                          <button 
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            style={{ 
+                              background: 'transparent', 
+                              border: 'none', 
+                              color: '#ef4444', 
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: 4,
+                              borderRadius: 6,
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            title="Excluir Mensagem"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
                    </div>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 4, [msg.sender === 'us' ? 'alignSelf' : 'alignSelf']: msg.sender === 'us' ? 'flex-end' : 'flex-start' }}>
-                     {msg.time} {msg.sender === 'us' && <CheckCheck size={14} color="#3b82f6" />}
+                   <div style={{ fontSize: 15, lineHeight: 1.6, color: '#334155', whiteSpace: 'pre-wrap' }}>
+                     {msg.text}
                    </div>
                 </div>
               ))}
             </div>
 
-            {/* Input Area */}
-            <div className="ad-chat-input-area" style={{ padding: 20, borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', position: 'relative' }}>
+            {/* Input Area (Textarea style) */}
+            <div className="ad-chat-input-area" style={{ padding: 24, borderTop: '1px solid hsl(var(--border-subtle))', background: 'white', position: 'relative' }}>
               
-              {/* Emoji Picker */}
-              {showEmojiPicker && (
-                <div style={{ position: 'absolute', bottom: 85, left: 24, background: '#fff', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, zIndex: 10 }}>
-                  {EMOJIS.map(emoji => (
-                    <button key={emoji} onClick={() => { setInputMsg(prev => prev + emoji); setShowEmojiPicker(false); }} style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', padding: 4, borderRadius: 4 }}>
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
 
-              <div className="ad-chat-input-box" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'hsl(var(--bg-main))', padding: '6px 8px', borderRadius: 32, border: '1px solid hsl(var(--border-subtle))' }}>
-                <button style={{ background: 'transparent', border: 0, color: 'hsl(var(--text-muted))', cursor: 'pointer', padding: '4px' }} onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={20} /></button>
-                <button style={{ background: 'transparent', border: 0, color: 'hsl(var(--text-muted))', cursor: 'pointer', padding: '4px' }} onClick={() => fileInputRef.current?.click()}><Paperclip size={20} /></button>
-                <input 
-                  placeholder={`Mensagem...`} 
-                  style={{ flex: 1, background: 'transparent', border: 0, outline: 'none', padding: '8px 4px', fontSize: 15 }}
+              <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, overflow: 'hidden', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', gap: 16, padding: '10px 16px', borderBottom: '1px solid hsl(var(--border-subtle))', background: '#f8fafc' }}>
+                    <button onClick={() => setShowEmojiTarget(showEmojiTarget === 'reply' ? null : 'reply')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600 }}><Smile size={16} /> Emojis</button>
+                </div>
+                {showEmojiTarget === 'reply' && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: 12, background: 'white' }}>
+                    {EMOJIS.map(e => <button key={e} onClick={() => insertText('reply', e)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer' }}>{e}</button>)}
+                  </div>
+                )}
+                <textarea 
+                  placeholder="Escreva sua resposta oficial aqui..." 
+                  style={{ width: '100%', background: 'transparent', border: 0, outline: 'none', padding: '16px', fontSize: 15, resize: 'none', minHeight: 120, fontFamily: 'inherit' }}
                   value={inputMsg}
                   onChange={e => setInputMsg(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSend()}
                 />
-                <button onClick={handleSend} style={{ background: inputMsg.trim() ? 'var(--gradient-primary)' : 'hsl(var(--bg-surface-alt))', color: inputMsg.trim() ? 'white' : 'hsl(var(--text-muted))', border: 0, width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: inputMsg.trim() ? 'pointer' : 'default', transition: 'all 0.2s', boxShadow: inputMsg.trim() ? '0 4px 12px rgba(99,102,241,0.3)' : 'none' }}>
-                  <Send size={18} style={{ marginLeft: -2 }} />
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 12, marginTop: 12, paddingLeft: 16 }}>
-                <button className="badge badge-ghost" style={{ cursor: 'pointer' }} onClick={() => setInputMsg(prev => prev + ' Segue o seu boleto rápido:')}>⚡ Enviar Boleto Rápido</button>
-                <button className="badge badge-ghost" style={{ cursor: 'pointer' }} onClick={() => setInputMsg(prev => prev + ' Olá! Em que posso ajudar hoje?')}>⚡ Resposta Pronta (Atendimento)</button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'white', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button style={{ background: 'transparent', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-muted))', cursor: 'pointer', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => fileInputRef.current?.click()}><Paperclip size={18} /></button>
+                  </div>
+                  <button onClick={handleSend} style={{ background: inputMsg.trim() ? '#4f46e5' : '#e2e8f0', color: inputMsg.trim() ? 'white' : '#94a3b8', border: 0, padding: '10px 24px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, cursor: inputMsg.trim() ? 'pointer' : 'default', transition: 'all 0.2s' }}>
+                    <Reply size={18} /> Enviar Resposta
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -417,25 +613,121 @@ export default function ADAdminConversas() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
-               {(alunos || []).filter(a => a.nome.toLowerCase().includes(newChatSearch.toLowerCase()) || a.id.includes(newChatSearch)).slice(0, 50).map(a => (
-                 <div 
-                   key={a.id} 
-                   style={{ padding: '12px 0', borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                 >
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <div className="avatar" style={{ width: 36, height: 36, background: 'hsl(var(--bg-overlay))', color: 'var(--color-primary)' }}>
-                        <User size={16} />
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600 }}>{a.nome}</div>
-                        <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma} • MAT: {a.id.substring(0,8)}</div>
-                      </div>
+               {!selectedRecipient ? (
+                 <>
+                   {newChatSearch === '' ? (
+                     <>
+                        <h4 style={{ fontSize: 13, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', fontWeight: 800, marginBottom: 12, letterSpacing: 1 }}>Selecione por Turma / Grupo</h4>
+                        {chatGroups?.map(grupo => {
+                           const isExpanded = expandedGroup === grupo.id
+                           let totalAlunos = (alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).length
+                           
+                           return (
+                             <div key={grupo.id} style={{ marginBottom: 12, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden' }}>
+                                <div 
+                                   onClick={() => setExpandedGroup(isExpanded ? null : grupo.id)}
+                                   style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(99,102,241,0.05)' : 'transparent' }}
+                                >
+                                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                      <div style={{ width: 32, height: 32, borderRadius: 8, background: grupo.cor || '#4338ca', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={16} /></div>
+                                      <div style={{ fontWeight: 700 }}>{grupo.nome}</div>
+                                   </div>
+                                   <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{totalAlunos} Alunos</span>
+                                </div>
+                                {isExpanded && (
+                                  <div style={{ padding: '8px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: '#f8fafc' }}>
+                                     {(alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).map((a: any) => (
+                                       <div key={a.id} onClick={() => startNewChat(a.id, a.nome)} style={{ padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ fontWeight: 600, fontSize: 13 }}>{a.nome}</span>
+                                          <Plus size={14} color="#4f46e5" />
+                                       </div>
+                                     ))}
+                                  </div>
+                                )}
+                             </div>
+                           )
+                        })}
+                     </>
+                   ) : newChatSearch.length >= 3 ? (
+                     <>
+                       {(alunos || []).filter(a => a.nome.toLowerCase().includes(newChatSearch.toLowerCase()) || a.id.includes(newChatSearch)).slice(0, 50).map(a => (
+                         <div 
+                           key={a.id} 
+                           style={{ padding: '12px 16px', borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderRadius: 12, marginBottom: 8 }}
+                           onClick={() => startNewChat(a.id, a.nome)}
+                         >
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                              <div className="avatar" style={{ width: 40, height: 40, background: 'var(--gradient-primary)', color: 'white' }}>
+                                <User size={20} />
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#1e293b' }}>{a.nome}</div>
+                                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma} • MAT: {a.id.substring(0,8)}</div>
+                              </div>
+                            </div>
+                            <button className="btn btn-primary btn-sm" style={{ borderRadius: 20 }}>Selecionar</button>
+                         </div>
+                       ))}
+                     </>
+                   ) : (
+                     <div style={{ textAlign: 'center', padding: '60px 20px', color: 'hsl(var(--text-muted))' }}>
+                        <Search size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
+                        <p>Digite pelo menos 3 letras para buscar um aluno.</p>
+                     </div>
+                   )}
+                 </>
+               ) : (
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20, padding: '8px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                       <div className="avatar" style={{ width: 32, height: 32, background: '#4f46e5', color: 'white' }}><User size={14} /></div>
+                       <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Enviando para:</div>
+                          <div style={{ fontWeight: 700 }}>{selectedRecipient.nome}</div>
+                       </div>
+                       <button className="btn btn-ghost btn-sm" onClick={() => setSelectedRecipient(null)}>Alterar</button>
                     </div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => startNewChat(a.id, a.nome)}>Iniciar Chat</button>
+                    
+                    <div className="form-group">
+                      <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, display: 'block' }}>Assunto do Tópico</label>
+                      <input 
+                        className="form-input" 
+                        placeholder="Ex: Assunto Financeiro / Dúvida Pedagógica" 
+                        value={composeSubject}
+                        onChange={e => setComposeSubject(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700 }}>Mensagem Inicial</label>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <button onClick={() => setShowEmojiTarget(showEmojiTarget === 'compose' ? null : 'compose')} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><Smile size={14} /></button>
+                        </div>
+                      </div>
+                      {showEmojiTarget === 'compose' && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, marginBottom: 8 }}>
+                          {EMOJIS.map(e => <button key={e} onClick={() => insertText('compose', e)} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer' }}>{e}</button>)}
+                        </div>
+                      )}
+                      <textarea 
+                        className="form-input" 
+                        placeholder="Escreva o conteúdo da mensagem..." 
+                        value={composeBody}
+                        onChange={e => setComposeBody(e.target.value)}
+                        style={{ width: '100%', minHeight: 120, resize: 'none' }}
+                      />
+                    </div>
+
+                    <button 
+                       className="btn btn-primary" 
+                       style={{ height: 48, borderRadius: 12 }}
+                       disabled={!composeSubject.trim() || !composeBody.trim()}
+                       onClick={finalSendAdminTicket}
+                    >
+                       <Send size={18} /> Enviar Mensagem Oficial
+                    </button>
                  </div>
-               ))}
-               {(alunos || []).length === 0 && (
-                 <div style={{ padding: 24, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Nenhum aluno encontrado na base.</div>
                )}
             </div>
           </motion.div>

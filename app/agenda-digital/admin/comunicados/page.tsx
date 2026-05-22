@@ -1,9 +1,10 @@
 'use client'
+// Last Update: 2026-05-16T16:08:00Z - Forced Rebuild
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useFormularios } from '@/lib/formulariosContext'
@@ -12,11 +13,16 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { 
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
-  Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart
+  Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, MessageSquare, Layout, FileCheck
 } from 'lucide-react'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
+import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import { UserAvatar } from '@/components/UserAvatar'
+import { getSignedUploadUrlAction } from './actions'
+import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
@@ -30,6 +36,12 @@ export default function ADAdminComunicados() {
 
   const renderConteudo = (text: string) => {
     if (!text) return null;
+    // Se o texto contém HTML (resultado do novo editor WYSIWYG)
+    if (text.includes('<') && text.includes('>')) {
+      return <div dangerouslySetInnerHTML={{ __html: text }} />;
+    }
+    
+    // Fallback para comunicados legados ou texto simples
     const lines = text.split('\n');
     return lines.map((line, i) => {
       const boldParts = line.split(/(\*\*.*?\*\*)/g);
@@ -71,28 +83,33 @@ export default function ADAdminComunicados() {
   const [newConteudo, setNewConteudo] = useState('')
   const [anexos, setAnexos] = useState<string[]>([])
   const [dataAgendamento, setDataAgendamento] = useState('')
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [tempDataAgendamento, setTempDataAgendamento] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
   
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
   const [cobrancaForm, setCobrancaForm] = useState({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
   const [appCharges, setAppCharges] = useLocalStorage<any[]>('edu-app-charges-v1', [])
-
+  
   const [showFormsModal, setShowFormsModal] = useState(false)
   const [showRelsModal, setShowRelsModal] = useState(false)
 
   const [editComId, setEditComId] = useState<string | null>(null)
+  const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
+  const [viewingReportPayload, setViewingReportPayload] = useState<any>(null)
+  const [activePreviewStudent, setActivePreviewStudent] = useState<any>(null)
   
-  const textRef = useRef<HTMLTextAreaElement>(null)
+  const comunicadoRichEditorRef = useRef<HTMLDivElement>(null)
 
-  const insertFormat = (tag: string, tagEnd = tag) => {
-    if (!textRef.current) { setNewConteudo(p => p + ' ' + tag + tagEnd); return }
-    const start = textRef.current.selectionStart
-    const end = textRef.current.selectionEnd
-    const txt = newConteudo
-    setNewConteudo(txt.substring(0, start) + tag + txt.substring(start, end) + tagEnd + txt.substring(end))
-    setTimeout(() => textRef.current?.focus(), 10)
-  }
+  // Sync editor content only on showComposer or edit changes to avoid cursor jumps
+  useEffect(() => {
+    if (showComposer && comunicadoRichEditorRef.current) {
+      comunicadoRichEditorRef.current.innerHTML = newConteudo;
+    }
+  }, [showComposer]);
 
   const handleEnviar = (asRascunho = false) => {
     if (!newTitulo.trim() || !newConteudo.trim()) {
@@ -175,14 +192,16 @@ export default function ADAdminComunicados() {
     setShowComposer(false)
     setNewTitulo('')
     setNewConteudo('')
-    setSelectedDest([])
-    setEditComId(null)
+    setAnexos([])
   }
 
   const openEdit = (c: ADComunicado) => {
     setEditComId(c.id)
     setNewTitulo(c.titulo)
-    setNewConteudo(c.conteudo)
+    setNewConteudo(c.conteudo || (c as any).texto || '')
+    setAnexos(c.anexos || [])
+    setDataAgendamento(c.dataAgendamento || '')
+    setTempDataAgendamento(c.dataAgendamento || '')
     
     const mappedDest: {id: string, name: string, type: 'turma' | 'aluno'}[] = []
     c.turmas.forEach((t, i) => mappedDest.push({id: `t${c.id}${i}`, name: t, type: 'turma'}))
@@ -190,25 +209,31 @@ export default function ADAdminComunicados() {
        const idReal = a.replace(/^_/, '')
        const alunoObj = alunos?.find(al => al.id === a || al.id === `_${idReal}` || al.id === `_ALU${idReal.replace('ALU', '')}`)
        mappedDest.push({id: `a_${a.replace(/^_+/, '_')}`, name: alunoObj ? alunoObj.nome : a, type: 'aluno'})
-    })
+     })
     setSelectedDest(mappedDest)
 
     setShowComposer(true)
   }
 
   const handleReenviar = (c: ADComunicado) => {
-    adConfirm('Deseja duplicar este comunicado e enviá-lo novamente no topo da lista?', 'Reenviar', () => {
-      const newCom = { ...c, id: `AD-COM-RESEND-${Date.now()}`, leituras: {}, ciencias: {}, dataEnvio: new Date().toISOString(), status: 'enviado' as const }
-      setComunicados(prev => [newCom, ...prev])
-    })
+    setEditComId(null)
+    setNewTitulo(c.titulo)
+    setNewConteudo(c.conteudo || (c as any).texto || '')
+    setAnexos(c.anexos || [])
+    setSelectedDest([]) // Permite selecionar novos destinatários
+    setDataAgendamento('')
+    setTempDataAgendamento('')
+    setShowComposer(true)
   }
 
   const handleNovo = () => {
     setEditComId(null)
     setNewTitulo('')
     setNewConteudo('')
+    if (comunicadoRichEditorRef.current) comunicadoRichEditorRef.current.innerHTML = ''
     setAnexos([])
     setDataAgendamento('')
+    setTempDataAgendamento('')
     setSelectedDest([])
     setShowComposer(true)
   }
@@ -219,11 +244,18 @@ export default function ADAdminComunicados() {
     if (tab === 'rascunhos' && c.status !== 'rascunho') return false
     
     if (search) {
-      return c.titulo.toLowerCase().includes(search.toLowerCase()) || 
-             c.conteudo.toLowerCase().includes(search.toLowerCase())
+      const searchLower = search.toLowerCase()
+      const titleMatch = (c.titulo || '').toLowerCase().includes(searchLower)
+      const contentMatch = (c.conteudo || (c as any).texto || '').toLowerCase().includes(searchLower)
+      return titleMatch || contentMatch
     }
+    
     return true
-  }).sort((a,b) => new Date(b.dataEnvio || 0).getTime() - new Date(a.dataEnvio || 0).getTime())
+  }).sort((a,b) => {
+    const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
+    const timeB = new Date(b.dataEnvio || (b as any).data || (b as any).created_at || 0).getTime();
+    return timeB - timeA;
+  })
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
@@ -262,84 +294,114 @@ export default function ADAdminComunicados() {
         </button>
       </div>
 
-      <div className="card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Assunto</th>
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Categoria</th>
+      <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(0,0,0,0.02)', borderRadius: 20, border: '2px dashed hsl(var(--border-subtle))' }}>
+              <Bell size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
+              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
+            </div>
+          )}
+          {filtered.map(c => {
+             const lidas = Object.keys(c.leituras || {}).length
+             const progresso = alunosAtivos.length > 0 ? (lidas / alunosAtivos.length) * 100 : 0
+             const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
 
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>{tab === 'agendados' ? 'Agendado para' : 'Data'}</th>
-              {tab === 'enviados' && <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Leituras</th>}
-              <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))', textAlign: 'right' }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>
-                  Nenhum comunicado encontrado nesta aba.
-                </td>
-              </tr>
-            )}
-            {filtered.map(c => {
-               const lidas = Object.keys(c.leituras).length
-               const progresso = alunosAtivos.length > 0 ? (lidas / alunosAtivos.length) * 100 : 0
+             return (
+              <motion.div 
+                key={c.id}
+                layout
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                onClick={() => setViewingCom(c)}
+                style={{ 
+                  background: 'white',
+                  borderRadius: 16,
+                  border: '1px solid hsl(var(--border-subtle))',
+                  padding: '16px 24px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 24,
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = '#4f46e5'
+                  e.currentTarget.style.boxShadow = '0 10px 20px -10px rgba(79, 70, 229, 0.1)'
+                  e.currentTarget.style.transform = 'translateX(4px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)'
+                  e.currentTarget.style.transform = 'translateX(0)'
+                }}
+              >
+                {/* Column 1: Date & Time */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 70, padding: '0 12px', borderRight: '1px solid rgba(0,0,0,0.05)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    {dateObj ? dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '') : '--'}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: '#1e293b', marginTop: -2 }}>
+                    {dateObj ? dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  </span>
+                </div>
 
-               return (
-                <tr 
-                  key={c.id} 
-                  style={{ borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', background: selectedCom?.id === c.id ? 'rgba(99,102,241,0.05)' : '' }}
-                  onClick={() => setSelectedCom(c)}
-                  onMouseEnter={e => { if (selectedCom?.id !== c.id) e.currentTarget.style.background = 'hsl(var(--bg-overlay))' }}
-                  onMouseLeave={e => { if (selectedCom?.id !== c.id) e.currentTarget.style.background = 'transparent' }}
-                >
-                  <td style={{ padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
-                      <span style={{ fontWeight: 600, color: 'hsl(var(--text-main))' }}>{c.titulo}</span>
-                      {c.exigeCiencia && <span className="badge" style={{ background: 'rgba(245,158,11,0.1)', color: '#d97706', fontSize: 10 }}>Assinatura Req.</span>}
-                    </div>
-                  </td>
-                  <td style={{ padding: '16px', color: 'hsl(var(--text-secondary))', fontSize: 13 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 500, color: 'hsl(var(--text-main))', textTransform: 'capitalize' }}>{c.tipo || 'Texto'}</span>
-                      {c.anexos?.length > 0 && (
-                        <span style={{display: 'flex', alignItems: 'center', gap: 4, background: 'hsl(var(--bg-overlay))', padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))'}}>
-                          <Paperclip size={12} /> {c.anexos.length}
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                {/* Column 2: Content */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.titulo}
+                    </h3>
+                    {c.fixado && <Pin size={12} fill="#f59e0b" color="#f59e0b" />}
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
+                  </p>
+                </div>
 
-                  <td style={{ padding: '16px', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
-                    {c.dataEnvio ? new Date(c.dataEnvio).toLocaleDateString() : '—'}
-                  </td>
-                  {tab === 'enviados' && (
-                    <td style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 80, height: 6, background: 'hsl(var(--border-subtle))', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(progresso, 100)}%`, height: '100%', background: progresso > 80 ? '#10b981' : '#3b82f6', borderRadius: 3 }} />
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>{lidas}/{alunosAtivos.length}</span>
-                      </div>
-                    </td>
-                  )}
-                  <td style={{ padding: '16px', textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
-                       <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={14} /></button>
-                       <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); openEdit(c) }} title="Editar"><MoreHorizontal size={14} /></button>
-                       <button className="btn btn-ghost btn-sm" style={{ color: '#ef4444' }} onClick={e => { e.stopPropagation(); adConfirm('Excluir este comunicado permanentemente?', 'Excluir', () => setComunicados(prev => prev.filter(x => x.id !== c.id))) }} title="Excluir"><XCircle size={14} /></button>
-                       <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); setSelectedCom(c) }} style={{ padding: '4px 12px' }}>
-                         Relatório
-                       </button>
+                {/* Column 3: Stats */}
+                <div style={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Leitura</span>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: progresso > 80 ? '#10b981' : '#4f46e5' }}>{Math.round(progresso)}%</span>
                     </div>
-                  </td>
-                </tr>
-               )
-            })}
-          </tbody>
-        </table>
+                    <div style={{ height: 6, background: '#f1f5f9', borderRadius: 10, overflow: 'hidden' }}>
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progresso}%` }}
+                        style={{ height: '100%', background: progresso > 80 ? '#10b981' : 'linear-gradient(90deg, #6366f1, #4f46e5)', borderRadius: 10 }} 
+                      />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', background: '#f8fafc', padding: '4px 8px', borderRadius: 8, minWidth: 45, textAlign: 'center' }}>
+                    {lidas}/{alunosAtivos.length}
+                  </div>
+                </div>
+
+                {/* Column 4: Author */}
+                <div style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid rgba(0,0,0,0.05)', paddingLeft: 20 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 30, background: 'rgba(79, 70, 229, 0.05)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+                    {c.autor?.charAt(0) || 'U'}
+                  </div>
+                  <div style={{ overflow: 'hidden' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.autor || 'Sistema'}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{c.autorCargo || 'Admin'}</div>
+                  </div>
+                </div>
+
+                {/* Column 5: Actions */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                   <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={14} /></button>
+                   <button className="btn btn-primary btn-sm" style={{ padding: '6px 12px', borderRadius: 10, fontSize: 11, fontWeight: 700 }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
+                      Relatório
+                   </button>
+                </div>
+              </motion.div>
+             )
+          })}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -365,12 +427,12 @@ export default function ADAdminComunicados() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
                <div className="card" style={{ padding: 16 }}>
                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Leituras Totais</div>
-                 <div style={{ fontSize: 24, fontWeight: 800, color: '#3b82f6' }}>{Object.keys(selectedCom.leituras).length}</div>
+                 <div style={{ fontSize: 24, fontWeight: 800, color: '#3b82f6' }}>{Object.keys(selectedCom.leituras || {}).length}</div>
                </div>
                {selectedCom.exigeCiencia && (
                  <div className="card" style={{ padding: 16 }}>
                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Ciências Confirmadas</div>
-                   <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{Object.keys(selectedCom.ciencias).length}</div>
+                   <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{Object.keys(selectedCom.ciencias || {}).length}</div>
                  </div>
                )}
             </div>
@@ -411,7 +473,7 @@ export default function ADAdminComunicados() {
                 })
                 
                 return targets.map(a => {
-                  const leu = !!selectedCom.leituras[a.id]
+                  const leu = !!(selectedCom.leituras && selectedCom.leituras[a.id])
                   return (
                     <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'hsl(var(--bg-surface))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{a.nome} <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginLeft: 8 }}>{a.turma}</span></div>
@@ -440,21 +502,21 @@ export default function ADAdminComunicados() {
           <div className="card" style={{ width: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 18, fontWeight: 700 }}>{editComId ? 'Editar Comunicado' : 'Escrever Novo Comunicado'}</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowComposer(false)}><X size={18} /></button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setShowComposer(false); setAnexos([]); }}><X size={18} /></button>
             </div>
             
-            <div style={{ padding: 24, overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Para:</div>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setShowDestModal(true)}>+ Adicionar Destinatários</button>
+                  {!editComId && <button className="btn btn-secondary btn-sm" onClick={() => setShowDestModal(true)}>+ Adicionar Destinatários</button>}
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, background: 'hsl(var(--bg-main))', padding: '12px', borderRadius: 8, minHeight: 48, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, background: 'hsl(var(--bg-main))', padding: '12px', borderRadius: 8, minHeight: 48, maxHeight: 120, overflowY: 'auto', border: '1px solid hsl(var(--border-subtle))' }}>
                   {selectedDest.length === 0 && <span className="badge badge-ghost text-muted" style={{ padding: '6px 12px' }}>Toda a Escola (Todos os Alunos Ativos)</span>}
                   {selectedDest.map(d => (
                     <span key={d.id} className="badge" style={{ background: d.type === 'turma' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)', color: d.type === 'turma' ? '#4f46e5' : '#10b981', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', fontSize: 13 }}>
                       {d.type === 'turma' ? 'Turma:' : ''} {d.name}
-                      <button onClick={() => setSelectedDest(prev => prev.filter(x => x.id !== d.id))} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', display: 'flex', color: 'inherit' }}><X size={14} color="currentColor"/></button>
+                      {!editComId && <button onClick={() => setSelectedDest(prev => prev.filter(x => x.id !== d.id))} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', display: 'flex', color: 'inherit' }}><X size={14} color="currentColor"/></button>}
                     </span>
                   ))}
                 </div>
@@ -471,66 +533,298 @@ export default function ADAdminComunicados() {
               <input className="form-input" placeholder="Título do Comunicado" style={{ fontSize: 16, fontWeight: 600 }} value={newTitulo} onChange={e => setNewTitulo(e.target.value)} />
 
               {/* Rich Text Editor Simulation */}
-              <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden' }}>
-                 <div style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 8 }}>
-                    <button onClick={() => insertFormat('**')} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><Bold size={16}/></button>
-                    <button onClick={() => insertFormat('*')} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><Italic size={16}/></button>
-                    <button onClick={() => insertFormat('_')} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><Underline size={16}/></button>
-                    <div style={{ width: 1, background: 'hsl(var(--border-subtle))', margin: '0 4px' }} />
-                    <button onClick={() => insertFormat('\\n- ')} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><List size={16}/></button>
-                    <button onClick={() => insertFormat('[Link](', ')')} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><LinkIcon size={16}/></button>
-                    <div style={{ width: 1, background: 'hsl(var(--border-subtle))', margin: '0 4px' }} />
-                    <div style={{ position: 'relative' }}>
-                       <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="btn btn-ghost btn-sm" style={{ padding: 6, opacity: 0.7 }}><Smile size={16}/></button>
-                       {showEmojiPicker && (
-                         <div style={{ position: 'absolute', top: 32, left: 0, background: '#fff', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: 8, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, zIndex: 10 }}>
-                           {EMOJIS.map(emoji => (
-                             <button key={emoji} onClick={() => { insertFormat(emoji, ''); setShowEmojiPicker(false); }} style={{ background: 'transparent', border: 0, fontSize: 18, cursor: 'pointer', padding: 4, borderRadius: 4 }}>
-                               {emoji}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                    </div>
-                 </div>
-                 <textarea 
-                   ref={textRef}
-                   className="form-input" 
-                   placeholder="Escreva sua mensagem aqui. Você pode usar formatação (ex: **negrito**), links..." 
-                   style={{ height: 200, resize: 'none', border: 'none', borderRadius: 0, boxShadow: 'none' }}
-                   value={newConteudo}
-                   onChange={e => setNewConteudo(e.target.value)}
-                 />
-                 {anexos.length > 0 && (
-                   <div style={{ padding: '12px', display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))' }}>
-                     {anexos.map((anexo, i) => (
-                       <span key={i} className="badge" style={{ background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 4 }}>
-                         <Paperclip size={12}/> {anexo}
-                         <button onClick={() => setAnexos(anexos.filter(a => a !== anexo))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}><X size={12}/></button>
-                       </span>
-                     ))}
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                border: '1px solid hsl(var(--border-subtle))', 
+                borderRadius: 16, 
+                overflow: 'hidden',
+                background: 'white',
+                boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ 
+                  padding: '10px 16px', 
+                  background: '#f8fafc', 
+                  borderBottom: '1px solid hsl(var(--border-subtle))', 
+                  display: 'flex', 
+                  gap: 8,
+                  alignItems: 'center'
+                }}>
+                   <button onClick={() => { document.execCommand('bold', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Negrito"><Bold size={16}/></button>
+                   <button onClick={() => { document.execCommand('italic', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Itálico"><Italic size={16}/></button>
+                   <button onClick={() => { document.execCommand('underline', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Sublinhado"><Underline size={16}/></button>
+                   <div style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
+                   <button onClick={() => { document.execCommand('insertUnorderedList', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Lista"><List size={16}/></button>
+                   <button onClick={() => { 
+                     const url = prompt('Digite o link:'); 
+                     if(url) document.execCommand('createLink', false, url); 
+                     comunicadoRichEditorRef.current?.focus(); 
+                   }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Link"><LinkIcon size={16}/></button>
+                   <div style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
+                   <div style={{ position: 'relative' }}>
+                      <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Emoji"><Smile size={16}/></button>
+                      {showEmojiPicker && (
+                        <div style={{ position: 'absolute', top: 40, left: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, zIndex: 100 }}>
+                          {EMOJIS.map(emoji => (
+                            <button key={emoji} onClick={() => { document.execCommand('insertText', false, emoji); setShowEmojiPicker(false); comunicadoRichEditorRef.current?.focus(); }} style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', padding: 4, borderRadius: 6 }}>
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                    </div>
-                 )}
+                </div>
+
+                <div 
+                  ref={comunicadoRichEditorRef}
+                  contentEditable
+                  className="wysiwyg-editor"
+                  style={{ 
+                    minHeight: 150, 
+                    maxHeight: 350,
+                    padding: '16px 20px', 
+                    outline: 'none', 
+                    fontSize: 15, 
+                    lineHeight: 1.6,
+                    overflowY: 'auto',
+                    color: '#334155'
+                  }}
+                  onInput={e => setNewConteudo(e.currentTarget.innerHTML)}
+                />
+
+                {anexos.length > 0 && (
+                  <div style={{ 
+                    padding: '12px 16px', 
+                    display: 'flex', 
+                    gap: 12, 
+                    flexWrap: 'wrap', 
+                    borderTop: '1px solid #f1f5f9', 
+                    background: '#f8fafc',
+                    maxHeight: 180,
+                    overflowY: 'auto'
+                  }}>
+                    {anexos.map((anexo, i) => {
+                      const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
+                      const name = parts[0];
+                      const url = parts[1];
+                      const mimeType = parts[2] || '';
+                      const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
+                      const isVid = mimeType.startsWith('video/') || (url && url.startsWith('data:video')) || /\.(mp4|webm|ogg|mov)$/i.test(name);
+
+                      return (
+                        <div key={i} style={{ position: 'relative', width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                           <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', position: 'relative' }}>
+                              {isImg ? (
+                                <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : isVid ? (
+                                <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                   <div style={{ width: 24, height: 24, borderRadius: 12, border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <div style={{ width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '8px solid white', marginLeft: 2 }} />
+                                   </div>
+                                </div>
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                                  <FileText size={24} color="#64748b" />
+                                </div>
+                              )}
+                              
+                              <button 
+                                onClick={() => setAnexos(anexos.filter(a => a !== anexo))}
+                                style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, background: 'rgba(239, 68, 68, 0.9)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 5 }}
+                              >
+                                <X size={14} strokeWidth={3} />
+                              </button>
+                           </div>
+                           <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                        </div>
+                      );
+                    })}
+                    
+                    {isUploading && (
+                      <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                         <div style={{ width: 24, height: 24, borderRadius: 12, border: '3px solid #e2e8f0', borderTopColor: '#4f46e5', animation: 'spin 1s linear infinite' }} />
+                         <span style={{ fontSize: 10, fontWeight: 700, color: '#4f46e5' }}>{uploadProgress}%</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {!anexos.length && isUploading && (
+                  <div style={{ padding: '16px', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: 12 }}>
+                     <div style={{ width: 20, height: 20, borderRadius: 10, border: '2px solid #e2e8f0', borderTopColor: '#4f46e5', animation: 'spin 1s linear infinite' }} />
+                     <span style={{ fontSize: 13, fontWeight: 600, color: '#4f46e5' }}>Processando mídia... {uploadProgress}%</span>
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                  <Paperclip size={14}/> Anexar Arquivo
-                  <input type="file" hidden onChange={e => { if(e.target.files?.[0]) setAnexos([...anexos, e.target.files[0].name]) }} />
-                </label>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowFormsModal(true)}><FileText size={14}/> Anexar Formulário</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowRelsModal(true)}><FileText size={14}/> Anexar Relatório</button>
-                <button className="btn btn-primary btn-sm" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: 'none' }} onClick={() => setShowCobrancaModal(true)}>
-                   <BadgeDollarSign size={14}/> Nova Cobrança
-                </button>
-              </div>
+               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+                 <label className="btn" style={{ 
+                   cursor: 'pointer', background: 'rgba(99, 102, 241, 0.05)', color: '#4f46e5', border: '1px solid rgba(99, 102, 241, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
+                 }}>
+                   <Paperclip size={16} /> Anexar Arquivo
+                   <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={async e => { 
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (!file) return;
+                      
+                      const MAX_SIZE = 50 * 1024 * 1024;
+                      if (file.size > MAX_SIZE) {
+                        adAlert('Arquivo muito grande. O limite é 50MB.', 'Erro');
+                        return;
+                      }
+
+                      setIsUploading(true);
+                      setUploadProgress(5);
+
+                      try {
+                        // 1. Obter URL assinada
+                        let fileToUpload: File = file;
+
+                        if (file.type.startsWith('image/')) {
+                          setUploadProgress(10);
+                          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' });
+                          setUploadProgress(40);
+                        } else if (file.type.startsWith('video/')) {
+                          setUploadProgress(5);
+                          fileToUpload = await compressVideo(file, (percent) => {
+                            const scaled = Math.round(5 + (percent * 0.45));
+                            setUploadProgress(scaled);
+                          }) as File;
+                        }
+
+                        setUploadProgress(60);
+
+                        // 1. Obter URL assinada
+                        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, 'comunicados-midia');
+
+                        if (signedRes.error || !signedRes.signedUrl) {
+                          console.error('[upload-midia]', signedRes.error);
+                          adAlert(signedRes.error || 'Erro ao preparar upload.', 'Erro');
+                          setIsUploading(false);
+                          setUploadProgress(0);
+                          return;
+                        }
+
+                        setUploadProgress(75);
+
+                        // 2. Upload direto para o Supabase via PUT (usando a URL assinada)
+                        // Isso é muito mais rápido e estável que passar pelo servidor Next.js
+                        const uploadRes = await fetch(signedRes.signedUrl, {
+                          method: 'PUT',
+                          body: fileToUpload,
+                          headers: {
+                            'Content-Type': fileToUpload.type || 'application/octet-stream'
+                          }
+                        });
+
+                        if (!uploadRes.ok) {
+                          const errText = await uploadRes.text();
+                          console.error('[upload-midia] Direct upload failed:', errText);
+                          adAlert('Falha no envio direto do arquivo.', 'Erro de Conexão');
+                          setIsUploading(false);
+                          setUploadProgress(0);
+                          return;
+                        }
+
+                        setUploadProgress(100);
+                        setAnexos(prev => [...prev, `${fileToUpload.name}|${signedRes.publicUrl}|${fileToUpload.type}`]);
+                        setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
+                      } catch (err: any) {
+                        adAlert('Erro inesperado: ' + (err?.message || ''), 'Erro');
+                        setIsUploading(false);
+                        setUploadProgress(0);
+                      }
+                    }} />
+                 </label>
+
+                 <button className="btn" style={{ 
+                   background: 'rgba(139, 92, 246, 0.05)', color: '#7c3aed', border: '1px solid rgba(139, 92, 246, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
+                 }} onClick={() => setShowFormsModal(true)}>
+                   <FileText size={16} /> Formulário
+                 </button>
+
+                 <button className="btn" style={{ 
+                   background: 'rgba(236, 72, 153, 0.05)', color: '#db2777', border: '1px solid rgba(236, 72, 153, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
+                 }} onClick={() => setShowRelsModal(true)}>
+                   <FileBarChart size={16} /> Relatório
+                 </button>
+
+                 <button className="btn" style={{ 
+                   background: 'rgba(16, 185, 129, 0.05)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
+                 }} onClick={() => setShowCobrancaModal(true)}>
+                   <BadgeDollarSign size={16} /> Nova Cobrança
+                 </button>
+               </div>
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', display: 'flex', justifyContent: 'space-between', borderRadius: '0 0 16px 16px' }}>
-              <button className="btn btn-ghost" onClick={() => handleEnviar(true)}>Salvar Rascunho</button>
+            <div style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '0 0 24px 24px' }}>
+              <button className="btn btn-ghost" onClick={() => handleEnviar(true)} style={{ fontWeight: 700, color: '#64748b' }}>Salvar Rascunho</button>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <input type="datetime-local" className="form-input" style={{ width: 180, fontSize: 13 }} value={dataAgendamento} onChange={e => setDataAgendamento(e.target.value)} title="Definir agendamento" />
-                <button className="btn btn-primary" onClick={() => handleEnviar(false)}><SendIcon size={16} /> {dataAgendamento ? 'Agendar' : editComId ? 'Salvar Alterações' : 'Enviar Agora'}</button>
+                <button 
+                  type="button"
+                  className="btn" 
+                  onClick={() => {
+                    if (dataAgendamento) {
+                      setTempDataAgendamento(dataAgendamento);
+                    } else {
+                      const nowLocal = new Date();
+                      nowLocal.setHours(nowLocal.getHours() + 24);
+                      const localString = nowLocal.getFullYear() + '-' + 
+                        String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(nowLocal.getDate()).padStart(2, '0') + 'T' + 
+                        String(nowLocal.getHours()).padStart(2, '0') + ':' + 
+                        String(nowLocal.getMinutes()).padStart(2, '0');
+                      setTempDataAgendamento(localString);
+                    }
+                    setShowScheduleModal(true);
+                  }} 
+                  style={{ 
+                    height: 40, 
+                    borderRadius: 10, 
+                    fontWeight: 700, 
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8, 
+                    border: '1px solid ' + (dataAgendamento ? 'rgba(79, 70, 229, 0.3)' : 'hsl(var(--border-subtle))'),
+                    background: dataAgendamento ? 'rgba(79, 70, 229, 0.05)' : 'white',
+                    color: dataAgendamento ? '#4f46e5' : '#64748b',
+                    padding: '0 16px',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Clock size={16} /> 
+                  {dataAgendamento ? (
+                    (() => {
+                      try {
+                        const d = new Date(dataAgendamento);
+                        return `Agendado: ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                      } catch (e) {
+                        return 'Agendado';
+                      }
+                    })()
+                  ) : 'Agendar Envio'}
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  disabled={isUploading}
+                  style={{ 
+                    height: 40, 
+                    padding: '0 24px', 
+                    borderRadius: 10, 
+                    fontWeight: 800, 
+                    gap: 8, 
+                    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
+                    opacity: isUploading ? 0.6 : 1,
+                    cursor: isUploading ? 'not-allowed' : 'pointer'
+                  }} 
+                  onClick={() => handleEnviar(false)}
+                >
+                   {isUploading ? (
+                     <div style={{ width: 16, height: 16, borderRadius: 8, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
+                   ) : <SendIcon size={16} />}
+                   {isUploading ? 'Processando...' : dataAgendamento ? 'Agendar' : editComId ? 'Salvar Alterações' : 'Enviar Agora'}
+                </button>
               </div>
             </div>
           </div>
@@ -545,112 +839,525 @@ export default function ADAdminComunicados() {
       />
 
       <AnimatePresence>
-{/* Cobranca Modal */}
-      {showCobrancaModal && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-          zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-               <div>
+        {/* Cobranca Modal */}
+        {showCobrancaModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
                   <h3 style={{ fontSize: 18, fontWeight: 800 }}>Criar Nova Cobrança</h3>
                   <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Este pagamento ficará disponível no App Central.</div>
-               </div>
-               <button className="btn btn-ghost btn-sm" onClick={() => setShowCobrancaModal(false)}><X size={18} /></button>
-             </div>
-             
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-               <div>
-                 <label className="form-label">Motivo (Produto/Serviço)</label>
-                 <input className="form-input" placeholder="Ex: Livro Didático Extra" value={cobrancaForm.motivo} onChange={e => setCobrancaForm(f => ({...f, motivo: e.target.value}))}/>
-               </div>
-               <div style={{ display: 'flex', gap: 12 }}>
-                 <div style={{ flex: 1 }}>
-                   <label className="form-label">Valor (R$)</label>
-                   <input className="form-input" type="number" placeholder="0.00" value={cobrancaForm.valor} onChange={e => setCobrancaForm(f => ({...f, valor: e.target.value}))}/>
-                 </div>
-                 <div style={{ flex: 1 }}>
-                   <label className="form-label">Data de Vencimento</label>
-                   <input className="form-input" type="date" value={cobrancaForm.vencimento} onChange={e => setCobrancaForm(f => ({...f, vencimento: e.target.value}))}/>
-                 </div>
-               </div>
-               <div>
-                 <label className="form-label">Forma de Pagamento Aceita</label>
-                 <select className="form-input" value={cobrancaForm.tipo} onChange={e => setCobrancaForm(f => ({...f, tipo: e.target.value}))}>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowCobrancaModal(false)}><X size={18} /></button>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <label className="form-label">Motivo (Produto/Serviço)</label>
+                  <input className="form-input" placeholder="Ex: Livro Didático Extra" value={cobrancaForm.motivo} onChange={e => setCobrancaForm(f => ({...f, motivo: e.target.value}))}/>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Valor (R$)</label>
+                    <input className="form-input" type="number" placeholder="0.00" value={cobrancaForm.valor} onChange={e => setCobrancaForm(f => ({...f, valor: e.target.value}))}/>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Data de Vencimento</label>
+                    <input className="form-input" type="date" value={cobrancaForm.vencimento} onChange={e => setCobrancaForm(f => ({...f, vencimento: e.target.value}))}/>
+                  </div>
+                </div>
+                <div>
+                  <label className="form-label">Forma de Pagamento Aceita</label>
+                  <select className="form-input" value={cobrancaForm.tipo} onChange={e => setCobrancaForm(f => ({...f, tipo: e.target.value}))}>
                     <option value="pix">Exclusivo PIX</option>
                     <option value="boleto">PIX + Boleto</option>
                     <option value="cartao">PIX + Cartão de Crédito</option>
-                 </select>
-               </div>
-               
-               <div style={{ borderTop: '1px solid hsl(var(--border-subtle))', marginTop: 8, paddingTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                  </select>
+                </div>
+                
+                <div style={{ borderTop: '1px solid hsl(var(--border-subtle))', marginTop: 8, paddingTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                   <button className="btn btn-secondary" onClick={() => setShowCobrancaModal(false)}>Cancelar</button>
                   <button className="btn btn-primary" style={{ background: '#10b981', borderColor: '#10b981' }} onClick={() => {
-                     if (!cobrancaForm.motivo || !cobrancaForm.valor) return adAlert('Preencha motivo e valor.', 'Atenção');
-                     const novaCob = {
-                        id: `app-cob-${Date.now()}`,
-                        aluno: selectedDest.length > 0 ? selectedDest.map(d=>d.name).join(', ') : 'Toda a Escola',
-                        motivo: cobrancaForm.motivo,
-                        valor: parseFloat(cobrancaForm.valor),
-                        vencimento: cobrancaForm.vencimento.split('-').reverse().join('/'),
-                        status: 'pendente',
-                        tipo: cobrancaForm.tipo
-                     }
-                     setAppCharges(prev => [novaCob, ...prev])
-                     
-                     // Incorporate the link in text
-                     const txtCob = `\\n\\n[Aviso de Fatura Gerada] Acesse o link para pagamento no seu app:\\n💳 **${cobrancaForm.motivo}** - R$ ${novaCob.valor.toFixed(2)}\\n`
-                     setNewConteudo(p => p + txtCob)
-                     
-                     setCobrancaForm({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
-                     setShowCobrancaModal(false)
+                    if (!cobrancaForm.motivo || !cobrancaForm.valor) return adAlert('Preencha motivo e valor.', 'Atenção');
+                    const novaCob = {
+                      id: `app-cob-${Date.now()}`,
+                      aluno: selectedDest.length > 0 ? selectedDest.map(d=>d.name).join(', ') : 'Toda a Escola',
+                      motivo: cobrancaForm.motivo,
+                      valor: parseFloat(cobrancaForm.valor),
+                      vencimento: cobrancaForm.vencimento.split('-').reverse().join('/'),
+                      status: 'pendente',
+                      tipo: cobrancaForm.tipo
+                    }
+                    setAppCharges(prev => [novaCob, ...prev])
+                    
+                    const txtCob = `\n\n[Aviso de Fatura Gerada] Acesse o link para pagamento no seu app:\n **${cobrancaForm.motivo}** - R$ ${novaCob.valor.toFixed(2)}\n`
+                    setNewConteudo(p => p + txtCob)
+                        
+                    setCobrancaForm({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
+                    setShowCobrancaModal(false)
                   }}>Gerar Cobrança e Inserir no Texto</button>
-               </div>
-             </div>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
+        )}
+      </AnimatePresence>
+
+      <ReportsSelectionModal 
+        isOpen={showRelsModal} 
+        onClose={() => setShowRelsModal(false)} 
+        selectedDest={selectedDest} 
+        onAdd={(text, payload) => setAnexos(prev => [...prev, `${text}|payload:${JSON.stringify(payload)}|report-payload`])} 
+      />
 
       <AnimatePresence>
-{/* Forms/Reports Selection Modals */}
-      {showFormsModal && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-               <h3 style={{ fontWeight: 800 }}>Anexar um Formulário</h3>
-               <button className="btn btn-ghost btn-sm" onClick={() => setShowFormsModal(false)}><X size={16}/></button>
-             </div>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
+        {/* Forms Selection Modal */}
+        {showFormsModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="card" style={{ width: '100%', maxWidth: 550, padding: 40, borderRadius: 40, boxShadow: '0 50px 100px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+                <div>
+                  <h3 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', marginBottom: 8 }}>📝 Anexar Formulário</h3>
+                  <p style={{ fontSize: 14, color: '#64748b', fontWeight: 600, maxWidth: '90%' }}>Envie uma pesquisa, formulário de coleta de dados ou autorização para os pais.</p>
+                </div>
+                <button className="btn" onClick={() => setShowFormsModal(false)} style={{ background: '#f1f5f9', width: 40, height: 40, borderRadius: '50%', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', border: 'none' }}><X size={20} /></button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 420, overflowY: 'auto', paddingRight: 8, margin: '0 -8px' }}>
                 {forms.filter(f => f.status !== 'arquivado').map(f => (
-                   <button key={f.id} className="btn btn-secondary" style={{ justifyContent: 'flex-start', textAlign: 'left', minHeight: 48 }} onClick={() => { setAnexos([...anexos, `Formulário: ${f.name}`]); setShowFormsModal(false) }}>{f.name}</button>
+                  <motion.button 
+                    whileHover={{ scale: 1.02, backgroundColor: '#f8fafc' }}
+                    whileTap={{ scale: 0.98 }}
+                    key={f.id} 
+                    className="btn"
+                    style={{ 
+                      justifyContent: 'flex-start', textAlign: 'left', minHeight: 80, padding: '16px 20px', borderRadius: 24, 
+                      background: '#fff', border: '1px solid #e2e8f0', display: 'flex', gap: 18, cursor: 'pointer',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                    }}
+                    onClick={() => { setAnexos(prev => [...prev, `Formulário: ${f.name}`]); setShowFormsModal(false) }}
+                  >
+                    <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6', flexShrink: 0 }}>
+                      <FileText size={24} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 900, color: '#1e293b', marginBottom: 2 }}>{f.name}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{(f as any).questions?.length || 0} perguntas no total</div>
+                    </div>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                      <Plus size={16} color="#3b82f6" />
+                    </div>
+                  </motion.button>
                 ))}
-                {forms.filter(f => f.status !== 'arquivado').length === 0 && <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum formulário ativo encontrado. Crie um novo formulário na aba de Formulários.</span>}
-             </div>
+                {forms.filter(f => f.status !== 'arquivado').length === 0 && (
+                  <div style={{ padding: '60px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: 32, border: '2px dashed #e2e8f0' }}>
+                    <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.5 }}>📋</div>
+                    <h4 style={{ fontSize: 16, fontWeight: 900, color: '#475569', marginBottom: 8 }}>Nenhum formulário ativo</h4>
+                  </div>
+                )}
+              </div>
+
+              <button className="btn" style={{ width: '100%', marginTop: 32, height: 56, borderRadius: 20, fontWeight: 900, background: '#0f172a', border: 'none', color: '#fff', fontSize: 15, boxShadow: '0 10px 20px rgba(15, 23, 42, 0.2)' }} onClick={() => setShowFormsModal(false)}>Fechar</button>
+            </motion.div>
           </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
-{showRelsModal && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 400, padding: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-               <h3 style={{ fontWeight: 800 }}>Anexar um Relatório</h3>
-               <button className="btn btn-ghost btn-sm" onClick={() => setShowRelsModal(false)}><X size={16}/></button>
-             </div>
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 300, overflowY: 'auto' }}>
-                {relatoriosTemplates.filter(r => r.status !== 'arquivado').map(r => (
-                   <button key={r.id} className="btn btn-secondary" style={{ justifyContent: 'flex-start', textAlign: 'left', minHeight: 48 }} onClick={() => { setAnexos([...anexos, `Relatório: ${r.name}`]); setShowRelsModal(false) }}>{r.name}</button>
-                ))}
-                {relatoriosTemplates.filter(r => r.status !== 'arquivado').length === 0 && <span style={{ color: 'hsl(var(--text-muted))', fontSize: 13, textAlign: 'center', padding: 20 }}>Nenhum modelo de relatório ativo foi encontrado.</span>}
-             </div>
+        {/* View Communication Modal */}
+        {viewingCom && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              style={{ background: 'white', width: '100%', maxWidth: 650, borderRadius: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.3)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}
+            >
+              {/* Header */}
+              <div style={{ padding: '24px 32px', background: 'hsl(var(--bg-overlay))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' }}>
+                    {viewingCom.autor?.charAt(0)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#1e293b' }}>{viewingCom.autor}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.02em' }}>{viewingCom.autorCargo}</div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                      {(() => {
+                        const rawDate = viewingCom.dataEnvio || (viewingCom as any).data || (viewingCom as any).created_at || new Date().toISOString();
+                        try {
+                          const d = new Date(rawDate);
+                          if (isNaN(d.getTime())) {
+                            return new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                          }
+                          return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        } catch (e) {
+                          return new Date().toLocaleDateString('pt-BR') + ' às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                        }
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                <button className="btn btn-ghost" onClick={() => setViewingCom(null)} style={{ padding: 8 }}><X size={24} /></button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
+                <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(79, 70, 229, 0.03)', borderRadius: 12, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.05em' }}>Para:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: '110px', overflowY: 'auto', paddingRight: 4 }}>
+                    {viewingCom.turmas?.length > 0 ? viewingCom.turmas.map(t => (
+                      <span key={t} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
+                    )) : <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>}
+                  </div>
+                </div>
+
+                <h2 style={{ fontSize: 24, fontWeight: 900, color: '#1e293b', marginBottom: 20, lineHeight: 1.2 }}>{viewingCom.titulo}</h2>
+                
+                <div style={{ fontSize: 15, lineHeight: 1.8, color: '#334155', whiteSpace: 'pre-wrap', marginBottom: 24 }}>
+                  {renderConteudo(viewingCom.conteudo || (viewingCom as any).texto || '')}
+                </div>
+
+                {viewingCom.anexos && viewingCom.anexos.length > 0 && (
+                  <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Anexos e Mídia ({viewingCom.anexos.length})</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {viewingCom.anexos.map((a, i) => {
+                        const parts = typeof a === 'string' ? a.split('|') : [String(a)];
+                        const name = parts[0];
+                        const url = parts[1] || (name.startsWith('http') ? name : '');
+                        const mimeType = parts[2] || '';
+                        
+                        const isImg = mimeType.startsWith('image/') || (url && (url.startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)));
+                        const isVid = mimeType.startsWith('video/') || (url && (url.startsWith('data:video') || /\.(mp4|webm|ogg|mov|quicktime)$/i.test(name)));
+                        const isReportPayload = mimeType === 'report-payload' || url.startsWith('payload:');
+
+                        if (isReportPayload) {
+                          let parsedPayload: any = null;
+                          try {
+                            const payloadStr = url.startsWith('payload:') ? url.substring(8) : url;
+                            parsedPayload = JSON.parse(payloadStr);
+                          } catch(e) {
+                            console.error("Failed to parse report payload", e);
+                          }
+
+                          return (
+                            <div key={i} style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', border: '1px solid #cbd5e1', borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3b82f612', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <FileBarChart size={18} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{name}</div>
+                                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Relatório Individual com campos preenchidos por aluno</div>
+                                </div>
+                              </div>
+                              
+                              {parsedPayload && parsedPayload.values && (
+                                <button 
+                                  className="btn" 
+                                  onClick={() => {
+                                    setViewingReportPayload({
+                                      name,
+                                      payload: parsedPayload
+                                    });
+                                    // Set the first student as active preview
+                                    const firstStudentId = Object.keys(parsedPayload.values)[0];
+                                    if (firstStudentId) {
+                                      const st = (alunos || []).find(s => String(s.id) === String(firstStudentId));
+                                      setActivePreviewStudent(st || { id: firstStudentId, nome: `Aluno #${firstStudentId}` });
+                                    }
+                                  }}
+                                  style={{ 
+                                    background: '#fff', border: '1px solid #cbd5e1', borderRadius: 12, height: 38, fontSize: 12, fontWeight: 800, color: '#475569',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                                >
+                                  🔍 Visualizar Relatórios Preenchidos por Aluno
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        if (isImg && url) return (
+                          <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                            <img src={url} alt={name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
+                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>{name}</div>
+                          </div>
+                        );
+
+                        if (isVid && url) return (
+                          <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#000' }}>
+                            <video 
+                              src={url} 
+                              controls 
+                              playsInline
+                              preload="metadata"
+                              style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600 }} 
+                            />
+                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(0,0,0,0.5)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>{name}</div>
+                          </div>
+                        );
+
+                        return (
+                          <div key={i} style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12, fontWeight: 600 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Paperclip size={16} color="#64748b" />
+                            </div>
+                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                            {url && <button className="btn btn-ghost btn-sm" onClick={() => window.open(url, '_blank')}>Abrir</button>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ padding: '20px 32px', background: 'hsl(var(--bg-overlay))', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 12 }}>
+                <button className="btn btn-secondary" style={{ flex: 1, gap: 8, height: 48 }} onClick={() => { openEdit(viewingCom); setViewingCom(null); }}>
+                  <MoreHorizontal size={18} /> Editar
+                </button>
+                <button className="btn btn-secondary" style={{ flex: 1, gap: 8, height: 48 }} onClick={() => { handleReenviar(viewingCom); setViewingCom(null); }}>
+                  <SendIcon size={18} /> Encaminhar
+                </button>
+                <button className="btn" style={{ flex: 1, gap: 8, height: 48, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
+                  adConfirm('Excluir este comunicado permanentemente?', 'Apagar', () => {
+                    setComunicados(prev => prev.filter(x => x.id !== viewingCom.id));
+                    setViewingCom(null);
+                  })
+                }}>
+                  <XCircle size={18} /> Apagar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Viewing Custom Report Payload Modal */}
+      <AnimatePresence>
+        {viewingReportPayload && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10003, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 850, height: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 40px 100px rgba(0,0,0,0.3)' }}
+            >
+              {/* Header */}
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>📋 Relatórios Individuais Enviados</h3>
+                  <p style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{viewingReportPayload.name}</p>
+                </div>
+                <button 
+                  className="btn btn-ghost" 
+                  onClick={() => { setViewingReportPayload(null); setActivePreviewStudent(null); }}
+                  style={{ width: 36, height: 36, borderRadius: '50%', padding: 0 }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Body split pane */}
+              <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+                {/* Left side: Students List */}
+                <div style={{ width: 260, borderRight: '1px solid #f1f5f9', background: '#f8fafc', overflowY: 'auto', padding: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {Object.keys(viewingReportPayload.payload.values).map(studentId => {
+                      const st = (alunos || []).find(s => String(s.id) === String(studentId)) || { id: studentId, nome: `Aluno #${studentId}` };
+                      const isActive = activePreviewStudent?.id === st.id;
+                      return (
+                        <button
+                          key={studentId}
+                          onClick={() => setActivePreviewStudent(st)}
+                          style={{
+                            width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+                            background: isActive ? '#fff' : 'transparent',
+                            boxShadow: isActive ? '0 4px 10px rgba(0,0,0,0.03)' : 'none',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <div style={{ 
+                            width: 32, height: 32, borderRadius: '50%', background: isActive ? '#3b82f6' : '#cbd5e1', color: '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900
+                          }}>
+                            {st.nome?.charAt(0)}
+                          </div>
+                          <div style={{ flex: 1, overflow: 'hidden' }}>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#0f172a' : '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.nome}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right side: Report card display */}
+                <div style={{ flex: 1, background: '#fff', overflowY: 'auto', padding: 32 }}>
+                  {activePreviewStudent ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
+                        <div style={{ 
+                          width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #4f46e5)', color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900
+                        }}>
+                          {activePreviewStudent.nome?.charAt(0)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{activePreviewStudent.nome}</div>
+                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{activePreviewStudent.turma || 'Sem turma'}</div>
+                        </div>
+                      </div>
+
+                      {/* Display field values */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {(() => {
+                          const studentValues = viewingReportPayload.payload.values[activePreviewStudent.id] || {};
+                          const templateId = viewingReportPayload.payload.templateId;
+                          const template = (relatoriosTemplates || []).find(t => t.id === templateId);
+                          const fields = template ? template.sections.flatMap(s => s.fields) : [];
+
+                          if (fields.length === 0) {
+                            return <div style={{ fontSize: 13, color: '#64748b' }}>Nenhum campo definido.</div>;
+                          }
+
+                          return fields.map(field => {
+                            const val = studentValues[field.id];
+                            return (
+                              <div key={field.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 20px', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{field.label}</div>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: val ? '#1e293b' : '#94a3b8' }}>
+                                  {val ? (
+                                    field.type === 'unica-escolha' ? (
+                                      <span style={{ background: '#3b82f612', color: '#3b82f6', padding: '4px 10px', borderRadius: 8, fontSize: 13, fontWeight: 900 }}>
+                                        {val}
+                                      </span>
+                                    ) : val
+                                  ) : '—'}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8' }}>
+                      <FileBarChart size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>Selecione um aluno para visualizar</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => { setViewingReportPayload(null); setActivePreviewStudent(null); }}
+                  style={{ fontWeight: 800, padding: '10px 24px', borderRadius: 12 }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Agendamento */}
+      <AnimatePresence>
+        {showScheduleModal && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            style={{ position: 'fixed', inset: 0, zIndex: 10003, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.95, opacity: 0, y: 20 }} 
+              transition={{ type: "spring", stiffness: 300, damping: 25 }} 
+              className="card" 
+              style={{ width: 420, padding: 28, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 24, background: '#fff' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>📅 Agendar Envio</h3>
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Escolha a data e hora para disparo automático.</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowScheduleModal(false)}><X size={18} /></button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 24 }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, display: 'block' }}>Data e Hora de Disparo</label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Clock size={16} style={{ position: 'absolute', left: 16, color: '#64748b' }} />
+                    <input 
+                      type="datetime-local" 
+                      className="form-input" 
+                      style={{ width: '100%', fontSize: 14, paddingLeft: 44, height: 48, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }} 
+                      value={tempDataAgendamento} 
+                      onChange={e => setTempDataAgendamento(e.target.value)} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 800, background: '#4f46e5', borderColor: '#4f46e5' }}
+                  onClick={() => {
+                    if (!tempDataAgendamento) {
+                      adAlert('Selecione uma data e hora válidas.', 'Aviso');
+                      return;
+                    }
+                    setDataAgendamento(tempDataAgendamento);
+                    setShowScheduleModal(false);
+                    adAlert(`Envio agendado com sucesso para ${new Date(tempDataAgendamento).toLocaleDateString('pt-BR')} às ${new Date(tempDataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Clique em "Agendar" para salvar o comunicado.`, 'Sucesso');
+                  }}
+                >
+                  Confirmar Agendamento
+                </button>
+                
+                {dataAgendamento && (
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
+                    onClick={() => {
+                      setDataAgendamento('');
+                      setTempDataAgendamento('');
+                      setShowScheduleModal(false);
+                      adAlert('Agendamento removido. O comunicado será enviado imediatamente ao salvar.', 'Informação');
+                    }}
+                  >
+                    Remover Agendamento
+                  </button>
+                )}
+
+                <button 
+                  className="btn btn-ghost" 
+                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))' }}
+                  onClick={() => setShowScheduleModal(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
+

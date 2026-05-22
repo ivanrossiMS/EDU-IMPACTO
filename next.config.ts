@@ -18,11 +18,17 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // unsafe-* needed for Next.js dev; tighten in prod
+      // Em prod não precisamos de unsafe-eval (apenas Next.js dev mode)
+      process.env.NODE_ENV === 'development'
+        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+        : "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in",
-      "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br",
+      "media-src 'self' blob: https://*.supabase.co https://*.supabase.in",
+      process.env.NODE_ENV === 'development'
+        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:*"
+        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br",
       "frame-ancestors 'none'",
     ].join('; '),
   },
@@ -31,8 +37,17 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // ── Performance ─────────────────────────────────────────────────
   experimental: {
-    // Optimize package imports to reduce bundle size
-    optimizePackageImports: ['lucide-react', '@supabase/supabase-js'],
+    // Otimiza imports para melhor tree-shaking e bundle menor
+    optimizePackageImports: [
+      'lucide-react',
+      '@supabase/supabase-js',
+      'framer-motion',
+      'recharts',
+      'date-fns',
+    ],
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
   },
 
   // ── Images ──────────────────────────────────────────────────────

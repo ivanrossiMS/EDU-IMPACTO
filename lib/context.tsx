@@ -37,6 +37,9 @@ export interface CurrentUser {
   email: string
   cargo: string
   perfil: string
+  foto?: string
+  aluno_id?: string
+  responsavel_id?: string
 }
 
 interface AppState {
@@ -113,6 +116,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Only hydrate user if explicitly saved — never default to a perfil
     if (savedUser) {
       setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
+      
+      // Tentar carregar a foto de chaves isoladas (mais persistente)
+      try {
+        const isolatedPhoto = localStorage.getItem(`edu-user-photo-${savedUser.id}`)
+        const extraData = localStorage.getItem(`edu-profile-extra-${savedUser.id}`)
+        
+        if (isolatedPhoto) {
+          savedUser.foto = isolatedPhoto
+        } else if (extraData) {
+          const parsed = JSON.parse(extraData)
+          if (parsed.foto) {
+            savedUser.foto = parsed.foto
+          }
+        }
+      } catch (e) {}
+
       setCurrentUserState(savedUser)
     } else {
       // No saved user = logged out — clear any stale perfil
@@ -155,13 +174,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const setCurrentUser = useCallback((user: CurrentUser | null) => {
-    setCurrentUserState(user)
     if (user) {
-      // Login: persist user data
-      saveSetting('edu-current-user', user)
+      setCurrentUserState(prev => {
+        // Se for o mesmo usuário, mescla os dados para não perder propriedades como 'foto'
+        const merged = prev && prev.id === user.id ? { ...prev, ...user } : user
+        saveSetting('edu-current-user', merged)
+        
+        // Garante que a foto fique isolada para persistência extrema
+        if (merged.foto) {
+          localStorage.setItem(`edu-user-photo-${merged.id}`, merged.foto)
+        }
+        
+        return merged
+      })
       setCurrentUserPerfilState(user.perfil)
       saveSetting('edu-current-perfil', user.perfil)
     } else {
+      setCurrentUserState(null)
       // Logout: wipe ALL user-related keys from localStorage
       const USER_KEYS = [
         'edu-current-user',

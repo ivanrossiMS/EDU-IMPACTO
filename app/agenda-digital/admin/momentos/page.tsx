@@ -1,200 +1,120 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion';
-
+import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
-import { Image as ImageIcon, Check, X, Filter, MoreHorizontal, MessageSquare, AlertCircle, Plus, ChevronLeft, ChevronRight, Heart, Trash2, Video } from 'lucide-react'
+import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
+import { getSignedUploadUrlAction } from '../comunicados/actions'
+import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
-
-function PostCard({ post, onApprove, onReject, onDelete }: { post: ADMomento, onApprove: (id: string|number)=>void, onReject: (id: string|number)=>void, onDelete: (id: string|number)=>void }) {
-  const [slide, setSlide] = useState(0)
-  const [showComments, setShowComments] = useState(false)
-  const { adAlert, adConfirm } = useAgendaDigital()
-  
-  const medias = post.media || []
-  const hasMultiple = medias.length > 1
-  const currentMedia = medias[slide]
-
-  return (
-    <div className="card ad-momentos-card" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-           <div className="avatar" style={{ width: 36, height: 36, background: 'var(--gradient-purple)', color: 'white', fontSize: 14 }}>
-             {post.author.charAt(0)}
-           </div>
-           <div>
-             <div style={{ fontSize: 14, fontWeight: 700 }}>{post.author}</div>
-             <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{(post.targetClasses || []).join(', ')} • {post.time}</div>
-           </div>
-         </div>
-         <button className="btn btn-ghost btn-sm" style={{ padding: 4, color: '#ef4444' }} onClick={() => {
-           adConfirm('Tem certeza que deseja apagar este momento?', 'Apagar Momento', () => onDelete(post.id))
-         }} title="Apagar Post">
-           <Trash2 size={16} />
-         </button>
-      </div>
-      
-      {/* Media Carousel */}
-      <div className="ad-momentos-card-media-wrapper" style={{ width: '100%', aspectRatio: '4/3', background: '#000', position: 'relative' }}>
-         {currentMedia ? (
-           currentMedia.type === 'video' || currentMedia.url.match(/\.(mp4|webm)$/i) ? (
-             <video src={currentMedia.url} controls style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-           ) : (
-             <img src={currentMedia.url} alt="Post" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-           )
-         ) : (
-           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>Sem Mídia</div>
-         )}
-         
-         {post.status === 'rejected' && (
-           <div style={{ position: 'absolute', inset: 0, background: 'rgba(239, 68, 68, 0.8)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', padding: 24, textAlign: 'center', zIndex: 10 }}>
-              <AlertCircle size={32} style={{ marginBottom: 12 }} />
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Foto Rejeitada</div>
-              <div style={{ fontSize: 13 }}>Motivo: {post.reason}</div>
-           </div>
-         )}
-
-         {hasMultiple && (
-           <>
-             <button className="btn btn-ghost btn-icon btn-sm" 
-               style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', color: '#000' }}
-               onClick={() => setSlide(s => s === 0 ? medias.length - 1 : s - 1)}>
-               <ChevronLeft size={16} />
-             </button>
-             <button className="btn btn-ghost btn-icon btn-sm" 
-               style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(255,255,255,0.8)', color: '#000' }}
-               onClick={() => setSlide(s => s === medias.length - 1 ? 0 : s + 1)}>
-               <ChevronRight size={16} />
-             </button>
-             <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 6 }}>
-               {medias.map((_, i) => (
-                 <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === slide ? '#fff' : 'rgba(255,255,255,0.4)' }} />
-               ))}
-             </div>
-           </>
-         )}
-      </div>
-      
-      {/* Content */}
-      <div className="ad-momentos-card-content" style={{ padding: '16px' }}>
-        <p style={{ fontSize: 14, margin: '0 0 16px 0', lineHeight: 1.5 }}>
-          {post.desc}
-        </p>
-
-        {/* Actions */}
-        {post.status === 'pending' && (
-           <div style={{ display: 'flex', gap: 12 }}>
-             <button className="btn" style={{ flex: 1, background: '#10b981', color: 'white', borderColor: '#10b981' }} onClick={() => onApprove(post.id)}>
-               <Check size={16} /> Aprovar
-             </button>
-             <button className="btn btn-secondary" style={{ color: '#ef4444', borderColor: '#ef4444' }} onClick={() => onReject(post.id)}>
-               <X size={16} />
-             </button>
-           </div>
-        )}
-         {post.status === 'approved' && (
-           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
-             <div className="badge badge-success" style={{ width: '100%', justifyContent: 'center', padding: '8px 0' }}>
-               <Check size={16} style={{ marginRight: 6 }}/> Publicado no Feed
-             </div>
-           </div>
-        )}
-      </div>
-
-      {post.status === 'approved' && (
-        <>
-         <div style={{ padding: '12px 16px', background: 'rgba(0,0,0,0.02)', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 16 }}>
-           <button className="btn btn-ghost btn-sm" style={{ padding: 4, color: 'hsl(var(--text-secondary))' }} onClick={() => setShowComments(!showComments)}>
-             <MessageSquare size={14} style={{ marginRight: 6 }}/> {(post.comments || []).length} Comentários
-           </button>
-           <button className="btn btn-ghost btn-sm" style={{ padding: 4, color: 'hsl(var(--text-secondary))' }} onClick={() => adAlert('Curtiram:\n' + (post.likes || []).join('\n'), 'Curtidas')}>
-             <Heart size={14} style={{ marginRight: 6, color: (post.likes || []).length > 0 ? '#ef4444' : 'inherit' }}/> {(post.likes || []).length} Curtidas
-           </button>
-         </div>
-         {showComments && (
-           <div style={{ padding: '12px 16px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))', display: 'flex', flexDirection: 'column', gap: 12 }}>
-             {(!post.comments || post.comments.length === 0) ? (
-               <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center' }}>Nenhum comentário.</div>
-             ) : (
-               post.comments.map(c => (
-                 <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'hsl(var(--bg-surface))', padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
-                   <div>
-                     <div style={{ fontSize: 13, fontWeight: 700 }}>{c.author} <span style={{ fontWeight: 400, color: 'hsl(var(--text-muted))', fontSize: 11 }}>• {c.time}</span></div>
-                     <div style={{ fontSize: 13 }}>{c.text}</div>
-                   </div>
-                   <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#ef4444' }} onClick={() => adAlert('Comentário apagado (simulação).', 'Ação')}><Trash2 size={13}/></button>
-                 </div>
-               ))
-             )}
-           </div>
-         )}
-        </>
-      )}
-    </div>
-  )
-}
+import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
 
 export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm } = useAgendaDigital()
   const { turmas = [] } = useData()
-
-  const [filterType, setFilterType] = useState('pending')
+  const { currentUser } = useApp()
+  const [filterType, setFilterType] = useState('all')
   const [filterTurma, setFilterTurma] = useState('all')
-
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
   const [showModal, setShowModal] = useState(false)
   const [showDestModal, setShowDestModal] = useState(false)
-  const [newPost, setNewPost] = useState({ mediaFiles: [] as File[], targetClasses: [] as {id: string, name: string, type: 'turma' | 'funcionario'}[], desc: '' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [newPost, setNewPost] = useState({
+    mediaFiles: [] as File[],
+    targetClasses: [] as { id: string; name: string; type: 'turma' | 'funcionario' | 'aluno' | 'grupo' }[],
+    desc: ''
+  })
 
-  const handleApprove = (id: number | string) => {
-    setFeed(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p))
-  }
-
+  const handleApprove = (id: number | string) => setFeed(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p))
   const handleReject = (id: number | string) => {
     const reason = prompt('Motivo da rejeição:') || 'Não especificado'
     setFeed(prev => prev.map(p => p.id === id ? { ...p, status: 'rejected', reason } : p))
   }
 
   const submitPost = async () => {
+    if (isSubmitting) return
+    if (!newPost.mediaFiles.length || !newPost.desc) return adAlert('Selecione mídias e preencha a legenda.', 'Atenção')
+    
+    // Validar tamanhos
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    for (const f of newPost.mediaFiles) {
+      if (f.type.includes('video') && f.size > MAX_VIDEO_SIZE) {
+        return adAlert(`O vídeo "${f.name}" é muito grande. O limite é 50MB.`, 'Arquivo muito grande')
+      }
+    }
+
+    setIsSubmitting(true)
+    setUploadProgress({})
+    
     try {
-      if(newPost.mediaFiles.length === 0 || !newPost.desc) return adAlert('Anexe arquivos e preencha a leganda.', 'Atenção')
-      
-      const mediaArray: ADMedia[] = await Promise.all(newPost.mediaFiles.map(async f => {
-        const b64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader()
-          reader.onloadend = () => resolve(reader.result as string)
-          reader.onerror = reject
-          reader.readAsDataURL(f)
-        })
-        return {
-          type: f.type.includes('video') ? 'video' : 'image',
-          url: b64
+      const mediaArray: ADMedia[] = await Promise.all(newPost.mediaFiles.map(async (file, idx) => {
+        const bucket = 'comunicados-midia'
+        let fileToUpload: File = file
+
+        if (file.type.startsWith('image/')) {
+          setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
+          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' })
+          setUploadProgress(prev => ({ ...prev, [file.name]: 40 }))
+        } else if (file.type.startsWith('video/')) {
+          setUploadProgress(prev => ({ ...prev, [file.name]: 5 }))
+          fileToUpload = await compressVideo(file, (percent) => {
+            const scaled = Math.round(5 + (percent * 0.45))
+            setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
+          }) as File
         }
+
+        setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))
+
+        // Gerar URL assinada para bypassar RLS e limites de tamanho
+        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, bucket)
+        if (!signedRes.ok || !signedRes.signedUrl) {
+          throw new Error(signedRes.error || 'Erro ao gerar URL assinada')
+        }
+
+        setUploadProgress(prev => ({ ...prev, [file.name]: 75 }))
+
+        // Upload direto via PUT para a URL assinada
+        const response = await fetch(signedRes.signedUrl, {
+          method: 'PUT',
+          body: fileToUpload,
+          headers: {
+            'Content-Type': fileToUpload.type
+          }
+        })
+
+        if (!response.ok) {
+          const errText = await response.text()
+          throw new Error(`Upload falhou: ${errText}`)
+        }
+        
+        // Sucesso
+        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
+
+        return { type: file.type.includes('video') ? 'video' : 'image', url: signedRes.publicUrl }
       }))
 
       const post: ADMomento = {
-        id: Date.now(),
-        author: 'Administração',
+        id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        author: currentUser?.nome || 'Administração',
         targetClasses: newPost.targetClasses.length > 0 ? newPost.targetClasses.map(t => t.name) : ['Toda a Escola'],
-        media: mediaArray,
-        desc: newPost.desc,
-        status: 'approved',
-        time: 'Agora',
-        likes: [],
-        comments: []
+        media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
+
       setFeed(prev => [post, ...prev])
-      setFilterType('all')
       setShowModal(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
-      adAlert('Momento publicado com sucesso!', 'Sucesso')
-    } catch (e) {
-      console.error(e)
-      adAlert('Ocorreu um erro ao processar as mídias.', 'Erro')
+      adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
+    } catch (e: any) {
+      console.error('[Momentos Upload] Error:', e)
+      adAlert(`Erro ao enviar mídias: ${e.message || 'Erro desconhecido'}`, 'Erro')
+    } finally {
+      setIsSubmitting(false)
+      setUploadProgress({})
     }
   }
-
 
   const filteredFeed = feed.filter(p => {
     const matchStatus = filterType === 'all' || p.status === filterType
@@ -202,196 +122,297 @@ export default function ADAdminMomentos() {
     return matchStatus && matchTurma
   })
 
+  const totalPages = Math.max(1, Math.ceil(filteredFeed.length / PAGE_SIZE))
+  const pagedFeed = filteredFeed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const selectStyle: React.CSSProperties = {
+    appearance: 'none', WebkitAppearance: 'none',
+    background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12,
+    padding: '8px 36px 8px 14px', fontSize: 14, color: '#374151',
+    cursor: 'pointer', outline: 'none', height: 42
+  }
+
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-momentos-mobile-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        @media (max-width: 768px) {
-           .ad-momentos-mobile-container {
-              padding-top: 16px !important;
-           }
-           .ad-momentos-header-actions {
-              flex-direction: column !important;
-              width: 100% !important;
-           }
-           .ad-momentos-header-actions > * {
-              width: 100% !important;
-           }
-           .ad-momentos-card {
-              border-radius: 8px !important; 
-              box-shadow: 0 12px 30px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.03) !important;
-              margin: 0 -8px 24px -8px !important; 
-              width: calc(100% + 16px) !important;
-              background: #ffffff !important;
-              border: none !important;
-           }
-           .ad-momentos-card > div:first-child {
-              padding: 16px 16px 12px 16px !important; /* Header padding */
-              border-bottom: none !important;
-           }
-           .ad-momentos-card .avatar {
-              width: 32px !important;
-              height: 32px !important;
-              font-size: 13px !important;
-           }
-           .ad-momentos-card .avatar + div > div:first-child {
-              font-size: 13px !important; /* Author name */
-           }
-           .ad-momentos-card .avatar + div > div:last-child {
-              font-size: 11px !important; /* Subtitle / time */
-           }
-           .ad-momentos-card-media-wrapper {
-              aspect-ratio: 1/1 !important; 
-              border-radius: 4px !important;
-              margin: 0 12px !important;
-              width: calc(100% - 24px) !important;
-              box-shadow: inset 0 2px 6px rgba(0,0,0,0.2) !important;
-              overflow: hidden !important;
-           }
-           .ad-momentos-card-content {
-              padding: 16px 16px 12px 16px !important;
-           }
-           .ad-momentos-card-content > p {
-              font-family: inherit !important;
-              font-size: 14px !important;
-              line-height: 1.5 !important;
-              color: #1f2937 !important;
-              margin: 0 0 16px 0 !important;
-           }
-           .ad-momentos-card-content .btn {
-              padding: 8px 12px !important;
-              font-size: 13px !important;
-              min-height: 40px !important;
-              height: auto !important;
-              border-radius: 20px !important;
-           }
-           .ad-momentos-card > div:nth-last-child(2) {
-              padding: 8px 16px !important; 
-              border-top: none !important;
-              background: transparent !important;
-           }
-           .ad-momentos-card > div:nth-last-child(2) .btn {
-              background: transparent !important;
-              font-size: 13px !important;
-              font-weight: 700 !important;
-           }
-           .ad-momentos-modal {
-              width: 95% !important;
-              padding: 20px 16px !important;
-              margin: 0 auto !important;
-           }
-           .ad-momentos-modal h3 {
-              font-size: 18px !important;
-           }
-           .ad-momentos-title-box h2 {
-              font-size: 20px !important;
-           }
-           .ad-momentos-title-box p {
-              font-size: 13px !important;
-           }
-        }
-      `}} />
-      <div className="ad-momentos-title-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '28px 32px', fontFamily: 'Inter, Outfit, sans-serif' }}>
+
+      {/* === HEADER === */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Momentos (Mural)</h2>
-          <p style={{ color: 'hsl(var(--text-muted))' }}>Moderação de fotos e atividades postadas pelas professoras.</p>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111827', margin: 0 }}>
+            Momentos <span style={{ background: 'linear-gradient(90deg, #a855f7, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>(Mural)</span>
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>Moderação de fotos e atividades postadas pelas professoras.</p>
         </div>
-        
-        <div className="ad-momentos-header-actions" style={{ display: 'flex', gap: 12 }}>
-          <select className="form-input" style={{ width: 180 }} value={filterType} onChange={e => setFilterType(e.target.value)}>
-            <option value="pending">Pendentes ({feed.filter(f => f.status === 'pending').length})</option>
-            <option value="all">Todas as postagens</option>
-          </select>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', flex: 1 }}>
-            <Filter size={16} style={{ position: 'absolute', left: 12, color: 'hsl(var(--text-muted))' }} />
-            <select className="form-input" style={{ width: '100%', paddingLeft: 36 }} value={filterTurma} onChange={e => setFilterTurma(e.target.value)}>
+
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Filter: Postagens */}
+          <div style={{ position: 'relative' }}>
+            <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value)}>
+              <option value="all">Todas as postagens</option>
+              <option value="pending">Pendentes</option>
+              <option value="approved">Aprovadas</option>
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
+          </div>
+
+          {/* Filter: Turmas */}
+          <div style={{ position: 'relative' }}>
+            <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
+            <select style={{ ...selectStyle, paddingLeft: 32, minWidth: 160 }} value={filterTurma} onChange={e => setFilterTurma(e.target.value)}>
               <option value="all">Todas as Turmas</option>
               {turmas.map(t => <option key={t.id} value={t.nome}>{t.nome}</option>)}
             </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
           </div>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={16} /> Novo Momento</button>
+
+          {/* New Momento button */}
+          <button onClick={() => setShowModal(true)} style={{
+            height: 42, padding: '0 20px', border: 'none', borderRadius: 12, cursor: 'pointer',
+            background: 'linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)',
+            color: '#fff', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
+            boxShadow: '0 4px 16px rgba(168,85,247,0.4)', transition: 'opacity 0.2s'
+          }}>
+            <Plus size={16} /> Novo Momento
+          </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 24 }}>
-        {filteredFeed.map(post => <PostCard key={post.id} post={post} onApprove={handleApprove} onReject={handleReject} onDelete={(id) => setFeed(prev => prev.filter(p => p.id !== id))} />)}
+      {/* === BANNER === */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1e1b4b 0%, #4c1d95 30%, #7c3aed 60%, #db2777 85%, #f97316 100%)',
+        borderRadius: 20,
+        padding: '14px 32px',
+        marginBottom: 28,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20,
+        overflow: 'hidden', position: 'relative',
+        boxShadow: '0 8px 40px rgba(124,58,237,0.35), 0 2px 8px rgba(0,0,0,0.15)'
+      }}>
+        <div style={{ position: 'absolute', top: -30, left: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', bottom: -20, right: 180, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, zIndex: 1 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+            background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)',
+            border: '2px solid rgba(255,255,255,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22, boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
+          }}>❝</div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 2, textShadow: '0 1px 8px rgba(0,0,0,0.2)' }}>
+              Cada momento compartilhado é uma memória que fica.
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>Continue incentivando, participando e celebrando cada conquista!</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, zIndex: 1 }}>
+          <span style={{ fontSize: 16, opacity: 0.7 }}>✦</span>
+          <span style={{ fontSize: 12, opacity: 0.5 }}>✦</span>
+          <span style={{ fontSize: 60, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>🚀</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #7c3aed)', opacity: 0.85, boxShadow: '0 4px 16px rgba(124,58,237,0.5)' }} />
+            <span style={{ fontSize: 12, opacity: 0.6 }}>✦</span>
+          </div>
+        </div>
+      </div>
+
+      {/* === GRID === */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+        {pagedFeed.map((post, i) => (
+          <MomentoPostCard
+            key={post.id}
+            post={post}
+            index={(page - 1) * PAGE_SIZE + i}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onDelete={id => adConfirm('Apagar momento?', 'Apagar', () => setFeed(prev => prev.filter(p => p.id !== id)))}
+          />
+        ))}
       </div>
 
       {filteredFeed.length === 0 && (
-        <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-           Nenhum post encontrado para este filtro.
+        <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>📸</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>Nenhum momento encontrado</div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>Publique o primeiro momento da sua escola!</div>
         </div>
       )}
 
+      {/* === PAGINATION === */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 40, paddingBottom: 16 }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              width: 38, height: 38, borderRadius: 10, border: '1.5px solid #e2e8f0',
+              background: page === 1 ? '#f9fafb' : '#fff', color: page === 1 ? '#d1d5db' : '#374151',
+              cursor: page === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700, fontSize: 16, transition: 'all 0.2s'
+            }}
+          >‹</button>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+            <button
+              key={n}
+              onClick={() => setPage(n)}
+              style={{
+                width: 38, height: 38, borderRadius: 10, cursor: 'pointer',
+                background: n === page ? 'linear-gradient(135deg, #7c3aed, #a855f7)' : '#fff',
+                color: n === page ? '#fff' : '#374151',
+                fontWeight: 700, fontSize: 14,
+                boxShadow: n === page ? '0 4px 12px rgba(124,58,237,0.35)' : '0 1px 4px rgba(0,0,0,0.06)',
+                border: n === page ? 'none' : '1.5px solid #e2e8f0',
+                transition: 'all 0.2s'
+              }}
+            >{n}</button>
+          ))}
+
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              width: 38, height: 38, borderRadius: 10, border: '1.5px solid #e2e8f0',
+              background: page === totalPages ? '#f9fafb' : '#fff', color: page === totalPages ? '#d1d5db' : '#374151',
+              cursor: page === totalPages ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700, fontSize: 16, transition: 'all 0.2s'
+            }}
+          >›</button>
+
+          <span style={{ marginLeft: 8, fontSize: 13, color: '#6b7280' }}>
+            {filteredFeed.length} momento{filteredFeed.length !== 1 ? 's' : ''} · Página {page} de {totalPages}
+          </span>
+        </div>
+      )}
+
+      {/* === MODAL: NOVO MOMENTO === */}
       <AnimatePresence>
-{showModal && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card ad-momentos-modal" style={{ width: 540, padding: 24, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-               <h3 style={{ fontSize: 18, fontWeight: 700 }}>Novo Momento Corporativo</h3>
-               <button className="btn btn-ghost btn-sm" onClick={() => setShowModal(false)}><X size={16} /></button>
-             </div>
-             
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', paddingRight: 8 }}>
-                 <div>
-                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><ImageIcon size={14}/> Mídia (Imagens ou Vídeos)</label>
-                   <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '0 0 6px 0' }}>Faça o upload do seu computador ou celular sem limites de tamanho. O sistema adapta fotos e vídeos.</p>
-                   <input type="file" multiple accept="image/*,video/mp4,video/webm" style={{ display: 'none' }} id="upload-midia" onChange={e => {
-                     if(e.target.files) {
-                       setNewPost(p => ({...p, mediaFiles: [...p.mediaFiles, ...Array.from(e.target.files!)]}))
-                     }
-                   }} />
-                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                     {newPost.mediaFiles.map((file, i) => (
-                       <div key={i} style={{ width: 80, height: 80, borderRadius: 8, background: '#f3f4f6', border: '1px solid #e5e7eb', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                         <button style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: 'white', border: 0, borderRadius: '50%', padding: 2, cursor: 'pointer', zIndex: 10 }} onClick={() => setNewPost(p => ({...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i)}))}><X size={12}/></button>
-                         {file.type.includes('video') ? <Video size={24} color="#9ca3af" /> : <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                       </div>
-                     ))}
-                     <label htmlFor="upload-midia" style={{ width: 80, height: 80, borderRadius: 8, border: '2px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9ca3af' }}>
-                       <Plus size={24} />
-                     </label>
-                   </div>
-                 </div>
+        {showModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+              style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 32px 64px rgba(0,0,0,0.3)' }}>
 
-                 <div>
-                    <label className="form-label">Descrição</label>
-                    <textarea className="form-input" rows={3} value={newPost.desc} onChange={e => setNewPost({...newPost, desc: e.target.value})} placeholder="Escreva a legenda..." />
-                 </div>
+              {isSubmitting && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
+                  <div style={{ position: 'relative', width: 80, height: 80 }}>
+                    <Loader2 size={80} color="#7c3aed" style={{ animation: 'spin 1.5s linear infinite', opacity: 0.2 }} />
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#7c3aed', fontSize: 18 }}>
+                      {Math.round((Object.values(uploadProgress).reduce((a, b) => a + b, 0) / newPost.mediaFiles.length) || 0)}%
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 800, color: '#111827', fontSize: 18 }}>Publicando Momento</div>
+                  <div style={{ color: '#6b7280', fontSize: 14, maxWidth: 300 }}>
+                    Enviando {newPost.mediaFiles.length} mídia{newPost.mediaFiles.length !== 1 ? 's' : ''}. Isso pode levar alguns segundos dependendo do tamanho dos vídeos.
+                  </div>
+                  
+                  {/* Lista de arquivos com status */}
+                  <div style={{ width: '100%', maxWidth: 300, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                    {newPost.mediaFiles.map((f, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8fafc', padding: '8px 12px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                        {f.type.includes('video') ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
+                        <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                        {uploadProgress[f.name] === 100 ? <Check size={16} color="#10b981" /> : <Loader2 size={14} className="animate-spin" color="#94a3b8" />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label className="form-label" style={{ margin: 0 }}>Visibilidade (Turmas Alvo)</label>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setShowDestModal(true)}>+ Adicionar / Ver Alvos</button>
-                    </div>
-                    <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '0 0 6px 0' }}>Se nenhuma for selecionada, o post será público para toda a escola.</p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 48, background: 'hsl(var(--bg-main))', padding: '12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
-                      {newPost.targetClasses.length === 0 && <span className="badge badge-ghost text-muted">Toda a Escola</span>}
-                      {newPost.targetClasses.map(t => (
-                        <span key={t.id} className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {t.name}
-                          <button onClick={() => setNewPost(p => ({...p, targetClasses: p.targetClasses.filter(x => x.id !== t.id)}))} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', display: 'flex', color: 'inherit' }}><X size={14} color="currentColor"/></button>
-                        </span>
-                      ))}
-                    </div>
-                 </div>
+              {/* Modal Header */}
+              <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111827' }}>Novo Momento</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>Publique fotos e vídeos no mural da escola</p>
+                </div>
+                <button onClick={() => setShowModal(false)} style={{ background: '#f3f4f6', border: 'none', borderRadius: 10, padding: 8, cursor: 'pointer', display: 'flex', color: '#374151' }}>
+                  <X size={18} />
+                </button>
               </div>
 
-             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
-                <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
-                <button className="btn btn-primary" onClick={submitPost}>Publicar no Feed</button>
-             </div>
-           </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
-      
-      {/* Universal Target Selector */}
-      <DestinatariosModal 
+              {/* Modal Body */}
+              <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+                {/* Media upload */}
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <ImageIcon size={14} /> Mídias (imagens ou vídeos)
+                  </label>
+                  <input type="file" multiple accept="image/*,video/*" id="upload-midia" style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files) setNewPost(p => ({ ...p, mediaFiles: [...p.mediaFiles, ...Array.from(e.target.files!)] })) }} />
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {newPost.mediaFiles.map((file, i) => (
+                      <div key={i} style={{ width: 76, height: 76, borderRadius: 12, background: '#f3f4f6', border: '1px solid #e5e7eb', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
+                          style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                          <X size={10} />
+                        </button>
+                        {file.type.includes('video')
+                          ? <Video size={24} color="#9ca3af" />
+                          : <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+                      </div>
+                    ))}
+                    <label htmlFor="upload-midia" style={{ width: 76, height: 76, borderRadius: 12, border: '2px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9ca3af', background: '#fafafa', transition: 'all 0.2s' }}>
+                      <Plus size={22} />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 8 }}>Legenda</label>
+                  <textarea rows={3} value={newPost.desc} onChange={e => setNewPost({ ...newPost, desc: e.target.value })}
+                    placeholder="Escreva uma legenda para este momento..."
+                    style={{ width: '100%', borderRadius: 12, border: '1.5px solid #e5e7eb', padding: '10px 14px', fontSize: 14, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#111827' }} />
+                </div>
+
+                {/* Target Classes */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Visibilidade</label>
+                    <button onClick={() => setShowDestModal(true)} style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
+                      + Selecionar Turmas
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 40, background: '#f9fafb', padding: 10, borderRadius: 12, border: '1.5px solid #e5e7eb' }}>
+                    {newPost.targetClasses.length === 0
+                      ? <span style={{ color: '#9ca3af', fontSize: 12 }}>Toda a Escola (padrão)</span>
+                      : newPost.targetClasses.map(t => (
+                        <span key={t.id} style={{ background: 'rgba(99,102,241,0.1)', color: '#4f46e5', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          {t.name}
+                          <button onClick={() => setNewPost(p => ({ ...p, targetClasses: p.targetClasses.filter(x => x.id !== t.id) }))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4f46e5', display: 'flex', padding: 0 }}>
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowModal(false)} disabled={isSubmitting}
+                  style={{ padding: '10px 20px', borderRadius: 12, border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+                  Cancelar
+                </button>
+                <button onClick={submitPost} disabled={isSubmitting}
+                  style={{ padding: '10px 24px', borderRadius: 12, border: 'none', background: 'linear-gradient(90deg,#7c3aed,#a855f7,#ec4899)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(124,58,237,0.3)' }}>
+                  {isSubmitting ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Publicando...</> : <><Plus size={16} /> Publicar no Mural</>}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <DestinatariosModal
         isOpen={showDestModal}
         onClose={() => setShowDestModal(false)}
         initialSelected={newPost.targetClasses}
-        onAdd={(res) => setNewPost({...newPost, targetClasses: res as any})}
+        onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
       />
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

@@ -1,15 +1,27 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
-
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useData } from '@/lib/dataContext'
-import { useState } from 'react'
-import { FileText, Search, Plus, FileCheck, Download } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { FileText, Search, Plus, FileCheck, Download, CheckCircle, Clock, Trash2, Printer } from 'lucide-react'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+
+interface DocumentoEmitido {
+  id: string
+  aluno_id: string
+  documento_tipo: string
+  data_emissao: string
+  emitido_por?: string
+}
 
 export default function SecretariaPage() {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [alunos] = useSupabaseArray<any>('alunos')
   const [search, setSearch] = useState('')
   const [alunoSel, setAlunoSel] = useState('')
+  const queryClient = useQueryClient()
+  const { logSystemAction } = useData()
 
   const filtered = (alunos || []).filter(a =>
     a.nome.toLowerCase().includes(search.toLowerCase()) ||
@@ -27,124 +39,205 @@ export default function SecretariaPage() {
 
   const alunoSelecionado = (alunos || []).find(a => a.id === alunoSel)
 
+  // Query para buscar histórico de documentos (Cache via React Query)
+  const { data: historico = [], isLoading: loadingHist, refetch: fetchHistorico } = useApiQuery<DocumentoEmitido[]>(
+    ['documentos'],
+    '/api/documentos'
+  )
+
+  const handleEmitir = async (tipo: string) => {
+    if (!alunoSel) return
+
+    try {
+      const res = await fetch('/api/documentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aluno_id: alunoSel,
+          documento_tipo: tipo,
+          emitido_por: 'Secretaria' // Aqui poderia ser o nome do usuário logado
+        })
+      })
+
+      if (res.ok) {
+        logSystemAction(
+          'Secretaria (Documentos)',
+          'Emissão',
+          `Emissão do documento "${tipo}" para o aluno ${alunoSelecionado?.nome}`,
+          { registroId: alunoSel, detalhesDepois: { tipo, aluno_id: alunoSel } }
+        )
+        alert(`Documento "${tipo}" emitido com sucesso para ${alunoSelecionado?.nome}!`)
+        queryClient.invalidateQueries({ queryKey: ['documentos'] })
+        // Aqui simularia o download do PDF
+      } else {
+        alert('Erro ao registrar emissão.')
+      }
+    } catch (error) {
+      console.error('Erro ao emitir documento:', error)
+    }
+  }
+
+
   return (
-    <div>
-      <div className="page-header">
+    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* Header */}
+      <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title">Secretaria Digital</h1>
-          <p className="page-subtitle">Documentos, declarações, atestados e protocolos</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <FileText size={20} style={{ color: '#2563eb' }} />
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '1px' }}>Secretaria</span>
+          </div>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Secretaria Digital</h1>
+          <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Documentos, declarações, atestados e protocolos.</p>
         </div>
-        <button className="btn btn-primary btn-sm"><Plus size={13} />Novo Protocolo</button>
+        <button style={{ height: '44px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Plus size={16} /> Novo Protocolo
+        </button>
       </div>
 
       {/* Seleção de aluno */}
-      <div className="card" style={{ padding: '20px', marginBottom: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Selecionar Aluno para Emitir Documento</div>
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" style={{ paddingLeft: 36 }}
+      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
+        <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px' }}>Selecionar Aluno para Emitir Documento</div>
+        
+        <div style={{ position: 'relative', marginBottom: '12px' }}>
+          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <input 
+            className="form-input" 
+            style={{ paddingLeft: 36, height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
             placeholder="Buscar aluno por nome ou matrícula..."
             value={search}
             onChange={e => { setSearch(e.target.value); setAlunoSel('') }}
           />
         </div>
+
         {search && filtered.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px', background: '#fff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
             {filtered.slice(0, 10).map(a => (
-              <button key={a.id} onClick={() => { setAlunoSel(a.id); setSearch(a.nome) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px', borderRadius: 6, cursor: 'pointer', background: alunoSel === a.id ? 'rgba(59,130,246,0.1)' : 'transparent', border: 'none', textAlign: 'left', width: '100%' }}>
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', borderRadius: '8px', background: alunoSel === a.id ? '#eff6ff' : 'transparent', border: alunoSel === a.id ? '1px solid #bfdbfe' : '1px solid transparent' }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{a.nome}</div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Cód.: {a.matricula} • Turma: {a.turma} • {a.serie}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{a.nome}</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Matrícula: {a.matricula} • Turma: {a.turma}</div>
                 </div>
-              </button>
+                <button 
+                  onClick={() => { setAlunoSel(a.id); setSearch(a.nome) }}
+                  style={{ height: '32px', padding: '0 12px', background: alunoSel === a.id ? '#2563eb' : '#f1f5f9', color: alunoSel === a.id ? '#fff' : '#475569', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {alunoSel === a.id ? 'Selecionado' : 'Selecionar'}
+                </button>
+              </div>
             ))}
           </div>
         )}
+
         {alunoSelecionado && (
-          <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 10, fontSize: 13 }}>
-            <span style={{ fontWeight: 700, color: '#60a5fa' }}>✓ Aluno selecionado:</span>{' '}
-            {alunoSelecionado.nome} — Cód. {(alunoSelecionado as any).codigo || alunoSelecionado.matricula} • {alunoSelecionado.turma} • {alunoSelecionado.status}
+          <div style={{ marginTop: '16px', padding: '16px', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <CheckCircle size={20} style={{ color: '#2563eb' }} />
+            <div>
+              <span style={{ fontWeight: 700, color: '#1e3a8a' }}>Aluno Selecionado:</span>{' '}
+              <span style={{ color: '#1e40af' }}>{alunoSelecionado.nome}</span>
+              <span style={{ fontSize: '12px', color: '#60a5fa', marginLeft: '8px' }}>• {alunoSelecionado.turma}</span>
+            </div>
           </div>
         )}
       </div>
 
       {/* Tipos de documentos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
         {DOCUMENTOS_TIPOS.map(doc => (
-          <div key={doc.label} className="card" style={{ padding: '20px', cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-                {doc.icon}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{doc.label}</div>
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 10 }}>{doc.desc}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  {alunoSelecionado ? (
-                    <span style={{ fontSize: 11, color: '#34d399' }}>Pronto para emitir</span>
-                  ) : (
-                    <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Selecione um aluno</span>
-                  )}
-                  <button className={`btn btn-sm ${alunoSelecionado ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: 11 }}
-                    disabled={!alunoSelecionado}>
-                    <Download size={11} />Emitir PDF
-                  </button>
+          <div key={doc.label} style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+                  {doc.icon}
                 </div>
+                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '15px' }}>{doc.label}</div>
               </div>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>{doc.desc}</p>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+              {alunoSelecionado ? (
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pronto para emitir</span>
+              ) : (
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Selecione um aluno</span>
+              )}
+              <button 
+                className={`btn btn-sm ${alunoSelecionado ? 'btn-primary' : 'btn-secondary'}`} 
+                style={{ height: '32px', padding: '0 12px', background: alunoSelecionado ? '#2563eb' : '#f1f5f9', color: alunoSelecionado ? '#fff' : '#94a3b8', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: alunoSelecionado ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '6px' }}
+                disabled={!alunoSelecionado}
+                onClick={() => handleEmitir(doc.label)}
+              >
+                <Download size={14} /> Emitir PDF
+              </button>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Alunos cadastrados */}
-      {(alunos || []).length === 0 ? (
-        <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-          <FileText size={40} style={{ margin: '0 auto 12px', opacity: 0.2 }} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Nenhum aluno cadastrado</div>
-          <div style={{ fontSize: 13 }}>Cadastre alunos no módulo Acadêmico para emitir documentos.</div>
+      {/* Histórico de Documentos Emitidos */}
+      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Histórico de Documentos Emitidos</div>
+          <button 
+            onClick={() => fetchHistorico()}
+            style={{ background: 'transparent', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Atualizar
+          </button>
         </div>
-      ) : (
-        <div className="card" style={{ padding: '20px' }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14 }}>Alunos Elegíveis — {(alunos || []).length} cadastrados</div>
-          <div className="table-container" style={{ border: 'none' }}>
-            <table>
-              <thead>
-                <tr><th>Aluno</th><th>Matrícula</th><th>Turma</th><th>Status</th><th>Ações</th></tr>
-              </thead>
-              <tbody>
-                {(alunos || []).slice(0, 20).map(a => (
-                  <tr key={a.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div className="avatar" style={{ width: 28, height: 28, fontSize: 10 }}>
-                          {a.nome.split(' ')[0][0]}{a.nome.split(' ')[1]?.[0]}
+
+        <div className="table-container" style={{ border: 'none' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Aluno</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Documento</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Data de Emissão</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Emitido Por</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loadingHist ? (
+                <TableSkeleton rows={3} cols={5} />
+              ) : historico.length === 0 ? (
+                <tr>
+                  <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>Nenhum documento emitido recentemente.</td>
+                </tr>
+              ) : (
+                historico.map(reg => {
+                  const aluno = (alunos || []).find(a => a.id === reg.aluno_id)
+                  return (
+                    <tr key={reg.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{aluno?.nome || 'Aluno Não Encontrado'}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: {aluno?.matricula || '—'}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a' }}>{reg.documento_tipo}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={14} style={{ color: '#94a3b8' }} />
+                          {new Date(reg.data_emissao).toLocaleString('pt-BR')}
                         </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{a.nome}</div>
-                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{a.responsavel}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td><code style={{ fontSize: 12, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>{a.matricula}</code></td>
-                    <td><span className="badge badge-neutral">{a.turma}</span></td>
-                    <td>
-                      <span className={`badge ${a.status === 'matriculado' ? 'badge-success' : 'badge-warning'}`} style={{ textTransform: 'capitalize' }}>{a.status}</span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}>
-                          <FileCheck size={11} />Emitir
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b' }}>{reg.emitido_por || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <button 
+                          style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '0 auto' }}
+                          title="Reimprimir / Visualizar"
+                        >
+                          <Printer size={14} />
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </div>
   )
 }

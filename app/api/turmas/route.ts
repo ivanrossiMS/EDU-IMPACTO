@@ -1,72 +1,198 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const supabase = await createProtectedClient();
-  const { searchParams } = new URL(request.url)
-  const q = searchParams.get('q')?.toLowerCase()
-  const serie = searchParams.get('serie')
-
-  let query = supabase.from('turmas').select('*').order('nome')
-  if (q) query = query.or(`nome.ilike.%${q}%,professor.ilike.%${q}%`)
-  if (serie && serie !== 'Todos') query = query.eq('serie', serie)
-
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
-  return NextResponse.json(result)
-}
-
-export async function POST(request: Request) {
-  const supabase = await createProtectedClient();
   try {
-    const body = await request.json()
+    const supabase = await createProtectedClient()
+    const url = new URL(request.url)
+    const pageParam = url.searchParams.get('page')
+    const limitParam = url.searchParams.get('limit')
+    const all = url.searchParams.get('all') === 'true' || (!pageParam && !limitParam)
 
-    if (Array.isArray(body)) {
-      const incomingIds = body.map(t => t.id).filter(Boolean);
+    const page = parseInt(pageParam || '1')
+    const limit = parseInt(limitParam || '10')
+    const search = url.searchParams.get('search') || ''
+    const ano = url.searchParams.get('ano') || ''
+    const segmento = url.searchParams.get('segmento') || ''
 
-      if (incomingIds.length === 0) {
-        await supabase.from('turmas').delete().neq('id', 'impossible-id');
-        return NextResponse.json({ ok: true, count: 0 });
-      }
+    const from = (page - 1) * limit
+    const to = from + limit - 1
 
-      const rows = body.map(t => buildRow(t))
-      const { error: upErr } = await supabase.from('turmas').upsert(rows)
-      if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 })
+    let query = supabase
+      .from('turmas')
+      .select('*', { count: 'exact' })
 
-      // Sincronizar exclusões de turmas
-      const { error: delErr } = await supabase.from('turmas').delete().not('id', 'in', `(${incomingIds.join(',')})`);
-      if (delErr) console.error('Erro ao excluir turmas removidas:', delErr);
-
-      return NextResponse.json({ ok: true, count: rows.length })
+    if (search) {
+      query = query.or(`nome.ilike.%${search}%,codigo.ilike.%${search}%`)
     }
 
-    const row = buildRow(body)
-    const { data, error } = await supabase.from('turmas').upsert(row).select().single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
+    if (ano) {
+      query = query.eq('ano', parseInt(ano))
+    }
+
+    // Como segmento é guardado em dados->segmento, precisamos filtrar via JSONB
+    if (segmento) {
+      query = query.filter('dados->>segmento', 'eq', segmento)
+    }
+
+    let queryExec = query.order('nome')
+    if (!all) {
+      queryExec = queryExec.range(from, to)
+    }
+
+    const { data, error, count } = await queryExec
+
+    if (error) throw error
+
+    // Calcular matriculados em tempo real
+    if (data && data.length > 0) {
+      const turmasIds = data.map(t => t.id)
+      
+      // Busca alunos que pertencem a essas turmas
+      // Usamos o cliente protegido (supabase) pois se o usuário pode ver os alunos no modal,
+      // ele também poderá vê-los aqui!
+      const { data: alunosData } = await supabase
+        .from('alunos')
+        .select('id, turma')
+        .in('turma', turmasIds)
+        
+      // Mapeia a contagem para cada turma
+      data.forEach((t: any) => {
+        const countAlunos = (alunosData || []).filter((a: any) => {
+          return String(a.turma) === String(t.id)
+        }).length
+        
+        t.matriculados = countAlunos
+      })
+    }
+
+    return NextResponse.json({
+      data: data || [],
+      total: count || 0,
+      page,
+      limit
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
-function buildRow(body: any) {
-  const { id, codigo, nome, serie, turno, professor, sala, capacidade, matriculados, unidade, ano, dados, ...rest } = body
-  return {
-    id: id || `T${Date.now()}`,
-    codigo: codigo || '',
-    nome,
-    serie: serie || '',
-    turno: turno || '',
-    professor: professor || '',
-    sala: sala || '',
-    capacidade: capacidade || 30,
-    matriculados: matriculados || 0,
-    unidade: unidade || '',
-    ano: ano || new Date().getFullYear(),
-    dados: { ...rest, ...(dados || {}) },
+export async function POST(request: Request) {
+  try {
+    const supabase = await createProtectedClient()
+    const body = await request.json()
+    const { nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
+
+    if (!nome) {
+      return NextResponse.json({ error: 'Nome da turma é obrigatório' }, { status: 400 })
+    }
+
+    let id = ''
+    let exists = true
+    let attempts = 0
+    while (exists && attempts < 10) {
+      id = Math.floor(1000 + Math.random() * 9000).toString() // 4 dígitos
+      const { data } = await supabase.from('turmas').select('id').eq('id', id)
+      if (!data || data.length === 0) exists = false
+      attempts++
+    }
+    
+    if (exists) {
+      throw new Error('Não foi possível gerar um ID único para a turma')
+    }
+    
+    const newTurma = {
+      id,
+      codigo: id, // Usando o mesmo ID como código
+      nome,
+      serie: serie || '',
+      turno: turno || '',
+      professor: professor || '',
+      sala: sala || '',
+      capacidade: parseInt(capacidade) || 30,
+      matriculados: 0,
+      unidade: unidade || '',
+      ano: parseInt(ano) || new Date().getFullYear(),
+      dados: {
+        status: 'ativa',
+        segmento: segmento || '',
+        dataMatricula: new Date().toISOString().split('T')[0]
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('turmas')
+      .insert(newTurma)
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true, data: data?.[0] })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const supabase = await createProtectedClient()
+    const body = await request.json()
+    const { id, nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID da turma é obrigatório' }, { status: 400 })
+    }
+
+    const updatedTurma = {
+      nome,
+      serie,
+      turno,
+      professor,
+      sala,
+      capacidade: parseInt(capacidade),
+      unidade,
+      ano: parseInt(ano),
+      dados: {
+        segmento: segmento || ''
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('turmas')
+      .update(updatedTurma)
+      .eq('id', id)
+      .select()
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true, data: data?.[0] })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const supabase = await createProtectedClient()
+    const url = new URL(request.url)
+    const id = url.searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID da turma é obrigatório' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('turmas')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }

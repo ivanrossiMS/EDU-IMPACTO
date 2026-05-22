@@ -1,22 +1,29 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
-
 import { useData, Ocorrencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { getSignedUploadUrlAction } from '@/app/agenda-digital/admin/comunicados/actions'
+import { Skeleton } from '@/components/skeletons/Skeleton'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
+import { FieldSkeleton } from '@/components/skeletons/FieldSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 import {
   Plus, AlertTriangle, CheckCircle, Calendar, User, MessageSquare,
-  Trash2, Search, ArrowLeft, Pencil, X,
-  BookOpen, Users, Printer, FileText
+  Trash2, Search, ArrowLeft, Pencil, X, Undo,
+  BookOpen, Users, Printer, FileText, Sparkles, School, TrendingUp, AlertCircle, ChevronRight, Filter,
+  BarChart, Clock, Paperclip, Loader2, ImageIcon, FileArchive
 } from 'lucide-react'
 
 type GravOcorrencia = 'leve' | 'media' | 'grave'
 
-const GRAV_CONFIG: Record<GravOcorrencia, { color: string; bg: string; label: string; border: string }> = {
-  leve:  { color: '#f59e0b', bg: 'rgba(245,158,11,0.06)',  label: '🟡 Leve',   border: 'rgba(245,158,11,0.3)' },
-  media: { color: '#ef4444', bg: 'rgba(239,68,68,0.06)',   label: '🔴 Média',  border: 'rgba(239,68,68,0.3)' },
-  grave: { color: '#dc2626', bg: 'rgba(220,38,38,0.1)',    label: '⛔ Grave',  border: 'rgba(220,38,38,0.4)' },
+const GRAV_CONFIG: Record<GravOcorrencia, { color: string; bg: string; label: string; border: string; glow: string }> = {
+  leve:  { color: '#f59e0b', bg: '#fef3c7', label: 'Leve',   border: '#fde68a', glow: 'rgba(245, 158, 11, 0.1)' },
+  media: { color: '#ef4444', bg: '#fee2e2', label: 'Média',  border: '#fecaca', glow: 'rgba(239, 68, 68, 0.1)' },
+  grave: { color: '#dc2626', bg: '#fee2e2', label: 'Grave',  border: '#fecaca', glow: 'rgba(220, 38, 38, 0.2)' },
 }
 
 const TIPOS_FALLBACK = ['Indisciplina','Atraso recorrente','Bullying','Briga','Uso de celular','Desrespeito ao professor','Dano ao patrimônio','Outro']
@@ -24,66 +31,118 @@ const TIPOS_FALLBACK = ['Indisciplina','Atraso recorrente','Bullying','Briga','U
 const BLANK: Omit<Ocorrencia,'id'|'createdAt'> = {
   alunoId:'', alunoNome:'', turma:'', tipo:'',
   descricao:'', gravidade:'leve', data:'', responsavel:'', ciencia_responsavel: false,
+  anexoUrl:'', anexoNome:'', anexoTipo:'', anexoTamanho:0
 }
 
 const SEG_COLORS: Record<string,string> = { EI:'#10b981', EF1:'#3b82f6', EF2:'#8b5cf6', EM:'#f59e0b', EJA:'#ec4899' }
 
 // ── Search dropdown de aluno ──────────────────────────────────────────────────
+
+
 function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos }: {
   value: string; onChange: (id: string, nome: string, turma: string) => void
   alunosDaTurma: { id: string; nome: string; turma: string }[]
   todosAlunos: { id: string; nome: string; turma: string }[]
 }) {
   const [q, setQ] = useState(value)
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  
+  const handleSearch = () => {
+    if (!q.trim()) return
+    setModalOpen(true)
+  }
 
-  // Filtra primeiro na turma; se não achar, busca em todos
   const filteredTurma = q.trim().length > 0
-    ? alunosDaTurma.filter(a => a.nome.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
-    : alunosDaTurma.slice(0, 8)
-  const filteredGlobal = q.trim().length > 0 && filteredTurma.length === 0
-    ? todosAlunos.filter(a => a.nome.toLowerCase().includes(q.toLowerCase())).slice(0, 8)
+    ? alunosDaTurma.filter(a => a.nome.toLowerCase().includes(q.toLowerCase()))
     : []
-  const showGlobal = filteredTurma.length === 0 && filteredGlobal.length > 0
-  const items = showGlobal ? filteredGlobal : filteredTurma
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
-  }, [])
+    
+  const filteredGlobal = q.trim().length > 0
+    ? todosAlunos.filter(a => !alunosDaTurma.some(at => at.id === a.id) && a.nome.toLowerCase().includes(q.toLowerCase()))
+    : []
 
   return (
-    <div ref={ref} style={{ position:'relative' }}>
-      <div style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }}><Search size={12} style={{ color:'hsl(var(--text-muted))' }} /></div>
-      <input className="form-input" style={{ paddingLeft:30 }} placeholder="Buscar aluno da turma..."
-        value={q}
-        onChange={e => { setQ(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)} />
-      {open && (
-        <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:300, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-default))', borderRadius:10, boxShadow:'0 8px 30px rgba(0,0,0,0.3)', overflow:'hidden', marginTop:4 }}>
-          {showGlobal && (
-            <div style={{ padding:'5px 12px 3px', fontSize:10, color:'#f59e0b', fontWeight:700, background:'rgba(245,158,11,0.06)', borderBottom:'1px solid hsl(var(--border-subtle))' }}>
-              ⚠ Nenhum aluno nesta turma — exibindo resultados globais
+    <div style={{ position:'relative' }}>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={16} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
+          <input 
+            className="form-input" 
+            style={{ paddingLeft:40, height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }} 
+            placeholder="Digite o nome do aluno..."
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
+          />
+        </div>
+        <button 
+          type="button"
+          onClick={handleSearch}
+          style={{ height: '48px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+        >
+          <Search size={16} />
+          Buscar
+        </button>
+      </div>
+
+      {/* Modal de Resultados */}
+      {modalOpen && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:3000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ background: '#fff', width:'100%', maxWidth:500, borderRadius: '20px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+            
+            <div style={{ background: '#f8fafc', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Resultados da Busca</div>
+              <button style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer' }} onClick={() => setModalOpen(false)}><X size={20} /></button>
             </div>
-          )}
-          {items.length === 0
-            ? <div style={{ padding:'12px', fontSize:12, color:'hsl(var(--text-muted))', textAlign:'center' }}>
-                {q.trim().length === 0 ? 'Digite para buscar alunos...' : 'Nenhum aluno encontrado'}
-              </div>
-            : items.map(a => (
-              <button key={a.id} type="button" onMouseDown={() => { onChange(a.id, a.nome, a.turma); setQ(a.nome); setOpen(false) }}
-                style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 12px', background:'transparent', border:'none', cursor:'pointer', textAlign:'left' }}
-                onMouseEnter={e => (e.currentTarget.style.background='hsl(var(--bg-hover))')}
-                onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
-                <div style={{ width:26, height:26, borderRadius:7, background:'rgba(59,130,246,0.15)', color:'#60a5fa', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:800 }}>{getInitials(a.nome)}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.nome}</div>
-                  {a.turma && <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{a.turma}</div>}
+
+            <div style={{ padding: '20px', maxHeight: '400px', overflowY: 'auto' }}>
+              {filteredTurma.length === 0 && filteredGlobal.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+                  Nenhum aluno encontrado para "{q}".
                 </div>
-              </button>
-            ))
-          }
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  
+                  {filteredTurma.length > 0 && (
+                    <div>
+                      <div style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, color: '#10b981', background: '#f0fdf4', borderRadius: '4px', display: 'inline-block', marginBottom: '8px' }}>DA TURMA</div>
+                      {filteredTurma.map(a => (
+                        <button key={a.id} type="button" 
+                          onClick={() => { onChange(a.id, a.nome, a.turma); setQ(a.nome); setModalOpen(false) }}
+                          style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'10px', background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, cursor:'pointer', textAlign:'left', transition: 'all 0.2s', marginBottom: '6px' }}
+                          onMouseEnter={e => (e.currentTarget.style.background='#f8fafc')}
+                          onMouseLeave={e => (e.currentTarget.style.background='#fff')}>
+                          <div style={{ width:32, height:32, borderRadius:8, background:'rgba(16, 185, 129, 0.1)', color:'#10b981', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{getInitials(a.nome)}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color: '#0f172a' }}>{a.nome}</div>
+                            {a.turma && <div style={{ fontSize:11, color:'#64748b' }}>{a.turma}</div>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {filteredGlobal.length > 0 && (
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ padding: '4px 8px', fontSize: '11px', fontWeight: 700, color: '#ef4444', background: '#fef2f2', borderRadius: '4px', display: 'inline-block', marginBottom: '8px' }}>OUTRAS TURMAS</div>
+                      {filteredGlobal.map(a => (
+                        <button key={a.id} type="button" 
+                          onClick={() => { onChange(a.id, a.nome, a.turma); setQ(a.nome); setModalOpen(false) }}
+                          style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'10px', background:'#fff', border:'1px solid #e2e8f0', borderRadius:10, cursor:'pointer', textAlign:'left', transition: 'all 0.2s', marginBottom: '6px' }}
+                          onMouseEnter={e => (e.currentTarget.style.background='#f8fafc')}
+                          onMouseLeave={e => (e.currentTarget.style.background='#fff')}>
+                          <div style={{ width:32, height:32, borderRadius:8, background:'rgba(239, 68, 68, 0.1)', color:'#ef4444', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700 }}>{getInitials(a.nome)}</div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color: '#0f172a' }}>{a.nome}</div>
+                            {a.turma && <div style={{ fontSize:11, color:'#64748b' }}>{a.turma}</div>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -91,74 +150,187 @@ function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos }: {
 }
 
 // ── Modal de edição/criação ──────────────────────────────────────────────────
-function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia }: {
+function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas }: {
   form: Omit<Ocorrencia,'id'|'createdAt'>
   setForm: React.Dispatch<React.SetStateAction<Omit<Ocorrencia,'id'|'createdAt'>>>
   onSave: () => void; onClose: () => void
   alunosDaTurma: { id: string; nome: string; turma: string }[]
   todosAlunos: { id: string; nome: string; turma: string }[]
   tiposOcorrencia: { label: string; gravidade: 'leve' | 'media' | 'grave' }[]
+  turmas: any[]
 }) {
+  const [isUploading, setIsUploading] = useState(false)
   const s = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }))
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div className="card" style={{ width:'100%', maxWidth:560, padding:28, boxShadow:'0 32px 80px rgba(0,0,0,0.5)' }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <div style={{ fontWeight:800, fontSize:16 }}>{form.alunoId ? 'Editar Ocorrência' : 'Nova Ocorrência'}</div>
-          <button className="btn btn-ghost btn-icon" onClick={onClose}><X size={16} /></button>
+    <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background: '#fff', width:'100%', maxWidth:600, maxHeight:'95vh', display:'flex', flexDirection:'column', borderRadius: '20px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+        
+        {/* Cabeçalho Gradiente */}
+        <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '24px 32px', color: '#fff', position: 'relative', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
+                {form.alunoId ? 'Editar Ocorrência' : 'Nova Ocorrência'}
+              </h2>
+              <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', margin: '4px 0 0 0' }}>Preencha os dados da ocorrência disciplinar.</p>
+            </div>
+            <button style={{ border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} onClick={onClose}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}>
+              <X size={18} />
+            </button>
+          </div>
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
-          <div style={{ gridColumn:'1/-1' }}>
-            <label className="form-label">Aluno *</label>
-            <AlunoSearch
-              value={form.alunoNome}
-              onChange={(id, nome, turma) => setForm(p => ({ ...p, alunoId:id, alunoNome:nome, turma: turma||p.turma }))}
-              alunosDaTurma={alunosDaTurma}
-              todosAlunos={todosAlunos}
-            />
-          </div>
-          <div>
-            <label className="form-label">Tipo</label>
-            <select className="form-input" value={form.tipo} onChange={e => s('tipo', e.target.value)}>
-              {tiposOcorrencia.length > 0 ? (
-                tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)
+        
+        {/* Conteúdo do Formulário */}
+        <div style={{ padding: '20px 24px 24px 24px', background: '#fff', overflowY: 'auto', flex: 1 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div style={{ gridColumn:'1/-1' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno *</label>
+              <AlunoSearch
+                value={form.alunoNome}
+                onChange={(id, nome, turma) => setForm(p => ({ ...p, alunoId:id, alunoNome:nome, turma: turma||p.turma }))}
+                alunosDaTurma={alunosDaTurma}
+                todosAlunos={todosAlunos}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ano Letivo</label>
+              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontSize: '13px', color: '#475569' }} value={turmas.find((t: any) => t.nome === form.turma || t.id === form.turma)?.ano || 'N/A'} readOnly />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Turma</label>
+              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', fontSize: '13px', color: '#475569' }} value={turmas.find((t: any) => t.nome === form.turma || t.id === form.turma)?.nome || form.turma || 'N/A'} readOnly />
+            </div>
+            
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tipo</label>
+              <select className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} value={form.tipo} onChange={e => s('tipo', e.target.value)}>
+                {tiposOcorrencia.length > 0 ? (
+                  tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)
+                ) : (
+                  TIPOS_FALLBACK.map(t => <option key={t}>{t}</option>)
+                )}
+              </select>
+            </div>
+            
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gravidade</label>
+              <div style={{ display:'flex', gap:6 }}>
+                {(['leve','media','grave'] as GravOcorrencia[]).map(g => (
+                  <button key={g} type="button" onClick={() => s('gravidade', g)}
+                    style={{ flex:1, height: '36px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer', border:`1px solid ${form.gravidade===g ? GRAV_CONFIG[g].color : '#e2e8f0'}`, background: form.gravidade===g ? GRAV_CONFIG[g].bg : '#f8fafc', color: form.gravidade===g ? GRAV_CONFIG[g].color : '#64748b', transition: 'all 0.2s' }}>
+                    {GRAV_CONFIG[g].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Data</label>
+              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} type="date" value={form.data} onChange={e => s('data', e.target.value)} />
+            </div>
+            
+            <div>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Responsável</label>
+              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} value={form.responsavel} onChange={e => s('responsavel', e.target.value)} placeholder="Prof. ou Coord." />
+            </div>
+            
+            <div style={{ gridColumn:'1/-1' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Descrição *</label>
+              <textarea className="form-input" style={{ borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '13px' }} rows={3} value={form.descricao} onChange={e => s('descricao', e.target.value)} placeholder="Descreva detalhadamente o ocorrido..." />
+            </div>
+
+            <div style={{ gridColumn: '1/-1' }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Anexo (Opcional)</label>
+              {form.anexoUrl ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '6px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {form.anexoTipo?.includes('image') ? <ImageIcon size={16} /> : <FileText size={16} />}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{form.anexoNome}</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>{form.anexoTamanho ? (form.anexoTamanho / 1024).toFixed(1) : 0} KB</div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => { s('anexoUrl', ''); s('anexoNome', ''); s('anexoTipo', ''); s('anexoTamanho', 0) }} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', width: 28, height: 28, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ) : (
-                TIPOS_FALLBACK.map(t => <option key={t}>{t}</option>)
+                <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px', border: '2px dashed #cbd5e1', borderRadius: '10px', background: '#f8fafc', cursor: isUploading ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isUploading ? 0.7 : 1 }}>
+                  {isUploading ? (
+                    <>
+                      <Loader2 size={24} style={{ color: '#2563eb', marginBottom: '8px', animation: 'spin 1s linear infinite' }} />
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Enviando arquivo...</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', marginBottom: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                        <Paperclip size={16} />
+                      </div>
+                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', marginBottom: '2px' }}>Clique para anexar documento ou foto</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>Máx: 10MB</div>
+                    </>
+                  )}
+                  <input type="file" style={{ display: 'none' }} disabled={isUploading} onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    if (file.size > 50 * 1024 * 1024) { alert('Arquivo muito grande! Máximo 50MB.'); return; }
+                    setIsUploading(true)
+                    try {
+                        let fileToUpload: File = file;
+
+                        if (file.type.startsWith('image/')) {
+                          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' });
+                        } else if (file.type.startsWith('video/')) {
+                          fileToUpload = await compressVideo(file, (percent) => {}) as File;
+                        }
+
+                        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, 'comunicados-midia');
+
+                        if (signedRes.error || !signedRes.signedUrl) {
+                          alert(signedRes.error || 'Erro ao preparar upload.');
+                          return;
+                        }
+
+                        const uploadRes = await fetch(signedRes.signedUrl, {
+                          method: 'PUT',
+                          body: fileToUpload,
+                          headers: {
+                            'Content-Type': fileToUpload.type || 'application/octet-stream'
+                          }
+                        });
+
+                        if (!uploadRes.ok) {
+                          alert('Falha no envio direto do arquivo.');
+                          return;
+                        }
+
+                        s('anexoUrl', signedRes.publicUrl)
+                        s('anexoNome', fileToUpload.name)
+                        s('anexoTipo', fileToUpload.type)
+                        s('anexoTamanho', fileToUpload.size)
+                    } catch(err) { alert('Erro na conexão ao enviar anexo.') }
+                    finally { setIsUploading(false); e.target.value = '' }
+                  }} />
+                </label>
               )}
-            </select>
-            {tiposOcorrencia.length === 0 && (
-              <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 3 }}>⚠ Configure tipos em Config. Pedagógico → Tipos de Ocorrências</div>
-            )}
-          </div>
-          <div>
-            <label className="form-label">Gravidade</label>
-            <div style={{ display:'flex', gap:8 }}>
-              {(['leve','media','grave'] as GravOcorrencia[]).map(g => (
-                <button key={g} type="button" onClick={() => s('gravidade', g)}
-                  style={{ flex:1, padding:'8px 4px', borderRadius:8, fontSize:11, fontWeight:700, cursor:'pointer', border:`1px solid ${form.gravidade===g ? GRAV_CONFIG[g].color : 'hsl(var(--border-subtle))'}`, background: form.gravidade===g ? GRAV_CONFIG[g].bg : 'transparent', color: form.gravidade===g ? GRAV_CONFIG[g].color : 'hsl(var(--text-muted))' }}>
-                  {GRAV_CONFIG[g].label}
-                </button>
-              ))}
             </div>
           </div>
-          <div>
-            <label className="form-label">Data</label>
-            <input className="form-input" type="date" value={form.data} onChange={e => s('data', e.target.value)} />
+          
+          <div style={{ display:'flex', gap:12, marginTop:20, justifyContent:'flex-end' }}>
+            <button style={{ height: '40px', padding: '0 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }} onClick={onClose}>
+              Cancelar
+            </button>
+            <button style={{ height: '40px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'all 0.2s' }} onClick={onSave} disabled={!form.alunoNome.trim() || !form.descricao.trim()}>
+              <CheckCircle size={16} />
+              <span>Salvar Ocorrência</span>
+            </button>
           </div>
-          <div>
-            <label className="form-label">Responsável</label>
-            <input className="form-input" value={form.responsavel} onChange={e => s('responsavel', e.target.value)} placeholder="Professor ou coordenador" />
-          </div>
-          <div style={{ gridColumn:'1/-1' }}>
-            <label className="form-label">Descrição *</label>
-            <textarea className="form-input" rows={3} value={form.descricao} onChange={e => s('descricao', e.target.value)} placeholder="Descreva detalhadamente o ocorrido..." />
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:10, marginTop:20, justifyContent:'flex-end' }}>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-primary btn-sm" onClick={onSave} disabled={!form.alunoNome.trim() || !form.descricao.trim()}>
-            <CheckCircle size={13} />Salvar Ocorrência
-          </button>
         </div>
       </div>
     </div>
@@ -166,62 +338,98 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
 }
 
 export default function OcorrenciasPage() {
-  const { ocorrencias: rawOcorrencias, setOcorrencias, turmas: rawTurmas, cfgTiposOcorrencia: rawCfgTipos } = useData();
-  const [rawAlunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { data: rawOcorrencias, refetch: refetchOcorrencias, isLoading: isLoadingOcorrencias, isFetching: isFetchingOcorrencias } = useApiQuery<any[]>(
+    ['ocorrencias'],
+    `/api/ocorrencias`,
+    {},
+    { noCache: true }
+  );
+  const { cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData();
+  const { data: userData } = useApiQuery<any>(['auth-me'], `/api/auth/me`);
+  const currentUser = userData?.user || {};
+  
+  const { data: rawTurmas, isLoading: isLoadingTurmas } = useApiQuery<any[]>(['turmas'], `/api/turmas`);
+  const { data: rawAlunos, isLoading: isLoadingAlunos } = useApiQuery<any[]>(['alunos'], `/api/alunos`);
+  const [rawCfgTipos, , { loading: isLoadingTipos }] = useSupabaseArray<any>('edu-cfg-tipos-ocorrencia');
 
   const ocorrencias = rawOcorrencias || [];
-  const turmas = rawTurmas || [];
+  const turmas = (rawTurmas as any)?.data || [];
   const cfgTiposOcorrencia = rawCfgTipos || [];
-  const alunos = rawAlunos || [];
+  const alunos = (rawAlunos as any)?.data || rawAlunos || [];
 
-  // Tipos de ocorrência dinâmicos (usa os configurados ou fallback)
   const tiposAtivos = cfgTiposOcorrencia
     .filter(t => t.situacao === 'ativo')
     .map(t => ({ label: t.descricao, gravidade: t.gravidade }))
 
-  // ── Navegação turma ──
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
-
-  // ── Modo home: turma | aluno ──
   const [modoHome, setModoHome] = useState<'turma'|'aluno'>('turma')
   const [buscaAlunoHome, setBuscaAlunoHome] = useState('')
   const [alunoSel, setAlunoSel] = useState<{id:string;nome:string;turma:string}|null>(null)
 
-  // ── Filtros da home ──
   const [filtroAno, setFiltroAno] = useState('todos')
   const [filtroSeg, setFiltroSeg] = useState('todos')
   const [filtroBuscaHome, setFiltroBuscaHome] = useState('')
-  const anosDisponiveis = useMemo(() => [...new Set(turmas.map(t => t.ano))].sort().reverse(), [turmas])
-  const segmentosDisponiveis = useMemo(() => [...new Set(turmas.map(t => t.serie))].sort(), [turmas])
 
-  // ── Filtros dentro da turma ──
+  useEffect(() => {
+    const vigente = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
+    if (vigente) {
+      setFiltroAno(String(vigente.ano))
+    }
+  }, [cfgCalendarioLetivo])
+  const anosDisponiveis = useMemo(() => [...new Set(turmas.map((t: any) => t.ano))].sort().reverse(), [turmas])
+  
+  const seriesDisponiveis = useMemo(() => {
+    let levels = cfgNiveisEnsino
+    if (filtroSeg !== 'todos') {
+      levels = cfgNiveisEnsino.filter((n: any) => n.nome === filtroSeg)
+    }
+    const allSeries = levels.flatMap((n: any) => n.series || [])
+    return [...new Set(allSeries.map((s: any) => s.nome))].sort()
+  }, [cfgNiveisEnsino, filtroSeg])
+
   const [filtroGrav, setFiltroGrav] = useState<GravOcorrencia | 'todas'>('todas')
   const [busca, setBusca] = useState('')
 
-  // ── Modal ──
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<Ocorrencia,'id'|'createdAt'>>(BLANK)
+  const [metaCriacao, setMetaCriacao] = useState('')
+  const [metaConfirmacao, setMetaConfirmacao] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [turmaSel, filtroGrav, busca])
 
   const alunosDaTurmaAtual = useMemo(() => {
-    if (!turmaSel) return alunos.map(a => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
+    if (!turmaSel) return alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
     return alunos
-      .filter(a =>
+      .filter((a: any) =>
         a.turma === turmaSel ||
-        (a as any).turmaId === turmas.find(t => t.nome === turmaSel)?.id
+        (a as any).turmaId === turmas.find((t: any) => t.nome === turmaSel)?.id
       )
-      .map(a => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
+      .map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' }))
   }, [alunos, turmaSel, turmas])
-  const todosAlunosMapped = useMemo(() => alunos.map(a => ({ id: a.id, nome: a.nome, turma: a.turma || '' })), [alunos])
-  const ocDaTurma = turmaSel ? ocorrencias.filter(o => o.turma === turmaSel) : []
+  
+  const todosAlunosMapped = useMemo(() => alunos.map((a: any) => ({ id: a.id, nome: a.nome, turma: a.turma || '' })), [alunos])
+  const selectedTurmaObj = turmas.find((t: any) => t.nome === turmaSel)
+  const ocDaTurma = turmaSel ? ocorrencias.filter(o => o.turma === turmaSel || o.turma === selectedTurmaObj?.id) : []
   const filtered = ocDaTurma.filter(o => {
     const mg = filtroGrav === 'todas' || o.gravidade === filtroGrav
-    const mb = !busca || o.alunoNome.toLowerCase().includes(busca.toLowerCase()) || o.tipo.toLowerCase().includes(busca.toLowerCase())
+    const mb = !busca || o.alunoNome?.toLowerCase().includes(busca.toLowerCase()) || o.tipo?.toLowerCase().includes(busca.toLowerCase())
     return mg && mb
   })
 
+  const paginatedOcorrencias = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage
+    return filtered.slice(start, start + itemsPerPage)
+  }, [filtered, currentPage, itemsPerPage])
+
   const openNew = () => {
     setEditingId(null)
+    setMetaCriacao('')
+    setMetaConfirmacao('')
     const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0]
     setForm({ ...BLANK, turma: turmaSel ?? '', tipo: primeiroTipo })
     setModalOpen(true)
@@ -231,23 +439,146 @@ export default function OcorrenciasPage() {
     const oc = ocorrencias.find(o => o.id === id)
     if (!oc) return
     setEditingId(id)
-    setForm({ alunoId: oc.alunoId, alunoNome: oc.alunoNome, turma: oc.turma, tipo: oc.tipo, descricao: oc.descricao, gravidade: oc.gravidade as GravOcorrencia, data: oc.data, responsavel: oc.responsavel, ciencia_responsavel: oc.ciencia_responsavel })
+    
+    const lines = oc.descricao.split('\n')
+    let lancadoLine = ''
+    let editadoLine = ''
+    let confirmadoLine = ''
+    let resto = []
+    
+    for (const line of lines) {
+      if (line.startsWith('[Lançado por:')) lancadoLine = line
+      else if (line.startsWith('[Editado por:')) editadoLine = line
+      else if (line.startsWith('[Confirmado por:')) confirmadoLine = line
+      else resto.push(line)
+    }
+    
+    setMetaCriacao(lancadoLine)
+    setMetaConfirmacao(confirmadoLine)
+    
+    setForm({ 
+      alunoId: oc.alunoId, 
+      alunoNome: oc.alunoNome, 
+      turma: oc.turma, 
+      tipo: oc.tipo, 
+      descricao: resto.join('\n').trim(), 
+      gravidade: oc.gravidade as GravOcorrencia, 
+      data: oc.data, 
+      responsavel: oc.responsavel, 
+      ciencia_responsavel: oc.ciencia_responsavel,
+      anexoUrl: oc.anexoUrl || '',
+      anexoNome: oc.anexoNome || '',
+      anexoTipo: oc.anexoTipo || '',
+      anexoTamanho: oc.anexoTamanho || 0
+    })
     setModalOpen(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.alunoNome.trim() || !form.descricao.trim()) return
+    
+    const now = new Date()
+    const dataHora = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    
+    let userInfo = ''
     if (editingId) {
-      setOcorrencias(prev => prev.map(o => o.id === editingId ? { ...o, ...form } : o))
+      const editInfo = `[Editado por: ${currentUser?.nome || 'Usuário'} em ${dataHora}]`
+      userInfo = metaCriacao ? `${metaCriacao}\n${editInfo}` : editInfo
+      if (metaConfirmacao) userInfo += `\n${metaConfirmacao}`
     } else {
-      const nova: Ocorrencia = { ...form, turma: turmaSel ?? '', id: newId('OC'), data: form.data || new Date().toISOString().slice(0,10), createdAt: new Date().toISOString() }
-      setOcorrencias(prev => [nova, ...prev])
+      userInfo = `[Lançado por: ${currentUser?.nome || 'Usuário'} em ${dataHora}]`
     }
-    setModalOpen(false)
+
+    const payload = {
+      ...form,
+      id: editingId,
+      turma: turmaSel ?? form.turma,
+      descricao: form.descricao ? `${userInfo}\n${form.descricao}` : userInfo
+    }
+    try {
+      const response = await fetch('/api/ocorrencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (response.ok) {
+        refetchOcorrencias()
+        setModalOpen(false)
+      } else {
+        const err = await response.json()
+        alert('Erro ao salvar: ' + (err.error || response.statusText))
+      }
+    } catch (error: any) {
+      alert('Erro na requisição: ' + error.message)
+    }
   }
 
-  const marcarCiencia = (id: string) => setOcorrencias(prev => prev.map(o => o.id === id ? { ...o, ciencia_responsavel:true } : o))
-  const handleDelete = (id: string) => setOcorrencias(prev => prev.filter(o => o.id !== id))
+  const marcarCiencia = async (id: string) => {
+    const oc = ocorrencias.find(o => o.id === id)
+    if (!oc) return
+    
+    const now = new Date()
+    const dataHora = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const confirmInfo = `[Confirmado por: ${currentUser?.nome || 'Usuário'} em ${dataHora}]`
+    
+    const payload = { 
+      ...oc, 
+      ciencia_responsavel: true,
+      descricao: oc.descricao ? `${oc.descricao}\n${confirmInfo}` : confirmInfo
+    }
+    try {
+      const response = await fetch('/api/ocorrencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (response.ok) {
+        refetchOcorrencias()
+      }
+    } catch (error) {
+      console.error('Erro ao marcar ciência:', error)
+    }
+  }
+
+  const desfazerCiencia = async (id: string) => {
+    const oc = ocorrencias.find(o => o.id === id)
+    if (!oc) return
+    
+    const lines = oc.descricao.split('\n')
+    const filteredLines = lines.filter((l: string) => !l.startsWith('[Confirmado por:'))
+    
+    const payload = { 
+      ...oc, 
+      ciencia_responsavel: false,
+      descricao: filteredLines.join('\n').trim()
+    }
+    try {
+      const response = await fetch('/api/ocorrencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (response.ok) {
+        refetchOcorrencias()
+      }
+    } catch (error) {
+      console.error('Erro ao desfazer ciência:', error)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente excluir esta ocorrência?')) return
+    try {
+      const response = await fetch(`/api/ocorrencias?id=${id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        refetchOcorrencias()
+      }
+    } catch (error) {
+      console.error('Erro ao excluir:', error)
+    }
+  }
 
   // ── HOME: dashboard pedagógico ────────────────────────────────────────────
   if (!turmaSel) {
@@ -255,46 +586,52 @@ export default function OcorrenciasPage() {
     const pendentes = ocorrencias.filter(o => !o.ciencia_responsavel).length
     const graves = ocorrencias.filter(o => o.gravidade === 'grave').length
     const gravesPendentes = ocorrencias.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel).length
-    const turmasFiltradas = turmas.filter(t =>
-      (filtroAno === 'todos' || String(t.ano) === filtroAno) &&
-      (filtroSeg === 'todos' || t.serie === filtroSeg) &&
-      (!filtroBuscaHome || t.nome.toLowerCase().includes(filtroBuscaHome.toLowerCase()))
-    )
+    
+    const turmasFiltradas = turmas.filter((t: any) => {
+      const levelOfTurma = cfgNiveisEnsino.find((n: any) => n.series?.some((s: any) => s.nome === t.serie))
+      const levelName = levelOfTurma?.nome || ''
+      
+      return (filtroAno === 'todos' || String(t.ano) === filtroAno) &&
+             (filtroSeg === 'todos' || levelName === filtroSeg) &&
+             (!filtroBuscaHome || t.serie === filtroBuscaHome)
+    })
 
-    // Alunos mais reincidentes
     const reincidentes = (() => {
-      const map: Record<string, { nome: string; turma: string; count: number; graves: number }> = {}
+      const map: Record<string, { id: string; nome: string; turma: string; count: number; graves: number }> = {}
       ocorrencias.forEach(o => {
-        if (!map[o.alunoId]) map[o.alunoId] = { nome: o.alunoNome, turma: o.turma, count: 0, graves: 0 }
+        if (!map[o.alunoId]) map[o.alunoId] = { id: o.alunoId, nome: o.alunoNome, turma: o.turma, count: 0, graves: 0 }
         map[o.alunoId].count++
         if (o.gravidade === 'grave') map[o.alunoId].graves++
       })
       return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 5)
     })()
 
-    // Distribuição por tipo
     const tiposCount = (() => {
       const map: Record<string, number> = {}
       ocorrencias.forEach(o => { map[o.tipo] = (map[o.tipo] ?? 0) + 1 })
       return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 6)
     })()
     const maxTipo = tiposCount[0]?.[1] ?? 1
+    const ultimasOC = [...ocorrencias].sort((a, b) => {
+      const dateA = a.createdAt || a.created_at || ''
+      const dateB = b.createdAt || b.created_at || ''
+      return dateB.localeCompare(dateA)
+    }).slice(0, 5)
 
-    // Últimas 5 ocorrências
-    const ultimasOC = [...ocorrencias].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5)
-
-    // Distribuição por gravidade
     const leves = ocorrencias.filter(o => o.gravidade === 'leve').length
     const medias = ocorrencias.filter(o => o.gravidade === 'media').length
 
     // ── MODO ALUNO ────────────────────────────────────────────────────────
     if (modoHome === 'aluno') {
-      const todosMapped = alunos.map(a => ({ id:a.id, nome:a.nome, turma:a.turma||'' }))
+      const todosMapped = alunos.map((a: any) => ({ id:a.id, nome:a.nome, turma:a.turma||'' }))
       const filteredAlunos = buscaAlunoHome.trim().length > 0
-        ? todosMapped.filter(a => a.nome.toLowerCase().includes(buscaAlunoHome.toLowerCase())).slice(0,12)
+        ? todosMapped.filter((a: any) => a.nome.toLowerCase().includes(buscaAlunoHome.toLowerCase())).slice(0,12)
         : []
-
-      const ocDoAluno = alunoSel ? ocorrencias.filter(o => o.alunoId === alunoSel.id).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)) : []
+      const ocDoAluno = alunoSel ? ocorrencias.filter(o => o.alunoId === alunoSel.id).sort((a,b) => {
+        const dateA = a.createdAt || a.created_at || ''
+        const dateB = b.createdAt || b.created_at || ''
+        return dateB.localeCompare(dateA)
+      }) : []
 
       const printRelatorio = () => {
         if (!alunoSel) return
@@ -313,40 +650,52 @@ export default function OcorrenciasPage() {
       }
 
       return (
-        <div>
-          <div className="page-header">
+        <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+          <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-              <button className="btn btn-ghost btn-icon" onClick={() => { setModoHome('turma'); setAlunoSel(null); setBuscaAlunoHome('') }}><ArrowLeft size={18} /></button>
+              <button style={{ border: '1px solid #e2e8f0', background: '#fff', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a' }} onClick={() => { setModoHome('turma'); setAlunoSel(null); setBuscaAlunoHome('') }}><ArrowLeft size={18} /></button>
               <div>
-                <h1 className="page-title">Ocorrências por Aluno</h1>
-                <p className="page-subtitle">Histórico individual de ocorrências disciplinares</p>
+                <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0 }}>Ocorrências por Aluno</h1>
+                <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Histórico individual de ocorrências disciplinares.</p>
               </div>
             </div>
             {alunoSel && (
-              <button className="btn btn-secondary btn-sm" onClick={printRelatorio}><Printer size={13} />Imprimir Relatório</button>
+              <button style={{ height: '42px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={printRelatorio}><Printer size={16} />Imprimir Relatório</button>
             )}
           </div>
 
           {/* Busca aluno */}
-          <div className="card" style={{ padding:'20px', marginBottom:20 }}>
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>🔍 Buscar Aluno</div>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
+            <div style={{ fontWeight:700, fontSize:14, color: '#0f172a', marginBottom:12 }}>🔍 Buscar Aluno</div>
             <div style={{ position:'relative' }}>
-              <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))', pointerEvents:'none' }} />
-              <input className="form-input" style={{ paddingLeft:34 }} placeholder="Digite o nome do aluno..."
+              <Search size={18} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
+              <input className="form-input" style={{ paddingLeft:42, height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} placeholder="Digite o nome do aluno..."
                 value={buscaAlunoHome} onChange={e => { setBuscaAlunoHome(e.target.value); setAlunoSel(null) }} autoFocus />
             </div>
-            {filteredAlunos.length > 0 && !alunoSel && (
-              <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:4 }}>
-                {filteredAlunos.map(a => (
+            {isLoadingAlunos ? (
+              <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:8 }}>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px', background:'transparent', border:'1px solid #e2e8f0', borderRadius:12 }}>
+                    <Skeleton w="40px" h="40px" borderRadius="10px" />
+                    <div style={{ flex: 1 }}>
+                      <Skeleton w="40%" h="14px" style={{ marginBottom: '4px' }} />
+                      <Skeleton w="20%" h="12px" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredAlunos.length > 0 && !alunoSel && (
+              <div style={{ marginTop:12, display:'flex', flexDirection:'column', gap:8 }}>
+                {filteredAlunos.map((a: any) => (
                   <button key={a.id} type="button"
                     onClick={() => setAlunoSel(a)}
-                    style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'transparent', border:'1px solid hsl(var(--border-subtle))', borderRadius:10, cursor:'pointer', textAlign:'left' }}
-                    onMouseEnter={e => e.currentTarget.style.background='hsl(var(--bg-overlay))'}
+                    style={{ display:'flex', alignItems:'center', gap:12, padding:'12px', background:'transparent', border:'1px solid #e2e8f0', borderRadius:12, cursor:'pointer', textAlign:'left', transition: 'all 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#f8fafc'}
                     onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                    <div style={{ width:32,height:32,borderRadius:9,background:'rgba(99,102,241,0.12)',color:'#6366f1',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800 }}>{getInitials(a.nome)}</div>
+                    <div style={{ width:40,height:40,borderRadius:10,background:'rgba(37, 99, 235, 0.1)',color:'#2563eb',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700 }}>{getInitials(a.nome)}</div>
                     <div>
-                      <div style={{ fontSize:13, fontWeight:600 }}>{a.nome}</div>
-                      <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{a.turma || 'Sem turma'} • {ocorrencias.filter(o=>o.alunoId===a.id).length} ocorrência(s)</div>
+                      <div style={{ fontSize:14, fontWeight:600, color: '#0f172a' }}>{a.nome}</div>
+                      <div style={{ fontSize:12, color:'#64748b' }}>{a.turma || 'Sem turma'} • {ocorrencias.filter(o=>o.alunoId===a.id).length} ocorrência(s)</div>
                     </div>
                   </button>
                 ))}
@@ -357,12 +706,12 @@ export default function OcorrenciasPage() {
           {/* Histórico do aluno */}
           {alunoSel && (
             <div>
-              <div className="card" style={{ padding:'20px', marginBottom:16, borderLeft:'4px solid #6366f1' }}>
-                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                  <div style={{ width:44,height:44,borderRadius:12,background:'rgba(99,102,241,0.12)',color:'#6366f1',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800 }}>{getInitials(alunoSel.nome)}</div>
+              <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', borderLeft: '4px solid #2563eb' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                  <div style={{ width:48,height:48,borderRadius:12,background:'rgba(37, 99, 235, 0.1)',color:'#2563eb',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700 }}>{getInitials(alunoSel.nome)}</div>
                   <div>
-                    <div style={{ fontWeight:800, fontSize:16 }}>{alunoSel.nome}</div>
-                    <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{alunoSel.turma} • {ocDoAluno.length} ocorrência(s) no histórico</div>
+                    <div style={{ fontWeight:900, fontSize:18, color: '#0f172a', fontFamily: 'Outfit,sans-serif' }}>{alunoSel.nome}</div>
+                    <div style={{ fontSize:13, color:'#64748b' }}>{alunoSel.turma} • {ocDoAluno.length} ocorrência(s) no histórico</div>
                   </div>
                   <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
                     {(['leve','media','grave'] as const).map(g => (
@@ -373,29 +722,88 @@ export default function OcorrenciasPage() {
                   </div>
                 </div>
               </div>
-              {ocDoAluno.length === 0 ? (
-                <div className="card" style={{ padding:'30px', textAlign:'center', color:'#10b981', fontWeight:600 }}>✓ Nenhuma ocorrência registrada para este aluno.</div>
+              
+              {isLoadingOcorrencias ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} style={{ padding: '16px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                      <Skeleton w="40%" h="16px" style={{ marginBottom: '8px' }} />
+                      <Skeleton w="80%" h="12px" />
+                    </div>
+                  ))}
+                </div>
+              ) : ocDoAluno.length === 0 ? (
+                <div style={{ background: '#fff', padding: '32px', borderRadius: '16px', border: '1px solid #e2e8f0', textAlign: 'center', color: '#10b981', fontWeight: 600 }}>
+                  ✓ Nenhuma ocorrência registrada para este aluno.
+                </div>
               ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                   {ocDoAluno.map(oc => {
                     const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
                     return (
-                      <div key={oc.id} style={{ display:'flex', gap:14, padding:'16px 18px', background:cfg.bg, border:`1px solid ${cfg.border}`, borderLeft:`4px solid ${cfg.color}`, borderRadius:12 }}>
+                      <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cfg.color}`, borderRadius:12 }}>
                         <div style={{ flex:1 }}>
                           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:4 }}>
-                            <span className="badge badge-neutral">{oc.tipo}</span>
-                            <span style={{ fontSize:10, padding:'1px 7px', borderRadius:100, background:`${cfg.color}18`, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
-                            {oc.turma && <span style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>Turma: {oc.turma}</span>}
+                            <span style={{ padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{oc.tipo}</span>
+                            <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
+                            {oc.turma && <span style={{ fontSize:12, color:'#64748b' }}>Turma: {oc.turma}</span>}
+                            {oc.anexoUrl && <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f0f9ff', color:'#0284c7', fontWeight:700 }}><Paperclip size={12} />Anexo</span>}
                           </div>
-                          <p style={{ fontSize:13, color:'hsl(var(--text-secondary))', lineHeight:1.5, marginBottom:6 }}>{oc.descricao}</p>
-                          <div style={{ display:'flex', gap:16, fontSize:11, color:'hsl(var(--text-muted))' }}>
-                            {oc.data && <span><Calendar size={9} style={{ display:'inline', marginRight:4 }} />{oc.data}</span>}
-                            {oc.responsavel && <span><User size={9} style={{ display:'inline', marginRight:4 }} />{oc.responsavel}</span>}
+                          
+                          {(() => {
+                            const lines = oc.descricao.split('\n')
+                            let lancado = ''
+                            let editado = ''
+                            let confirmado = ''
+                            let resto = []
+                            
+                            for (const line of lines) {
+                              if (line.startsWith('[Lançado por:')) lancado = line.replace('[Lançado por: ', '').replace(']', '')
+                              else if (line.startsWith('[Editado por:')) editado = line.replace('[Editado por: ', '').replace(']', '')
+                              else if (line.startsWith('[Confirmado por:')) confirmado = line.replace('[Confirmado por: ', '').replace(']', '')
+                              else resto.push(line)
+                            }
+                            
+                            const infoReal = resto.join('\n').trim()
+                            
+                            return (
+                              <>
+                                <p style={{ fontSize:14, color:'#334155', lineHeight:1.5, marginBottom:6, marginTop: 8 }}>{infoReal || oc.descricao}</p>
+                                
+                                <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop: 8, background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                  {lancado && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                                      <Clock size={12} style={{ color: '#2563eb' }} />
+                                      <span>Registrado por <strong>{lancado}</strong></span>
+                                    </div>
+                                  )}
+                                  {editado && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                                      <Pencil size={12} style={{ color: '#10b981' }} />
+                                      <span>Editado por <strong>{editado}</strong></span>
+                                    </div>
+                                  )}
+                                  {confirmado && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                                      <CheckCircle size={12} style={{ color: '#10b981' }} />
+                                      <span>Confirmado por <strong>{confirmado}</strong></span>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )
+                          })()}
+
+                          <div style={{ display:'flex', gap:16, fontSize:12, color:'#64748b', marginTop: 8 }}>
+                            {oc.data && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} />{oc.data}</span>}
+                            {oc.responsavel && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><User size={14} />{oc.responsavel}</span>}
                           </div>
                         </div>
-                        {oc.ciencia_responsavel
-                          ? <span className="badge badge-success" style={{ alignSelf:'flex-start' }}><CheckCircle size={9} />Ciência confirmada</span>
-                          : <span className="badge badge-warning" style={{ alignSelf:'flex-start' }}><AlertTriangle size={9} />Aguardando</span>}
+                        <div style={{ alignSelf: 'center' }}>
+                          {oc.ciencia_responsavel
+                            ? <span style={{ padding: '4px 10px', background: '#dcfce7', color: '#15803d', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={14} />Ciência confirmada</span>
+                            : <span style={{ padding: '4px 10px', background: '#fef3c7', color: '#b45309', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={14} />Aguardando</span>}
+                        </div>
                       </div>
                     )
                   })}
@@ -408,76 +816,87 @@ export default function OcorrenciasPage() {
     }
 
     return (
-      <div>
-        <div className="page-header">
+      <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+        {/* Header Ultra Moderno */}
+        <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 className="page-title">Ocorrências Disciplinares</h1>
-            <p className="page-subtitle">Painel de monitoramento disciplinar • {totalOC} ocorrências registradas</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Sparkles size={20} style={{ color: '#2563eb' }} />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '1px' }}>Gestão Disciplinar</span>
+            </div>
+            <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Ocorrências Escolares</h1>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Monitore o comportamento e aplique medidas pedagógicas.</p>
           </div>
-          <div style={{ display:'flex', gap:10 }}>
-            <div className="tab-list">
-              {(['turma','aluno'] as const).map(m => (
-                <button key={m} className={`tab-trigger ${modoHome===m?'active':''}`} onClick={() => setModoHome(m)}>
-                  {m==='turma' ? <><Users size={13} />Por Turma</> : <><Search size={13} />Por Aluno</>}
-                </button>
-              ))}
+          
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <button 
+                onClick={() => setModoHome('turma')}
+                style={{ height: '36px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+              >
+                <Users size={16} />
+                <span>Por Turma</span>
+              </button>
+              <button 
+                onClick={() => setModoHome('aluno')}
+                style={{ height: '36px', padding: '0 16px', background: 'transparent', color: '#64748b', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+              >
+                <Search size={16} />
+                <span>Por Aluno</span>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* ── Alerta urgente: graves pendentes ── */}
+        {/* Alerta urgente: graves pendentes */}
         {gravesPendentes > 0 && (
-          <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 20px', background:'rgba(220,38,38,0.08)', border:'1px solid rgba(220,38,38,0.35)', borderRadius:14, marginBottom:20, borderLeft:'4px solid #dc2626' }}>
-            <div style={{ fontSize:28 }}>⛔</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:800, fontSize:14, color:'#ef4444' }}>{gravesPendentes} ocorrência{gravesPendentes > 1 ? 's' : ''} grave{gravesPendentes > 1 ? 's' : ''} aguardando ciência do responsável</div>
-              <div style={{ fontSize:12, color:'hsl(var(--text-secondary))', marginTop:2 }}>Ação imediata necessária — clique na turma correspondente para resolver</div>
+          <div style={{ display:'flex', alignItems:'center', gap:16, padding:'16px 24px', background:'rgba(239, 68, 68, 0.05)', borderTop: '1px solid #fecaca', borderRight: '1px solid #fecaca', borderBottom: '1px solid #fecaca', borderRadius: 16, marginBottom: 24, borderLeft: '4px solid #ef4444' }}>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '10px', borderRadius: '12px' }}>
+              <AlertTriangle size={24} />
             </div>
-            <div style={{ fontSize:11, fontWeight:700, color:'#ef4444', background:'rgba(239,68,68,0.1)', padding:'4px 12px', borderRadius:20, border:'1px solid rgba(239,68,68,0.3)' }}>URGENTE</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:800, fontSize:15, color:'#b91c1c' }}>{gravesPendentes} ocorrência{gravesPendentes > 1 ? 's' : ''} grave{gravesPendentes > 1 ? 's' : ''} aguardando ciência</div>
+              <div style={{ fontSize:13, color:'#7f1d1d', marginTop:2 }}>Ação imediata necessária para garantir o alinhamento com os responsáveis.</div>
+            </div>
+            <div style={{ fontSize:11, fontWeight:700, color:'#ef4444', background:'#fee2e2', padding:'4px 12px', borderRadius:20, border:'1px solid #fecaca' }}>ALERTA</div>
           </div>
         )}
 
-        {/* ── KPIs globais ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom:22 }}>
-          {[
-            { label:'Total', value:totalOC, color:'#3b82f6', icon:'📋', sub:'todas as turmas' },
-            { label:'Graves', value:graves, color:'#dc2626', icon:'⛔', sub:`${gravesPendentes} pendentes` },
-            { label:'Médias', value:medias, color:'#ef4444', icon:'🔴', sub:'gravidade média' },
-            { label:'Leves', value:leves, color:'#f59e0b', icon:'🟡', sub:'gravidade leve' },
-            { label:'Resolvidas', value:ocorrencias.filter(o => o.ciencia_responsavel).length, color:'#10b981', icon:'✅', sub:'ciência confirmada' },
-          ].map(c => (
-            <div key={c.label} style={{ padding:'18px', background:'hsl(var(--bg-elevated))', borderRadius:14, border:`1px solid ${c.color}20`, position:'relative', overflow:'hidden' }}>
-              <div style={{ position:'absolute', top:0, left:0, right:0, height:3, background:c.color }} />
-              <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
-                <span style={{ fontSize:18 }}>{c.icon}</span>
-                <span style={{ fontSize:11, color:'hsl(var(--text-muted))', fontWeight:600 }}>{c.label}</span>
-              </div>
-              <div style={{ fontSize:30, fontWeight:900, color:c.color, fontFamily:'Outfit,sans-serif', lineHeight:1 }}>{c.value}</div>
-              <div style={{ fontSize:10, color:'hsl(var(--text-muted))', marginTop:6 }}>{c.sub}</div>
-            </div>
-          ))}
-        </div>
 
-        {/* ── Segundo nível: tipos + reincidentes ── */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:16, marginBottom:22 }}>
-
+        {/* Segundo nível: tipos + reincidentes */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20, marginBottom:32 }}>
           {/* Tipos mais frequentes */}
-          <div className="card" style={{ padding:'20px' }}>
-            <div style={{ fontWeight:800, fontSize:13, marginBottom:16 }}>📊 Tipos Mais Frequentes</div>
-            {tiposCount.length === 0 ? (
-              <div style={{ fontSize:12, color:'hsl(var(--text-muted))', textAlign:'center', padding:'20px 0' }}>Sem dados</div>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BarChart size={16} style={{ color: '#2563eb' }} />
+              <span>Tipos Mais Frequentes</span>
+            </div>
+            {isLoadingOcorrencias ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                      <Skeleton w="60%" h="12px" />
+                      <Skeleton w="20px" h="12px" />
+                    </div>
+                    <Skeleton w="100%" h="6px" />
+                  </div>
+                ))}
+              </div>
+            ) : tiposCount.length === 0 ? (
+              <div style={{ fontSize:13, color:'#94a3b8', textAlign:'center', padding:'20px 0' }}>Sem dados</div>
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 {tiposCount.map(([tipo, count]) => {
                   const pct = (count / maxTipo) * 100
                   return (
                     <div key={tipo}>
                       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                        <span style={{ fontSize:11, fontWeight:600, color:'hsl(var(--text-secondary))' }}>{tipo}</span>
-                        <span style={{ fontSize:11, fontWeight:800, color:'#f59e0b' }}>{count}</span>
+                        <span style={{ fontSize:12, fontWeight:600, color:'#475569' }}>{tipo}</span>
+                        <span style={{ fontSize:12, fontWeight:800, color:'#0f172a' }}>{count}</span>
                       </div>
-                      <div style={{ height:6, borderRadius:3, background:'hsl(var(--bg-overlay))' }}>
-                        <div style={{ width:`${pct}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg,#f59e0b,#ef4444)' }} />
+                      <div style={{ height:6, borderRadius:3, background:'#f1f5f9' }}>
+                        <div style={{ width:`${pct}%`, height:'100%', borderRadius:3, background:'linear-gradient(90deg, #2563eb, #3b82f6)' }} />
                       </div>
                     </div>
                   )
@@ -486,25 +905,41 @@ export default function OcorrenciasPage() {
             )}
           </div>
 
-          {/* Alunos reincidentes */}
-          <div className="card" style={{ padding:'20px', borderLeft:'3px solid #ef4444' }}>
-            <div style={{ fontWeight:800, fontSize:13, marginBottom:16 }}>⚠️ Alunos Reincidentes</div>
-            {reincidentes.length === 0 ? (
-              <div style={{ fontSize:12, color:'#10b981', textAlign:'center', padding:'20px 0', fontWeight:600 }}>✓ Nenhum reincidente</div>
+            {/* Alunos reincidentes */}
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', borderTop: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0', borderLeft: '4px solid #ef4444' }}>
+              <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={16} style={{ color: '#ef4444' }} />
+                <span>Alunos Reincidentes</span>
+              </div>
+              {isLoadingOcorrencias ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Skeleton w="24px" h="24px" borderRadius="6px" />
+                      <div style={{ flex: 1 }}>
+                        <Skeleton w="60%" h="12px" style={{ marginBottom: '4px' }} />
+                        <Skeleton w="40%" h="10px" />
+                      </div>
+                      <Skeleton w="20px" h="20px" />
+                    </div>
+                  ))}
+                </div>
+              ) : reincidentes.length === 0 ? (
+              <div style={{ fontSize:13, color:'#10b981', textAlign:'center', padding:'20px 0', fontWeight:600 }}>✓ Nenhum reincidente</div>
             ) : (
-              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {reincidentes.map((r, i) => (
-                  <div key={r.nome} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', background: i === 0 ? 'rgba(239,68,68,0.06)' : 'transparent', borderRadius:8, border: i === 0 ? '1px solid rgba(239,68,68,0.2)' : '1px solid transparent' }}>
-                    <div style={{ width:24, height:24, borderRadius:7, background:'rgba(239,68,68,0.12)', color:'#ef4444', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, flexShrink:0 }}>
+                  <div key={`${r.id || 'aluno'}-${i}`} style={{ display:'flex', alignItems:'center', gap:12, padding:'8px 10px', background: i === 0 ? 'rgba(239,68,68,0.05)' : 'transparent', borderRadius:10, border: i === 0 ? '1px solid rgba(239,68,68,0.1)' : '1px solid transparent' }}>
+                    <div style={{ width:24, height:24, borderRadius:6, background: i === 0 ? '#ef4444' : '#f1f5f9', color: i === 0 ? '#fff' : '#64748b', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>
                       {i + 1}º
                     </div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.nome}</div>
-                      <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{r.turma}</div>
+                      <div style={{ fontSize:13, fontWeight:700, color: '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.nome}</div>
+                      <div style={{ fontSize:11, color:'#64748b' }}>{r.turma}</div>
                     </div>
                     <div style={{ textAlign:'right', flexShrink:0 }}>
-                      <div style={{ fontSize:14, fontWeight:900, color: r.count >= 3 ? '#ef4444' : '#f59e0b', fontFamily:'Outfit,sans-serif' }}>{r.count}</div>
-                      {r.graves > 0 && <div style={{ fontSize:9, color:'#dc2626', fontWeight:700 }}>{r.graves} grave{r.graves > 1 ? 's' : ''}</div>}
+                      <div style={{ fontSize:16, fontWeight:900, color: r.count >= 3 ? '#ef4444' : '#f59e0b', fontFamily:'Outfit,sans-serif' }}>{r.count}</div>
+                      {r.graves > 0 && <div style={{ fontSize:10, color:'#dc2626', fontWeight:700 }}>{r.graves} grave{r.graves > 1 ? 's' : ''}</div>}
                     </div>
                   </div>
                 ))}
@@ -513,23 +948,34 @@ export default function OcorrenciasPage() {
           </div>
 
           {/* Últimas ocorrências */}
-          <div className="card" style={{ padding:'20px' }}>
-            <div style={{ fontWeight:800, fontSize:13, marginBottom:16 }}>🕐 Registro Recente</div>
-            {ultimasOC.length === 0 ? (
-              <div style={{ fontSize:12, color:'hsl(var(--text-muted))', textAlign:'center', padding:'20px 0' }}>Sem registros</div>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={16} style={{ color: '#10b981' }} />
+              <span>Registro Recente</span>
+            </div>
+            {isLoadingOcorrencias ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'center', paddingBottom: 10, borderBottom: '1px solid #f1f5f9' }}>
+                    <Skeleton w="40px" h="16px" borderRadius="4px" />
+                  </div>
+                ))}
+              </div>
+            ) : ultimasOC.length === 0 ? (
+              <div style={{ fontSize:13, color:'#94a3b8', textAlign:'center', padding:'20px 0' }}>Sem registros</div>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {ultimasOC.map(oc => {
+                {ultimasOC.map((oc, idx) => {
                   const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
                   return (
-                    <div key={oc.id} style={{ display:'flex', gap:10, alignItems:'flex-start', paddingBottom:10, borderBottom:'1px solid hsl(var(--border-subtle))' }}>
-                      <div style={{ width:8, height:8, borderRadius:'50%', background:cfg.color, marginTop:5, flexShrink:0 }} />
+                    <div key={oc.id || idx} style={{ display:'flex', gap:10, alignItems:'center', paddingBottom:10, borderBottom:'1px solid #f1f5f9' }}>
+                      <div style={{ width:8, height:8, borderRadius:'50%', background:cfg.color, flexShrink:0 }} />
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:12, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{oc.alunoNome}</div>
-                        <div style={{ fontSize:10, color:'hsl(var(--text-muted))', marginTop:1 }}>{oc.tipo} • {oc.turma}</div>
+                        <div style={{ fontSize:13, fontWeight:600, color: '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{oc.alunoNome}</div>
+                        <div style={{ fontSize:11, color:'#64748b' }}>{oc.tipo} • {oc.turma}</div>
                       </div>
-                      <div style={{ fontSize:9, padding:'2px 7px', borderRadius:20, background:cfg.bg, color:cfg.color, fontWeight:700, flexShrink:0, border:`1px solid ${cfg.border}` }}>
-                        {oc.gravidade}
+                      <div style={{ fontSize:10, padding:'2px 6px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700, flexShrink:0 }}>
+                        {cfg.label}
                       </div>
                     </div>
                   )
@@ -539,93 +985,186 @@ export default function OcorrenciasPage() {
           </div>
         </div>
 
-        {/* ── Filtros ── */}
-        <div style={{ display:'flex', gap:10, marginBottom:20, alignItems:'center', flexWrap:'wrap', padding:'14px 18px', background:'hsl(var(--bg-elevated))', borderRadius:12, border:'1px solid hsl(var(--border-subtle))' }}>
-          <div style={{ position:'relative', flex:1, minWidth:160 }}>
-            <Search size={13} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))', pointerEvents:'none' }} />
-            <input className="form-input" style={{ paddingLeft:30, fontSize:12 }} placeholder="Buscar turma..." value={filtroBuscaHome} onChange={e => setFiltroBuscaHome(e.target.value)} />
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ fontSize:12, color:'hsl(var(--text-muted))', fontWeight:600 }}>Ano letivo:</span>
-            <select className="form-input" style={{ width:'auto', minWidth:100, fontSize:12 }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
-              <option value="todos">Todos</option>
-              {anosDisponiveis.map(a => <option key={a} value={String(a)}>{a}</option>)}
-            </select>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ fontSize:12, color:'hsl(var(--text-muted))', fontWeight:600 }}>Segmento:</span>
-            <div style={{ display:'flex', gap:5 }}>
-              {(['todos',...segmentosDisponiveis] as string[]).map(s => (
-                <button key={s} onClick={() => setFiltroSeg(s)}
-                  style={{ padding:'3px 10px', borderRadius:20, fontSize:11, fontWeight:700, cursor:'pointer',
-                    background: filtroSeg===s ? `${SEG_COLORS[s] ?? '#3b82f6'}15` : 'transparent',
-                    border: `1px solid ${filtroSeg===s ? (SEG_COLORS[s] ?? '#3b82f6') : 'hsl(var(--border-subtle))'}`,
-                    color: filtroSeg===s ? (SEG_COLORS[s] ?? '#3b82f6') : 'hsl(var(--text-muted))' }}>
-                  {s === 'todos' ? 'Todos' : s}
-                </button>
-              ))}
+        {/* Filtros */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
+            <div style={{ position:'relative', flex: 1, maxWidth: '400px' }}>
+              {isLoadingTurmas ? (
+                <Skeleton w="100%" h="44px" />
+              ) : (
+                <>
+                  <Users size={16} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
+                  <select 
+                    className="form-input" 
+                    style={{ width: '100%', paddingLeft:40, height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }} 
+                    value={filtroBuscaHome} 
+                    onChange={e => setFiltroBuscaHome(e.target.value)}
+                  >
+                    <option value="">Todas as Séries</option>
+                    {seriesDisponiveis.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+            
+            <div style={{ width: '140px' }}>
+              {cfgCalendarioLetivo.length === 0 ? (
+                <Skeleton w="100%" h="44px" />
+              ) : (
+                <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
+                  <option value="todos">Anos Letivos</option>
+                  {cfgCalendarioLetivo.map((c: any) => <option key={c.id} value={c.ano}>{c.ano}</option>)}
+                </select>
+              )}
+            </div>
+
+            <div style={{ width: '160px' }}>
+              {cfgNiveisEnsino.length === 0 ? (
+                <Skeleton w="100%" h="44px" />
+              ) : (
+                <select 
+                  className="form-input" 
+                  style={{ width: '100%', height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }} 
+                  value={filtroSeg} 
+                  onChange={e => setFiltroSeg(e.target.value)}
+                >
+                  <option value="todos">Segmentos</option>
+                  {cfgNiveisEnsino.map((n: any) => (
+                    <option key={n.id} value={n.nome}>{n.nome}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
-          {(filtroAno !== 'todos' || filtroSeg !== 'todos' || filtroBuscaHome) && (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={() => { setFiltroAno('todos'); setFiltroSeg('todos'); setFiltroBuscaHome('') }}>✕ Limpar</button>
-          )}
-          <span style={{ marginLeft:'auto', fontSize:12, color:'hsl(var(--text-muted))' }}>{turmasFiltradas.length}/{turmas.length} turma(s)</span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Filtrando: </span>
+            <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{turmasFiltradas.length} turmas</span>
+            {isFetchingOcorrencias && <UpdatingIndicator />}
+          </div>
         </div>
 
-        {/* ── Grid de turmas ── */}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-          <div style={{ fontWeight:800, fontSize:15 }}>📌 Selecione a Turma para Gerenciar Ocorrências</div>
-        </div>
+        {/* Tabela de Turmas (Substituindo os Cards) */}
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Turma</th>
+                  <th style={{ textAlign: 'left', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Segmento</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alunos</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ocorrências</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Graves</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pendentes</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingTurmas ? (
+                  <TableSkeleton rows={5} cols={7} />
+                ) : turmasFiltradas.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                        <BookOpen size={32} style={{ color: '#94a3b8' }} />
+                        <span style={{ fontSize: '14px', fontWeight: 600 }}>Nenhuma turma encontrada</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  turmasFiltradas.map((turma: any) => {
+                    const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
+                    const ocTurma = ocorrencias.filter(o => o.turma === turma.nome || o.turma === turma.id)
+                    const pendTurma = ocTurma.filter(o => !o.ciencia_responsavel).length
+                    const gravesTurma = ocTurma.filter(o => o.gravidade === 'grave').length
+                    const gravesPend = ocTurma.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel).length
+                    const alunosTurma = alunos.filter((a: any) => a.turma === turma.nome || a.turma === turma.id || a.turmaId === turma.id).length
+                    
+                    const isUrgent = gravesPend > 0
 
-        {turmasFiltradas.length === 0 ? (
-          <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-            <BookOpen size={40} style={{ margin:'0 auto 12px', opacity:0.15 }} />
-            <div style={{ fontSize:14, fontWeight:600 }}>{turmas.length === 0 ? 'Nenhuma turma cadastrada' : 'Nenhuma turma com esses filtros'}</div>
-            {turmas.length === 0 && <div style={{ fontSize:13, marginTop:6 }}>Cadastre turmas em Acadêmico → Turmas para iniciar.</div>}
+                    return (
+                      <tr key={turma.id} style={{ background: '#fff', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                        <td style={{ padding: '16px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
+                          <div>
+                            <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{turma.nome}</p>
+                            <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{turma.serie} • {turma.turno}</p>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 500 }}>{turma.serie}</span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 600 }}>{alunosTurma}</span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 600 }}>{ocTurma.length}</span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ 
+                            fontSize: '13px', 
+                            fontWeight: 700, 
+                            color: gravesTurma > 0 ? '#ef4444' : '#64748b',
+                            background: gravesTurma > 0 ? '#fee2e2' : 'transparent',
+                            padding: gravesTurma > 0 ? '2px 6px' : '0',
+                            borderRadius: '4px'
+                          }}>
+                            {gravesTurma}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ 
+                            fontSize: '13px', 
+                            fontWeight: 700, 
+                            color: pendTurma > 0 ? '#f59e0b' : '#10b981',
+                            background: pendTurma > 0 ? '#fef3c7' : 'transparent',
+                            padding: pendTurma > 0 ? '2px 6px' : '0',
+                            borderRadius: '4px'
+                          }}>
+                            {pendTurma}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+                            <button 
+                              onClick={() => { setTurmaSel(turma.nome); setFiltroGrav('todas'); setBusca('') }}
+                              style={{ background: 'transparent', border: 'none', color: isUrgent ? '#ef4444' : '#2563eb', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              Gerenciar <ChevronRight size={16} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setEditingId(null);
+                                const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0];
+                                setForm({ ...BLANK, turma: turma.nome, tipo: primeiroTipo });
+                                setModalOpen(true);
+                              }}
+                              style={{ height: '32px', padding: '0 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#1d4ed8'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#2563eb'}
+                            >
+                              <Plus size={14} /> Nova
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px,1fr))', gap:16 }}>
-            {turmasFiltradas.map(turma => {
-              const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
-              const ocTurma = ocorrencias.filter(o => o.turma === turma.nome)
-              const pendTurma = ocTurma.filter(o => !o.ciencia_responsavel).length
-              const gravesTurma = ocTurma.filter(o => o.gravidade === 'grave').length
-              const gravesPend = ocTurma.filter(o => o.gravidade === 'grave' && !o.ciencia_responsavel).length
-              const alunosTurma = alunos.filter(a => a.turma === turma.nome).length
-              const alertLevel = gravesPend > 0 ? '#dc2626' : pendTurma > 0 ? '#f59e0b' : color
-              return (
-                <button key={turma.id} onClick={() => { setTurmaSel(turma.nome); setFiltroGrav('todas'); setBusca('') }}
-                  style={{ textAlign:'left', background:'hsl(var(--bg-elevated))', border:`1px solid ${alertLevel}30`, borderLeft:`4px solid ${alertLevel}`, borderRadius:14, padding:'20px', cursor:'pointer', transition:'all 0.2s', display:'block', width:'100%' }}
-                  onMouseEnter={e => { e.currentTarget.style.background='hsl(var(--bg-overlay))'; e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow=`0 8px 24px ${alertLevel}20` }}
-                  onMouseLeave={e => { e.currentTarget.style.background='hsl(var(--bg-elevated))'; e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
-                    <div>
-                      <div style={{ fontSize:22, fontWeight:900, color, fontFamily:'Outfit,sans-serif' }}>{turma.nome}</div>
-                      <div style={{ fontSize:11, color:'hsl(var(--text-muted))', marginTop:3 }}>{turma.serie} • {turma.turno} • {turma.ano} • {alunosTurma} alunos</div>
-                    </div>
-                    <div style={{ textAlign:'right' }}>
-                      <div style={{ fontSize:28, fontWeight:900, color: ocTurma.length > 0 ? alertLevel : color, fontFamily:'Outfit,sans-serif' }}>{ocTurma.length}</div>
-                      <div style={{ fontSize:9, color:'hsl(var(--text-muted))' }}>ocorrências</div>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                    {gravesPend > 0 && <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(220,38,38,0.15)', color:'#dc2626', fontWeight:700, border:'1px solid rgba(220,38,38,0.3)' }}>⛔ {gravesPend} grave{gravesPend > 1 ? 's' : ''} pendente{gravesPend > 1 ? 's' : ''}</span>}
-                    {gravesTurma > 0 && gravesPend === 0 && <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(239,68,68,0.1)', color:'#ef4444', fontWeight:700 }}>⛔ {gravesTurma} graves</span>}
-                    {pendTurma > 0 && <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontWeight:700 }}>⚠ {pendTurma} pendentes</span>}
-                    {ocTurma.length === 0 && <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700 }}>✓ Sem ocorrências</span>}
-                    {ocTurma.length > 0 && pendTurma === 0 && gravesTurma === 0 && <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700 }}>✓ Todas resolvidas</span>}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+        </div>
+        {modalOpen && (
+          <OcorrenciaModal form={form} setForm={setForm} onSave={handleSave} onClose={() => setModalOpen(false)} alunosDaTurma={alunosDaTurmaAtual} todosAlunos={todosAlunosMapped} tiposOcorrencia={tiposAtivos} turmas={turmas} />
         )}
       </div>
     )
   }
 
   // ── Vista interna: ocorrências da turma ──────────────────────────────────
-  const turmaObj = turmas.find(t => t.nome === turmaSel)
+  const turmaObj = turmas.find((t: any) => t.nome === turmaSel)
   const color = SEG_COLORS[turmaObj?.serie ?? ''] ?? '#3b82f6'
 
   const printRelatorioTurma = () => {
@@ -643,107 +1182,203 @@ export default function OcorrenciasPage() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <button className="btn btn-ghost btn-icon" onClick={() => setTurmaSel(null)}><ArrowLeft size={18} /></button>
+    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+          <button style={{ border: '1px solid #e2e8f0', background: '#fff', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a' }} onClick={() => setTurmaSel(null)}><ArrowLeft size={18} /></button>
           <div>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <h1 className="page-title" style={{ marginBottom:0 }}>Ocorrências — {turmaSel}</h1>
-              <span style={{ padding:'2px 10px', borderRadius:20, background:`${color}15`, color, fontSize:11, fontWeight:700 }}>{turmaObj?.serie}</span>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, color: '#0f172a', margin: 0 }}>Ocorrências — {turmaSel}</h1>
+              <span style={{ padding:'2px 8px', borderRadius:4, background:`${color}15`, color, fontSize:11, fontWeight:700 }}>{turmaObj?.serie}</span>
             </div>
-            <p className="page-subtitle">{ocDaTurma.length} ocorrência(s) • {alunosDaTurmaAtual.length} alunos</p>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>{ocDaTurma.length} ocorrência(s) • {alunosDaTurmaAtual.length} alunos</p>
           </div>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={printRelatorioTurma}><Printer size={13} />Relatório da Turma</button>
-          <button className="btn btn-primary btn-sm" onClick={openNew}><Plus size={13} />Nova Ocorrência</button>
+        <div style={{ display:'flex', gap:12 }}>
+          <button style={{ height: '42px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={printRelatorioTurma}><Printer size={16} />Relatório da Turma</button>
+          <button style={{ height: '42px', padding: '0: 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }} onClick={openNew}><Plus size={16} />Nova Ocorrência</button>
         </div>
       </div>
 
       {/* KPIs da turma */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:24 }}>
         {[
-          { label:'Total', value: ocDaTurma.length, color:'#3b82f6' },
-          { label:'Graves', value: ocDaTurma.filter(o=>o.gravidade==='grave').length, color:'#dc2626' },
-          { label:'Aguardando ciência', value: ocDaTurma.filter(o=>!o.ciencia_responsavel).length, color:'#f59e0b' },
-          { label:'Resolvidas', value: ocDaTurma.filter(o=>o.ciencia_responsavel).length, color:'#10b981' },
+          { label:'Total', value: ocDaTurma.length, color:'#2563eb', bg: 'rgba(37, 99, 235, 0.1)' },
+          { label:'Graves', value: ocDaTurma.filter(o=>o.gravidade==='grave').length, color:'#dc2626', bg: 'rgba(220, 38, 38, 0.1)' },
+          { label:'Aguardando Ciência', value: ocDaTurma.filter(o=>!o.ciencia_responsavel).length, color:'#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+          { label:'Resolvidas', value: ocDaTurma.filter(o=>o.ciencia_responsavel).length, color:'#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
         ].map(c => (
-          <div key={c.label} className="kpi-card" style={{ borderTop:`3px solid ${c.color}` }}>
-            <div style={{ fontSize:11, color:'hsl(var(--text-muted))', marginBottom:6 }}>{c.label}</div>
-            <div style={{ fontSize:26, fontWeight:900, color:c.color, fontFamily:'Outfit,sans-serif' }}>{c.value}</div>
+          <div key={c.label} style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize:12, color:'#64748b', fontWeight: 600, marginBottom:4 }}>{c.label}</div>
+            <div style={{ fontSize:28, fontWeight:900, color:c.color, fontFamily:'Outfit,sans-serif' }}>{c.value}</div>
           </div>
         ))}
       </div>
 
       {/* Filtros internos */}
-      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+      <div style={{ display:'flex', gap:16, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
         <div style={{ position:'relative', flex:1, minWidth:200 }}>
-          <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))', pointerEvents:'none' }} />
-          <input className="form-input" style={{ paddingLeft:34 }} placeholder="Buscar aluno ou tipo..." value={busca} onChange={e => setBusca(e.target.value)} />
+          <Search size={16} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
+          <input className="form-input" style={{ paddingLeft:36, height: '40px', borderRadius: '8px', background: '#fff', border: '1px solid #e2e8f0' }} placeholder="Buscar aluno ou tipo..." value={busca} onChange={e => setBusca(e.target.value)} />
         </div>
-        <div className="tab-list">
+        
+        <div style={{ display: 'flex', background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
           {(['todas','leve','media','grave'] as const).map(f => (
-            <button key={f} className={`tab-trigger ${filtroGrav===f?'active':''}`} onClick={() => setFiltroGrav(f)}>
+            <button key={f} 
+              onClick={() => setFiltroGrav(f)}
+              style={{ height: '32px', padding: '0 12px', background: filtroGrav === f ? GRAV_CONFIG[f==='todas'?'leve':f].color : 'transparent', color: filtroGrav === f ? '#fff' : '#64748b', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+            >
               {f==='todas' ? 'Todas' : GRAV_CONFIG[f].label}
             </button>
           ))}
         </div>
-        <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{filtered.length} result.</span>
+        
+        <span style={{ fontSize:12, color:'#64748b', fontWeight: 500 }}>{filtered.length} resultados</span>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
+        <div style={{ background: '#fff', padding: '40px', borderRadius: '16px', border: '1px solid #e2e8f0', textAlign: 'center', color: '#64748b' }}>
           {ocDaTurma.length === 0
-            ? <><CheckCircle size={36} style={{ margin:'0 auto 12px', opacity:0.15 }} /><div style={{ fontSize:14, fontWeight:600 }}>Nenhuma ocorrência nesta turma</div><button className="btn btn-primary" style={{ marginTop:16 }} onClick={openNew}><Plus size={13} />Nova Ocorrência</button></>
+            ? <><CheckCircle size={36} style={{ margin:'0 auto 12px', color: '#94a3b8' }} /><div style={{ fontSize:14, fontWeight:600 }}>Nenhuma ocorrência nesta turma</div><button style={{ marginTop:16, height: '40px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={openNew}><Plus size={14} /> Nova Ocorrência</button></>
             : <div>Nenhuma ocorrência com os filtros aplicados.</div>
           }
         </div>
       ) : (
-        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {filtered.map(oc => {
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {paginatedOcorrencias.map(oc => {
             const cfg = GRAV_CONFIG[oc.gravidade as GravOcorrencia] ?? GRAV_CONFIG.leve
             return (
-              <div key={oc.id} style={{ display:'flex', gap:14, padding:'16px 18px', background:cfg.bg, border:`1px solid ${cfg.border}`, borderLeft:`4px solid ${cfg.color}`, borderRadius:12, transition:'box-shadow 0.2s' }}
-                onMouseEnter={e => (e.currentTarget.style.boxShadow=`0 4px 20px ${cfg.color}15`)}
+              <div key={oc.id} style={{ display:'flex', gap:16, padding:'16px 20px', background:'#fff', borderTop: `1px solid #e2e8f0`, borderRight: `1px solid #e2e8f0`, borderBottom: `1px solid #e2e8f0`, borderLeft: `4px solid ${cfg.color}`, borderRadius: 12, transition: 'all 0.2s' }}
+                onMouseEnter={e => (e.currentTarget.style.boxShadow=`0 4px 6px -1px rgba(0,0,0,0.05)`)}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow='')}>
-                <div className="avatar" style={{ width:40, height:40, fontSize:12, background:`${cfg.color}20`, color:cfg.color, flexShrink:0 }}>
+                <div style={{ width:40, height:40, borderRadius: 10, background:`${cfg.color}15`, color:cfg.color, flexShrink:0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px' }}>
                   {getInitials(oc.alunoNome)}
                 </div>
                 <div style={{ flex:1 }}>
                   <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:4 }}>
-                    <span style={{ fontSize:14, fontWeight:700 }}>{oc.alunoNome}</span>
-                    <span className="badge badge-neutral">{oc.tipo}</span>
-                    <span style={{ fontSize:10, padding:'1px 7px', borderRadius:100, background:`${cfg.color}18`, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
+                    <span style={{ fontSize:15, fontWeight:700, color: '#0f172a' }}>{oc.alunoNome}</span>
+                    <span style={{ padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{oc.tipo}</span>
+                    <span style={{ fontSize:11, padding:'2px 8px', borderRadius:4, background:cfg.bg, color:cfg.color, fontWeight:700 }}>{cfg.label}</span>
+                    {oc.anexoUrl && <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11, padding:'2px 8px', borderRadius:4, background:'#f0f9ff', color:'#0284c7', fontWeight:700 }}><Paperclip size={12} />Anexo</span>}
                   </div>
-                  <p style={{ fontSize:13, color:'hsl(var(--text-secondary))', lineHeight:1.5, marginBottom:6 }}>{oc.descricao}</p>
-                  <div style={{ display:'flex', gap:16, fontSize:11, color:'hsl(var(--text-muted))' }}>
-                    {oc.data && <span><Calendar size={9} style={{ display:'inline', marginRight:4 }} />{oc.data}</span>}
-                    {oc.responsavel && <span><User size={9} style={{ display:'inline', marginRight:4 }} />{oc.responsavel}</span>}
+                  
+                  {(() => {
+                    const lines = oc.descricao.split('\n')
+                    let lancado = ''
+                    let editado = ''
+                    let confirmado = ''
+                    let resto = []
+                    
+                    for (const line of lines) {
+                      if (line.startsWith('[Lançado por:')) lancado = line.replace('[Lançado por: ', '').replace(']', '')
+                      else if (line.startsWith('[Editado por:')) editado = line.replace('[Editado por: ', '').replace(']', '')
+                      else if (line.startsWith('[Confirmado por:')) confirmado = line.replace('[Confirmado por: ', '').replace(']', '')
+                      else resto.push(line)
+                    }
+                    
+                    const infoReal = resto.join('\n').trim()
+                    
+                    return (
+                      <>
+                        <p style={{ fontSize:14, color:'#334155', lineHeight:1.5, marginBottom:6, marginTop: 4 }}>{infoReal || oc.descricao}</p>
+                        
+                        <div style={{ display:'flex', flexDirection:'column', gap:4, marginTop: 8, background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          {lancado && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                              <Clock size={12} style={{ color: '#2563eb' }} />
+                              <span>Registrado por <strong>{lancado}</strong></span>
+                            </div>
+                          )}
+                          {editado && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                              <Pencil size={12} style={{ color: '#10b981' }} />
+                              <span>Editado por <strong>{editado}</strong></span>
+                            </div>
+                          )}
+                          {confirmado && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#64748b' }}>
+                              <CheckCircle size={12} style={{ color: '#10b981' }} />
+                              <span>Confirmado por <strong>{confirmado}</strong></span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
+
+                  <div style={{ display:'flex', gap:16, fontSize:12, color:'#64748b', marginTop: 8 }}>
+                    {oc.data && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Calendar size={14} />{oc.data}</span>}
+                    {oc.responsavel && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><User size={14} />{oc.responsavel}</span>}
                   </div>
                 </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end', flexShrink:0 }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:8, alignItems:'flex-end', flexShrink:0 }}>
                   {oc.ciencia_responsavel
-                    ? <span className="badge badge-success"><CheckCircle size={9} />Ciência confirmada</span>
-                    : <span className="badge badge-warning"><AlertTriangle size={9} />Aguardando</span>}
+                    ? <span style={{ padding: '4px 10px', background: '#dcfce7', color: '#15803d', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><CheckCircle size={12} />Ciência confirmada</span>
+                    : <span style={{ padding: '4px 10px', background: '#fef3c7', color: '#b45309', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><AlertTriangle size={12} />Aguardando</span>}
                   <div style={{ display:'flex', gap:4 }}>
-                    <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => openEdit(oc.id)}><Pencil size={12} /></button>
-                    {!oc.ciencia_responsavel && (
-                      <button className="btn btn-ghost btn-sm" style={{ fontSize:10 }} onClick={() => marcarCiencia(oc.id)}>
-                        <MessageSquare size={10} />Confirmar
+                    <button style={{ border: '1px solid #e2e8f0', background: '#fff', width: '32px', height: '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }} title="Editar" onClick={() => openEdit(oc.id)}><Pencil size={14} /></button>
+                    {oc.ciencia_responsavel ? (
+                      <button style={{ height: '32px', padding: '0 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', color: '#64748b', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => desfazerCiencia(oc.id)}>
+                        <Undo size={14} />Desfazer
+                      </button>
+                    ) : (
+                      <button style={{ height: '32px', padding: '0 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => marcarCiencia(oc.id)}>
+                        <MessageSquare size={14} />Confirmar
                       </button>
                     )}
-                    <button className="btn btn-ghost btn-icon btn-sm" style={{ color:'#f87171' }} onClick={() => handleDelete(oc.id)}><Trash2 size={12} /></button>
+                    <button style={{ border: '1px solid #fee2e2', background: '#fff', width: '32px', height: '32px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444' }} onClick={() => handleDelete(oc.id)}><Trash2 size={14} /></button>
                   </div>
                 </div>
               </div>
             )
           })}
+          
+          {/* Paginação */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', background: '#fff', padding: '12px 20px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', color: '#64748b' }}>Mostrar:</span>
+              <select 
+                value={itemsPerPage} 
+                onChange={e => setItemsPerPage(Number(e.target.value))}
+                style={{ height: '32px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', background: '#f8fafc', padding: '0 8px' }}
+              >
+                {[5, 10, 20, 50].map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+              <span style={{ fontSize: '13px', color: '#64748b' }}>por página</span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? '#cbd5e1' : '#475569' }}
+              >
+                ‹
+              </button>
+              
+              {(() => {
+                const totalPages = Math.ceil(filtered.length / itemsPerPage)
+                return (
+                  <span style={{ fontSize: '13px', color: '#475569', margin: '0 8px' }}>
+                    Página <strong>{currentPage}</strong> de <strong>{totalPages || 1}</strong>
+                  </span>
+                )
+              })()}
+              
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / itemsPerPage), p + 1))}
+                disabled={currentPage === Math.ceil(filtered.length / itemsPerPage) || filtered.length === 0}
+                style={{ height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', cursor: (currentPage === Math.ceil(filtered.length / itemsPerPage) || filtered.length === 0) ? 'not-allowed' : 'pointer', color: (currentPage === Math.ceil(filtered.length / itemsPerPage) || filtered.length === 0) ? '#cbd5e1' : '#475569' }}
+              >
+                ›
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {modalOpen && (
-        <OcorrenciaModal form={form} setForm={setForm} onSave={handleSave} onClose={() => setModalOpen(false)} alunosDaTurma={alunosDaTurmaAtual} todosAlunos={todosAlunosMapped} tiposOcorrencia={tiposAtivos} />
+        <OcorrenciaModal form={form} setForm={setForm} onSave={handleSave} onClose={() => setModalOpen(false)} alunosDaTurma={alunosDaTurmaAtual} todosAlunos={todosAlunosMapped} tiposOcorrencia={tiposAtivos} turmas={turmas} />
       )}
     </div>
   )

@@ -1,10 +1,11 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 
 import { useState, useMemo } from 'react'
 import { useData, newId } from '@/lib/dataContext'
-import { useLocalStorage } from '@/lib/useLocalStorage'
+
 import { formatCurrency } from '@/lib/utils'
 import {
   Palmtree, Plus, X, Trash2, Calendar, Check, Search, Filter,
@@ -38,6 +39,8 @@ interface Ausencia {
   provisaoFerias: number     // provisão acumulada utilizada
   abonoPecuniario: boolean   // 10 dias vendidos
   obs: string
+  atestadoUrl?: string
+  atestadoNome?: string
   createdAt: string
 }
 
@@ -89,6 +92,8 @@ const BLANK_FORM = {
   substitutoId: '',
   abonoPecuniario: false,
   obs: '',
+  atestadoUrl: '',
+  atestadoNome: '',
 }
 
 // ─── Cálculo de impacto financeiro ────────────────────────────────
@@ -108,8 +113,9 @@ function calcProvisaoMensal(salario: number) {
 }
 
 export default function FeriasAfastamentosPage() {
-  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
-  const [ausencias, setAusencias] = useLocalStorage<Ausencia[]>('edu-rh-ausencias', [])
+  const [funcionarios, setFuncionarios, { loading: isFuncsLoading }] = useSupabaseArray<any>('rh/funcionarios');
+  const [ausencias = [], setAusencias, { loading: isAusenciasLoading }] = useSupabaseArray<Ausencia>('rh/ausencias', [])
+  const isLoading = isFuncsLoading || isAusenciasLoading;
 
   // Filtros
   const [search, setSearch] = useState('')
@@ -194,6 +200,8 @@ export default function FeriasAfastamentosPage() {
       provisaoFerias: tipo === 'ferias' ? calcProvisaoMensal(func.salario) * Math.ceil(dCorridos / 30) : 0,
       abonoPecuniario: form.abonoPecuniario,
       obs: form.obs,
+      atestadoUrl: form.atestadoUrl,
+      atestadoNome: form.atestadoNome,
       createdAt: new Date().toISOString(),
     }
     setAusencias(prev => [nova, ...prev])
@@ -303,7 +311,27 @@ export default function FeriasAfastamentosPage() {
       )}
 
       {/* Tabela */}
-      {(ausencias || []).length === 0 ? (
+      {isLoading ? (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Funcionário</th>
+                <th>Tipo</th>
+                <th>Período</th>
+                <th style={{ textAlign: 'center' }}>Dias</th>
+                <th style={{ textAlign: 'right' }}>Impacto R$</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableSkeleton rows={6} cols={8} />
+            </tbody>
+          </table>
+        </div>
+      ) : (ausencias || []).length === 0 ? (
         <div className="card" style={{ padding: '72px 24px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Palmtree size={52} style={{ opacity: 0.1, margin: '0 auto 20px' }} />
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Nenhuma ausência registrada</div>
@@ -346,6 +374,11 @@ export default function FeriasAfastamentosPage() {
                         {tc.icon} {tc.label}
                       </span>
                       {a.cid && <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>CID: {a.cid}</div>}
+                      {a.atestadoUrl && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#10b981', fontWeight: 700, marginTop: 4 }}>
+                          <FileText size={11} /> Atestado Anexo
+                        </div>
+                      )}
                     </td>
                     <td>
                       <div style={{ fontSize: 12 }}>{fmt(a.dataInicio)} → {fmt(a.dataFim)}</div>
@@ -519,6 +552,74 @@ export default function FeriasAfastamentosPage() {
                 <textarea className="form-input" rows={2} value={form.obs} onChange={e => set('obs', e.target.value)} placeholder="Motivo, condições especiais, restrições..." />
               </div>
 
+              {/* Envio de Atestado / Documento */}
+              <div>
+                <label className="form-label">Atestado Médico / Documento de Comprovação</label>
+                <div style={{
+                  border: '2px dashed hsl(var(--border-subtle))',
+                  borderRadius: 12,
+                  padding: '16px',
+                  textAlign: 'center',
+                  background: 'hsl(var(--bg-elevated))',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#10b981'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}
+                >
+                  <input 
+                    type="file" 
+                    accept="image/*,application/pdf" 
+                    onChange={e => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        const reader = new FileReader()
+                        reader.onloadend = () => {
+                          set('atestadoUrl', reader.result as string)
+                          set('atestadoNome', file.name)
+                        }
+                        reader.readAsDataURL(file)
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      opacity: 0,
+                      cursor: 'pointer'
+                    }}
+                  />
+                  {form.atestadoNome ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                      <FileText size={24} style={{ color: '#10b981' }} />
+                      <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{form.atestadoNome}</div>
+                        <div style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>Arquivo carregado com sucesso!</div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          set('atestadoUrl', '')
+                          set('atestadoNome', '')
+                        }}
+                        className="btn btn-ghost btn-sm btn-icon"
+                        style={{ color: '#ef4444', zIndex: 10 }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Plus size={20} style={{ color: 'hsl(var(--text-muted))', margin: '0 auto 6px' }} />
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Clique ou arraste para anexar o atestado</div>
+                      <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Formatos aceitos: PDF, PNG, JPG (máx. 5MB)</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Preview financeiro */}
               {form.funcionarioId && dias > 0 && (
                 <div style={{ padding: '14px 16px', background: 'linear-gradient(135deg, rgba(239,68,68,0.06), rgba(245,158,11,0.04))', borderRadius: 12, border: '1px solid rgba(239,68,68,0.15)' }}>
@@ -616,6 +717,56 @@ export default function FeriasAfastamentosPage() {
                     <div style={{ fontWeight: 700, fontSize: 12 }}>CID-10: {selectedAus.cid}</div>
                     {selectedAus.motivoCid && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{selectedAus.motivoCid}</div>}
                   </div>
+                </div>
+              )}
+
+              {/* Atestado Anexo */}
+              {selectedAus.atestadoUrl && (
+                <div style={{ 
+                  padding: '12px 14px', 
+                  background: 'rgba(16,185,129,0.08)', 
+                  borderRadius: 12, 
+                  border: '1px solid rgba(16,185,129,0.2)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <FileText size={18} style={{ color: '#10b981', flexShrink: 0 }} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedAus.atestadoNome || 'Atestado Médico'}</div>
+                      <div style={{ fontSize: 10, color: '#10b981', fontWeight: 600 }}>Documento Anexo</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const url = selectedAus.atestadoUrl
+                      if (!url) return
+                      const win = window.open()
+                      if (win) {
+                        if (url.startsWith('data:image/')) {
+                          win.document.write(`<div style="display:flex; justify-content:center; align-items:center; min-height:100vh; background:#0f172a;"><img src="${url}" style="max-width:100%; max-height:100vh; object-fit:contain; box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); border-radius:12px;" /></div>`)
+                        } else {
+                          win.document.write(`<iframe src="${url}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`)
+                        }
+                        win.document.title = selectedAus.atestadoNome || 'Visualizar Atestado'
+                        win.document.close()
+                      }
+                    }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ 
+                      height: '32px', 
+                      padding: '0 12px', 
+                      fontSize: '11px', 
+                      fontWeight: 700, 
+                      color: '#10b981', 
+                      borderColor: 'rgba(16,185,129,0.3)',
+                      background: 'white'
+                    }}
+                  >
+                    <Eye size={12} style={{ marginRight: 4 }} /> Visualizar
+                  </button>
                 </div>
               )}
 

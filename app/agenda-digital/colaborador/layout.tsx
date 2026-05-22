@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
@@ -19,7 +20,7 @@ export default function AgendaDigitalColaboradorLayout({
 
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/colaborador/comunicados`, icon: <Bell size={18} /> },
-    { label: 'Conversas', href: `/agenda-digital/colaborador/conversas`, icon: <MessageSquare size={18} /> },
+    { label: 'Mensagens', href: `/agenda-digital/colaborador/conversas`, icon: <MessageSquare size={18} /> },
     { label: 'Momentos', href: `/agenda-digital/colaborador/momentos`, icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: `/agenda-digital/colaborador/calendario`, icon: <Calendar size={18} /> },
     { label: 'Meu Perfil', href: `/agenda-digital/colaborador/perfil`, icon: <UserCog size={18} /> },
@@ -58,8 +59,25 @@ export default function AgendaDigitalColaboradorLayout({
           flex-direction: column;
           gap: 4px;
         }
+        .ad-desktop-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .ad-mobile-nav-bar {
+          display: none;
+        }
         /* Somente Modificacoes Mobile, intocavel no Desktop */
         @media (max-width: 768px) {
+          .ad-desktop-sidebar {
+            display: none !important;
+          }
+          .ad-mobile-nav-bar {
+            display: flex !important;
+          }
+          .ad-content-page-area {
+            padding-bottom: 80px !important;
+          }
           .ad-main-grid {
             grid-template-columns: 1fr !important;
             gap: 0px !important;
@@ -211,51 +229,76 @@ export default function AgendaDigitalColaboradorLayout({
         </div>
       </div>
 
-      {/* Main Content Area with Navigation */}
-      <div className="ad-main-grid">
-        {/* Sub-NavigationBar (Desktop Side, Mobile Bottom conceptual) */}
-        <nav className="ad-mobile-nav">
-          {navItems.map(item => {
-            const isActive = pathname.includes(item.href)
+      {/* Main Grid containing Sidebar and Page Content */}
+      <div className="ad-main-grid" style={{ marginTop: 24 }}>
+        {/* Sidebar for Desktop */}
+        <div className="ad-desktop-sidebar">
+          {navItems.map((item, idx) => {
+            const isActive = pathname.startsWith(item.href);
             return (
-              <Link key={item.label} href={item.href} style={{ textDecoration: 'none' }}>
-                <div 
-                  className="ad-mobile-nav-item"
-                  style={{
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  background: isActive ? 'rgba(59,130,246,0.1)' : 'transparent',
-                  color: isActive ? '#3b82f6' : 'hsl(var(--text-secondary))',
-                  fontWeight: isActive ? 600 : 500,
-                  transition: 'background 0.2s',
-                  cursor: 'pointer'
-                }}
-                onMouseEnter={e => {
-                  if (!isActive) e.currentTarget.style.background = 'hsl(var(--bg-surface))'
-                  e.currentTarget.style.color = '#3b82f6'
-                }}
-                onMouseLeave={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'hsl(var(--text-secondary))'
-                  }
-                }}
+              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
+                <button 
+                  className={isActive ? 'btn' : 'btn btn-ghost'} 
+                  style={{ 
+                    width: '100%', 
+                    justifyContent: 'flex-start', 
+                    background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent', 
+                    color: isActive ? '#3b82f6' : 'inherit',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderRadius: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    border: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                 >
                   {item.icon}
-                  {item.label}
-                </div>
+                  <span style={{ fontWeight: isActive ? 700 : 500, fontSize: 14 }}>{item.label}</span>
+                </button>
               </Link>
             )
           })}
-        </nav>
+        </div>
 
-        {/* Page Content */}
-        <div style={{ minHeight: 400 }}>
+        {/* Page Content Area */}
+        <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
           {children}
         </div>
+      </div>
+
+      {/* Mobile Bottom Navigation (Glassmorphic overlay) */}
+      <div className="ad-mobile-nav-bar" style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 68,
+        background: 'rgba(255, 255, 255, 0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        zIndex: 9999,
+        padding: '0 12px',
+        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)'
+      }}>
+        {navItems.slice(0, 5).map((item, idx) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#3b82f6' : '#94a3b8', flex: 1, minWidth: 0 }}>
+              <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {React.cloneElement(item.icon, { size: 22, color: isActive ? '#3b82f6' : '#94a3b8' })}
+              </div>
+              <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+            </Link>
+          )
+        })}
       </div>
     </div>
     </>

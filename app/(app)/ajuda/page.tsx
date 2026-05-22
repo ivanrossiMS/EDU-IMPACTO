@@ -8,7 +8,7 @@ const FAQS = [
   { pergunta: 'Como gerar um boleto de mensalidade?', resposta: 'Acesse Financeiro → Banking & PIX → aba Boletos. Selecione o mês e clique em Emitir boletos do mês para gerar em lote.', categoria: 'Financeiro' },
   { pergunta: 'Como emitir uma Declaração de Matrícula?', resposta: 'Acesse Secretaria → Emitir Documento, selecione o aluno, tipo "Declaração de Matrícula" e clique em Gerar e enviar.', categoria: 'Secretaria' },
   { pergunta: 'Como registrar falta de um aluno?', resposta: 'Acesse Acadêmico → Frequência, selecione a turma e clique nas células de presença para alterar entre P (presente), F (falta) e J (justificada).', categoria: 'Acadêmico' },
-  { pergunta: 'Como funciona o Copiloto IA?', resposta: 'O Copiloto IA utiliza o modelo Gemini para responder perguntas sobre os dados da escola em tempo real. Acesse IA → Copilotos para diferentes especialidades.', categoria: 'Inteligência' },
+
   { pergunta: 'O sistema está lento — o que fazer?', resposta: 'Tente limpar o cache do navegador (Ctrl+Shift+Del) e recarregar. Se o problema persistir, contate o suporte pelo chat abaixo.', categoria: 'Suporte' },
 ]
 

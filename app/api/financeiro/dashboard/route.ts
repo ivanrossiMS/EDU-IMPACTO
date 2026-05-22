@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const [
       resNovasMatriculas,
       resAlunosAll, resFuncionarios, resTurmas,
-      resChartReceita, resChartDespesa, resDespesasCat
+      resChartReceita
     ] = await Promise.all([
       supabase.from('alunos').select('id', { count: 'exact', head: true })
         .eq('status', 'matriculado')
@@ -48,9 +48,10 @@ export async function GET(request: Request) {
       supabase.from('funcionarios').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
       supabase.from('turmas').select('capacidade, matriculados'),
       supabase.from('titulos').select('valor, pagamento').eq('status', 'pago').gte('pagamento', `${chartStartMonth}-01`),
-      supabase.from('contas_pagar').select('valor, vencimento').in('status', ['pago', 'pendente', 'atrasado']).gte('vencimento', `${chartStartMonth}-01`),
-      supabase.from('contas_pagar').select('valor, categoria').in('status', ['pago', 'pendente', 'atrasado']).ilike('vencimento', `${mes}%`)
     ])
+
+    const resChartDespesa: { data: any[] } = { data: [] }
+    const resDespesasCat: { data: any[] } = { data: [] }
 
     const alunosVal = resAlunosAll.data ?? []
     

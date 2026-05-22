@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     // Buscar alunos
     let alunosQuery = supabase
       .from('alunos')
-      .select('id, nome, codigo, matricula, foto, status')
+      .select('id, nome, matricula, foto, status')
       .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
 
     if (aluno_id) {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     const results: any[] = []
 
     for (const aluno of alunos) {
-      const codigo = aluno.codigo || aluno.matricula
+      const codigo = aluno.matricula
       if (!codigo) {
         results.push({ aluno_id: aluno.id, nome: aluno.nome, status: 'erro', erro: 'Sem código' })
         continue

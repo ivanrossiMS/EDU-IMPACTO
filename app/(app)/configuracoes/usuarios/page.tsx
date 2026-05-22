@@ -4,6 +4,8 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData, Perfil } from '@/lib/dataContext'
@@ -18,7 +20,7 @@ interface ModuleGroup { key: string; label: string; icon: React.ReactNode; pages
 const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
 
 const MODULES_CONFIG: ModuleGroup[] = ALL_NAV_GROUPS.map(g => ({
-  key: g.moduleKey || toSlug(g.title),
+  key: toSlug(g.title),
   label: g.title,
   icon: g.icon,
   pages: g.items.flatMap(item => {
@@ -28,9 +30,70 @@ const MODULES_CONFIG: ModuleGroup[] = ALL_NAV_GROUPS.map(g => ({
     return [{ key: item.href || toSlug(item.label), label: item.label }]
   })
 }))
+/* ── Skeletons e Estilos Premium de Carregamento ── */
+const TableSkeleton = () => (
+  <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
+    <table>
+      <thead>
+        <tr>
+          <th style={{ width: '25%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 80 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 60 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 70 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 100 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 50 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 50 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 60 }} /></th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <tr key={i}>
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="skeleton-shimmer" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  <div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '70%' }} />
+                  <div className="skeleton-shimmer" style={{ height: 11, borderRadius: 6, width: '50%' }} />
+                </div>
+              </div>
+            </td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '60%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 20, borderRadius: 12, width: 80 }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '80%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 20, borderRadius: 12, width: 50 }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 20, borderRadius: 12, width: 50 }} /></td>
+            <td>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 
-
-
+const PerfisSkeleton = () => (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, animation: 'fadeIn 0.25s ease-out' }}>
+    {Array.from({ length: 3 }).map((_, i) => (
+      <div key={i} className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', height: 210 }}>
+        <div className="skeleton-shimmer" style={{ height: 4 }} />
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div className="skeleton-shimmer" style={{ width: 48, height: 48, borderRadius: 12 }} />
+            <div className="skeleton-shimmer" style={{ width: 68, height: 28, borderRadius: 8 }} />
+          </div>
+          <div className="skeleton-shimmer" style={{ height: 18, borderRadius: 6, width: '60%' }} />
+          <div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '90%' }} />
+          <div className="skeleton-shimmer" style={{ height: 44, borderRadius: 10, width: '100%', marginTop: 8 }} />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 /* ─── Types ─────────────────────────────────────── */
 interface SysUser {
@@ -89,22 +152,18 @@ export default function UsuariosPage() {
   // Perfil editor always shows ALL modules (active state doesn't restrict editing)
   const activeModulosKeys = MODULES_CONFIG
 
-  /* Persist everything */
-  const [users, setUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
-  // Carregar dados online no load da página
-  useEffect(() => {
-    fetch('/api/configuracoes/usuarios', { cache: 'no-store' })
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) setUsers(data as SysUser[]);
-      })
-      .catch(console.error)
-  }, [])
+  const queryClient = useQueryClient()
+
+  const { data: usersData, isLoading: isUsersLoading } = useApiQuery<SysUser[]>(
+    ['usuarios'],
+    '/api/configuracoes/usuarios'
+  )
+  const users = usersData || []
 
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
-  const { logSystemAction, perfis, setPerfis } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { logSystemAction, perfis, setPerfis, perfisLoading } = useData();
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos');
 
   // Calcula o total virtual de usuários da Família (alunos + responsáveis únicos)
   const totalFamiliaUsuarios = useMemo(() => {
@@ -112,6 +171,9 @@ export default function UsuariosPage() {
     ;(alunos || []).forEach(aluno => {
       const parseG = (g: any) => {
         if (!g.nome) return
+        const isLegacyOutro = g.isOutro && !g.isFinanceiro && !g.isPedagogico
+        const isNewOutro = String(g.tipo || g.role || '').toLowerCase() === 'outro'
+        if (isLegacyOutro || isNewOutro) return
         guardianKeys.add(g.cpf || g.email || g.nome)
       }
       if ((aluno as any)._responsaveis && Array.isArray((aluno as any)._responsaveis)) {
@@ -154,7 +216,7 @@ export default function UsuariosPage() {
         if (!res.ok) { const err = await res.json(); alert('Erro na nuvem: ' + err.error); setIsSavingUser(false); return; }
       } catch(e) { alert('Erro critico ao salvar usuario'); setIsSavingUser(false); return; }
       
-      setUsers(prev => [...prev, payload])
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Cadastro', `Novo usuário: ${userForm.nome}`, { registroId: uId, detalhesDepois: userForm })
     } else if (editingUserId) {
       try {
@@ -162,20 +224,20 @@ export default function UsuariosPage() {
         if (!res.ok) { const err = await res.json(); alert('Erro na nuvem (Netlify/Local): ' + err.error); setIsSavingUser(false); return; }
       } catch(e) { alert('Erro critico ao atualizar'); setIsSavingUser(false); return; }
 
-      setUsers(prev => prev.map(u => u.id === editingUserId ? { ...u, ...userForm } : u))
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Edição', `Atualização do usuário ${userForm.nome}`, { registroId: editingUserId, detalhesDepois: userForm })
     }
     setUserModal(null); setEditingUserId(null); setIsSavingUser(false)
   }
   const deleteUser = async () => {
     if (deleteUserId) {
+      const uDel = users.find(u => u.id === deleteUserId)
       try {
         const res = await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' })
         if (!res.ok) throw new Error('Falha no db')
       } catch(e) { alert('Falha ao excluir online'); return; }
 
-      const uDel = users.find(u => u.id === deleteUserId)
-      setUsers(prev => prev.filter(u => u.id !== deleteUserId))
+      queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, detalhesAntes: uDel })
       setDeleteUserId(null)
     }
@@ -242,6 +304,17 @@ export default function UsuariosPage() {
 
   return (
     <div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .skeleton-shimmer {
+          background: linear-gradient(90deg, hsl(var(--bg-elevated)) 25%, hsl(var(--border-subtle)) 50%, hsl(var(--bg-elevated)) 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite linear;
+        }
+      `}} />
       <div className="page-header">
         <div>
           <h1 className="page-title">Usuários & Acessos</h1>
@@ -261,7 +334,9 @@ export default function UsuariosPage() {
 
       {/* ── USUÁRIOS ── */}
       {tab === 'usuarios' && (
-        users.length === 0 ? (
+        isUsersLoading ? (
+          <TableSkeleton />
+        ) : users.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px', color: 'hsl(var(--text-muted))' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Nenhum usuário cadastrado</div>
@@ -367,67 +442,75 @@ export default function UsuariosPage() {
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button className="btn btn-primary btn-sm" onClick={openAddPerfil}><Plus size={13} />Novo Perfil</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
-            {perfis.map(p => (
-              <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', background: 'linear-gradient(180deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-base)) 100%)' }}>
-                 <div style={{ height: 4, background: p.cor }} />
-                 <div style={{ padding: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: 12, background: `${p.cor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 24px ${p.cor}15` }}>
-                        <Shield size={22} color={p.cor} />
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, background: 'hsl(var(--bg-elevated))', borderRadius: 8, padding: 4, border: '1px solid hsl(var(--border-subtle))' }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditPerfil(p)}><Pencil size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#ef4444' }} onClick={() => setDeletePerfilId(p.id)}><Trash2 size={13} /></button>
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, color: 'hsl(var(--text-primary))' }}>{p.nome}</div>
-                    <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.5, marginBottom: 20 }}>{p.descricao}</div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
-                        <div style={{ flex: 1 }}>
-                           <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Membros</div>
-                           <div style={{ fontSize: 20, fontWeight: 900, color: p.cor, display: 'flex', alignItems: 'center', gap: 8 }}>
-                             {users.filter(u => u.perfil === p.nome).length + (p.nome === 'Família' ? totalFamiliaUsuarios : 0)}
-                             <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', background: `${p.cor}15`, padding: '2px 8px', borderRadius: 10 }}>Ativos</span>
-                           </div>
+          {perfisLoading ? (
+            <PerfisSkeleton />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              {(perfis || []).map(p => (
+                <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))', background: 'linear-gradient(180deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-base)) 100%)' }}>
+                   <div style={{ height: 4, background: p.cor }} />
+                   <div style={{ padding: '24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 12, background: `${p.cor}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 24px ${p.cor}15` }}>
+                          <Shield size={22} color={p.cor} />
                         </div>
-                        <div style={{ width: 1, height: 32, background: 'hsl(var(--border-subtle))' }} />
-                        <div style={{ flex: 1 }}>
-                           <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restrições</div>
-                           <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', marginTop: 4 }}>
-                             {p.nome === 'Diretor Geral' ? 'Acesso Livre' : `${p.permissoes.length} Módulos`}
-                           </div>
+                        <div style={{ display: 'flex', gap: 4, background: 'hsl(var(--bg-elevated))', borderRadius: 8, padding: 4, border: '1px solid hsl(var(--border-subtle))' }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openEditPerfil(p)}><Pencil size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#ef4444' }} onClick={() => setDeletePerfilId(p.id)}><Trash2 size={13} /></button>
                         </div>
-                    </div>
-                 </div>
-              </div>
-            ))}
-          </div>
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, color: 'hsl(var(--text-primary))' }}>{p.nome}</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.5, marginBottom: 20 }}>{p.descricao}</div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                          <div style={{ flex: 1 }}>
+                             <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Membros</div>
+                             <div style={{ fontSize: 20, fontWeight: 900, color: p.cor, display: 'flex', alignItems: 'center', gap: 8 }}>
+                               {users.filter(u => u.perfil === p.nome).length + (p.nome === 'Família' ? totalFamiliaUsuarios : 0)}
+                               <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', background: `${p.cor}15`, padding: '2px 8px', borderRadius: 10 }}>Ativos</span>
+                             </div>
+                          </div>
+                          <div style={{ width: 1, height: 32, background: 'hsl(var(--border-subtle))' }} />
+                          <div style={{ flex: 1 }}>
+                             <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Restrições</div>
+                             <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', marginTop: 4 }}>
+                               {p.nome === 'Diretor Geral' ? 'Acesso Livre' : `${p.permissoes.length} Módulos`}
+                             </div>
+                          </div>
+                      </div>
+                   </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── LOGS ── */}
       {tab === 'logs' && (
-        <div className="table-container">
-          <table>
-            <thead><tr><th>Usuário</th><th>Ação</th><th>Módulo</th><th>Data/Hora</th></tr></thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'hsl(var(--text-muted))' }}>Nenhum log registrado. Adicione usuários ao sistema.</td></tr>
-              ) : (
-                users.slice(0, 5).map((u, i) => (
-                  <tr key={i}>
-                    <td style={{ fontSize: 12, fontWeight: 600 }}>{u.nome}</td>
-                    <td style={{ fontSize: 12 }}>Login</td>
-                    <td><span className="badge badge-neutral" style={{ fontSize: 10 }}>Dashboard</span></td>
-                    <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{u.ultimoAcesso || '—'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        isUsersLoading ? (
+          <TableSkeleton />
+        ) : (
+          <div className="table-container">
+            <table>
+              <thead><tr><th>Usuário</th><th>Ação</th><th>Módulo</th><th>Data/Hora</th></tr></thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '30px', color: 'hsl(var(--text-muted))' }}>Nenhum log registrado. Adicione usuários ao sistema.</td></tr>
+                ) : (
+                  users.slice(0, 5).map((u, i) => (
+                    <tr key={i}>
+                      <td style={{ fontSize: 12, fontWeight: 600 }}>{u.nome}</td>
+                      <td style={{ fontSize: 12 }}>Login</td>
+                      <td><span className="badge badge-neutral" style={{ fontSize: 10 }}>Dashboard</span></td>
+                      <td style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{u.ultimoAcesso || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* ── MODALS ── */}

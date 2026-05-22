@@ -4,16 +4,20 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
-  LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardList, ChevronDown, ChevronRight, Tag, Percent,
+  LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardList, ChevronDown, ChevronRight,
   DollarSign, CreditCard, TrendingDown, Receipt, PiggyBank, Building2, CandlestickChart,
   UserCheck, Users2, Calendar, ClipboardCheck, Star, Megaphone, MessageSquare, Bell,
   BarChart3, Brain, Zap, Settings, Shield, HelpCircle, Package, Wrench, Bus, UtensilsCrossed,
   FileText, Archive, Library, Search, ChevronLeft, Layers, TargetIcon, UserPlus, PanelLeft,
   Home, LineChart, BookMarked, Database, Globe, Webhook, FolderOpen,
-  BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck
+  BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck, LogOut, Handshake,
+  UserCircle, Laptop, ShieldAlert, History, Landmark, Coins, CreditCard as CardIcon, FileSpreadsheet, Building, Tablet, FileStack,
+  Sun, Moon
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { UserAvatar } from '@/components/UserAvatar'
 
 interface NavItem {
   label: string
@@ -23,15 +27,11 @@ interface NavItem {
   badgeColor?: string
   target?: string
   children?: NavItem[]
-  roles?: string[]
 }
 
-export interface NavGroup {
+interface NavGroup {
   title: string
-  moduleKey?: string
-  roleKey?: string
   collapsible?: boolean
-  defaultOpen?: boolean
   items: NavItem[]
   href?: string
   icon?: React.ReactNode
@@ -43,239 +43,124 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'Principal',
     collapsible: false,
     items: [
-      { label: 'Hub Executivo', href: '/dashboard', icon: <Home size={16} />, badge: 'AO VIVO', badgeColor: 'cyan' },
-      { label: 'Central de Alertas', href: '/alertas', icon: <Bell size={16} /> },
-      { label: 'Minhas Tarefas', href: '/tarefas', icon: <ClipboardCheck size={16} /> },
-      { label: 'Calendário', href: '/calendario', icon: <Calendar size={16} /> },
-    ],
-  },
-
-  {
-    title: 'Agenda Digital',
-    href: '/agenda-digital',
-    target: '_blank',
-    icon: <BookHeart size={16} />,
-    items: [],
-  },
-
-
-  {
-    title: 'Acadêmico',
-    moduleKey: 'academico',
-    collapsible: true,
-    defaultOpen: true,
-    items: [
-      {
-        label: 'Alunos', icon: <Users size={16} />,
-        children: [
-          { label: 'Alunos', href: '/academico/alunos', icon: <Users size={14} /> },
-          { label: 'Ficha 360°', href: '/academico/alunos/ficha', icon: <UserCheck size={14} /> },
-          { label: 'Responsáveis', href: '/academico/responsaveis', icon: <Users2 size={14} /> },
-          { label: 'Transferências', href: '/academico/transferencias', icon: <ChevronRight size={14} /> },
-          { label: 'Rematrícula Digital', href: '/crm/rematricula', icon: <UserPlus size={14} /> },
-        ],
-      },
-      {
-        label: 'Turmas & Ensalamento', icon: <Layers size={16} />,
-        children: [
-          { label: 'Turmas', href: '/academico/turmas', icon: <Layers size={14} /> },
-          { label: 'Grade Horária', href: '/academico/grade', icon: <Calendar size={14} /> },
-          { label: 'Ensalamento', href: '/academico/ensalamento', icon: <Building2 size={14} /> },
-        ],
-      },
-      {
-        label: 'Diário Digital', icon: <BookOpen size={16} />,
-        children: [
-          { label: 'Frequência', href: '/academico/frequencia', icon: <ClipboardList size={14} /> },
-          { label: 'Lançamento de Notas', href: '/academico/notas', icon: <Star size={14} /> },
-          { label: 'Boletim Escolar', href: '/academico/boletim', icon: <FileText size={14} />, badge: 'NOVO', badgeColor: 'green' },
-          { label: 'Ocorrências', href: '/academico/ocorrencias', icon: <ClipboardCheck size={14} /> },
-        ],
-      },
-      { label: 'Conselhos de Classe',  href: '/academico/conselho',       icon: <GraduationCap size={16} /> },
-      { label: 'Declarações & Docs',    href: '/secretaria/documentos',    icon: <FileText size={16} /> },
-      { label: 'Secretaria Escolar',    href: '/secretaria',               icon: <Archive size={16} /> },
+      { label: 'DASHBOARD', href: '/dashboard', icon: <Home size={16} />, badge: 'LIVE', badgeColor: 'pink' },
+      { label: 'CENTRAL DE ALERTAS', href: '/alertas', icon: <Bell size={16} /> },
+      { label: 'MINHAS TAREFAS', href: '/tarefas', icon: <ClipboardCheck size={16} /> },
+      { label: 'CALENDÁRIO', href: '/calendario', icon: <Calendar size={16} /> },
+      { label: 'AGENDA DIGITAL', href: '/agenda-digital', icon: <BookHeart size={16} />, target: '_blank' },
     ],
   },
   {
-    title: 'Financeiro',
-    moduleKey: 'financeiro',
+    title: 'ACADÊMICO',
     collapsible: true,
-    defaultOpen: false,
     items: [
-      { label: 'Contas a Receber', href: '/financeiro/receber', icon: <CreditCard size={16} /> },
-      { label: 'Inadimplência', href: '/financeiro/inadimplencia', icon: <TrendingDown size={16} /> },
-      { label: 'Renegociação', href: '/financeiro/renegociacao', icon: <Receipt size={16} /> },
-      { label: 'Contas a Pagar', href: '/financeiro/pagar', icon: <DollarSign size={16} /> },
-      { label: 'Movimentações', href: '/financeiro/movimentacoes', icon: <CandlestickChart size={16} /> },
-      { label: 'Boletos & Convênio', href: '/financeiro/boletos', icon: <FileText size={16} /> },
-
-      { label: 'Emissão de NF', href: '/financeiro/nf', icon: <Receipt size={16} /> },
-      { label: 'Banking & PIX', href: '/financeiro/banking', icon: <PiggyBank size={16} /> },
-      { label: 'Validação de Recibo', href: '/financeiro/validacao-recibo', icon: <ShieldCheck size={16} />, badge: 'NOVO', badgeColor: 'green' },
-    ],
-  },
-  {
-    title: 'Recursos Humanos',
-    moduleKey: 'rh',
-    collapsible: true,
-    defaultOpen: false,
-    items: [
-      { label: 'Funcionários', href: '/rh/funcionarios', icon: <Users2 size={16} /> },
-      { label: 'Folha de Pagamento', href: '/rh/folha', icon: <Banknote size={16} /> },
-      { label: 'Adiantamentos', href: '/rh/adiantamentos', icon: <Banknote size={16} />, badge: 'NOVO', badgeColor: 'cyan' },
-      { label: 'Ponto Eletrônico', href: '/rh/ponto', icon: <Clock3 size={16} /> },
-      { label: 'Férias & Afastamentos', href: '/rh/ferias', icon: <ClipboardList size={16} /> },
-      { label: 'Advertências', href: '/rh/advertencias', icon: <AlertTriangle size={16} /> },
-    ],
-  },
-  {
-    title: 'CRM & Captação',
-    moduleKey: 'crm',
-    collapsible: true,
-    defaultOpen: false,
-    items: [
-      { label: 'Funil de Leads', href: '/crm/leads', icon: <TargetIcon size={16} /> },
-      { label: 'Agendamentos', href: '/crm/agendamentos', icon: <Calendar size={16} /> },
-      { label: 'Retenção & Evasão', href: '/crm/retencao', icon: <TrendingDown size={16} /> },
-    ],
-  },
-  {
-    title: 'Portaria',
-    moduleKey: 'portaria',
-    collapsible: true,
-    defaultOpen: false,
-    items: [
+      { label: 'ALUNOS', href: '/academico/alunos', icon: <Users size={16} /> },
+      { label: 'RESPONSÁVEIS', href: '/academico/responsaveis', icon: <Users2 size={16} /> },
+      { label: 'TURMAS', href: '/academico/turmas', icon: <Layers size={16} /> },
       {
-        label: 'Entrada iDFace', icon: <Scan size={16} />,
+        label: 'DIÁRIO DIGITAL', icon: <BookOpen size={16} />,
         children: [
-          { label: 'Dashboard',          href: '/portaria',                 icon: <LayoutDashboard size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
-          { label: 'Entradas Hoje',      href: '/portaria/entradas',        icon: <Clock3 size={14} /> },
-          { label: 'Alunos Liberados',   href: '/portaria/alunos-liberados',icon: <UserCheck size={14} /> },
-          { label: 'Dispositivos',       href: '/portaria/dispositivos',    icon: <Monitor size={14} /> },
-          { label: 'Logs / Auditoria',   href: '/portaria/logs',            icon: <ListChecks size={14} /> },
-          { label: 'Configurações',      href: '/portaria/configuracoes',   icon: <Settings size={14} /> },
-        ],
-      },
-      {
-        label: 'Saída de Alunos', icon: <DoorOpen size={16} />,
-        children: [
-          { label: 'Painel Tablet',  href: '/painel-tablet',              icon: <Scan size={14} />, target: '_blank' },
-          { label: 'Monitor TV',     href: '/saida-alunos/monitor',        icon: <Monitor size={14} /> },
-          { label: 'Chamadas',       href: '/saida-alunos/chamadas',       icon: <DoorOpen size={14} /> },
-          { label: 'Relatórios',     href: '/saida-alunos/relatorios',     icon: <ListChecks size={14} /> },
-          { label: 'Configurações',  href: '/saida-alunos/configuracoes',  icon: <Settings size={14} /> },
+          { label: 'FREQUÊNCIA', href: '/academico/frequencia', icon: <ClipboardList size={11} /> },
+          { label: 'NOTAS E BOLETIM', href: '/academico/notas', icon: <Star size={11} /> },
+          { label: 'CONTEÚDOS E TAREFAS', href: '/academico/conteudos', icon: <BookMarked size={11} /> },
+          { label: 'OCORRÊNCIAS', href: '/academico/ocorrencias', icon: <ShieldAlert size={11} /> },
         ],
       },
     ],
   },
-
   {
-    title: 'Administrativo',
-    moduleKey: 'administrativo',
+    title: 'FINANCEIRO',
     collapsible: true,
-    defaultOpen: false,
     items: [
-      { label: 'Razão de Contas', href: '/administrativo/razao-contas', icon: <BookOpen size={16} />, badge: 'NOVO', badgeColor: 'blue' },
-      { label: 'Demonstração Financeira', href: '/administrativo/demonstracao-financeira', icon: <BarChart3 size={16} />, badge: 'NOVO', badgeColor: 'green' },
-      { label: 'Fornecedores',          href: '/administrativo/fornecedores', icon: <Building2 size={16} /> },
-      { label: 'Abertura de Caixa',      href: '/administrativo/caixa',       icon: <DollarSign size={16} /> },
-      { label: 'Patrimônio',             href: '/administrativo/patrimonio',  icon: <Package size={16} /> },
-      { label: 'Almoxarifado',           href: '/administrativo/almoxarifado',icon: <Library size={16} /> },
-      { label: 'Pedidos Livros/Apostilas',href: '/administrativo/pedidos-livros',icon: <BookOpenCheck size={16} />, badge: 'NOVO', badgeColor: 'cyan' },
-      { label: 'Manutenção Predial',     href: '/administrativo/manutencao',  icon: <HardHat size={16} /> },
+      { label: 'CONTAS A RECEBER', href: '/financeiro/receber', icon: <CreditCard size={16} /> },
+      { label: 'RENEGOCIAÇÃO', href: '/financeiro/renegociacao', icon: <Handshake size={16} /> },
+    ],
+  },
+  {
+    title: 'RH',
+    collapsible: true,
+    items: [
+      { label: 'FUNCIONÁRIOS', href: '/rh/funcionarios', icon: <Users2 size={16} /> },
+      { label: 'FOLHA DE PGTO', href: '/rh/folha', icon: <DollarSign size={16} /> },
+      { label: 'ADIANTAMENTOS', href: '/rh/adiantamentos', icon: <Banknote size={16} /> },
+      { label: 'FÉRIAS E AFAST.', href: '/rh/ferias', icon: <CalendarDays size={16} /> },
+      { label: 'ADVERTÊNCIAS', href: '/rh/advertencias', icon: <AlertTriangle size={16} /> },
+    ],
+  },
+  {
+    title: 'PORTARIA',
+    collapsible: true,
+    items: [
       {
-        label: 'Config. Pedagógico', icon: <GraduationCap size={16} />,
+        label: 'ENTRADA IDFACE', icon: <Scan size={16} />,
         children: [
-          { label: 'Turmas', href: '/academico/turmas', icon: <Layers size={14} /> },
-          { label: 'Turnos', href: '/configuracoes/pedagogico/turnos', icon: <Clock3 size={14} /> },
-          { label: 'Situação do Aluno', href: '/configuracoes/pedagogico/situacao-aluno', icon: <UserCheck size={14} /> },
-          { label: 'Grupos de Alunos', href: '/configuracoes/pedagogico/grupo-alunos', icon: <Users2 size={14} /> },
-          { label: 'Disciplinas', href: '/configuracoes/pedagogico/disciplinas', icon: <BookOpen size={14} /> },
-          { label: 'Níveis de Ensino', href: '/configuracoes/pedagogico/niveis-ensino', icon: <GraduationCap size={14} /> },
-          { label: 'Tipo de Ocorrências', href: '/configuracoes/pedagogico/tipo-ocorrencias', icon: <ClipboardCheck size={14} /> },
-          { label: 'Horário de Aulas', href: '/configuracoes/pedagogico/horario', icon: <CalendarDays size={14} /> },
-          { label: 'Documentos Escolares', href: '/configuracoes/pedagogico/documentos', icon: <FileText size={14} /> },
+          { label: 'DASHBOARD', href: '/portaria', icon: <LayoutDashboard size={11} /> },
+          { label: 'MONITOR ENTRADAS', href: '/portaria/entradas', icon: <Monitor size={11} /> },
+          { label: 'ALUNOS LIBERADOS', href: '/portaria/alunos-liberados', icon: <UserCheck size={11} /> },
+          { label: 'LOGS DE ACESSO', href: '/portaria/logs', icon: <ListChecks size={11} /> },
+          { label: 'RELATÓRIOS', href: '/portaria/relatorios', icon: <FileSpreadsheet size={11} /> },
+          { label: 'DISPOSITIVOS', href: '/portaria/dispositivos', icon: <Laptop size={11} /> },
+          { label: 'CONFIGURAÇÕES', href: '/portaria/configuracoes', icon: <Settings size={11} /> },
         ],
       },
       {
-        label: 'Config. de Notas', icon: <Star size={16} />,
+        label: 'SAÍDA DE ALUNOS', icon: <DoorOpen size={16} />,
         children: [
-          { label: 'Esquema de Notas', href: '/configuracoes/notas/esquema-notas', icon: <Layers size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
-          { label: 'Componentes Curriculares', href: '/configuracoes/notas/componentes-curriculares', icon: <BookOpen size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
-          { label: 'Grupo de Avaliações', href: '/configuracoes/notas/grupos-avaliacao', icon: <Star size={14} /> },
-          { label: 'Fórmulas', href: '/configuracoes/notas/formulas', icon: <FlaskConical size={14} />, badge: 'NOVO', badgeColor: 'cyan' },
-          { label: 'Arredondamentos', href: '/configuracoes/notas/arredondamento', icon: <Percent size={14} /> },
-        ],
-      },
-      {
-        label: 'Config. Financeiro', icon: <DollarSign size={16} />,
-        children: [
-          { label: 'Cartões', href: '/configuracoes/financeiro/cartoes', icon: <CreditCard size={14} /> },
-          { label: 'Eventos Financeiros', href: '/configuracoes/financeiro/eventos', icon: <Tag size={14} /> },
-          { label: 'Grupo de Descontos', href: '/configuracoes/financeiro/grupo-desconto', icon: <Percent size={14} /> },
-          { label: 'Métodos de Pagamento', href: '/configuracoes/financeiro/metodos-pagamento', icon: <Wallet size={14} /> },
-          { label: 'Padrão de Pagamentos', href: '/configuracoes/financeiro/padrao-pagamento', icon: <DollarSign size={14} /> },
-          { label: 'Plano de Contas', href: '/configuracoes/financeiro/plano-contas', icon: <FileText size={14} /> },
-          { label: 'Tipos de Documentos', href: '/configuracoes/financeiro/tipo-documentos', icon: <FileText size={14} /> },
+          { label: 'CHAMADAS', href: '/saida-alunos/chamadas', icon: <LogOut size={11} /> },
+          { label: 'PAINEL-TABLET', href: '/painel-tablet', icon: <Tablet size={11} />, target: '_blank' },
+          { label: 'MONITOR TV (VERTICAL)', href: '/monitor-tv', icon: <Monitor size={11} />, target: '_blank' },
+          { label: 'RELATÓRIOS', href: '/saida-alunos/relatorios', icon: <FileText size={11} /> },
+          { label: 'CONFIGURAÇÕES', href: '/saida-alunos/configuracoes', icon: <Settings size={11} /> },
         ],
       },
     ],
   },
-
   {
-    title: 'Inteligência & BI',
-    moduleKey: 'bi',
+    title: 'ADMINISTRATIVO',
     collapsible: true,
-    defaultOpen: false,
     items: [
-      { label: 'Hub BI Executivo', href: '/bi', icon: <BarChart3 size={16} /> },
-      { label: 'Copilotos IA', href: '/ia/copilotos', icon: <Brain size={16} />, badge: 'IA', badgeColor: 'purple' },
-      { label: 'Insights Automáticos', href: '/ia/insights', icon: <Zap size={16} /> },
+      { label: 'DOCS ESCOLARES', href: '/secretaria/documentos', icon: <FileStack size={16} /> },
+      { label: 'PEDIDO LIVROS/APOST', href: '/administrativo/pedidos-livros', icon: <Library size={16} /> },
+      { label: 'MANUTENÇÃO PREDIAL', href: '/administrativo/manutencao', icon: <Wrench size={16} /> },
     ],
   },
   {
-    title: 'Relatórios',
-    moduleKey: 'relatorios',
+    title: 'CONFIGURACOES',
     collapsible: true,
-    defaultOpen: false,
     items: [
-      { label: 'Central de Relatórios', href: '/relatorios', icon: <BarChart3 size={16} />, badge: 'NOVO', badgeColor: 'green' },
-      { label: 'Relatório Personalizado', href: '/relatorios/personalizado', icon: <ClipboardPenLine size={16} /> },
-      { label: 'Censo Escolar', href: '/relatorios/censo', icon: <Database size={16} /> },
-      { label: 'Novos & Rematriculados', href: '/relatorios/rematriculas', icon: <UserPlus size={16} />, badge: 'NOVO', badgeColor: 'blue' },
-      { label: 'Relatórios MEC/INEP', href: '/relatorios/mec', icon: <FileText size={16} /> },
-    ],
-  },
-
-  {
-    title: 'Multi-Unidades',
-    moduleKey: 'multiUnidades',
-    collapsible: true,
-    defaultOpen: false,
-    items: [
-      { label: 'Gestão de Unidades', href: '/configuracoes/unidades', icon: <Building2 size={16} /> },
-    ],
-  },
-
-  {
-    title: 'Configurações',
-    roleKey: 'Diretor Geral',
-    collapsible: true,
-    defaultOpen: false,
-    items: [
-      { label: 'Usuários & Acessos', href: '/configuracoes/usuarios', icon: <Shield size={16} /> },
-      { label: 'Integrações & API', href: '/configuracoes/integracoes', icon: <Webhook size={16} /> },
-      { label: 'Config. do Sistema', href: '/configuracoes', icon: <Settings size={16} /> },
-      { label: 'Controle de Logs', href: '/configuracoes/logs', icon: <ShieldCheck size={16} /> },
-      { label: 'Ajuda & Suporte', href: '/ajuda', icon: <HelpCircle size={16} /> },
+      { label: 'USUARIOS E ACESSOS', href: '/configuracoes/usuarios', icon: <Shield size={16} /> },
+      { label: 'CONFIG DO SISTEMA', href: '/configuracoes', icon: <Settings size={16} /> },
+      { label: 'MULTI-UNIDADES', href: '/configuracoes/unidades', icon: <Building size={16} /> },
+      {
+        label: 'CONFIG. FINANCEIRO', icon: <Landmark size={16} />,
+        children: [
+          { label: 'PLANO DE CONTAS', href: '/configuracoes/financeiro/plano-contas', icon: <CandlestickChart size={11} /> },
+          { label: 'CARTÕES', href: '/configuracoes/financeiro/cartoes', icon: <CardIcon size={11} /> },
+          { label: 'MÉTODOS DE PAGAMENTOS', href: '/configuracoes/financeiro/metodos-pagamento', icon: <Coins size={11} /> },
+          { label: 'TIPO DE DOCUMENTOS', href: '/configuracoes/financeiro/tipo-documentos', icon: <FileSpreadsheet size={11} /> },
+          { label: 'GRUPO DESCONTO', href: '/configuracoes/financeiro/grupo-desconto', icon: <TrendingDown size={11} /> },
+          { label: 'PADRÃO PAGAMENTO', href: '/configuracoes/financeiro/padrao-pagamento', icon: <CreditCard size={11} /> },
+          { label: 'EVENTOS', href: '/configuracoes/financeiro/eventos', icon: <Zap size={11} /> },
+        ],
+      },
+      {
+        label: 'CONFIG. PEDAGÓGICO', icon: <GraduationCap size={16} />,
+        children: [
+          { label: 'ANO LETIVO', href: '/configuracoes/pedagogico/ano-letivo', icon: <CalendarDays size={11} /> },
+          { label: 'SÉRIES', href: '/configuracoes/pedagogico/series', icon: <Layers size={11} /> },
+          { label: 'NÍVEIS DE ENSINO', href: '/configuracoes/pedagogico/niveis-ensino', icon: <TargetIcon size={11} /> },
+          { label: 'DISCIPLINAS', href: '/configuracoes/pedagogico/disciplinas', icon: <BookOpen size={11} /> },
+          { label: 'HORÁRIOS', href: '/configuracoes/pedagogico/horario', icon: <Clock3 size={11} /> },
+          { label: 'TIPOS DE DOCUMENTOS', href: '/configuracoes/pedagogico/documentos', icon: <FileText size={11} /> },
+          { label: 'GRUPO ALUNOS', href: '/configuracoes/pedagogico/grupo-alunos', icon: <Users size={11} /> },
+          { label: 'SITUAÇÃO DO ALUNO', href: '/configuracoes/pedagogico/situacao-aluno', icon: <ShieldCheck size={11} /> },
+          { label: 'TIPO DE OCORRÊNCIAS', href: '/configuracoes/pedagogico/tipo-ocorrencias', icon: <AlertTriangle size={11} /> },
+        ],
+      },
     ],
   },
 ]
 
-/* ══════════════════════════════════════════
-   NAV ITEM COMPONENT (leaf + nested)
-══════════════════════════════════════════ */
 function NavItemComp({ item, collapsed, depth = 0 }: { item: NavItem; collapsed: boolean; depth?: number }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(() => {
@@ -286,445 +171,454 @@ function NavItemComp({ item, collapsed, depth = 0 }: { item: NavItem; collapsed:
   const isActive = item.href ? (item.href === pathname) : false
   const hasChildren = item.children && item.children.length > 0
 
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState<number | undefined>(open ? undefined : 0)
-
-  useEffect(() => {
-    if (!contentRef.current) return
-    if (open) {
-      setHeight(contentRef.current.scrollHeight)
-      const t = setTimeout(() => setHeight(undefined), 300)
-      return () => clearTimeout(t)
-    } else {
-      setHeight(contentRef.current.scrollHeight)
-      requestAnimationFrame(() => requestAnimationFrame(() => setHeight(0)))
-    }
-  }, [open])
-
   if (hasChildren) {
     return (
-      <div>
+      <div style={{ marginBottom: 2 }}>
         <button
           onClick={() => setOpen(o => !o)}
-          className={`nav-item w-full text-left ${open ? 'active-parent' : ''}`}
-          title={collapsed ? item.label : undefined}
-          style={{ position: 'relative' }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            padding: '8px 20px',
+            background: 'transparent',
+            border: 'none',
+            color: open ? 'white' : 'rgba(255,255,255,0.5)',
+            cursor: 'pointer',
+            textAlign: 'left',
+            transition: 'all 0.3s'
+          }}
         >
-          <span className="nav-icon">{item.icon}</span>
+          <span style={{ color: open ? '#ec4899' : 'inherit', filter: open ? 'drop-shadow(0 0 8px #ec4899)' : 'none', display: 'flex', alignItems: 'center' }}>{item.icon}</span>
           {!collapsed && (
             <>
-              <span className="flex-1 text-sm" style={{ fontSize: 13, fontWeight: open ? 600 : 500 }}>{item.label}</span>
-              <span style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 18, height: 18, borderRadius: 4,
-                background: open ? 'rgba(59,130,246,0.15)' : 'transparent',
-                transition: 'all 0.2s',
-                flexShrink: 0,
-              }}>
-                <ChevronDown size={12} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s', color: open ? '#60a5fa' : 'hsl(var(--text-muted))' }} />
-              </span>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: depth > 0 ? 11 : 12 }}>{item.label}</span>
+              <ChevronDown size={14} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.3s' }} />
             </>
           )}
         </button>
-        {!collapsed && (
-          <div
-            ref={contentRef}
-            style={{
-              overflow: 'hidden',
-              height: height === undefined ? 'auto' : height,
-              transition: 'height 0.25s cubic-bezier(0.4,0,0.2,1)',
-            }}
-          >
-            <div style={{ paddingLeft: 14, paddingBottom: 2, borderLeft: '1px solid rgba(59,130,246,0.15)', marginLeft: 22, marginTop: 1 }}>
-              {item.children!.map(child => (
-                <NavItemComp key={child.label} item={child} collapsed={false} depth={depth + 1} />
+        <AnimatePresence>
+          {open && !collapsed && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={{ overflow: 'hidden', paddingLeft: 46, position: 'relative' }}
+            >
+              {item.children!.map((child, idx) => (
+                <div key={child.label} style={{ position: 'relative' }}>
+                   {/* Conector em L (Vertical + Horizontal) */}
+                   <div style={{ 
+                     position: 'absolute', 
+                     left: -16, 
+                     top: idx === 0 ? -12 : -20, 
+                     width: 16, 
+                     height: idx === 0 ? 30 : 38,
+                     borderLeft: '1.5px solid rgba(255,255,255,0.1)',
+                     borderBottom: '1.5px solid rgba(255,255,255,0.1)',
+                     borderRadius: '0 0 0 6px',
+                     pointerEvents: 'none'
+                   }} />
+                   <NavItemComp item={child} collapsed={false} depth={depth + 1} />
+                </div>
               ))}
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
 
-  // External/new-tab link
-  if (item.target) {
-    return (
-      <a
-        href={item.href || '#'}
-        target={item.target}
-        rel="noopener noreferrer"
-        className={`nav-item ${isActive ? 'active' : ''}`}
-        title={collapsed ? item.label : undefined}
-        style={depth > 0 ? { paddingTop: 5, paddingBottom: 5 } : undefined}
+  return (
+    <Link href={item.href || '#'} style={{ textDecoration: 'none' }} target={item.target}>
+      <motion.div
+        whileHover={{ x: 4, background: 'rgba(255,255,255,0.03)' }}
+        style={{
+          padding: collapsed ? '12px' : '8px 20px',
+          borderRadius: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          position: 'relative',
+          background: isActive ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+          border: isActive ? '1px solid rgba(121, 40, 202, 0.5)' : '1px solid transparent',
+          color: isActive ? 'white' : 'rgba(255,255,255,0.6)',
+          cursor: 'pointer',
+          transition: 'all 0.3s',
+          boxShadow: isActive ? '0 0 20px rgba(121, 40, 202, 0.2)' : 'none'
+        }}
       >
-        <span className="nav-icon" style={depth > 0 ? { opacity: 0.7 } : undefined}>{item.icon}</span>
+        <div style={{ color: isActive ? '#ec4899' : 'inherit', filter: isActive ? 'drop-shadow(0 0 8px #ec4899)' : 'none', display: 'flex', alignItems: 'center' }}>
+          {item.icon}
+        </div>
         {!collapsed && (
           <>
-            <span className="flex-1 text-sm" style={{ fontSize: depth > 0 ? 12 : 13 }}>{item.label}</span>
+            <span style={{ flex: 1, fontWeight: isActive ? 700 : 500, fontSize: depth > 0 ? 11 : 12 }}>{item.label}</span>
             {item.badge && (
-              <span className={`badge badge-${item.badgeColor || 'neutral'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+              <div style={{ 
+                background: item.badgeColor === 'pink' ? 'linear-gradient(135deg, #7928ca, #FF0080)' : 'rgba(0, 210, 255, 0.1)', 
+                color: item.badgeColor === 'pink' ? 'white' : '#00d2ff',
+                border: item.badgeColor === 'pink' ? 'none' : '1px solid rgba(0, 210, 255, 0.3)',
+                padding: '1px 8px', borderRadius: 10, fontSize: 10, fontWeight: 800,
+                boxShadow: item.badgeColor === 'pink' ? '0 0 10px rgba(255, 0, 128, 0.4)' : 'none'
+              }}>
                 {item.badge}
-              </span>
+              </div>
             )}
+            {depth === 0 && !item.badge && <ChevronRight size={14} style={{ opacity: 0.3 }} />}
           </>
         )}
-      </a>
-    )
-  }
-
-  return (
-    <Link
-      href={item.href || '#'}
-      className={`nav-item ${isActive ? 'active' : ''}`}
-      title={collapsed ? item.label : undefined}
-      style={depth > 0 ? { paddingTop: 5, paddingBottom: 5 } : undefined}
-    >
-      <span className="nav-icon" style={depth > 0 ? { opacity: 0.7 } : undefined}>{item.icon}</span>
-      {!collapsed && (
-        <>
-          <span className="flex-1 text-sm" style={{ fontSize: depth > 0 ? 12 : 13 }}>{item.label}</span>
-          {item.badge && (
-            <span className={`badge badge-${item.badgeColor || 'neutral'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-              {item.badge}
-            </span>
-          )}
-        </>
-      )}
+      </motion.div>
     </Link>
   )
 }
 
-/* ══════════════════════════════════════════
-   COLLAPSIBLE NAV GROUP — com accordion
-   openGroupKey + onToggle permitem fechar
-   outros grupos quando um novo é aberto
-══════════════════════════════════════════ */
-function NavGroupComp({
-  group,
-  collapsed,
-  groupKey,
-  openGroupKey,
-  onToggle,
-}: {
-  group: { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean; href?: string; icon?: React.ReactNode; target?: string }
-  collapsed: boolean
-  groupKey: string
-  openGroupKey: string | null
-  onToggle: (key: string) => void
-}) {
+function NavGroupComp({ group, collapsed, onToggle, open }: { group: NavGroup; collapsed: boolean; onToggle: () => void; open: boolean }) {
   const pathname = usePathname()
-  const isActiveGroup = group.items.some(item =>
-    item.href === pathname ||
-    item.children?.some(c => c.href === pathname || c.children?.some(cc => cc.href === pathname))
-  )
-
-  // Accordion: aberto se é o grupo ativo OU se o pai disse que está aberto
-  const open = openGroupKey === groupKey || isActiveGroup
-
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [height, setHeight] = useState<number | undefined>(open ? undefined : 0)
-
-  // Abrir quando navegar para este grupo
-  useEffect(() => {
-    if (isActiveGroup) onToggle(groupKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
-
-  useEffect(() => {
-    if (!contentRef.current) return
-    if (open) {
-      setHeight(contentRef.current.scrollHeight)
-      const t = setTimeout(() => setHeight(undefined), 300)
-      return () => clearTimeout(t)
-    } else {
-      setHeight(contentRef.current.scrollHeight)
-      requestAnimationFrame(() => requestAnimationFrame(() => setHeight(0)))
-    }
-  }, [open])
+  const isActive = group.items.some(i => i.href === pathname || i.children?.some(c => c.href === pathname))
 
   if (group.href) {
-    const isDirectActive = pathname === group.href || pathname.startsWith(group.href + '/')
     return (
-      <div style={{ marginBottom: 4, marginTop: 6 }}>
-        {!collapsed ? (
-          <Link
-            href={group.href}
-            target={group.target}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 14px',
-              background: isDirectActive ? 'rgba(59,130,246,0.05)' : 'none',
-              border: 'none',
-              textDecoration: 'none',
-              borderLeft: isDirectActive ? '2px solid rgba(59,130,246,0.5)' : '2px solid transparent',
-              cursor: 'pointer',
-              textAlign: 'left',
-              userSelect: 'none',
-              transition: 'all 0.15s',
-            }}
-          >
-            <span style={{ color: isDirectActive ? '#60a5fa' : 'rgba(148,163,184,0.6)', flexShrink: 0 }}>
-              {group.icon}
-            </span>
-            <span style={{
-              flex: 1,
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: isDirectActive ? '#93c5fd' : '#94a3b8',
-              transition: 'color 0.15s',
-            }}>
-              {group.title}
-            </span>
-          </Link>
-        ) : (
-          <div style={{ padding: '8px 0', display: 'flex', justifyContent: 'center' }}>
-            <Link href={group.href} target={group.target} title={group.title} style={{ color: isDirectActive ? '#60a5fa' : '#94a3b8' }}>
-              {group.icon}
-            </Link>
-          </div>
-        )}
+      <div style={{ marginTop: 0, marginBottom: 0 }}>
+        <NavItemComp item={{ label: group.title, href: group.href, icon: group.icon, target: group.target }} collapsed={collapsed} />
       </div>
     )
   }
 
   if (!group.collapsible) {
     return (
-      <div>
-        {!collapsed && <div className="nav-section-label">{group.title}</div>}
-        {group.items.map(item => (
-          <NavItemComp key={item.label} item={item} collapsed={collapsed} />
-        ))}
+      <div style={{ marginBottom: 4 }}>
+        {!collapsed && <div style={{ padding: '0 24px', fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 8 }}>{group.title}</div>}
+        {group.items.map(item => <NavItemComp key={item.label} item={item} collapsed={collapsed} />)}
       </div>
     )
   }
 
   return (
-    <div style={{ marginBottom: 4, marginTop: 6 }}>
-      {!collapsed ? (
+    <div style={{ marginBottom: 4 }}>
+      {!collapsed && (
         <button
-          onClick={() => onToggle(groupKey)}
+          onClick={onToggle}
           style={{
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '5px 14px 5px',
-            background: isActiveGroup ? 'rgba(59,130,246,0.05)' : 'none',
-            border: 'none',
-            borderLeft: isActiveGroup ? '2px solid rgba(59,130,246,0.5)' : '2px solid transparent',
-            cursor: 'pointer',
-            textAlign: 'left',
-            userSelect: 'none',
-            transition: 'all 0.15s',
+            width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 24px',
+            background: 'transparent', border: 'none', color: isActive || open ? 'white' : 'rgba(255,255,255,0.4)',
+            cursor: 'pointer', textAlign: 'left', transition: 'all 0.3s'
           }}
         >
-          <span style={{
-            flex: 1,
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: isActiveGroup ? '#93c5fd' : '#94a3b8',
-            transition: 'color 0.15s',
-          }}>
-            {group.title}
-          </span>
-          <ChevronDown
-            size={12}
-            style={{
-              transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
-              transition: 'transform 0.2s',
-              color: isActiveGroup ? '#60a5fa' : 'rgba(148,163,184,0.6)',
-              flexShrink: 0,
-            }}
-          />
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em' }}>{group.title}</span>
+          <ChevronDown size={12} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.3s' }} />
         </button>
-      ) : (
-        <div style={{ padding: '4px 0', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: 20, height: 1, background: 'rgba(100,116,139,0.3)' }} />
-        </div>
       )}
-      <div
-        ref={contentRef}
-        style={{
-          overflow: 'hidden',
-          height: collapsed ? 'auto' : (height === undefined ? 'auto' : height),
-          transition: 'height 0.25s cubic-bezier(0.4,0,0.2,1)',
-        }}
-      >
+      <AnimatePresence>
         {(open || collapsed) && (
-          <div style={{ paddingBottom: 2 }}>
-            {group.items.map(item => (
-              <NavItemComp key={item.label} item={item} collapsed={collapsed} />
+          <motion.div 
+            initial={collapsed ? {} : { height: 0, opacity: 0 }} 
+            animate={{ height: 'auto', opacity: 1 }} 
+            exit={{ height: 0, opacity: 0 }} 
+            style={{ overflow: 'hidden', paddingLeft: collapsed ? 0 : 30, position: 'relative' }}
+          >
+            {group.items.map((item, idx) => (
+              <div key={item.label} style={{ position: 'relative' }}>
+                 {/* Conector em L (Vertical + Horizontal) */}
+                 {!collapsed && open && (
+                   <div style={{ 
+                     position: 'absolute', 
+                     left: -16, 
+                     top: idx === 0 ? -12 : -20, 
+                     width: 16, 
+                     height: idx === 0 ? 30 : 38,
+                     borderLeft: '1.5px solid rgba(255,255,255,0.1)',
+                     borderBottom: '1.5px solid rgba(255,255,255,0.1)',
+                     borderRadius: '0 0 0 6px',
+                     pointerEvents: 'none'
+                   }} />
+                 )}
+                 <NavItemComp item={item} collapsed={collapsed} />
+              </div>
             ))}
-          </div>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   )
 }
 
-/* ══════════════════════════════════════════
-   MAIN SIDEBAR COMPONENT
-══════════════════════════════════════════ */
 export function Sidebar() {
-  const { sidebarCollapsed: collapsed, toggleSidebar, activeUnit, setActiveUnit, activeModules, sidebarTheme, currentUserPerfil, hydrated } = useApp()
-  const { mantenedores = [], perfis = [] } = useData()
-  const [unitOpen, setUnitOpen] = useState(false)
+  const router = useRouter()
+  const { sidebarCollapsed: collapsed, toggleSidebar, currentUserPerfil, currentUser, hydrated, theme, setTheme, setCurrentUser } = useApp()
+  const { cfgCalendarioLetivo = [] } = useData()
+  const anoVigente = cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || '2026'
+  const [openGroup, setOpenGroup] = useState<string | null>('ACADÊMICO')
+  const [showTopMenu, setShowTopMenu] = useState(false)
   const pathname = usePathname()
 
-  // ── Unidades: prioriza mantenedores cadastrados, fallback decente
-  const unidades = mantenedores.length > 0
-    ? ['Todas as Unidades', ...mantenedores.map(m => m.nome)]
-    : ['Todas as Unidades', 'Unidade Centro', 'Unidade Norte', 'Unidade Sul']
+  const menuRef = useRef<HTMLDivElement>(null)
+  const profileCardRef = useRef<HTMLDivElement>(null)
 
-  const userPerfilObj = (perfis || []).find(p => p.nome === currentUserPerfil)
-  const userPerms = userPerfilObj?.permissoes || []
-  const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
-
-  // Removed legacy bypass since DataContext now falls back to DEFAULT_PERFIS reliably
-  const isDiretor = currentUserPerfil === 'Diretor Geral'
-
-  const visibleGroups = ALL_NAV_GROUPS.map(g => {
-    // 1. Module active global check
-    if (g.moduleKey && activeModules[g.moduleKey] === false) return null
-    // 2. RoleKey: only restrict if user is NOT Diretor Geral
-    if (g.roleKey && g.roleKey !== currentUserPerfil && !isDiretor) return null
-
-    // 3. Diretor Geral sees ALL items in ALL groups
-    if (isDiretor) return g
-
-    // 3. Permissions checks
-    const modKey = g.moduleKey || toSlug(g.title)
-    const isPrincipal = g.title === 'Principal'
-    const hasExplicitGroupAccess = userPerms.includes(modKey)
-
-    // Clone group
-    const filteredGroup = { ...g, items: [] as NavItem[] }
-
-    g.items.forEach(item => {
-      if (item.children) {
-        const filteredChildren = item.children.filter(child => {
-          const childKey = child.href || toSlug(child.label)
-          return isPrincipal || hasExplicitGroupAccess || userPerms.includes(childKey)
-        })
-        if (filteredChildren.length > 0) {
-          filteredGroup.items.push({ ...item, children: filteredChildren })
-        }
-      } else {
-        const itemKey = item.href || toSlug(item.label)
-        if (isPrincipal || hasExplicitGroupAccess || userPerms.includes(itemKey)) {
-          filteredGroup.items.push(item)
-        }
-      }
-    })
-
-    return filteredGroup.items.length > 0 || (g.href && (isPrincipal || hasExplicitGroupAccess || userPerms.includes(modKey))) ? filteredGroup : null
-  }).filter(Boolean) as NavGroup[]
-
-  type MergedGroup = { title: string; items: NavItem[]; collapsible: boolean; defaultOpen: boolean; href?: string; icon?: React.ReactNode; target?: string }
-  const mergedGroups: MergedGroup[] = []
-  for (const g of visibleGroups) {
-    const last = mergedGroups[mergedGroups.length - 1]
-    if (last && last.title === g.title) {
-      last.items = [...last.items, ...g.items]
-    } else {
-      mergedGroups.push({
-        title: g.title,
-        items: [...g.items],
-        collapsible: g.collapsible ?? false,
-        defaultOpen: g.defaultOpen ?? true,
-        href: g.href,
-        icon: g.icon,
-        target: g.target
-      })
-    }
-  }
-
-  // ── Accordion: controla qual grupo collapsible está aberto
-  const getInitialOpenKey = useCallback(() => {
-    for (const g of mergedGroups) {
-      if (g.href) continue
-      if (!g.collapsible) continue
-      const isActive = g.items.some(item =>
-        item.href === pathname ||
-        item.children?.some(c => c.href === pathname || c.children?.some(cc => cc.href === pathname))
-      )
-      if (isActive || g.defaultOpen) return g.title
-    }
-    return null
-  }, [pathname])
-
-  const [openGroupKey, setOpenGroupKey] = useState<string | null>(getInitialOpenKey)
-
-  // Fechar unit dropdown ao clicar fora
-  const unitRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (unitRef.current && !unitRef.current.contains(e.target as Node)) {
-        setUnitOpen(false)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowTopMenu(false)
       }
     }
-    if (unitOpen) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [unitOpen])
+    if (showTopMenu) {
+      window.addEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showTopMenu])
 
-  const handleGroupToggle = useCallback((key: string) => {
-    setOpenGroupKey(prev => prev === key ? null : key)
-  }, [])
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        menuRef.current && 
+        !menuRef.current.contains(event.target as Node) &&
+        profileCardRef.current &&
+        !profileCardRef.current.contains(event.target as Node)
+      ) {
+        setShowTopMenu(false)
+      }
+    }
+    if (showTopMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showTopMenu])
+
+  if (!hydrated) return null
 
   return (
-    <aside
-      className={`sidebar ${collapsed ? 'collapsed' : ''} sidebar-${sidebarTheme}`}
-      data-theme={sidebarTheme === 'dark' ? 'dark' : undefined}
+    <motion.aside
+      initial={false}
+      animate={{ width: collapsed ? 90 : 285 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+      style={{
+        height: '100vh',
+        background: 'linear-gradient(165deg, #0f1129 0%, #060814 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 50,
+        overflow: 'hidden',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        flexShrink: 0
+      }}
     >
-      {/* Logo */}
-      <div style={{ padding: '16px', borderBottom: '1px solid rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', gap: '10px', minHeight: '64px' }}>
-        <div style={{ width: 36, height: 36, background: 'var(--gradient-primary)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 20px rgba(59,130,246,0.3)' }}>
-          <GraduationCap size={20} color="#fff" />
+      {/* Background Glows */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'radial-gradient(circle at 0% 50%, rgba(0, 210, 255, 0.08) 0%, transparent 50%), radial-gradient(circle at 100% 20%, rgba(121, 40, 202, 0.08) 0%, transparent 50%)', zIndex: 0, pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* Header / Logo */}
+        <div style={{ padding: '40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {!collapsed && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #FF0080, #7928CA)', borderRadius: 12, opacity: 0.2, filter: 'blur(8px)' }} />
+                 <svg width="36" height="36" viewBox="0 0 40 40" fill="none">
+                    <path d="M8 32L16 8L24 32" stroke="#FF0080" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px #FF0080)' }} />
+                    <path d="M22 32L30 8L38 32" stroke="#00D2FF" strokeWidth="4" strokeLinecap="round" style={{ filter: 'drop-shadow(0 0 5px #00D2FF)' }} />
+                 </svg>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Colégio</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: 'white', letterSpacing: '0.02em', marginTop: -2 }}>IMPACTO</div>
+              </div>
+            </motion.div>
+          )}
+          <button onClick={toggleSidebar} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
+            <motion.div animate={{ rotate: collapsed ? 180 : 0 }}><ChevronLeft size={16} /></motion.div>
+          </button>
         </div>
+
+        {/* Ano Letivo Widget */}
         {!collapsed && (
-          <div style={{ overflow: 'hidden' }}>
-            <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 16, lineHeight: 1.2 }} className="gradient-text">IMPACTO</div>
-            <div style={{ fontSize: 10, color: 'rgba(100,116,139,0.8)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>EDU Platform</div>
-          </div>
-        )}
-        <button onClick={toggleSidebar} className="btn btn-ghost btn-icon" style={{ marginLeft: 'auto', flexShrink: 0, opacity: 0.7 }}>
-          {collapsed ? <PanelLeft size={15} /> : <ChevronLeft size={15} />}
-        </button>
-      </div>
-        {!collapsed && (
-          <div style={{ padding: '4px 16px 10px', borderBottom: '1px solid rgba(59,130,246,0.08)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'rgba(59,130,246,0.06)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.12)' }}>
-              <span style={{ fontSize: 10 }}>📅</span>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>Ano Letivo</span>
-              <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 900, color: '#60a5fa', fontFamily: 'Outfit, sans-serif' }}>{new Date().getFullYear()}</span>
+          <div style={{ padding: '0 24px 16px' }}>
+            <div style={{ padding: '8px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 10 }}>
+               <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CalendarDays size={15} color="#ef4444" />
+               </div>
+               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Ano Letivo</span>
+               <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 900, color: '#3b82f6', letterSpacing: '0.02em' }}>{anoVigente}</span>
             </div>
           </div>
         )}
 
+        {/* Navigation */}
+        <div style={{ flex: 1, padding: '0 16px', overflowY: 'auto' }} className="no-scrollbar">
+          {ALL_NAV_GROUPS.map((group, i) => (
+            <NavGroupComp 
+              key={group.title + i} 
+              group={group} 
+              collapsed={collapsed} 
+              open={openGroup === group.title} 
+              onToggle={() => setOpenGroup(openGroup === group.title ? null : group.title)} 
+            />
+          ))}
+        </div>
 
+        {/* Profile Footer */}
+        <div style={{ padding: '8px 12px 16px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', position: 'relative' }}>
+          <AnimatePresence>
+            {showTopMenu && (
+              <motion.div
+                ref={menuRef}
+                initial={{ y: 15, opacity: 0, scale: 0.95 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 15, opacity: 0, scale: 0.95 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 10px)',
+                  left: 10,
+                  right: 10,
+                  background: 'linear-gradient(180deg, rgba(15, 17, 41, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: 16,
+                  padding: '6px',
+                  boxShadow: '0 -10px 25px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
+                  zIndex: 100,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                {/* Option 1: Meu Perfil */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(255, 255, 255, 0.04)' }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowTopMenu(false);
+                    router.push('/meu-perfil');
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: collapsed ? '10px' : '10px 14px',
+                    borderRadius: 12,
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    gap: 12,
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    transition: 'all 0.2s',
+                    textAlign: 'left'
+                  }}
+                >
+                  <UserCircle size={18} color="#7928ca" style={{ filter: 'drop-shadow(0 0 5px rgba(121, 40, 202, 0.5))', flexShrink: 0 }} />
+                  {!collapsed && (
+                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Meu Perfil</span>
+                  )}
+                </motion.button>
 
-      {/* Navigation */}
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 0 16px' }}>
-        {hydrated && mergedGroups.map((group, i) => (
-          <NavGroupComp
-            key={group.title + i}
-            group={group}
-            collapsed={collapsed}
-            groupKey={group.title}
-            openGroupKey={openGroupKey}
-            onToggle={handleGroupToggle}
-          />
-        ))}
+                {/* Option 2: Sair */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(239, 68, 68, 0.04)' }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setShowTopMenu(false);
+                    try {
+                      await fetch('/api/auth/logout', { method: 'POST' });
+                      setCurrentUser(null);
+                      window.location.href = '/login';
+                    } catch (err) {
+                      window.location.href = '/login';
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: collapsed ? '10px' : '10px 14px',
+                    borderRadius: 12,
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    gap: 12,
+                    color: '#ef4444',
+                    transition: 'all 0.2s',
+                    textAlign: 'left'
+                  }}
+                >
+                  <LogOut size={18} color="#ef4444" style={{ filter: 'drop-shadow(0 0 5px rgba(239, 68, 68, 0.5))', flexShrink: 0 }} />
+                  {!collapsed && (
+                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Sair</span>
+                  )}
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <motion.div 
+              ref={profileCardRef}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTopMenu(prev => !prev);
+              }}
+              whileHover={{ background: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.2)' }}
+              style={{ padding: '10px', borderRadius: 20, background: 'rgba(255, 255, 255, 0.04)', display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'pointer', transition: 'all 0.2s' }}
+            >
+              <div style={{ position: 'relative' }}>
+                <UserAvatar 
+                  key={currentUser?.foto || 'default'}
+                  userId={currentUser?.id} 
+                  name={currentUser?.nome || 'Usuário'} 
+                  fotoUrl={currentUser?.foto}
+                  size={40} 
+                  style={{ borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)' }} 
+                />
+                <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6, background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
+              </div>
+              {!collapsed && (
+                <>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>{currentUser?.cargo || 'Colaborador'}</div>
+                  </div>
+                  
+                  {/* Inline Actions */}
+                  <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }} onClick={e => e.stopPropagation()}>
+                      <motion.button 
+                        whileHover={{ background: 'rgba(255,255,255,0.15)', scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => { e.stopPropagation(); setTheme(theme === 'dark' ? 'light' : 'dark') }}
+                        style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                      >
+                        {theme === 'dark' ? <Sun size={17} color="#fbbf24" style={{ filter: 'drop-shadow(0 0 5px rgba(251, 191, 36, 0.4))' }} /> : <Moon size={17} color="#60a5fa" style={{ filter: 'drop-shadow(0 0 5px rgba(96, 165, 250, 0.4))' }} />}
+                      </motion.button>
+                      
+                      <motion.button 
+                        whileHover={{ background: 'rgba(255,255,255,0.15)', scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={(e) => { e.stopPropagation(); router.push('/agenda-digital/admin/comunicados') }}
+                        style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
+                      >
+                        <Bell size={17} color="white" />
+                        <div style={{ position: 'absolute', top: 8, right: 8, width: 5, height: 5, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef4444' }} />
+                      </motion.button>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </div>
+        </div>
       </div>
 
-    </aside>
+      <style dangerouslySetInnerHTML={{__html: `
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
+    </motion.aside>
   )
 }
-

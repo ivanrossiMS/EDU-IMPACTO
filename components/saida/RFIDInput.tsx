@@ -34,8 +34,19 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
         if (document.activeElement !== inputRef.current) inputRef.current?.focus()
       }
       document.addEventListener('click', refocus)
+      
+      const handleBlur = () => {
+        setTimeout(() => {
+          if (enabled) inputRef.current?.focus()
+        }, 10)
+      }
+      inputRef.current?.addEventListener('blur', handleBlur)
+
       inputRef.current?.focus()
-      return () => document.removeEventListener('click', refocus)
+      return () => {
+        document.removeEventListener('click', refocus)
+        inputRef.current?.removeEventListener('blur', handleBlur)
+      }
     }, [enabled])
 
     // Clear buffer & DOM value when disabled (mode changed away from idle/rfid)
@@ -66,7 +77,7 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
         return
       }
       if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(flush, 80)
+      timerRef.current = setTimeout(flush, 50)
     }, [flush])
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

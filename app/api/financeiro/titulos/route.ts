@@ -10,7 +10,8 @@ export async function GET(request: Request) {
   const alunoId = searchParams.get('alunoId')
   const q = searchParams.get('q')
 
-  let query = supabase.from('titulos').select('*').order('vencimento')
+  // Adicionado limite rigoroso para evitar sobrecarga de memória (OOM) no frontend e banco
+  let query = supabase.from('titulos').select('*').order('vencimento').limit(1000)
 
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (alunoId) query = query.eq('aluno_id', alunoId)

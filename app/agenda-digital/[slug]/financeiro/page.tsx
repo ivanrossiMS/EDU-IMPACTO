@@ -1,382 +1,336 @@
 'use client'
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
+import React, { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  RefreshCw, Filter, CreditCard, Check, AlertCircle, Info, 
+  ChevronDown, ChevronUp, Search, Download, Copy, QrCode, 
+  ArrowRight, X, TrendingDown, DollarSign, Calendar
+} from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 
-import { useData, Titulo } from '@/lib/dataContext'
-import { useApp } from '@/lib/context'
-import { use, useState, useMemo, useEffect } from 'react'
-import { DollarSign, Lock, Download, Copy, Calendar, Tag, QrCode, CheckCircle2, Search, ArrowRight, ArrowUpRight, AlertTriangle, X } from 'lucide-react'
-import { EmptyStateCard } from '../../components/EmptyStateCard'
-import { formatCurrency, formatDate } from '@/lib/utils'
+const MOCK_DATA = [
+  { id: '1', vencimento: '05/02/2026', fatura: 'Mensalidade', parcela: '1/11', competencia: 'Fev. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Pago' },
+  { id: '2', vencimento: '05/03/2026', fatura: 'Mensalidade', parcela: '2/11', competencia: 'Mar. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Pago' },
+  { id: '3', vencimento: '06/04/2026', fatura: 'Mensalidade', parcela: '3/11', competencia: 'Abr. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Pago' },
+  { id: '4', vencimento: '05/05/2026', fatura: 'Mensalidade', parcela: '4/11', competencia: 'Mai. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Atrasado' },
+  { id: '5', vencimento: '05/06/2026', fatura: 'Mensalidade', parcela: '5/11', competencia: 'Jun. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'A vencer' },
+  { id: '6', vencimento: '06/07/2026', fatura: 'Mensalidade', parcela: '6/11', competencia: 'Jul. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'A vencer' },
+  { id: '7', vencimento: '05/08/2026', fatura: 'Mensalidade', parcela: '7/11', competencia: 'Ago. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'A vencer' },
+  { id: '8', vencimento: '08/09/2026', fatura: 'Mensalidade', parcela: '8/11', competencia: 'Set. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'A vencer' },
+]
 
-export default function ADFinanceiroPage({ params }: { params: Promise<{ slug: string }>}) {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
-  const { currentUser } = useApp()
-  const resolvedParams = use(params as Promise<{ slug: string }>)
-  
-  const aluno = alunos.find(a => a.id === resolvedParams.slug)
-  const [activeTab, setActiveTab] = useState<'abertos' | 'historico'>('abertos')
-  const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear().toString())
-  
-  // Security Check: Is the current user the financial responsible for this student?
-  const myName = (currentUser?.nome || '').toLowerCase().trim()
-  const myEmail = (currentUser?.email || '').toLowerCase().trim()
-  let isFinancial = false
+export default function ADFinanceiroPageMock() {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [payHover, setPayHover] = useState(false)
 
-  if (aluno && currentUser) {
-    if ((aluno.responsavelFinanceiro || '').toLowerCase().trim() === myName) isFinancial = true
-    if (aluno.emailResponsavelFinanceiro && myEmail && (aluno.emailResponsavelFinanceiro || '').toLowerCase().trim() === myEmail) isFinancial = true
-    
-    // Check array de responsáveis novo padrão (se houver flag isFinancial)
-    const respArr = (aluno as any).responsaveis || (aluno as any)._responsaveis || []
-    if (Array.isArray(respArr)) {
-       const euNoArray = respArr.find(r => 
-         (r.nome && r.nome.toLowerCase().trim() === myName) || 
-         (r.email && myEmail && r.email.toLowerCase().trim() === myEmail)
-       )
-       if (euNoArray && (euNoArray.respFinanceiro || euNoArray.financeiro || euNoArray.tipo === 'Financeiro' || euNoArray.tipo === 'Ambos')) {
-         isFinancial = true
-       }
-    }
-  }
-
-  // Se modo de desenvolvimento / adm / fallback
-  if (!currentUser || currentUser.perfil === 'Administrador' || currentUser.perfil === 'Gestor' || currentUser.perfil === 'Direção' || currentUser.perfil === 'Secretaria') {
-    isFinancial = true
-  }
-
-  // Safe date parser to handle both YYYY-MM-DD and DD/MM/YYYY without NaN errors
-  const parseDateSafe = (dStr: string) => {
-    if (!dStr) return new Date()
-    if (dStr.includes('/')) {
-      const [dd, mm, yyyy] = dStr.split('/')
-      return new Date(`${yyyy}-${mm}-${dd}T12:00:00`)
-    }
-    const d = new Date(dStr)
-    return isNaN(d.getTime()) ? new Date() : d
-  }
-
-  // Get data
-  const todosMeusTitulos = useMemo(() => {
-    if (!aluno) return []
-    const nomeAlunoStr = (aluno.nome || '').toLowerCase().trim()
-    
-    // DEBUG: Checking what is going on
-    const matched = titulos.filter(t => {
-      const tAluno = (t.aluno || '').toLowerCase().trim()
-      const isNomeMatch = tAluno === nomeAlunoStr
-      const isIdMatch = t.aluno === aluno.id || (t as any).alunoId === aluno.id
-      return isNomeMatch || isIdMatch
-    })
-
-    // MAP ALUNO PARCELAS (da Nova Matrícula) p/ Titulo
-    const parcelasStudent = (aluno as any).parcelas || []
-    const mappedParcelas = parcelasStudent.map((p: any) => {
-       return {
-         id: p.codigo || `parc-${p.num}-${p.competencia}-${Date.now()}`,
-         aluno: aluno.nome,
-         responsavel: aluno.responsavelFinanceiro || aluno.responsavel || '',
-         descricao: p.evento || 'Mensalidade',
-         valor: p.valorFinal ?? p.valor,
-         vencimento: p.vencimento,
-         pagamento: p.dtPagto || null,
-         status: (p.status === 'vencido' || (p.status === 'pendente' && parseDateSafe(p.vencimento) < new Date())) ? 'atrasado' 
-                 : (p.status === 'pago' ? 'pago' : 'pendente'),
-         metodo: p.formaPagto || null,
-         parcela: `${p.num}/${parcelasStudent.length}`,
-         nossoNumero: p.codigo || ''
-       } as Titulo
-    })
-
-    // Merge parcelas de matrícula com Títulos (Contas a Receber)
-    const all = [...mappedParcelas, ...matched]
-    
-    // Deduplicar: Se houver uma parcela e um título com mesmo vencimento e valor e descrição
-    const unique = all.filter((v, i, a) => a.findIndex(t => t.vencimento === v.vencimento && t.valor === v.valor && t.descricao === v.descricao) === i)
-
-    console.log('[DEBUG AGENDA FINANCEIRO] =============')
-    console.log('[DEBUG] Student ID:', aluno.id)
-    console.log('[DEBUG] Student Name:', nomeAlunoStr)
-    console.log('[DEBUG] Total titulos in system:', titulos.length)
-    console.log('[DEBUG] Total titulos matched:', matched.length)
-    console.log('[DEBUG] Mapeadas de aluno.parcelas:', mappedParcelas.length)
-    if (unique.length > 0) {
-       console.log('[DEBUG] Sample of unique titulos:', unique.slice(-5).map(t => ({ id: t.id, descricao: t.descricao, vencimento: t.vencimento, valor: t.valor })))
-    }
-    
-    return unique.sort((a,b) => parseDateSafe(a.vencimento).getTime() - parseDateSafe(b.vencimento).getTime())
-  }, [titulos, aluno])
-
-  const anosDisponiveis = Array.from(new Set(todosMeusTitulos.map(t => parseDateSafe(t.vencimento).getFullYear().toString()))).sort((a,b) => b.localeCompare(a))
-  const meusTitulos = todosMeusTitulos.filter(t => parseDateSafe(t.vencimento).getFullYear().toString() === anoFiltro)
-
-  const titulosAbertos = meusTitulos.filter(t => t.status === 'pendente' || t.status === 'atrasado')
-  const titulosHistorico = meusTitulos.filter(t => t.status === 'pago')
-
-  const titulosAtrasados = titulosAbertos.filter(t => t.status === 'atrasado' || (t.status === 'pendente' && parseDateSafe(t.vencimento) < new Date()))
-  const proximoVencimento = titulosAbertos.length > 0 ? titulosAbertos.sort((a,b) => parseDateSafe(a.vencimento).getTime() - parseDateSafe(b.vencimento).getTime()).find(t => parseDateSafe(t.vencimento) >= new Date()) || titulosAbertos[0] : null
-  const totalAberto = titulosAbertos.reduce((acc, curr) => acc + curr.valor, 0)
-
-  // ── Avisos do Sistema em Modal ──
-  const [modalAviso, setModalAviso] = useState(false)
-  const [hasShownAviso, setHasShownAviso] = useState(false)
-  const [modalPix, setModalPix] = useState<{tipo: 'pix'|'codigo', titulo: Titulo} | null>(null)
-
+  // Auto-selecionar os vencidos e o próximo a vencer
   useEffect(() => {
-    if (titulosAtrasados.length > 0 && !hasShownAviso && isFinancial) {
-      setModalAviso(true)
-      setHasShownAviso(true)
+    const toPay = MOCK_DATA.filter(i => i.situacao === 'Atrasado' || i.id === '5').map(i => i.id)
+    setSelectedIds(toPay)
+  }, [])
+
+  const handleSelectAll = () => {
+    const selectable = MOCK_DATA.filter(item => item.situacao !== 'Pago').map(item => item.id)
+    if (selectedIds.length === selectable.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(selectable)
     }
-  }, [titulosAtrasados, hasShownAviso, isFinancial])
-
-  if (!aluno) return null
-
-  if (!isFinancial) {
-    return (
-      <div style={{ maxWidth: 800, margin: '0 auto', paddingTop: 40 }}>
-        <EmptyStateCard 
-          title="Acesso Restrito"
-          description={`Por motivos de segurança e LGPD, as informações financeiras deste aluno estão restritas apenas ao responsável financeiro principal cadastrado na matrícula. Caso precise de acesso, entre em contato com a secretaria.`}
-          icon={<Lock size={64} style={{ opacity: 0.1, color: '#ef4444' }} />}
-        />
-      </div>
-    )
   }
 
-  const TituloCardRow = ({ t }: { t: Titulo }) => {
-    const isAtrasado = t.status === 'atrasado' || (t.status === 'pendente' && parseDateSafe(t.vencimento) < new Date())
-    const isPago = t.status === 'pago'
-
-    return (
-      <div className="ad-fin-card" style={{ 
-        background: isAtrasado ? 'rgba(239, 68, 68, 0.05)' : 'hsl(var(--bg-surface))', 
-        borderRadius: 16, padding: 20, 
-        boxShadow: isAtrasado ? '0 8px 24px rgba(239, 68, 68, 0.15)' : '0 4px 20px rgba(0,0,0,0.03)', 
-        border: `1px solid ${isAtrasado ? 'rgba(239, 68, 68, 0.4)' : 'hsl(var(--border-subtle))'}`, 
-        display: 'flex', flexDirection: 'column', gap: 16 
-      }}>
-        <div className="ad-fin-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div className="ad-fin-card-title-box">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span className="ad-fin-card-parcela" style={{ fontSize: 13, fontWeight: 700, color: isAtrasado ? '#dc2626' : 'hsl(var(--primary))', background: isAtrasado ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 12 }}>
-                {t.parcela || '1/1'}
-              </span>
-              <span className="ad-fin-card-valor" style={{ fontSize: 18, fontWeight: 800, color: isAtrasado ? '#b91c1c' : 'hsl(var(--text-main))' }}>
-                {formatCurrency(t.valor)}
-              </span>
-            </div>
-            <div className="ad-fin-card-desc" style={{ fontSize: 13, color: isAtrasado ? '#dc2626' : 'hsl(var(--text-secondary))', fontWeight: 700 }}>
-              {t.descricao}
-            </div>
-          </div>
-          <div className="ad-fin-card-badge-box">
-            {isPago ? (
-              <span className="badge badge-success" style={{ fontWeight: 600 }}><CheckCircle2 size={12} style={{ marginRight: 4 }}/> Pago</span>
-            ) : isAtrasado ? (
-              <span className="badge" style={{ fontWeight: 700, background: '#ef4444', color: 'white', padding: '4px 8px' }}>Atrasado</span>
-            ) : (
-              <span className="badge badge-warning" style={{ fontWeight: 600 }}>Pendente</span>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 13, color: isAtrasado ? '#ef4444' : 'hsl(var(--text-muted))', fontWeight: isAtrasado ? 600 : 400 }}>
-           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-             <Calendar size={14} color={isAtrasado ? '#ef4444' : undefined} />
-             {isPago ? `Pago em ${t.pagamento || 'N/A'}` : `Vence em ${formatDate(t.vencimento)}`}
-           </div>
-           {t.nossoNumero && (
-             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Tag size={14} color={isAtrasado ? '#ef4444' : undefined} />
-                Nosso N°: {t.nossoNumero}
-             </div>
-           )}
-        </div>
-
-        {!isPago && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 4, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary btn-sm" style={{ flex: 1, minWidth: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => setModalPix({tipo: 'pix', titulo: t})}>
-              <QrCode size={16} /> Copiar Pix
-            </button>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1, minWidth: 140, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => setModalPix({tipo: 'codigo', titulo: t})}>
-              <Copy size={16} /> Pegar Código
-            </button>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1, minWidth: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => window.open(`/api/boletos/${t.id}/pdf`, '_blank')}>
-              <Search size={16} /> Abrir Boleto
-            </button>
-          </div>
-        )}
-      </div>
-    )
+  const handleSelectRow = (id: string, isSelectable: boolean, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isSelectable) return
+    if (selectedIds.includes(id)) {
+      setSelectedIds(selectedIds.filter(i => i !== id))
+    } else {
+      setSelectedIds([...selectedIds, id])
+    }
   }
+
+  const handleRefresh = () => {
+    setIsRefreshing(true)
+    setTimeout(() => setIsRefreshing(false), 1000)
+  }
+
+  const totalToPay = MOCK_DATA.filter(item => selectedIds.includes(item.id)).reduce((acc, curr) => acc + curr.valor, 0)
+  const totalAtrasado = MOCK_DATA.filter(item => item.situacao === 'Atrasado').reduce((acc, curr) => acc + curr.valor, 0)
+
+  // Animations
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { staggerChildren: 0.05, duration: 0.4 }
+    }
+  }
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 15, scale: 0.98 },
+    visible: { 
+      opacity: 1, y: 0, scale: 1,
+      transition: { type: 'spring' as const, stiffness: 300, damping: 24 }
+    }
+  } as const
 
   return (
-    <div className="ad-fin-container" style={{ maxWidth: 800, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 100, fontFamily: 'Outfit, Inter, sans-serif' }}>
       
-      {/* Resumo Financeiro (Hero) */}
-      <div className="ad-fin-hero" style={{ background: 'var(--gradient-primary)', borderRadius: 24, padding: 32, color: 'white', marginBottom: 32, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'rgba(255,255,255,0.1)', borderRadius: '50%', filter: 'blur(50px)' }} />
-        <h2 className="ad-fin-hero-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, fontFamily: 'Outfit, sans-serif' }}>Central Financeira</h2>
-        <p className="ad-fin-hero-desc" style={{ opacity: 0.9, fontSize: 13, marginBottom: 24, maxWidth: '80%' }}>Gerencie e mantenha os pagamentos da mensalidade e taxas extracurriculares em dia com segurança.</p>
+      {/* Smart Dashboard Header */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ 
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+          borderRadius: 24, padding: '28px 32px', color: 'white', marginBottom: 24,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.4)',
+          position: 'relative', overflow: 'hidden'
+        }}
+      >
+        <div style={{ position: 'absolute', right: '-10%', top: '-50%', width: 300, height: 300, background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)', filter: 'blur(30px)' }} />
         
-        <div className="ad-fin-hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 24 }}>
-           <div style={{ background: 'rgba(0,0,0,0.2)', padding: 20, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-             <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, opacity: 0.8, marginBottom: 4 }}>Total em Aberto</div>
-             <div style={{ fontSize: 28, fontWeight: 800 }}>{formatCurrency(totalAberto)}</div>
-           </div>
-           
-           <div style={{ background: 'rgba(0,0,0,0.2)', padding: 20, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-             <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1, opacity: 0.8, marginBottom: 4 }}>Próximo Vencimento</div>
-             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>
-               {proximoVencimento ? formatDate(proximoVencimento.vencimento) : 'Em dia ✅'}
-             </div>
-             {proximoVencimento && <div style={{ fontSize: 13, opacity: 0.9 }}>{formatCurrency(proximoVencimento.valor)} • Parcela {proximoVencimento.parcela}</div>}
-           </div>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <DollarSign size={20} color="#818cf8" />
+            </div>
+            Central Financeira
+          </h2>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 6, fontWeight: 500 }}>
+            Acompanhe a saúde financeira, gere boletos e copie o Pix para pagamento.
+          </div>
         </div>
+
+        <div style={{ display: 'flex', gap: 24, textAlign: 'right' }}>
+          {totalAtrasado > 0 && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px 20px', borderRadius: 16, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              <div style={{ fontSize: 11, color: '#fca5a5', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                <AlertCircle size={12} /> Atrasado
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#fecaca' }}>{formatCurrency(totalAtrasado)}</div>
+            </div>
+          )}
+          <div style={{ padding: '12px 20px', borderRadius: 16, background: 'rgba(255,255,255,0.05)' }}>
+            <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 4 }}>Próximo Vencimento</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Calendar size={16} color="#818cf8" /> 05 Jun
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Main Table Card */}
+      <div style={{ 
+        background: 'hsl(var(--bg-surface))', borderRadius: 24, 
+        border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 8px 30px rgba(0,0,0,0.02)',
+        overflow: 'hidden'
+      }}>
+        
+        {/* Toolbar */}
+        <div style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, border: '1px solid #c7d2fe' }}>
+              Contrato #02F7AF <X size={12} style={{ cursor: 'pointer', opacity: 0.6 }} />
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={handleRefresh} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              <motion.div animate={{ rotate: isRefreshing ? 360 : 0 }} transition={{ duration: 1, ease: "linear", repeat: isRefreshing ? Infinity : 0 }}><RefreshCw size={14} /></motion.div> Atualizar
+            </button>
+            <button style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', border: '1px solid #e2e8f0', color: '#334155', padding: '6px 14px', borderRadius: 12, fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <Filter size={14} /> Filtros
+            </button>
+          </div>
+        </div>
+
+        {/* Compact & Ultra Modern Table */}
+        <div style={{ overflowX: 'auto' }}>
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" style={{ minWidth: 800 }}>
+            {/* Header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '12px 20px', fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+              <div onClick={handleSelectAll} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 18, height: 18, borderRadius: 6, border: `2px solid ${selectedIds.length > 0 ? '#4f46e5' : '#cbd5e1'}`, background: selectedIds.length > 0 ? '#4f46e5' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
+                  {selectedIds.length > 0 && <Check size={12} color="white" strokeWidth={3} />}
+                </div>
+              </div>
+              <div>Vencimento</div>
+              <div>Fatura</div>
+              <div>Competência</div>
+              <div>Aluno / Produto</div>
+              <div style={{ textAlign: 'right' }}>Valor</div>
+              <div style={{ textAlign: 'center' }}>Status</div>
+              <div></div>
+            </div>
+
+            {/* Rows */}
+            {MOCK_DATA.map((item, index) => {
+              const isSelected = selectedIds.includes(item.id)
+              const isPago = item.situacao === 'Pago'
+              const isAtrasado = item.situacao === 'Atrasado'
+              const isSelectable = !isPago
+              const isExpanded = expandedId === item.id
+
+              return (
+                <motion.div 
+                  layout
+                  key={item.id} variants={itemVariants}
+                  onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                  style={{ 
+                    borderBottom: '1px solid rgba(0,0,0,0.03)',
+                    background: isSelected ? 'rgba(99, 102, 241, 0.04)' : (isExpanded ? '#f8fafc' : 'transparent'),
+                    cursor: 'pointer', transition: 'background 0.2s'
+                  }}
+                  whileHover={{ background: isSelected ? 'rgba(99, 102, 241, 0.06)' : '#f8fafc' }}
+                >
+                  <div style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '14px 20px', alignItems: 'center' }}>
+                    
+                    {/* Checkbox */}
+                    <div onClick={(e) => handleSelectRow(item.id, isSelectable, e)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isSelectable ? (
+                        <div style={{ width: 18, height: 18, borderRadius: 6, border: `2px solid ${isSelected ? '#4f46e5' : '#cbd5e1'}`, background: isSelected ? '#4f46e5' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', boxShadow: isSelected ? '0 2px 8px rgba(79, 70, 229, 0.3)' : 'none' }}>
+                          {isSelected && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}><Check size={12} color="white" strokeWidth={3} /></motion.div>}
+                        </div>
+                      ) : (
+                        <div style={{ width: 18, height: 18, borderRadius: 6, background: '#f1f5f9', border: '2px solid #e2e8f0', opacity: 0.5 }} />
+                      )}
+                    </div>
+
+                    {/* Vencimento */}
+                    <div style={{ fontSize: 13, fontWeight: 700, color: isAtrasado ? '#ef4444' : 'hsl(var(--text-main))' }}>
+                      {item.vencimento}
+                    </div>
+
+                    {/* Fatura */}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-main))' }}>{item.fatura}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Parc. {item.parcela}</div>
+                    </div>
+
+                    {/* Competencia */}
+                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{item.competencia}</div>
+
+                    {/* Aluno/Produto */}
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.aluno}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.produto}</div>
+                    </div>
+
+                    {/* Valor */}
+                    <div style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-main))', textAlign: 'right' }}>
+                      {formatCurrency(item.valor)}
+                    </div>
+
+                    {/* Status */}
+                    <div style={{ textAlign: 'center' }}>
+                      <span style={{ 
+                        padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
+                        background: isPago ? '#dcfce7' : isAtrasado ? '#fee2e2' : '#e0f2fe',
+                        color: isPago ? '#166534' : isAtrasado ? '#991b1b' : '#0369a1',
+                      }}>
+                        {item.situacao}
+                      </span>
+                    </div>
+
+                    {/* Expand Icon */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', color: '#94a3b8' }}>
+                      <motion.div animate={{ rotate: isExpanded ? 180 : 0 }}><ChevronDown size={16} /></motion.div>
+                    </div>
+
+                  </div>
+
+                  {/* Expanded Actions */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <div style={{ padding: '0 20px 20px 64px', display: 'flex', gap: 12 }}>
+                          {!isPago && (
+                            <>
+                              <button onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>
+                                <QrCode size={14} /> Pagar com Pix
+                              </button>
+                              <button onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', color: '#334155', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                <Copy size={14} /> Copiar Código
+                              </button>
+                            </>
+                          )}
+                          <button onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', color: '#334155', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                            <Download size={14} /> {isPago ? 'Baixar Recibo' : 'Baixar Boleto'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                </motion.div>
+              )
+            })}
+          </motion.div>
+        </div>
+
       </div>
 
-      <div className="ad-fin-tabs-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid hsl(var(--border-subtle))', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
-        <div className="ad-fin-tabs" style={{ display: 'flex', gap: 24 }}>
-          <button 
-            onClick={() => setActiveTab('abertos')}
-            style={{ padding: '12px 0', fontSize: 15, fontWeight: 700, color: activeTab === 'abertos' ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))', borderBottom: `2px solid ${activeTab === 'abertos' ? 'hsl(var(--primary))' : 'transparent'}`, background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+      {/* Floating Sticky Footer for Payment Action */}
+      <AnimatePresence>
+        {selectedIds.length > 0 && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            style={{ 
+              position: 'fixed', bottom: 32, left: 0, right: 0, margin: '0 auto', maxWidth: 800,
+              background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+              borderRadius: 24, padding: '16px 24px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.5) inset',
+              border: '1px solid rgba(0,0,0,0.05)',
+              zIndex: 100
+            }}
           >
-             Mensalidades Abertas ({titulosAbertos.length})
-          </button>
-          <button 
-            onClick={() => setActiveTab('historico')}
-            style={{ padding: '12px 0', fontSize: 15, fontWeight: 700, color: activeTab === 'historico' ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))', borderBottom: `2px solid ${activeTab === 'historico' ? 'hsl(var(--primary))' : 'transparent'}`, background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-             Histórico de Pagos
-          </button>
-        </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
-           <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Ano Letivo:</span>
-           <select className="form-input" style={{ width: 100, padding: '4px 10px', fontSize: 13, height: 32 }} value={anoFiltro} onChange={e => setAnoFiltro(e.target.value)}>
-              {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
-              {!anosDisponiveis.includes(new Date().getFullYear().toString()) && <option value={new Date().getFullYear().toString()}>{new Date().getFullYear()}</option>}
-           </select>
-        </div>
-      </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 16, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+                <Check size={24} strokeWidth={3} />
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Faturas Selecionadas ({selectedIds.length})</div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>{formatCurrency(totalToPay)}</div>
+              </div>
+            </div>
 
-      <div style={{ display: 'grid', gap: 16 }}>
-        {activeTab === 'abertos' ? (
-          titulosAbertos.length > 0 ? (
-            titulosAbertos.map(t => <TituloCardRow key={t.id} t={t} />)
-          ) : (
-            <EmptyStateCard 
-               title="Tudo certo por aqui!"
-               description="Não há nenhuma mensalidade em aberto para este aluno."
-               icon={<CheckCircle2 size={48} color="#10b981" style={{ opacity: 0.5 }}/>}
-            />
-          )
-        ) : (
-          titulosHistorico.length > 0 ? (
-            titulosHistorico.map(t => <TituloCardRow key={t.id} t={t} />)
-          ) : (
-             <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-               Ainda não há pagamentos registrados neste ano letivo.
-             </div>
-          )
+            <motion.button 
+              whileTap={{ scale: 0.95 }}
+              onMouseEnter={() => setPayHover(true)}
+              onMouseLeave={() => setPayHover(false)}
+              style={{ 
+                display: 'flex', alignItems: 'center', gap: 12,
+                background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+                color: 'white', border: 'none', borderRadius: 20,
+                padding: '16px 40px', fontSize: 16, fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: payHover ? '0 12px 24px rgba(79, 70, 229, 0.4)' : '0 8px 16px rgba(79, 70, 229, 0.25)',
+                transition: 'all 0.3s'
+              }}
+            >
+              <CreditCard size={20} />
+              Pagar Faturas
+            </motion.button>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
 
-      <AnimatePresence>
-{/* ── Modal de Avisos do Sistema ── */}
-      {modalAviso && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 24, width: '100%', maxWidth: 440, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.8)', overflow: 'hidden' }}>
-            <div style={{ padding: '24px 24px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05))', borderBottom: '1px solid rgba(239, 68, 68, 0.1)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                 <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                   <AlertTriangle size={24} color="#ef4444" />
-                 </div>
-                 <div>
-                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-main))' }}>Aviso do Sistema</h3>
-                   <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Pendências Financeiras</span>
-                 </div>
-               </div>
-               <button onClick={() => setModalAviso(false)} className="btn btn-ghost btn-icon" style={{ borderRadius: 12 }}>
-                 <X size={20} />
-               </button>
-            </div>
-            
-            <div style={{ padding: 24, fontSize: 14, color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>
-               <p style={{ marginBottom: 16 }}>
-                 Identificamos que existem <strong>{titulosAtrasados.length} mensalidade(s)</strong> em atraso no sistema para o aluno <strong>{aluno.nome.split(' ')[0]}</strong>.
-               </p>
-               <p style={{ marginBottom: 0 }}>
-                 Para evitar juros, multas ou possíveis bloqueios no acesso pedagógico, recomendamos a regularização o mais breve possível diretamente por esta Central Financeira.
-               </p>
-            </div>
-            
-            <div style={{ padding: '16px 24px', background: 'hsl(var(--bg-elevated))', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end' }}>
-               <button 
-                 onClick={() => setModalAviso(false)}
-                 className="btn btn-primary" 
-                 style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)' }}
-               >
-                 Estou Ciente
-               </button>
-            </div>
-          </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
-
-      <AnimatePresence>
-{/* ── Modal de Copiar Pix / Código ── */}
-      {modalPix && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-base))', borderRadius: 24, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 40px 120px rgba(0,0,0,0.8)', overflow: 'hidden' }}>
-            <div style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.05))', borderBottom: '1px solid rgba(99,102,241,0.1)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                 <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                   {modalPix.tipo === 'pix' ? <QrCode size={24} color="hsl(var(--primary))" /> : <Copy size={24} color="hsl(var(--primary))" />}
-                 </div>
-                 <div>
-                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-main))' }}>
-                     {modalPix.tipo === 'pix' ? 'Copiar Chave Pix' : 'Copiar Linha Digitável'}
-                   </h3>
-                   <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>{modalPix.titulo.descricao}</span>
-                 </div>
-               </div>
-               <button onClick={() => setModalPix(null)} className="btn btn-ghost btn-icon" style={{ borderRadius: 12 }}>
-                 <X size={20} />
-               </button>
-            </div>
-            
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-               <p style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', lineHeight: 1.5, margin: 0 }}>
-                 {modalPix.tipo === 'pix' ? 'Cole a chave Pix abaixo no aplicativo do seu banco para realizar o pagamento instantâneo.' : 'Cole a linha digitável abaixo no aplicativo do seu banco para realizar o pagamento do boleto bancário.'}
-               </p>
-               
-               <div style={{ background: 'rgba(0,0,0,0.03)', padding: 16, borderRadius: 12, border: '1px dashed hsl(var(--border-subtle))', fontFamily: '"JetBrains Mono", monospace', fontSize: 14, wordBreak: 'break-all', textAlign: 'center', fontWeight: 'bold' }}>
-                 {modalPix.tipo === 'pix' ? (modalPix.titulo.linhaDigitavel || '00020126360014br.gov.bcb.pix0114000000000005204000053039865400') : (modalPix.titulo.linhaDigitavel || '34191.09008 00000.000000 00000.00000 0 000000000000')}
-               </div>
-
-               <button 
-                 onMouseLeave={(e) => { e.currentTarget.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" style="margin-right: 8px"><polyline points="20 6 9 17 4 12"></polyline></svg> Copiado com sucesso!` }}
-                 onClick={(e) => {
-                   navigator.clipboard.writeText(modalPix.tipo === 'pix' ? (modalPix.titulo.linhaDigitavel || '00020126') : (modalPix.titulo.linhaDigitavel || '34191'));
-                   e.currentTarget.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check" style="margin-right: 8px"><polyline points="20 6 9 17 4 12"></polyline></svg> Copiado com sucesso!`;
-                 }}
-                 className="btn btn-primary" 
-                 style={{ width: '100%', height: 48, fontSize: 15, fontWeight: 700 }}
-               >
-                 <Copy size={18} style={{ marginRight: 8 }} />
-                 {modalPix.tipo === 'pix' ? 'Copiar Chave' : 'Copiar Código'}
-               </button>
-            </div>
-          </motion.div>
-        
-</motion.div>
-)}</AnimatePresence>
+      {/* Background Decor */}
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '40vh', background: 'linear-gradient(180deg, rgba(248,250,252,1) 0%, rgba(248,250,252,0) 100%)', zIndex: -2 }} />
 
     </div>
   )
 }
-

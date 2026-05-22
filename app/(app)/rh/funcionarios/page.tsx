@@ -1,6 +1,6 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton';
 
 import { useState, useMemo } from 'react'
 import { useData, Funcionario, newId } from '@/lib/dataContext'
@@ -30,21 +30,37 @@ const BLANK_FORM = {
   // extras
   cpf: '', rg: '', dataNascimento: '', telefone: '', celular: '',
   tipoContrato: 'CLT', escolaridade: 'Graduação', cargaHoraria: 40,
-  bonus: 0,
+  bonus: 0, valeTransporte: false,
   pis: '', banco: '', agencia: '', conta: '', observacoes: '',
   perfilSistema: '', // Perfil de acesso do sistema (configuracoes/usuarios)
+  horario: {
+    Dom: { in: '', out1: '', in2: '', out: '' },
+    Seg: { in: '08:00', out1: '12:00', in2: '13:00', out: '17:00' },
+    Ter: { in: '08:00', out1: '12:00', in2: '13:00', out: '17:00' },
+    Qua: { in: '08:00', out1: '12:00', in2: '13:00', out: '17:00' },
+    Qui: { in: '08:00', out1: '12:00', in2: '13:00', out: '17:00' },
+    Sex: { in: '08:00', out1: '12:00', in2: '13:00', out: '17:00' },
+    Sab: { in: '', out1: '', in2: '', out: '' },
+  }
 }
 
 type FormData = typeof BLANK_FORM
 
 export default function FuncionariosPage() {
   const { mantenedores = [], logSystemAction, perfis } = useData();
-  const [funcionariosRaw, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const [funcionariosRaw, setFuncionarios, { loading: isLoading }] = useSupabaseArray<any>('rh/funcionarios');
   const funcionarios = funcionariosRaw || [];
 
   // Unidades do sistema
   const unidades = useMemo(() =>
     (mantenedores || []).flatMap(m => (m.unidades || []).map((u: any) => u.nomeFantasia || u.razaoSocial)), [mantenedores])
+
+  // Departamentos que realmente possuem funcionários
+  const departamentosAtivos = useMemo(() => {
+    const deps = (funcionarios || []).map((f: any) => f.departamento).filter(Boolean)
+    return Array.from(new Set(deps)).sort() as string[]
+  }, [funcionarios])
+
 
   const [search, setSearch] = useState('')
   const [filtroSt, setFiltroSt] = useState('Todos')
@@ -55,6 +71,37 @@ export default function FuncionariosPage() {
   const [importModal, setImportModal] = useState(false)
   const [aba, setAba] = useState<'pessoal' | 'profissional' | 'documentos' | 'contato'>('pessoal')
   const [form, setForm] = useState<FormData>({ ...BLANK_FORM })
+
+  const calcularHorasDia = (h: { in: string; out1: string; in2: string; out: string }) => {
+    if (!h.in || !h.out) return 0
+    const parseTime = (t: string) => {
+      const [h, m] = t.split(':').map(Number)
+      return h + m / 60
+    }
+    const t1 = parseTime(h.in)
+    const t2 = h.out1 ? parseTime(h.out1) : t1
+    const t3 = h.in2 ? parseTime(h.in2) : t2
+    const t4 = parseTime(h.out)
+    
+    const p1 = t2 - t1
+    const p2 = t4 - t3
+    return Math.max(0, p1 + p2)
+  }
+
+  const totalSemana = useMemo(() => {
+    return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].reduce((acc, dia) => {
+      const h = (form as any).horario?.[dia] || { in: '', out1: '', in2: '', out: '' }
+      return acc + calcularHorasDia(h)
+    }, 0)
+  }, [form.horario])
+
+  const handleHorarioChange = (dia: string, campo: string, valor: string) => {
+    setForm(prev => {
+      const horario = { ...(prev.horario || {}) } as any
+      horario[dia] = { ...(horario[dia] || { in: '', out1: '', in2: '', out: '' }), [campo]: valor }
+      return { ...prev, horario }
+    })
+  }
   const [isSaving, setIsSaving] = useState(false)
   const [userCreateResult, setUserCreateResult] = useState<{ok: boolean; msg: string} | null>(null)
 
@@ -86,10 +133,12 @@ export default function FuncionariosPage() {
       celular: (f as any).celular || '', tipoContrato: (f as any).tipoContrato || 'CLT',
       escolaridade: (f as any).escolaridade || 'Graduação', cargaHoraria: (f as any).cargaHoraria || 40,
       bonus: (f as any).bonus || 0,
+      valeTransporte: (f as any).valeTransporte || false,
       pis: (f as any).pis || '', banco: (f as any).banco || '',
       agencia: (f as any).agencia || '', conta: (f as any).conta || '',
       observacoes: (f as any).observacoes || '',
       perfilSistema: (f as any).perfilSistema || '',
+      horario: (f as any).horario || BLANK_FORM.horario,
     })
     setEditingId(f.id); setModal('edit'); setAba('pessoal')
   }
@@ -182,7 +231,22 @@ export default function FuncionariosPage() {
       'Salario': 5000.00,
       'Email': 'joao@escola.com.br',
       'Admissao': '2023-01-15',
-      'Unidade': 'Unidade Matriz'
+      'Unidade': 'Unidade Matriz',
+      'CPF': '000.000.000-00',
+      'RG': '00.000.000-0',
+      'DataNascimento': '1990-05-20',
+      'Telefone': '(11) 3000-0000',
+      'Celular': '(11) 99000-0000',
+      'TipoContrato': 'CLT',
+      'Escolaridade': 'Graduação',
+      'CargaHoraria': 40,
+      'Bonus': 0,
+      'PIS': '000.00000.00-0',
+      'Banco': '001 — Banco do Brasil',
+      'Agencia': '0001-5',
+      'Conta': '12345-6',
+      'Observacoes': 'Histórico relevante',
+      'PerfilSistema': 'Professor'
     }])
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Funcionarios")
@@ -229,9 +293,21 @@ export default function FuncionariosPage() {
           admissao: d || new Date().toISOString().split('T')[0],
           unidade: r['Unidade'] || '',
           status: 'ativo',
-          tipoContrato: 'CLT',
-          escolaridade: 'Ensino Médio',
-          cargaHoraria: 40
+          cpf: r['CPF'] || '',
+          rg: r['RG'] || '',
+          dataNascimento: r['DataNascimento'] || '',
+          telefone: r['Telefone'] || '',
+          celular: r['Celular'] || '',
+          tipoContrato: r['TipoContrato'] || 'CLT',
+          escolaridade: r['Escolaridade'] || 'Graduação',
+          cargaHoraria: parseFloat(r['CargaHoraria']) || 40,
+          bonus: parseFloat(r['Bonus']) || 0,
+          pis: r['PIS'] || '',
+          banco: r['Banco'] || '',
+          agencia: r['Agencia'] || '',
+          conta: r['Conta'] || '',
+          observacoes: r['Observacoes'] || '',
+          perfilSistema: r['PerfilSistema'] || '',
         })
       })
 
@@ -302,14 +378,35 @@ export default function FuncionariosPage() {
           </select>
           <select className="form-input" style={{ width: 170 }} value={filtroDep} onChange={e => setFiltroDep(e.target.value)}>
             <option value="Todos">Todos departamentos</option>
-            {DEPARTAMENTOS.map(d => <option key={d}>{d}</option>)}
+            {departamentosAtivos.map(d => <option key={d}>{d}</option>)}
           </select>
           <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{filtered.length} resultado(s)</span>
         </div>
       </div>
 
       {/* Lista */}
-      {funcionarios.length === 0 ? (
+      {isLoading ? (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Funcionário</th>
+                <th>Cargo / Depto</th>
+                <th>Salário</th>
+                <th>Admissão</th>
+                <th>Unidade</th>
+                <th>Perfil Sistema</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableSkeleton rows={8} cols={9} />
+            </tbody>
+          </table>
+        </div>
+      ) : funcionarios.length === 0 ? (
         <EmptyState icon="👥" title="Nenhum funcionário cadastrado"
           description="Cadastre o primeiro colaborador para iniciar a gestão de RH."
           action={<button className="btn btn-primary" onClick={openAdd}><UserPlus size={14} /> Cadastrar Primeiro Funcionário</button>} />
@@ -524,6 +621,26 @@ export default function FuncionariosPage() {
                     <label className="form-label">Carga Horária (h/semana)</label>
                     <input type="number" className="form-input" value={form.cargaHoraria} onChange={e => set('cargaHoraria', +e.target.value)} min={1} max={60} />
                   </div>
+                  <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>Vale Transporte</div>
+                      <div style={{ fontSize: '11px', color: '#64748b' }}>Habilitar desconto padrão de 6% sobre o salário base.</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={() => set('valeTransporte', false)}
+                        style={{ height: '32px', padding: '0 16px', background: !form.valeTransporte ? '#e2e8f0' : '#fff', color: !form.valeTransporte ? '#475569' : '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Não
+                      </button>
+                      <button 
+                        onClick={() => set('valeTransporte', true)}
+                        style={{ height: '32px', padding: '0 16px', background: form.valeTransporte ? '#2563eb' : '#fff', color: form.valeTransporte ? '#fff' : '#94a3b8', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Sim
+                      </button>
+                    </div>
+                  </div>
                   <div style={{ gridColumn: '1/-1' }}>
                     <label className="form-label">Unidade</label>
                     {unidades.length > 0 ? (
@@ -534,6 +651,49 @@ export default function FuncionariosPage() {
                     ) : (
                       <input className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)} placeholder="Unidade (configure em Administrativo)" />
                     )}
+                  </div>
+
+                  {/* Horário de Trabalho */}
+                  <div style={{ gridColumn: '1/-1', marginTop: 16 }}>
+                    <label className="form-label" style={{ fontWeight: 700 }}>Horário de Trabalho</label>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Dia</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Início</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Almoço</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Retorno</th>
+                            <th style={{ textAlign: 'left', padding: '6px' }}>Saída</th>
+                            <th style={{ textAlign: 'right', padding: '6px' }}>Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
+                            const h = (form as any).horario?.[dia] || { in: '', out1: '', in2: '', out: '' }
+                            const totalDia = calcularHorasDia(h)
+                            return (
+                              <tr key={dia} style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                                <td style={{ padding: '6px', fontWeight: 700 }}>{dia}</td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.in} onChange={e => handleHorarioChange(dia, 'in', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.out1} onChange={e => handleHorarioChange(dia, 'out1', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.in2} onChange={e => handleHorarioChange(dia, 'in2', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.out} onChange={e => handleHorarioChange(dia, 'out', e.target.value)} /></td>
+                                <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: totalDia > 0 ? '#34d399' : 'hsl(var(--text-muted))' }}>{totalDia.toFixed(2)}h</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 13 }}>
+                      <div>
+                        <strong>Total Semana:</strong> {totalSemana.toFixed(2)}h
+                      </div>
+                      <div>
+                        <strong>Total Mês (Fator 5):</strong> {(totalSemana * 5).toFixed(2)}h
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -645,7 +805,7 @@ export default function FuncionariosPage() {
                   Para importar corretamente, sua planilha deve seguir o modelo padrão com as seguintes colunas (mesmo nome no cabeçalho):
                 </p>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {['Nome', 'Cargo', 'Departamento', 'Salario', 'Email', 'Admissao', 'Unidade'].map(col => (
+                  {['Nome', 'Cargo', 'Departamento', 'Salario', 'Email', 'Admissao', 'Unidade', 'CPF', 'TipoContrato', 'PIS', 'Banco'].map(col => (
                     <span key={col} style={{ padding: '2px 8px', borderRadius: 4, background: 'hsl(var(--bg-elevated))', fontSize: 11, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))' }}>{col}</span>
                   ))}
                 </div>

@@ -39,25 +39,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ user: sysUser })
     }
 
-    // ── 2. Check Supabase Auth for users with a prior login ─────────
-    const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-    const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === q)
-    
-    if (authUser?.last_sign_in_at) {
-      return NextResponse.json({ 
-        error: 'Sua senha já foi configurada. Use Login normal.' 
-      }, { status: 409 })
-    }
+    // Fetch active Auth users to check their actual existence
+    const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
+    const authUsersList = listData?.users || []
 
-    // ── 3. Check ALUNOS — by email, matricula or CPF ────────────────
+    // ── 2. Check ALUNOS — by email, matricula or CPF ────────────────
     const { data: alunosRows } = await supabaseAdmin
       .from('alunos')
-      .select('id, nome, email, matricula, cpf, telefone, dados, status')
+      .select('id, nome, email, matricula, telefone, dados, status')
 
     const aluno = (alunosRows || []).find((a: any) => {
       const emailA   = (a.email || a.dados?.email || '').trim().toLowerCase()
       const matricA  = (a.matricula || a.dados?.codigo || '').trim().toLowerCase()
-      const cpfA     = (a.cpf || '').replace(/\D/g, '')
+      const cpfA     = (a.cpf || a.dados?.cpf || '').replace(/\D/g, '')
       const qDigits  = q.replace(/\D/g, '')
       return (
         (emailA && emailA === q) ||
@@ -76,10 +70,9 @@ export async function POST(request: Request) {
       // Check if student already set a password in Auth
       const matricula = aluno.matricula || aluno.dados?.codigo || aluno.id
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
-      // Check if student already set a password in Auth (check both virtual and real email)
       const storedAlunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
       const authEmail = isValidEmail(storedAlunoEmail) ? storedAlunoEmail : virtualEmail
-      const existingAuth = listData?.users?.find(
+      const existingAuth = authUsersList.find(
         (u: any) => u.email?.toLowerCase() === virtualEmail || (isValidEmail(storedAlunoEmail) && u.email?.toLowerCase() === storedAlunoEmail)
       )
       if (existingAuth?.last_sign_in_at) {
@@ -102,15 +95,15 @@ export async function POST(request: Request) {
       })
     }
 
-    // ── 4. Check RESPONSAVEIS table — by email, CPF or celular ──────
+    // ── 3. Check RESPONSAVEIS table — by email, CPF or celular ──────
     const { data: responsaveisRows } = await supabaseAdmin
       .from('responsaveis')
-      .select('id, nome, email, cpf, celular, codigo')
+      .select('id, nome, email, celular, codigo, telefone, dados')
 
     const responsavel = (responsaveisRows || []).find((r: any) => {
       const emailR   = (r.email || '').trim().toLowerCase()
-      const cpfR     = (r.cpf || '').replace(/\D/g, '')
-      const celR     = (r.celular || '').replace(/\D/g, '')
+      const cpfR     = (r.cpf || r.dados?.cpf || '').replace(/\D/g, '')
+      const celR     = (r.celular || r.telefone || '').replace(/\D/g, '')
       const codigoR  = (r.codigo || '').trim().toLowerCase()
       const qDigits  = q.replace(/\D/g, '')
       return (
@@ -122,13 +115,34 @@ export async function POST(request: Request) {
     })
 
     if (responsavel) {
-      const existingAuthResp = listData?.users?.find(
+      // ── Verify if they are Financeiro or Pedagogico ────────────────
+      const { data: links } = await supabaseAdmin
+        .from('aluno_responsavel')
+        .select('resp_financeiro, resp_pedagogico')
+        .eq('responsavel_id', responsavel.id)
+
+      const isAllowed = (links || []).some(
+        (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+      )
+
+      if (!isAllowed) {
+        return NextResponse.json({ 
+          error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
+        }, { status: 403 })
+      }
+
+      const existingAuthResp = authUsersList.find(
         (u: any) => u.email?.toLowerCase() === (responsavel.email || '').toLowerCase()
       )
-      if (existingAuthResp?.last_sign_in_at) {
-        return NextResponse.json({ 
-          error: 'Sua senha já foi configurada. Use Login normal.' 
-        }, { status: 409 })
+      if (existingAuthResp) {
+        // Se a conta no Auth existe mas o ID NÃO coincide com o do responsável no banco (conta fantasma)
+        if (existingAuthResp.id !== responsavel.id) {
+          await supabaseAdmin.auth.admin.deleteUser(existingAuthResp.id).catch((e: any) => console.error('Erro ao deletar conta fantasma de responsável no primeiro acesso:', e))
+        } else if (existingAuthResp.last_sign_in_at) {
+          return NextResponse.json({ 
+            error: 'Sua senha já foi configurada. Use Login normal.' 
+          }, { status: 409 })
+        }
       }
       return NextResponse.json({ 
         user: {
@@ -141,6 +155,12 @@ export async function POST(request: Request) {
           userType: 'responsavel'
         }
       })
+    }
+
+    // Se não há cadastro ativo correspondente mas a conta existe no Auth, limpa a conta fantasma imediatamente
+    const authGhost = authUsersList.find((u: any) => u.email?.toLowerCase() === q)
+    if (authGhost) {
+      await supabaseAdmin.auth.admin.deleteUser(authGhost.id).catch((e: any) => console.error('Erro ao deletar conta fantasma órfã no primeiro acesso:', e))
     }
 
     return NextResponse.json({ error: 'Nenhum cadastro encontrado. Verifique com a administração.' }, { status: 404 })

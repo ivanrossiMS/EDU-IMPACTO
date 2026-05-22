@@ -1,6 +1,8 @@
 'use client'
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
+import { useSupabaseArray, useSupabaseCollection } from '@/lib/useSupabaseCollection'
+import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type GuardianType = 'mae' | 'pai' | 'avo' | 'motorista' | 'outro'
@@ -65,9 +67,11 @@ export interface SaidaConfig {
   voiceTruncateTurma: boolean
   voiceTruncateChar: string
   voiceRate: number
+  voicePitch: number
   voiceVolume: number
   voiceRepeatCount: number
   tvDisplayTime: number   // seconds to keep on TV after confirm
+  tvUrgentTime: number    // minutes to flag a student as late/urgent
   requireConfirmation: boolean
   allowMultiRFID: boolean
 }
@@ -80,9 +84,11 @@ const DEFAULT_CONFIG: SaidaConfig = {
   voiceTruncateTurma: false,
   voiceTruncateChar: '-',
   voiceRate: 0.9,
+  voicePitch: 1.0,
   voiceVolume: 1.0,
   voiceRepeatCount: 0,
   tvDisplayTime: 30,
+  tvUrgentTime: 5,
   requireConfirmation: true,
   allowMultiRFID: true,
 }
@@ -115,6 +121,8 @@ interface SaidaCtx {
   activeCalls: PickupCall[]
   logs: SaidaLog[]
   config: SaidaConfig
+  realtimeStatus: 'online' | 'connecting' | 'offline'
+  isLoadingCalls: boolean
   // actions
   readRFID: (code: string) => { guardian: Guardian | null; error?: string }
   callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null) => PickupCall | null
@@ -134,6 +142,8 @@ interface SaidaCtx {
   getStudentsForGuardian: (guardianId: string) => string[]
   updateConfig: (patch: Partial<SaidaConfig>) => void
   clearLog: () => void
+  clearCalls: () => void
+  refreshCalls: () => Promise<void>
 }
 
 const Ctx = createContext<SaidaCtx | null>(null)
@@ -146,52 +156,119 @@ export function useSaida() {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function SaidaProvider({ children }: { children: React.ReactNode }) {
-  const [guardians, setGuardians] = useState<Guardian[]>(() => load(LS.guardians, []))
-  const [rfidMap, setRfidMap] = useState<GuardianRFID[]>(() => load(LS.rfid, []))
-  const [studentGuardians, setStudentGuardians] = useState<StudentGuardian[]>(() => load(LS.studentGuardians, []))
+  const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [])
+  const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [])
+  const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls }] = useSupabaseArray<PickupCall>('saida/calls', [])
+  const [logs, setLogs] = useSupabaseArray<SaidaLog>('saida/logs', [])
+  const [config, setConfig] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
+
+  const { emit, on } = useBroadcastRealtime()
+  const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
+
   const getTodayStr = useCallback(() => {
     const d = new Date()
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }, [])
 
-  const [activeCalls, setActiveCalls] = useState<PickupCall[]>(() => {
-    const list = load<PickupCall[]>(LS.calls, [])
-    const d = new Date()
-    const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    return list.filter(c => {
-      const cd = new Date(c.calledAt)
-      const callStr = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`
-      return callStr === todayStr
-    })
-  })
-  const [logs, setLogs] = useState<SaidaLog[]>(() => load<SaidaLog[]>(LS.logs, []).slice(0, 500))
-  const [config, setConfig] = useState<SaidaConfig>(() => ({ ...DEFAULT_CONFIG, ...load(LS.config, {}) }))
+  const channelRef = useRef<any>(null)
 
-  const { emit, on } = useBroadcastRealtime()
-
-  // Persist
-  useEffect(() => { save(LS.guardians, guardians) }, [guardians])
-  useEffect(() => { save(LS.rfid, rfidMap) }, [rfidMap])
-  useEffect(() => { save(LS.studentGuardians, studentGuardians) }, [studentGuardians])
-  useEffect(() => { save(LS.calls, activeCalls) }, [activeCalls])
-  useEffect(() => { save(LS.logs, logs) }, [logs])
-  useEffect(() => { save(LS.config, config) }, [config])
-
-  // ── Zerar lista diariamente à 00:00 ────────────────────────────────────────
-  useEffect(() => {
-    const filterTodayOnly = () => {
-      const todayStr = getTodayStr()
-      setActiveCalls(prev => prev.filter(c => {
-        const cd = new Date(c.calledAt)
-        const callStr = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}-${String(cd.getDate()).padStart(2, '0')}`
-        return callStr === todayStr
-      }))
+  const sendBroadcast = useCallback((event: string, data: any) => {
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'CALL_EVENT',
+        payload: { event, data }
+      })
     }
-    const interval = setInterval(filterTodayOnly, 60000)
-    return () => clearInterval(interval)
-  }, [getTodayStr])
+  }, [])
 
-  // ── Listen for remote updates (Monitor TV) ────────────────────────────────
+  // ── Listen to Supabase Realtime changes and Broadcast Room ──────────────────
+  useEffect(() => {
+    let isMounted = true
+    let channel: any = null
+
+    const setupRealtime = async () => {
+      setRealtimeStatus('connecting')
+      
+      // Clean up any stale channel from React Strict Mode re-mounts fully
+      const existingChannels = supabase.getChannels().filter(c => c.topic === 'realtime:saida_calls_shared_room')
+      for (const c of existingChannels) {
+        await supabase.removeChannel(c)
+      }
+
+      if (!isMounted) return
+
+      // Use a stable, shared channel room for network-wide broadcasts
+      channel = supabase.channel('saida_calls_shared_room')
+      channelRef.current = channel
+
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'saida_calls' },
+          (payload: any) => {
+            const { eventType, new: newRow, old: oldRow } = payload
+            
+            if (eventType === 'INSERT') {
+              const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              setActiveCalls((prev: PickupCall[]) => {
+                if (prev.some(c => c.id === call.id)) return prev
+                return [call, ...prev]
+              })
+            } else if (eventType === 'UPDATE') {
+              const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === call.id ? call : c))
+            } else if (eventType === 'DELETE') {
+              setActiveCalls((prev: PickupCall[]) => prev.filter(c => c.id !== oldRow.id))
+            }
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'CALL_EVENT' },
+          (payload: any) => {
+            const { event, data } = payload.payload || {}
+            if (event === 'CALL_STUDENT') {
+              setActiveCalls((prev: PickupCall[]) => {
+                if (prev.some(c => c.id === data.id)) return prev
+                return [data, ...prev]
+              })
+            } else if (event === 'CONFIRM_PICKUP') {
+              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+            } else if (event === 'CANCEL_CALL') {
+              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
+            } else if (event === 'RECALL_STUDENT') {
+              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
+            } else if (event === 'REVERT_CALL') {
+              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
+            } else if (event === 'CLEAR_ALL_CALLS') {
+              setActiveCalls([])
+            }
+          }
+        )
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            if (isMounted) setRealtimeStatus('online')
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            if (isMounted) setRealtimeStatus('offline')
+          } else {
+            if (isMounted) setRealtimeStatus('connecting')
+          }
+        })
+    }
+
+    setupRealtime()
+
+    return () => {
+      isMounted = false
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [setActiveCalls])
+
+  // ── Listen for remote updates (Monitor TV / same-browser tab sync) ─────────────────
   useEffect(() => {
     const unsub = on('*', payload => {
       if ((payload.data as any)._remote) return  // avoid loops
@@ -213,6 +290,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       }
       if (payload.event === 'REVERT_CALL' && d.callId) {
         setActiveCalls(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
+      }
+      if (payload.event === 'CLEAR_ALL_CALLS') {
+        setActiveCalls([])
       }
     })
     return () => { unsub() }
@@ -256,9 +336,10 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
     }
     setActiveCalls(prev => [call, ...prev])
     emit('CALL_STUDENT', { ...call })
+    sendBroadcast('CALL_STUDENT', call)
     addLog('CALL', `Chamada: ${studentName} (${studentClass}) — por ${guardianName}`)
     return call
-  }, [activeCalls, emit, addLog])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── blockAttempt ──────────────────────────────────────────────────
   // Logs a BLOCKED access attempt (proibido or wrong day) without creating an
@@ -290,8 +371,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
     ))
     const call = activeCalls.find(c => c.id === callId)
     emit('CONFIRM_PICKUP', { callId, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: now() })
     addLog('CONFIRM', `Saída confirmada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
@@ -300,8 +382,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
     ))
     const call = activeCalls.find(c => c.id === callId)
     emit('CANCEL_CALL', { callId, _remote: false })
+    sendBroadcast('CANCEL_CALL', { callId })
     addLog('CANCEL', `Chamada cancelada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── recallStudent ────────────────────────────────────────────────────────
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
@@ -311,10 +394,13 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       c.id === callId ? { ...c, status: 'waiting', calledAt: now() } : c
     ))
     emit('RECALL_STUDENT', { callId, _remote: false })
-    const cName = config.voiceTruncateTurma && config.voiceTruncateChar ? call.studentClass.split(config.voiceTruncateChar)[0].trim() : call.studentClass
+    sendBroadcast('RECALL_STUDENT', { callId, calledAt: now() })
+    const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
+      ? call.studentClass.split(config.voiceTruncateChar)[0].trim() 
+      : call.studentClass
     speakFn(`${call.studentName}, turma ${cName}`)
     addLog('RECALL', `Rechamada: ${call.studentName}`)
-  }, [activeCalls, emit, addLog])
+  }, [activeCalls, emit, addLog, config, sendBroadcast])
 
   // ─── revertCall ───────────────────────────────────────────────────────────
   const revertCall = useCallback((callId: string) => {
@@ -324,8 +410,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       c.id === callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c
     ))
     emit('REVERT_CALL', { callId, _remote: false })
+    sendBroadcast('REVERT_CALL', { callId, calledAt: now() })
     addLog('REVERT', `Chamada revertida: ${call.studentName}`)
-  }, [activeCalls, emit, addLog])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── Guardian CRUD ────────────────────────────────────────────────────────
   const addGuardian = useCallback((g: Omit<Guardian, 'id'>): Guardian => {
@@ -388,15 +475,53 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
 
   const clearLog = useCallback(() => setLogs([]), [])
 
+  const clearCalls = useCallback(() => {
+    setActiveCalls([])
+    emit('CLEAR_ALL_CALLS', { _remote: false })
+    sendBroadcast('CLEAR_ALL_CALLS', {})
+    addLog('CLEAR_CALLS', `Todas as chamadas foram zeradas.`)
+  }, [emit, addLog, sendBroadcast])
+
+  // ── Zerar lista diariamente às 23:59 ────────────────────────────────────────
+  useEffect(() => {
+    const checkTimeAndClear = () => {
+      const d = new Date()
+      if (d.getHours() === 23 && d.getMinutes() === 59) {
+        const lastCleared = localStorage.getItem('lastClearedDate')
+        const todayStr = getTodayStr()
+        // Prevents triggering multiple times in the same minute
+        if (lastCleared !== todayStr) {
+          clearCalls()
+          localStorage.setItem('lastClearedDate', todayStr)
+        }
+      }
+    }
+    const interval = setInterval(checkTimeAndClear, 30000) // Check every 30s
+    return () => clearInterval(interval)
+  }, [clearCalls, getTodayStr])
+
+  const refreshCalls = useCallback(async () => {
+    try {
+      const res = await fetch('/api/saida/calls')
+      if (res.ok) {
+        const data = await res.json()
+        const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        setActiveCalls(arr)
+      }
+    } catch (e) {
+      console.error('Erro ao recarregar chamadas:', e)
+    }
+  }, [setActiveCalls])
+
   return (
     <Ctx.Provider value={{
-      guardians, rfidMap, studentGuardians, activeCalls, logs, config,
+      guardians, rfidMap, studentGuardians, activeCalls, logs, config, realtimeStatus, isLoadingCalls,
       readRFID, callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall,
       addGuardian, updateGuardian, removeGuardian,
       addRFID, removeRFID,
       linkStudentGuardian, unlinkStudentGuardian,
       getGuardiansForStudent, getStudentsForGuardian,
-      updateConfig, clearLog,
+      updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}
     </Ctx.Provider>

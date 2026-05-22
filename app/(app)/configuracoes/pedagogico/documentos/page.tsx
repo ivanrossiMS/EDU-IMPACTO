@@ -1195,13 +1195,14 @@ function ModalGerar({ doc, onClose, alunos, turmas, onGerado, mapeamentos }: {
   const [gerando, setGerando] = useState(false)
 
   const alunosFiltrados = useMemo(() => {
-    if (!busca) return alunos.slice(0, 20)
+    const list = Array.isArray(alunos) ? alunos : []
+    if (!busca) return list.slice(0, 20)
     const q = busca.toLowerCase()
-    return alunos.filter(a => a.nome?.toLowerCase().includes(q) || a.matricula?.includes(busca)).slice(0, 20)
+    return list.filter(a => a.nome?.toLowerCase().includes(q) || a.matricula?.includes(busca)).slice(0, 20)
   }, [alunos, busca])
 
-  const alunoSel = alunos.find(a => a.id === alunoId)
-  const turmaSel = turmas.find(t => t.id === alunoSel?.turmaId || t.nome === alunoSel?.turma)
+  const alunoSel = (Array.isArray(alunos) ? alunos : []).find(a => a.id === alunoId)
+  const turmaSel = (Array.isArray(turmas) ? turmas : []).find(t => t.id === alunoSel?.turmaId || t.nome === alunoSel?.turma)
 
   const gerarPreview = () => {
     if (!alunoSel) return

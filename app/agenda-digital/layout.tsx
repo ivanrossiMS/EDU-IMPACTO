@@ -1,5 +1,7 @@
 'use client'
+// Layout da Agenda Digital com Sidebar Moderna
 
+import React, { useState, useEffect } from 'react'
 import { SaidaProvider } from '@/lib/saidaContext'
 import { AgendaDigitalProvider, useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { DataProvider } from '@/lib/dataContext'
@@ -7,13 +9,35 @@ import { FormulariosProvider } from '@/lib/formulariosContext'
 import { RelatoriosProvider } from '@/lib/relatoriosContext'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { BookHeart, LogOut, Search, Bell } from 'lucide-react'
-import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { getInitials } from '@/lib/utils'
-import { useEffect, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
+import { ADSidebar } from './components/Sidebar'
+import dynamic from 'next/dynamic'
+const FloatingChat = dynamic(
+  () => import('@/components/FloatingChat').then(m => ({ default: m.FloatingChat })),
+  { ssr: false, loading: () => null }
+)
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
+  const { currentUser, hydrated } = useApp()
+  const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+
+  if (!hydrated) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+
+  // Família não precisa carregar os dados massivos globais do ERP
+  if (isFamily) {
+    return (
+      <FormulariosProvider>
+        <SaidaProvider>
+          <AgendaDigitalProvider>
+            <AgendaDigitalLayoutInner>
+              {children}
+            </AgendaDigitalLayoutInner>
+          </AgendaDigitalProvider>
+        </SaidaProvider>
+      </FormulariosProvider>
+    )
+  }
+
   return (
     <DataProvider>
       <FormulariosProvider>
@@ -32,10 +56,19 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 }
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
-  const { bannerUrl } = useAgendaDigital()
+  const { bannerUrl, adLoading } = useAgendaDigital()
   const { currentUser, hydrated } = useApp()
   const { perfis } = useData()
   const router = useRouter()
+  const pathname = usePathname()
+  const [mounted, setMounted] = React.useState(false)
+  
+  const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno')
+  
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
   // Block access if profile doesn't have '/agenda-digital' permission
@@ -64,55 +97,27 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }
   }
 
+  if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+
   return (
-        <div className="agenda-digital-wrapper" style={{ 
-          minHeight: '100vh', 
-          background: 'hsl(var(--bg-main))',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
+    <div className="agenda-digital-wrapper" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'hsl(var(--bg-main))' }}>
         <style dangerouslySetInnerHTML={{__html: `
           /* Esconde a interface do ERP */
           .sidebar { display: none !important; }
           .topbar { display: none !important; }
           .main-content { padding-left: 0 !important; }
           
-          /* Estilos específicos Agenda Digital */
-          .ad-navbar {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05));
-            border-bottom: 1px solid hsl(var(--border-subtle));
-            padding: 0 32px;
-            height: 72px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-          }
-          .ad-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            text-decoration: none;
-            color: hsl(var(--text-main));
-          }
-          .ad-brand-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            background: var(--gradient-purple);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .ad-banner-global {
-            width: 100%;
-            height: 30vw;
-            min-height: 200px;
-            max-height: 300px;
-            position: relative;
-          }
-          .ad-main-global {
+          .no-scrollbar::-webkit-scrollbar { display: none; }
+          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+          .ad-main-scroll {
             flex: 1;
+            overflow-y: auto;
+            position: relative;
+            background: #f8fafc;
+          }
+
+          .ad-content-inner {
             padding: 32px;
             max-width: 1400px;
             margin: 0 auto;
@@ -120,56 +125,37 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
             z-index: 10;
           }
-          @media (max-width: 768px) {
-            .ad-banner-global {
-              height: auto !important;
-              min-height: unset !important;
-              max-height: unset !important;
-              background: transparent !important;
-              padding: 0 !important;
-            }
-            @keyframes bannerPopIn {
-              0% { opacity: 0; transform: translateY(-10px) scale(0.98); }
-              100% { opacity: 1; transform: translateY(0) scale(1); }
-            }
-            @keyframes gentleFloatBanner {
-              0% { transform: translateY(0); }
-              50% { transform: translateY(-3px); }
-              100% { transform: translateY(0); }
-            }
-            .ad-banner-global img {
-               position: relative !important;
-               object-fit: contain !important;
-               height: auto !important;
-               width: 100% !important;
-               background: transparent !important;
-               display: block;
-               border-radius: 0 0 24px 24px !important;
-               box-shadow: 0 16px 32px rgba(0,0,0,0.1) !important;
-               border: none !important;
-               box-sizing: border-box !important;
-               animation: bannerPopIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards, gentleFloatBanner 6s ease-in-out infinite 0.8s !important;
-            }
-            .ad-banner-gradient {
-               display: none !important;
-            }
-            .ad-main-global {
-              padding: 0 !important;
-              margin-top: 0 !important;
-            }
+
+          .ad-banner-global {
+            width: 100%;
+            height: 240px;
+            position: relative;
+          }
+
+          @media (max-width: 1024px) {
+            .ad-sidebar-container { display: none; }
           }
         `}} />
         
-        {bannerUrl && (
-          <div className="ad-banner-global">
-             <img src={bannerUrl} alt="Cover Banner" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
-             <div className="ad-banner-gradient" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, hsl(var(--bg-main)), transparent)' }} />
+        {!isSelectStudent && !adLoading && (
+          <div className="ad-sidebar-container">
+            <ADSidebar />
           </div>
         )}
 
-        <main className="ad-main-global" style={{ marginTop: bannerUrl ? '-60px' : 0 }}>
-          {children}
-        </main>
-      </div>
+        <div className="ad-main-scroll no-scrollbar">
+          {bannerUrl && (
+            <div className="ad-banner-global">
+              <img src={bannerUrl} alt="Cover Banner" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
+            </div>
+          )}
+
+          <main className="ad-content-inner" style={{ marginTop: bannerUrl ? '-80px' : 0 }}>
+            {children}
+          </main>
+          <FloatingChat />
+        </div>
+    </div>
   )
 }

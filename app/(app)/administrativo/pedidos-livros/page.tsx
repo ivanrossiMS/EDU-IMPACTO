@@ -1,23 +1,27 @@
 'use client'
+import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import React from 'react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
+import { useApp } from '@/lib/context'
 import {
   BookOpen, CheckCircle2, Clock, Search, Users, Building2,
   ChevronDown, X, MessageSquare, RotateCcw, Download, Filter,
-  BookMarked, StickyNote, Check, Layers, PackageCheck, Plus
+  BookMarked, StickyNote, Check, Layers, PackageCheck, Plus, User, CalendarDays,
+  Edit2, Trash2
 } from 'lucide-react'
 
 // ─── Tipos locais ─────────────────────────────────────────────────
 interface PedidoMeta {
   tituloId: string
   feito: boolean
+  usuarioFeito?: string
   dataFeito?: string
   entregue?: boolean
+  usuarioEntrega?: string
   dataEntrega?: string
   obs?: string
 }
@@ -80,11 +84,15 @@ function inferirSegmento(serie?: string, turma?: string): string {
 }
 
 export default function PedidosLivrosPage() {
-  const { cfgEventos } = useData();
-  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [pedidos, setPedidos] = useLocalStorage<PedidoMeta[]>('edu-pedidos-livros', [])
-  const [pedidosManuais, setPedidosManuais] = useLocalStorage<ParcelaUnificada[]>('edu-pedidos-livros-manuais', [])
+  const { cfgEventos, turmas: rawTurmas = [] } = useData();
+  const { currentUser } = useApp();
+
+  const [titulos, setTitulos, { loading: isTitulosLoading }] = useSupabaseArray<any>('titulos');
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos');
+  const [pedidos, setPedidos, { loading: isPedidosLoading }] = useSupabaseArray<PedidoMeta>('administrativo/pedidos-livros', [])
+  const [pedidosManuais, setPedidosManuais, { loading: isPedidosManuaisLoading }] = useSupabaseArray<ParcelaUnificada>('administrativo/pedidos-livros-manuais', [])
+
+  const isLoading = isTitulosLoading || isAlunosLoading || isPedidosLoading || isPedidosManuaisLoading;
 
   // Filtros UI
   const [busca, setBusca]               = React.useState('')
@@ -101,6 +109,108 @@ export default function PedidosLivrosPage() {
   const [buscaAluno, setBuscaAluno] = React.useState('')
   const [showBuscaAluno, setShowBuscaAluno] = React.useState(false)
 
+  // Estados e funções de edição/exclusão de lançamentos
+  const [modalEditar, setModalEditar] = React.useState<GrupoAluno | null>(null)
+  const [editForm, setEditForm] = React.useState({ eventoDescricao: '', valor: '', vencimento: '' })
+
+  function parseStudentParcelId(id: string) {
+    if (id.startsWith('alu-')) {
+      const parts = id.split('-p-');
+      const studentId = parts[0].replace('alu-', '');
+      const parcelId = parts[1];
+      return { type: 'aluno', studentId, parcelId };
+    }
+    if (id.startsWith('man-')) {
+      return { type: 'manual', id };
+    }
+    return { type: 'titulo', id };
+  }
+
+  const handleSaveEdit = () => {
+    if (!modalEditar) return;
+    const parsed = parseStudentParcelId(modalEditar.pedidoId);
+    if (parsed.type === 'manual') {
+      setPedidosManuais(prev => prev.map(p => p.id === parsed.id ? {
+        ...p,
+        eventoDescricao: editForm.eventoDescricao,
+        valor: Number(editForm.valor) || 0,
+        vencimento: editForm.vencimento
+      } : p));
+    } else if (parsed.type === 'aluno') {
+      const alu = (alunos || []).find(a => a.id === parsed.studentId);
+      if (alu) {
+        const updatedParcelas = (alu.parcelas || []).map((p: any) => {
+          const pId = p.num ?? p.codigo ?? '';
+          if (pId === parsed.parcelId) {
+            return {
+              ...p,
+              eventoDescricao: editForm.eventoDescricao,
+              descricao: editForm.eventoDescricao,
+              valor: Number(editForm.valor) || 0,
+              vencimento: editForm.vencimento
+            };
+          }
+          return p;
+        });
+        const updatedAluno = { ...alu, parcelas: updatedParcelas };
+        
+        setAlunos(prev => prev.map(a => a.id === alu.id ? updatedAluno : a));
+        
+        fetch(`/api/alunos?id=${alu.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedAluno)
+        }).catch(console.error);
+      }
+    } else if (parsed.type === 'titulo') {
+      const tit = titulos.find(t => t.id === parsed.id);
+      if (tit) {
+        const updatedTitulo = {
+          ...tit,
+          eventoDescricao: editForm.eventoDescricao,
+          descricao: editForm.eventoDescricao,
+          valor: Number(editForm.valor) || 0,
+          vencimento: editForm.vencimento
+        };
+        setTitulos(prev => prev.map(t => t.id === tit.id ? updatedTitulo : t));
+        fetch(`/api/titulos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedTitulo)
+        }).catch(console.error);
+      }
+    }
+    setModalEditar(null);
+  };
+
+  const handleDeleteLaunch = (g: GrupoAluno) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o lançamento de ${g.eventoDescricao} de ${g.alunoNome}?`)) return;
+    const parsed = parseStudentParcelId(g.pedidoId);
+    if (parsed.type === 'manual') {
+      setPedidosManuais(prev => prev.filter(p => p.id !== parsed.id));
+    } else if (parsed.type === 'aluno') {
+      const alu = (alunos || []).find(a => a.id === parsed.studentId);
+      if (alu) {
+        const updatedParcelas = (alu.parcelas || []).filter((p: any) => {
+          const pId = p.num ?? p.codigo ?? '';
+          return pId !== parsed.parcelId;
+        });
+        const updatedAluno = { ...alu, parcelas: updatedParcelas };
+        
+        setAlunos(prev => prev.map(a => a.id === alu.id ? updatedAluno : a));
+        
+        fetch(`/api/alunos?id=${alu.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedAluno)
+        }).catch(console.error);
+      }
+    } else if (parsed.type === 'titulo') {
+      fetch(`/api/titulos?id=${parsed.id}`, { method: 'DELETE' }).catch(console.error);
+      setTitulos(prev => prev.filter(t => t.id !== parsed.id));
+    }
+  };
+
   // ── Tipo unificado de parcela ─────────────────────────────────────────────
   type ParcelaUnificada = {
     id: string
@@ -111,6 +221,7 @@ export default function PedidosLivrosPage() {
     valor: number
     vencimento: string
     dataLancamento?: string  // ISO timestamp da inserção do evento
+    usuarioLancamento?: string
   }
 
   // ── Resolução de nome do evento: olha todos os campos possíveis ──────────
@@ -143,6 +254,7 @@ export default function PedidosLivrosPage() {
           valor: Number(p.valor) || 0,
           vencimento: p.vencimento ?? '',
           dataLancamento: p.dataLancamento,  // ISO timestamp gravado no momento da inserção
+          usuarioLancamento: p.usuarioLancamento || p.usuario,
         })
       }
     }
@@ -171,7 +283,7 @@ export default function PedidosLivrosPage() {
   const todasParcelas: ParcelaUnificada[] = React.useMemo(() => {
     const alunosComParcDiretas = new Set(parcelasDeAlunos.map(p => p.aluno))
     const titulosFiltrados = parcelasDeTitulos.filter(p => !alunosComParcDiretas.has(p.aluno))
-    return [...parcelasDeAlunos, ...titulosFiltrados, ...pedidosManuais]
+    return [...parcelasDeAlunos, ...titulosFiltrados, ...(Array.isArray(pedidosManuais) ? pedidosManuais : [])]
   }, [parcelasDeAlunos, parcelasDeTitulos, pedidosManuais])
 
   // ── Agrupa por aluno + nome de evento ─────────────────────────────────────
@@ -186,6 +298,7 @@ export default function PedidosLivrosPage() {
     vencimentos: string[]
     pedidoId: string
     dataLancamento: string
+    usuarioLancamento: string
   }
 
   const grupos: GrupoAluno[] = React.useMemo(() => {
@@ -194,10 +307,13 @@ export default function PedidosLivrosPage() {
       const alu = (alunos || []).find(a => a.nome === p.aluno || a.id === p.alunoId)
       const key = `${p.aluno}__${p.eventoDescricao}`
       if (!map.has(key)) {
+        const tObj = rawTurmas.find((t: any) => t.id === alu?.turma)
+        const nomeTurma = tObj?.nome || alu?.turma || '—'
+
         map.set(key, {
           alunoNome: p.aluno,
-          turma: alu?.turma ?? '—',
-          segmento: inferirSegmento(alu?.serie, alu?.turma),
+          turma: nomeTurma,
+          segmento: inferirSegmento(alu?.serie, nomeTurma),
           eventoId: p.eventoId,
           eventoDescricao: p.eventoDescricao,
           parcelas: [],
@@ -205,6 +321,7 @@ export default function PedidosLivrosPage() {
           vencimentos: [],
           pedidoId: p.id,
           dataLancamento: p.dataLancamento ?? '',  // ISO do momento de inserção
+          usuarioLancamento: p.usuarioLancamento ?? '',
         })
       }
       const g = map.get(key)!
@@ -217,6 +334,7 @@ export default function PedidosLivrosPage() {
 
   // helper: obter estado do pedido
   function getPedido(pedidoId: string) {
+    if (!Array.isArray(pedidos)) return undefined
     return pedidos.find(p => p.tituloId === pedidoId)
   }
   function isFeito(pedidoId: string) { return getPedido(pedidoId)?.feito ?? false }
@@ -230,6 +348,7 @@ export default function PedidosLivrosPage() {
         map.set(id, {
           ...(map.get(id) ?? { tituloId: id, feito: false }),
           feito,
+          usuarioFeito: feito ? currentUser?.nome || 'Usuário' : undefined,
           dataFeito: feito ? new Date().toISOString() : undefined,
         })
       }
@@ -246,9 +365,11 @@ export default function PedidosLivrosPage() {
         map.set(id, {
           ...atual,
           entregue,
+          usuarioEntrega: entregue ? currentUser?.nome || 'Usuário' : undefined,
           dataEntrega: entregue ? new Date().toISOString() : undefined,
           // Ao marcar como entregue, marca pedido como feito também
           feito: entregue ? true : atual.feito,
+          usuarioFeito: entregue && !atual.feito ? currentUser?.nome || 'Usuário' : atual.usuarioFeito,
           dataFeito: entregue && !atual.feito ? new Date().toISOString() : atual.dataFeito,
         })
       }
@@ -326,37 +447,46 @@ export default function PedidosLivrosPage() {
 
   return (
     <div>
-      <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div className="page-header" style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <div style={{
-            width: 46, height: 46, borderRadius: 12,
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.2))',
-            border: '1px solid rgba(139,92,246,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22
+            width: 56, height: 56, borderRadius: 16,
+            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+            boxShadow: '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
+            border: '2px solid rgba(255, 255, 255, 0.2)'
           }}>📚</div>
           <div>
-            <h1 className="page-title">Pedidos — Livros & Apostilas</h1>
-            <p className="page-subtitle">
-              Controle de pedidos gerados a partir dos eventos financeiros dos alunos
+            <h1 className="page-title" style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-0.02em' }}>Pedidos de Materiais</h1>
+            <p className="page-subtitle" style={{ fontSize: 14, opacity: 0.8 }}>
+              Rastreamento completo desde o lançamento financeiro até a entrega ao aluno.
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-primary btn-sm" onClick={() => setModalNovoPedido(true)}>
-            <Plus size={13} /> Novo Pedido Manual
-          </button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <motion.button 
+            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            className="btn btn-primary" 
+            style={{ height: 44, padding: '0 20px', borderRadius: 12, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}
+            onClick={() => setModalNovoPedido(true)}
+          >
+            <Plus size={16} /> Novo Pedido Manual
+          </motion.button>
           <button
-            className="btn btn-secondary btn-sm"
-            style={{ gap: 6 }}
+            className="btn btn-secondary"
+            style={{ height: 44, padding: '0 16px', borderRadius: 12, gap: 8 }}
             onClick={() => {
-              const csv = ['Aluno,Turma,Evento,Parcelas,Valor Total,Status,Data Pedido,Obs']
+              const csv = ['Aluno,Turma,Evento,Parcelas,Valor Total,Status,Data Pedido,Usuário Pedido,Data Entrega,Usuário Entrega,Obs']
               for (const g of grupos) {
                 const p = getPedido(g.pedidoId)
                 csv.push([
                   g.alunoNome, g.turma, g.eventoDescricao, g.parcelas.length,
                   g.valorTotal.toFixed(2),
-                  p?.feito ? 'Feito' : 'Pendente',
-                  p?.dataFeito ? new Date(p.dataFeito).toLocaleDateString('pt-BR') : '',
+                  p?.entregue ? 'Entregue' : p?.feito ? 'Feito' : 'Pendente',
+                  p?.dataFeito ? fmtDataHora(p.dataFeito) : '',
+                  p?.usuarioFeito ?? '',
+                  p?.dataEntrega ? fmtDataHora(p.dataEntrega) : '',
+                  p?.usuarioEntrega ?? '',
                   p?.obs ?? ''
                 ].join(','))
               }
@@ -367,7 +497,7 @@ export default function PedidosLivrosPage() {
               URL.revokeObjectURL(url)
             }}
           >
-            <Download size={13} /> Exportar CSV
+            <Download size={16} /> Exportar
           </button>
         </div>
       </div>
@@ -490,8 +620,55 @@ export default function PedidosLivrosPage() {
         </div>
       </div>
 
-      {/* Empty */}
-      {grupos.length === 0 ? (
+      {/* Loading state / Empty / Content */}
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="card" style={{ padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div className="skeleton-shimmer" style={{ width: 32, height: 32, borderRadius: 8 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div className="skeleton-shimmer" style={{ height: 16, width: 140, borderRadius: 6 }} />
+                    <div className="skeleton-shimmer" style={{ height: 12, width: 220, borderRadius: 6 }} />
+                  </div>
+                </div>
+                <div className="skeleton-shimmer" style={{ height: 32, width: 120, borderRadius: 8 }} />
+              </div>
+              <div className="table-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}><div className="skeleton-shimmer" style={{ height: 16, width: 20, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 120, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
+                      <th style={{ textAlign: 'center' }}><div className="skeleton-shimmer" style={{ height: 16, width: 40, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 100, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 100, borderRadius: 4 }} /></th>
+                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: 2 }).map((_, rIdx) => (
+                      <tr key={rIdx}>
+                        <td><div className="skeleton-shimmer" style={{ height: 16, width: 16, borderRadius: 4 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 150, borderRadius: 4 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 100, borderRadius: 4 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 30, borderRadius: 4, margin: '0 auto' }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 20, width: 70, borderRadius: 12 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 90, borderRadius: 4 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 20, width: 80, borderRadius: 12 }} /></td>
+                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 70, borderRadius: 4 }} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : grupos.length === 0 ? (
         <div className="card" style={{ padding: '80px 40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <BookMarked size={52} style={{ margin: '0 auto 20px', opacity: 0.2 }} />
           <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Nenhum pedido de livros/apostilas encontrado</div>
@@ -570,16 +747,12 @@ export default function PedidosLivrosPage() {
                     <thead>
                       <tr>
                         <th style={{ width: 40 }}></th>
-                        <th>Aluno</th>
-                        {agrupamento !== 'turma' && <th>Turma</th>}
+                        <th>Aluno & Turma</th>
                         {agrupamento !== 'evento' && <th>Evento</th>}
-                        <th style={{ textAlign: 'center' }}>Parcelas</th>
-                        <th style={{ textAlign: 'right' }}>Valor Total</th>
-                        <th>Data Entrega</th>
-                        <th>Lançamento</th>
-                        <th style={{ textAlign: 'center' }}>Status</th>
-                        <th>Data Pedido</th>
-                        <th>Obs</th>
+                        <th style={{ textAlign: 'center' }}>Qtd</th>
+                        <th style={{ textAlign: 'right' }}>Total</th>
+                        <th style={{ textAlign: 'center', minWidth: 400 }}>Rastreamento do Pedido</th>
+                        <th>Observações</th>
                         <th style={{ textAlign: 'center' }}>Ações</th>
                       </tr>
                     </thead>
@@ -593,11 +766,17 @@ export default function PedidosLivrosPage() {
                         const vencMax = g.vencimentos.sort().at(-1)
 
                         return (
-                          <tr key={g.pedidoId} style={{
-                            background: feito ? 'rgba(16,185,129,0.03)' : undefined,
-                            opacity: feito ? 0.8 : 1,
-                            transition: 'all 0.2s',
-                          }}>
+                          <motion.tr 
+                            key={g.pedidoId} 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            whileHover={{ scale: 1.002, backgroundColor: 'rgba(59, 130, 246, 0.02)' }}
+                            style={{
+                              background: feito ? 'rgba(16,185,129,0.02)' : undefined,
+                              transition: 'all 0.2s',
+                              borderBottom: '1px solid hsl(var(--border-subtle))'
+                            }}
+                          >
                             {/* Checkbox */}
                             <td style={{ textAlign: 'center' }}>
                               <button
@@ -617,179 +796,197 @@ export default function PedidosLivrosPage() {
 
                             {/* Aluno */}
                             <td>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{g.alunoNome}</div>
-                              {agrupamento === 'turma' && (
-                                <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{g.turma}</div>
-                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div style={{ 
+                                  width: 32, height: 32, borderRadius: 8, 
+                                  background: 'linear-gradient(135deg, #3b82f615, #8b5cf615)',
+                                  color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 700, border: '1px solid #3b82f630'
+                                }}>
+                                  {g.alunoNome.charAt(0)}
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-foreground))' }}>{g.alunoNome}</div>
+                                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', gap: 4, alignItems: 'center' }}>
+                                    <Layers size={10} /> {g.turma} • {g.segmento}
+                                  </div>
+                                </div>
+                              </div>
                             </td>
 
-                            {/* Turma (se agrup não é turma) */}
-                            {agrupamento !== 'turma' && (
-                              <td>
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  fontSize: 11, fontWeight: 600,
-                                  background: 'rgba(59,130,246,0.1)', color: '#60a5fa',
-                                  borderRadius: 6, padding: '2px 8px'
-                                }}>
-                                  <Layers size={10} />{g.turma}
-                                </span>
-                              </td>
-                            )}
-
-                            {/* Evento (se agrup não é evento) */}
+                            {/* Evento */}
                             {agrupamento !== 'evento' && (
                               <td>
                                 <span style={{
                                   display: 'inline-block', fontSize: 11, fontWeight: 600,
                                   background: cor.bg, color: cor.color,
                                   borderRadius: 6, padding: '2px 8px',
-                                  whiteSpace: 'nowrap',
+                                  border: `1px solid ${cor.color}30`
                                 }}>
                                   {g.eventoDescricao}
                                 </span>
                               </td>
                             )}
 
-                            {/* Qtd parcelas — clicável */}
+                            {/* Qtd */}
                             <td style={{ textAlign: 'center' }}>
-                              <button
-                                onClick={() => setModalParcelas(g)}
-                                style={{
-                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                  width: 32, height: 32, borderRadius: '50%',
-                                  background: 'rgba(167,139,250,0.12)',
-                                  fontWeight: 900, fontSize: 13, color: '#a78bfa',
-                                  border: '1.5px solid rgba(167,139,250,0.35)',
-                                  cursor: 'pointer', transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(167,139,250,0.25)')}
-                                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(167,139,250,0.12)')}
-                                title="Ver detalhes das parcelas"
-                              >
-                                {g.parcelas.length}
-                              </button>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>{g.parcelas.length}</span>
                             </td>
 
                             {/* Valor */}
-                            <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'Outfit,sans-serif', fontSize: 14, color: '#34d399' }}>
+                            <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'Outfit,sans-serif', fontSize: 14, color: '#10b981' }}>
                               {fmt(g.valorTotal)}
                             </td>
 
-                            {/* Data Entrega */}
-                            <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                              {pedido?.entregue && pedido.dataEntrega ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: 'rgba(52,211,153,0.12)', color: '#34d399',
-                                  borderRadius: 6, padding: '2px 8px', fontWeight: 600,
-                                }}>
-                                  <PackageCheck size={10} /> {fmtDataHora(pedido.dataEntrega)}
-                                </span>
-                              ) : <span style={{ color: 'hsl(var(--text-muted))', opacity: 0.5 }}>—</span>}
+                            {/* Rastreamento Moderno */}
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 0, justifyContent: 'space-between', position: 'relative' }}>
+                                
+                                {/* Linha de fundo conectora */}
+                                <div style={{ position: 'absolute', top: '15px', left: '10%', right: '10%', height: '2px', background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
+                                
+                                {/* Step 1: Lançado */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 1, flex: 1 }}>
+                                  <div style={{ 
+                                    width: 30, height: 30, borderRadius: '50%', background: '#6366f1', color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '4px solid #fff', boxShadow: '0 0 0 1px #6366f130'
+                                  }}>
+                                    <Plus size={14} />
+                                  </div>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 800, color: '#6366f1' }}>LANÇADO</div>
+                                    <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
+                                      {g.dataLancamento ? fmtData(g.dataLancamento) : 'Sistema'}
+                                    </div>
+                                    <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
+                                      {g.usuarioLancamento || 'Sistema'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Step 2: Pedido Feito */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 1, flex: 1, opacity: feito ? 1 : 0.4 }}>
+                                  <div style={{ 
+                                    width: 30, height: 30, borderRadius: '50%', background: feito ? '#f59e0b' : '#e2e8f0', color: feito ? '#fff' : '#94a3b8',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '4px solid #fff', boxShadow: feito ? '0 0 0 1px #f59e0b30' : 'none'
+                                  }}>
+                                    <Check size={14} />
+                                  </div>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 800, color: feito ? '#f59e0b' : '#94a3b8' }}>PEDIDO</div>
+                                    {feito && pedido ? (
+                                      <>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{fmtDataHora(pedido.dataFeito)}</div>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{pedido.usuarioFeito}</div>
+                                      </>
+                                    ) : (
+                                      <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>Aguardando</div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Step 3: Entregue */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 1, flex: 1, opacity: entregue ? 1 : 0.4 }}>
+                                  <div style={{ 
+                                    width: 30, height: 30, borderRadius: '50%', background: entregue ? '#10b981' : '#e2e8f0', color: entregue ? '#fff' : '#94a3b8',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '4px solid #fff', boxShadow: entregue ? '0 0 0 1px #10b98130' : 'none'
+                                  }}>
+                                    <PackageCheck size={14} />
+                                  </div>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 800, color: entregue ? '#10b981' : '#94a3b8' }}>ENTREGUE</div>
+                                    {entregue && pedido ? (
+                                      <>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{fmtDataHora(pedido.dataEntrega)}</div>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{pedido.usuarioEntrega}</div>
+                                      </>
+                                    ) : (
+                                      <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>Pendente</div>
+                                    )}
+                                  </div>
+                                </div>
+
+                              </div>
                             </td>
 
-                            {/* Data de lançamento */}
-                            <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                              {g.dataLancamento ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: 'rgba(99,102,241,0.08)', color: '#818cf8',
-                                  borderRadius: 6, padding: '2px 8px', fontWeight: 600,
-                                }}>
-                                  📅 {g.dataLancamento.includes('T')
-                                    ? fmtDataHora(g.dataLancamento)
-                                    : fmtData(g.dataLancamento)}
-                                </span>
-                              ) : <span style={{ color: 'hsl(var(--text-muted))', opacity: 0.5 }}>—</span>}
-                            </td>
-
-                            {/* Status badge — 3 níveis: Entregue > Pedido Feito > Pendente */}
-                            <td style={{ textAlign: 'center' }}>
-                              {entregue ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: 'rgba(52,211,153,0.15)', color: '#34d399',
-                                  borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700
-                                }}>
-                                  <PackageCheck size={11} /> Entregue
-                                </span>
-                              ) : feito ? (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: 'rgba(16,185,129,0.12)', color: '#10b981',
-                                  borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700
-                                }}>
-                                  <CheckCircle2 size={11} /> Pedido Feito
-                                </span>
-                              ) : (
-                                <span style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                                  background: 'rgba(245,158,11,0.12)', color: '#f59e0b',
-                                  borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700
-                                }}>
-                                  <Clock size={11} /> Pendente
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Data do pedido */}
-                            <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                              {pedido?.feito && pedido.dataFeito
-                                ? <span style={{ color: '#10b981' }}>{fmtDataHora(pedido.dataFeito)}</span>
-                                : '—'}
-                            </td>
-
-                            {/* Obs preview */}
-                            <td style={{ maxWidth: 120 }}>
+                            {/* Observações */}
+                            <td style={{ maxWidth: 150 }}>
                               {pedido?.obs ? (
-                                <span
+                                <div 
                                   onClick={() => abrirObs(g.pedidoId)}
-                                  style={{
-                                    display: 'block',
-                                    fontSize: 11, color: '#60a5fa', cursor: 'pointer',
-                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    textDecoration: 'underline dotted',
-                                  }}
+                                  style={{ fontSize: 11, color: 'hsl(var(--text-muted))', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', border: '1px dashed #3b82f640', padding: '4px 8px', borderRadius: 6, background: '#3b82f605' }}
                                   title={pedido.obs}
                                 >
                                   {pedido.obs}
-                                </span>
+                                </div>
                               ) : (
-                                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', opacity: 0.5 }}>—</span>
+                                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', opacity: 0.3 }}>Sem obs.</span>
                               )}
                             </td>
 
                             {/* Ações */}
                             <td>
-                              <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                <button
-                                  className="btn btn-ghost btn-icon btn-sm"
-                                  title={feito ? 'Desfazer pedido feito' : 'Marcar como pedido feito'}
-                                  style={{ color: feito ? '#f59e0b' : '#10b981' }}
-                                  onClick={() => marcarFeito([g.pedidoId], !feito)}
-                                >
-                                  {feito ? <RotateCcw size={13} /> : <CheckCircle2 size={13} />}
-                                </button>
-                                <button
-                                  className="btn btn-ghost btn-icon btn-sm"
-                                  title={entregue ? 'Desfazer entrega' : 'Marcar como entregue'}
-                                  style={{ color: entregue ? '#f59e0b' : '#34d399' }}
-                                  onClick={() => marcarEntregue([g.pedidoId], !entregue)}
-                                >
-                                  {entregue ? <RotateCcw size={13} /> : <PackageCheck size={13} />}
-                                </button>
-                                <button
-                                  className="btn btn-ghost btn-icon btn-sm"
-                                  title="Adicionar observação"
-                                  style={{ color: pedido?.obs ? '#60a5fa' : undefined }}
-                                  onClick={() => abrirObs(g.pedidoId)}
-                                >
-                                  <StickyNote size={13} />
-                                </button>
+                              <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                                {!feito && (
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    style={{ height: 30, padding: '0 10px', fontSize: 11, borderRadius: 8 }}
+                                    onClick={() => marcarFeito([g.pedidoId], true)}
+                                  >
+                                    Marcar Pedido
+                                  </button>
+                                )}
+                                {feito && !entregue && (
+                                  <button
+                                    className="btn btn-success btn-sm"
+                                    style={{ height: 30, padding: '0 10px', fontSize: 11, borderRadius: 8, background: '#10b981', color: '#fff', border: 'none' }}
+                                    onClick={() => marcarEntregue([g.pedidoId], true)}
+                                  >
+                                    Marcar Entrega
+                                  </button>
+                                )}
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  <button
+                                    className="btn btn-ghost btn-icon btn-sm"
+                                    title="Editar Lançamento"
+                                    onClick={() => {
+                                      setModalEditar(g)
+                                      setEditForm({
+                                        eventoDescricao: g.eventoDescricao,
+                                        valor: String(g.valorTotal),
+                                        vencimento: g.vencimentos[0] || ''
+                                      })
+                                    }}
+                                  >
+                                    <Edit2 size={14} color="#3b82f6" />
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-icon btn-sm"
+                                    title="Excluir Lançamento"
+                                    onClick={() => handleDeleteLaunch(g)}
+                                  >
+                                    <Trash2 size={14} color="#ef4444" />
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-icon btn-sm"
+                                    title="Observações"
+                                    onClick={() => abrirObs(g.pedidoId)}
+                                  >
+                                    <StickyNote size={14} color={pedido?.obs ? '#a78bfa' : '#94a3b8'} />
+                                  </button>
+                                  {(feito || entregue) && (
+                                    <button
+                                      className="btn btn-ghost btn-icon btn-sm"
+                                      title="Desfazer Rastreamento"
+                                      onClick={() => entregue ? marcarEntregue([g.pedidoId], false) : marcarFeito([g.pedidoId], false)}
+                                    >
+                                      <RotateCcw size={14} color="#f59e0b" />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </td>
-                          </tr>
+                          </motion.tr>
                         )
                       })}
                     </tbody>
@@ -1043,7 +1240,7 @@ export default function PedidosLivrosPage() {
             <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                <button className="btn btn-ghost" onClick={() => setModalNovoPedido(false)}>Cancelar</button>
                <button className="btn btn-primary" disabled={!novoPedidoForm.alunoId} onClick={() => {
-                 const al = alunos.find(a => a.id === novoPedidoForm.alunoId)
+                 const al = (alunos || []).find(a => a.id === novoPedidoForm.alunoId)
                  if (al) {
                    const novo: ParcelaUnificada = {
                      id: `man-${Date.now()}`,
@@ -1066,6 +1263,50 @@ export default function PedidosLivrosPage() {
         
 </motion.div>
 )}</AnimatePresence>
+
+      <AnimatePresence>
+{/* ════════════ MODAL EDITAR LANÇAMENTO ════════════ */}
+      {modalEditar && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 6000, padding: 20, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>Editar Lançamento</div>
+              <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalEditar(null)}><X size={15} /></button>
+            </div>
+            <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>ALUNO</label>
+                <input className="form-input" value={modalEditar.alunoNome} disabled style={{ opacity: 0.6 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>TIPO DE MATERIAL</label>
+                  <select className="form-input" value={editForm.eventoDescricao} onChange={e => setEditForm(p => ({...p, eventoDescricao: e.target.value}))}>
+                    <option value="Livros">Livros</option>
+                    <option value="Apostilas EM">Apostilas EM</option>
+                    <option value="Apostilas FUND2">Apostilas FUND2</option>
+                    <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>DATA PREVISTA / VENCIMENTO</label>
+                  <input type="date" className="form-input" value={editForm.vencimento} onChange={e => setEditForm(p => ({...p, vencimento: e.target.value}))} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>VALOR TOTAL (R$)</label>
+                <input type="number" step="0.01" className="form-input" value={editForm.valor} onChange={e => setEditForm(p => ({...p, valor: e.target.value}))} placeholder="0.00" />
+              </div>
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+               <button className="btn btn-ghost" onClick={() => setModalEditar(null)}>Cancelar</button>
+               <button className="btn btn-primary" onClick={handleSaveEdit}>
+                 <Check size={14}/> Salvar Alterações
+               </button>
+            </div>
+          </motion.div>
+</motion.div>
+      )}</AnimatePresence>
     </div>
   )
 }

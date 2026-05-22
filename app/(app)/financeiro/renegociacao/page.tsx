@@ -1,6 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { PageSkeleton } from '@/components/skeletons/PageSkeleton';
 ﻿
 
 import { useState, useMemo } from 'react'
@@ -27,9 +28,10 @@ const STATUS_BADGE = {
 }
 
 export default function RenegociacaoPage() {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
+  const [alunos, setAlunos, { loading: l1 }] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos, { loading: l2 }] = useSupabaseArray<any>('titulos');
   const [acordos, setAcordos] = useState<AcordoRenegociacao[]>([])
+  const { logSystemAction } = useData()
   const [showModal, setShowModal] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState<'todos'|'ativo'|'quitado'|'inadimplente'>('todos')
   const [search, setSearch] = useState('')
@@ -44,13 +46,13 @@ export default function RenegociacaoPage() {
     obs:'', motivoInadimpl:'Dificuldade financeira',
   })
 
-  const inadimplentes = alunos.filter(a=>a.inadimplente)
-  const titulosAtrasados = titulos.filter(t=>t.status==='atrasado')
+  const inadimplentes = (alunos || []).filter(a=>a.inadimplente)
+  const titulosAtrasados = (titulos || []).filter(t=>t.status==='atrasado')
 
   // Quando seleciona aluno, preenche valor original e responsável automaticamente
   const handleSelectAluno = (nome: string) => {
-    const aluno = alunos.find(a => a.nome === nome)
-    const titulo = titulosAtrasados.find(t => t.aluno === nome)
+    const aluno = (alunos || []).find(a => a.nome === nome)
+    const titulo = (titulosAtrasados || []).find(t => t.aluno === nome)
     const valorOrig = titulo?.valor || 0
     setForm(f => ({
       ...f, alunoNome: nome,
@@ -87,27 +89,35 @@ export default function RenegociacaoPage() {
       motivoInadimpl: form.motivoInadimpl,
     }
     setAcordos(prev=>[novo,...prev])
+    
+    logSystemAction(
+      'Financeiro (Renegociação)',
+      'Cadastro',
+      `Novo acordo de renegociação para ${novo.alunoNome}`,
+      { registroId: novo.id, detalhesDepois: novo }
+    )
+    
     setBuscaAluno('')
     // Atualiza título para pendente se existia
     const titulo = titulosAtrasados.find(t=>t.aluno===form.alunoNome)
     if(titulo){
-      setTitulos(prev=>prev.map(t=>t.id===titulo.id?{...t, valor:novo.valorNegociado, status:'pendente', descricao:`${t.descricao} [Reneg. ${form.parcelas}x]`}:t))
+      setTitulos(prev=>(prev || []).map(t=>t.id===titulo.id?{...t, valor:novo.valorNegociado, status:'pendente', descricao:`${t.descricao} [Reneg. ${form.parcelas}x]`}:t))
     }
     setShowModal(false)
     setForm({alunoNome:'',responsavel:'',valorOriginal:'',valorNegociado:'',desconto:'0',parcelas:'3',data:getToday(),status:'ativo',obs:'',motivoInadimpl:'Dificuldade financeira'})
   }
 
-  const filtered = useMemo(() => acordos.filter(a=>{
+  const filtered = useMemo(() => (acordos || []).filter(a=>{
     const matchStatus = filtroStatus==='todos' || a.status===filtroStatus
     const matchSearch = search.trim().length < 3 || (!search || a.alunoNome.toLowerCase().includes(search.toLowerCase()) || a.responsavel.toLowerCase().includes(search.toLowerCase()))
     const matchMotivo = filtroMotivo==='Todos' || a.motivoInadimpl===filtroMotivo
     return matchStatus && matchSearch && matchMotivo
   }), [acordos, filtroStatus, search, filtroMotivo])
 
-  const totalNegociado = acordos.reduce((s,a)=>s+a.valorNegociado,0)
-  const totalOriginal = acordos.reduce((s,a)=>s+a.valorOriginal,0)
+  const totalNegociado = (acordos || []).reduce((s,a)=>s+a.valorNegociado,0)
+  const totalOriginal = (acordos || []).reduce((s,a)=>s+a.valorOriginal,0)
   const totalDesconto = totalOriginal - totalNegociado
-  const taxaQuitacao = acordos.length>0?((acordos.filter(a=>a.status==='quitado').length/acordos.length)*100).toFixed(0):'0'
+  const taxaQuitacao = (acordos || []).length>0?(((acordos || []).filter(a=>a.status==='quitado').length/(acordos || []).length)*100).toFixed(0):'0'
 
   const activeFilters = [filtroStatus!=='todos', filtroMotivo!=='Todos'].filter(Boolean).length
   const clearFilters = () => { setFiltroStatus('todos'); setFiltroMotivo('Todos'); setSearch('') }
@@ -117,6 +127,8 @@ export default function RenegociacaoPage() {
   const parcV = valorNeg/(parseInt(form.parcelas)||1)
 
   function validarParc(_: typeof form) { return 0 }
+
+  if (l1 || l2) return <PageSkeleton />
 
   return (
     <div>
@@ -134,8 +146,8 @@ export default function RenegociacaoPage() {
       {/* KPIs */}
       <div style={{display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:12, marginBottom:20}}>
         {[
-          { label:'Acordos Ativos', value:acordos.filter(a=>a.status==='ativo').length, color:'#06b6d4', icon:'📋' },
-          { label:'Quitados', value:acordos.filter(a=>a.status==='quitado').length, color:'#10b981', icon:'✅' },
+          { label:'Acordos Ativos', value:(acordos || []).filter(a=>a.status==='ativo').length, color:'#06b6d4', icon:'📋' },
+          { label:'Quitados', value:(acordos || []).filter(a=>a.status==='quitado').length, color:'#10b981', icon:'✅' },
           { label:'Inadimpl. Base', value:inadimplentes.length, color:'#ef4444', icon:'⚠️', sub:'alunos' },
           { label:'Total Negociado', value:fmtCur(totalNegociado), color:'#f59e0b', icon:'💰' },
           { label:'Desconto Concedido', value:fmtCur(totalDesconto), color:'#8b5cf6', icon:'🎯', sub:`Taxa quitação ${taxaQuitacao}%` },
@@ -222,11 +234,28 @@ export default function RenegociacaoPage() {
                 </div>
                 <div style={{display:'flex',gap:6,flexShrink:0}}>
                   {a.status==='ativo'&&(
-                    <button className="btn btn-success btn-sm" style={{fontSize:11}} onClick={()=>setAcordos(prev=>prev.map(x=>x.id===a.id?{...x,status:'quitado'}:x))}>
+                    <button className="btn btn-success btn-sm" style={{fontSize:11}} onClick={() => {
+                      setAcordos(prev => (prev || []).map(x => x.id === a.id ? { ...x, status: 'quitado' } : x))
+                      logSystemAction(
+                        'Financeiro (Renegociação)',
+                        'Edição',
+                        `Acordo de renegociação de ${a.alunoNome} marcado como quitado`,
+                        { registroId: a.id, detalhesDepois: { ...a, status: 'quitado' } }
+                      )
+                    }}>
                       <CheckCircle size={11}/>Quitar
                     </button>
                   )}
-                  <button onClick={()=>setAcordos(prev=>prev.filter(x=>x.id!==a.id))} className="btn btn-ghost btn-icon btn-sm" style={{color:'#f87171'}}><Trash2 size={14}/></button>
+                  <button onClick={() => {
+                    const acordoExcluido = (acordos || []).find(x => x.id === a.id)
+                    setAcordos(prev => (prev || []).filter(x => x.id !== a.id))
+                    logSystemAction(
+                      'Financeiro (Renegociação)',
+                      'Exclusão',
+                      `Exclusão do acordo de renegociação de ${a.alunoNome}`,
+                      { registroId: a.id, detalhesAntes: acordoExcluido }
+                    )
+                  }} className="btn btn-ghost btn-icon btn-sm" style={{color:'#f87171'}}><Trash2 size={14}/></button>
                 </div>
               </div>
             )
@@ -270,7 +299,7 @@ export default function RenegociacaoPage() {
                   )}
                 </div>
                 {showAlunoDropdown && buscaAluno.length >= 1 && (() => {
-                  const matches = alunos.filter(a => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 8)
+                  const matches = (alunos || []).filter(a => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 8)
                   if (matches.length === 0) return (
                     <div style={{ position:'absolute', zIndex:50, width:'100%', background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))', borderRadius:8, padding:'10px 14px', fontSize:12, color:'hsl(var(--text-muted))', marginTop:3, boxShadow:'0 8px 24px rgba(0,0,0,0.3)' }}>
                       Nenhum aluno encontrado

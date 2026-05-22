@@ -1,5 +1,6 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { ListSkeleton } from '@/components/skeletons/ListSkeleton';
 
 
 import { useData } from '@/lib/dataContext'
@@ -34,13 +35,17 @@ const CATEGORIAS: string[] = ['Todas', 'Acadêmico', 'Financeiro', 'Disciplinar'
 
 export default function AlertasPage() {
   const { ocorrencias = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
-  const [contasPagar, setContasPagar] = useSupabaseArray<any>('contas-pagar');
-  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const [alunos, setAlunos, { loading: loadAlunos }] = useSupabaseArray<any>('alunos');
+  const [titulos, setTitulos, { loading: loadTitulos }] = useSupabaseArray<any>('titulos');
+  const [contasPagar, setContasPagar, { loading: loadContas }] = useSupabaseArray<any>('contas-pagar');
+  const [funcionarios, setFuncionarios, { loading: loadFuncs }] = useSupabaseArray<any>('rh/funcionarios');
+  const [lidosArray = [], setLidosArray, { loading: loadLidos }] = useSupabaseArray<string>('alertas/lidos');
+  const isLoading = loadAlunos || loadTitulos || loadContas || loadFuncs || loadLidos;
+  
   const [filtroNivel, setFiltroNivel] = useState('Todos')
   const [filtroCategoria, setFiltroCategoria] = useState('Todas')
-  const [lidos, setLidos] = useState<Set<string>>(new Set())
+
+  const lidos = useMemo(() => new Set(lidosArray), [lidosArray])
 
   const hoje = new Date()
 
@@ -208,7 +213,7 @@ export default function AlertasPage() {
           <p className="page-subtitle">{naoLidos} não lidos • {criticos} críticos agora — dados em tempo real</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => setLidos(new Set(TODOS_ALERTAS.map(a => a.id)))}>
+          <button className="btn btn-ghost btn-sm" onClick={() => setLidosArray(TODOS_ALERTAS.map(a => a.id))}>
             <CheckCircle size={13} />Marcar todos como lidos
           </button>
           <button className="btn btn-secondary btn-sm"><Settings size={13} />Configurar alertas</button>
@@ -246,7 +251,9 @@ export default function AlertasPage() {
 
       {/* Lista de alertas */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {(alunos || []).length === 0 && (titulos || []).length === 0 ? (
+        {isLoading ? (
+          <ListSkeleton count={5} />
+        ) : (alunos || []).length === 0 && (titulos || []).length === 0 ? (
           <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
             <Bell size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Nenhum dado para gerar alertas</div>
@@ -273,7 +280,7 @@ export default function AlertasPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <Link href={alerta.link} className="btn btn-primary btn-sm" style={{ fontSize: 11 }}>{alerta.acao}</Link>
-                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setLidos(s => new Set([...s, alerta.id]))} title="Marcar como lido"><X size={13} /></button>
+                  <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setLidosArray(prev => [...prev, alerta.id])} title="Marcar como lido"><X size={13} /></button>
                 </div>
               </div>
             )

@@ -1,14 +1,31 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { supabase } from '@/lib/supabase';
 
-import { useState, useEffect, useMemo } from 'react'
+const normalizeStr = (str: string) => {
+  if (!str) return ''
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+const getInitials = (name: string) => {
+  if (!name) return ''
+  return name.trim().split(/\s+/).map(n => n[0]).join('').toLowerCase()
+}
+
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { useApp } from '@/lib/context'
 import {
   CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
-  UserCheck, ChevronRight, RotateCcw,
+  UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin
 } from 'lucide-react'
 
 type FilterType = 'all' | 'waiting' | 'confirmed' | 'cancelled' | 'blocked'
@@ -16,18 +33,26 @@ type FilterType = 'all' | 'waiting' | 'confirmed' | 'cancelled' | 'blocked'
 // ── Helper ────────────────────────────────────────────────────────────────────
 function statusMeta(call: PickupCall) {
   if (call.status === 'waiting' || call.status === 'called')
-    return { color: '#f59e0b', label: '⏳ AGUARDANDO' }
+    return { color: '#f59e0b', label: 'AGUARDANDO' }
   if (call.status === 'confirmed')
-    return { color: '#10b981', label: '✅ CONFIRMADO'  }
+    return { color: '#10b981', label: 'CONFIRMADO'  }
   if (call.status === 'blocked')
     return {
       color: call.blockType === 'dia_restrito' ? '#f97316' : '#ef4444',
-      label: call.blockType === 'dia_restrito' ? '📅 DIA RESTRITO' : '🚫 PROIBIDO',
+      label: call.blockType === 'dia_restrito' ? 'DIA RESTRITO' : 'PROIBIDO',
     }
-  return { color: '#ef4444', label: '✕ CANCELADO' }
+  return { color: '#94a3b8', label: 'CANCELADO' }
 }
 
-// ── Unified call card (active + finished look the same, just different actions) ──
+function elapsedSec(since: string) {
+  return Math.floor((Date.now() - new Date(since).getTime()) / 1000)
+}
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+// ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
 function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
   call:      PickupCall
   onConfirm: (id: string) => void
@@ -35,12 +60,23 @@ function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
   onRecall:  (id: string) => void
   onRevert:  (id: string) => void
 }) {
+  const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
+  const [secs, setSecs] = useState(elapsedSec(call.calledAt))
+
+  useEffect(() => {
+    const iv = setInterval(() => setSecs(elapsedSec(call.calledAt)), 1000)
+    return () => clearInterval(iv)
+  }, [call.calledAt])
 
   const isActive   = call.status === 'waiting' || call.status === 'called'
   const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
   const isBlocked  = call.status === 'blocked'
-  const { color }  = statusMeta(call)
+  
+  const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
+  const urgent = isActive && secs > urgentLimit
+  const meta = statusMeta(call)
+  const color = urgent ? '#ef4444' : meta.color // Override with red if urgent
 
   const initials = call.studentName
     .split(' ').slice(0, 2)
@@ -52,225 +88,209 @@ function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
     setTimeout(() => setRecalling(false), 2500)
   }
 
+  const mins = Math.floor(secs / 60)
+
   return (
     <div style={{
-      background: isBlocked
-        ? call.blockType === 'proibido'
-          ? 'linear-gradient(135deg, rgba(239,68,68,0.06), hsl(var(--bg-elevated)))'
-          : 'linear-gradient(135deg, rgba(249,115,22,0.06), hsl(var(--bg-elevated)))'
-        : 'hsl(var(--bg-elevated))',
-      border: `2px solid ${color}${isFinished || isBlocked ? '25' : '35'}`,
-      borderRadius: 24, overflow: 'hidden',
-      boxShadow: `0 8px 36px ${color}${isFinished || isBlocked ? '0a' : '14'}`,
-      transition: 'all 0.25s ease',
-      opacity: isFinished || isBlocked ? 0.88 : 1,
-      display: 'flex', flexDirection: 'row',
-      minHeight: 220,
+      position: 'relative',
+      borderRadius: 20,
+      overflow: 'hidden',
+      background: 'hsl(var(--bg-elevated))',
+      border: `1px solid ${color}${isFinished ? '20' : '40'}`,
+      boxShadow: `0 8px 30px rgba(0,0,0,0.06), 0 0 15px ${color}${urgent ? '30' : '05'}`,
+      display: 'flex',
+      flexDirection: 'column',
+      opacity: isFinished ? 0.75 : 1,
+      transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
+      animation: urgent ? 'cardFloatUrgent 4s ease-in-out infinite' : 'none',
+      minHeight: 320,
+      aspectRatio: '1 / 1.38',
     }}>
 
-      {/* ── COLUNA ESQUERDA: Foto full-height ────────────────────────────── */}
-      <div style={{
-        width: 160, flexShrink: 0,
-        background: `linear-gradient(175deg, ${color}80, ${color}28)`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexDirection: 'column', gap: 10,
-        position: 'relative', overflow: 'hidden',
-      }}>
-        {/* Glow blob */}
-        <div style={{
-          position: 'absolute', top: -30, left: -30,
-          width: 200, height: 200, borderRadius: '50%',
-          background: `radial-gradient(circle, ${color}35 0%, transparent 70%)`,
-          pointerEvents: 'none',
-        }}/>
-
-        {/* Photo or initials */}
+      {/* ── BACKGROUND PHOTO ─────────────────────────────────────── */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0, background: 'hsl(var(--bg-muted))' }}>
         {call.studentPhoto ? (
           <img
             src={call.studentPhoto}
             alt={call.studentName}
-            style={{
-              position: 'absolute', inset: 0,
-              width: '100%', height: '100%',
-              objectFit: 'cover', zIndex: 1,
-              opacity: isFinished ? 0.6 : 1,
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
           />
         ) : (
           <div style={{
-            width: 120, height: 120,
-            borderRadius: 20,
-            background: `linear-gradient(145deg, ${color}90, ${color}40)`,
+            width: '100%', height: '100%',
+            background: `linear-gradient(135deg, ${color}80, ${color}30)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 900, fontSize: 52,
-            color: '#fff', letterSpacing: '-3px',
-            fontFamily: 'Outfit, sans-serif',
-            border: `3px solid ${color}70`,
-            boxShadow: `0 8px 28px ${color}45, inset 0 1px 0 rgba(255,255,255,0.2)`,
-            position: 'relative', zIndex: 1,
+            fontSize: 56, fontWeight: 900, color: '#fff',
+            letterSpacing: '-1px',
           }}>
             {initials}
           </div>
         )}
 
+        {/* Cinematic Gradient Overlay */}
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to bottom, transparent 20%, rgba(15,23,42,0.8) 65%, #0f172a 100%)'
+        }} />
       </div>
 
-      {/* ── COLUNA DIREITA: Informações ─────────────────────────────────── */}
-      <div style={{ flex: 1, padding: '20px 22px', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* Status badge — topo da coluna direita */}
+      {/* Floating Status Tag */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '4px 10px', borderRadius: 100,
-          background: `${color}12`, border: `1px solid ${color}40`,
-          fontSize: 9, fontWeight: 900, color, letterSpacing: '0.08em',
-          alignSelf: 'flex-start', marginBottom: 8,
+          position: 'absolute', top: 12, left: 12,
+          padding: '6px 12px', borderRadius: 50,
+          background: color,
+          display: 'flex', alignItems: 'center', gap: 4,
+          fontSize: 10, fontWeight: 900, color: '#fff',
+          textTransform: 'uppercase', letterSpacing: '0.05em',
+          boxShadow: `0 4px 16px ${color}80`,
+          zIndex: 10,
         }}>
-          <div style={{
-            width: 5, height: 5, borderRadius: '50%', background: color,
-            animation: isActive ? 'blink 1.4s ease infinite' : 'none', flexShrink: 0,
-          }}/>
-          {statusMeta(call).label}
+          {isActive ? <Clock size={10} className={urgent ? 'tv-pulse-icon' : ''} /> : 
+           call.status === 'confirmed' ? <CheckCircle2 size={10} /> : <X size={10} />}
+          {urgent ? 'ATRASADO' : meta.label}
         </div>
 
-        {/* Student name */}
+        {/* Live Timer (if active) */}
+        {isActive && (
+          <div style={{
+            position: 'absolute', top: 12, right: 12,
+            padding: '4px 10px', borderRadius: 50,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: 10, fontWeight: 900, color: '#fff',
+            display: 'flex', alignItems: 'center', gap: 4, zIndex: 10,
+          }}>
+            {mins} MIN
+          </div>
+        )}
+      {/* ── CONTENT AREA ─────────────────────────────────────────────────── */}
+      <div style={{
+        position: 'relative', zIndex: 5, marginTop: 'auto',
+        padding: '16px 20px 20px', display: 'flex', flexDirection: 'column',
+      }}>
         <div style={{
-          fontWeight: 900, fontSize: 22,
-          fontFamily: 'Outfit, sans-serif',
-          letterSpacing: '-0.03em', lineHeight: 1.2,
-          wordBreak: 'break-word',
-          marginBottom: 10,
+          fontSize: 16, fontWeight: 900, color: '#fff',
+          lineHeight: 1.2, marginBottom: 4, textTransform: 'uppercase',
+          fontFamily: 'Outfit, sans-serif', textShadow: '0 2px 8px rgba(0,0,0,0.8)',
         }}>
           {call.studentName}
         </div>
-
-        {/* Turma */}
+        
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          padding: '6px 14px', borderRadius: 10, marginBottom: 10,
-          background: `${color}12`, border: `1px solid ${color}25`,
-          color, fontWeight: 800, fontSize: 14,
-          alignSelf: 'flex-start',
+          fontSize: 12, fontWeight: 800, color, textTransform: 'uppercase',
+          letterSpacing: '0.02em', marginBottom: 16,
         }}>
-          <GraduationCap size={14}/>
+          <GraduationCap size={12} />
           {call.studentClass}
         </div>
 
-        {/* Guardian */}
-        <div style={{ fontSize: 14, color: 'hsl(var(--text-muted))', marginBottom: 6, fontWeight: 600 }}>
-          👤 {call.guardianName}
-        </div>
 
-        {/* Time */}
-        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 16 }}>
-          Chamado às{' '}
-          <span style={{ color, fontWeight: 800, fontSize: 15 }}>
-            {new Date(call.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          {call.confirmedAt && (
-            <span style={{ fontSize: 12 }}> → saída {new Date(call.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-          )}
-        </div>
 
-        {/* Spacer */}
-        <div style={{ flex: 1 }}/>
-
-        {/* ── Action buttons ─────────────────────────────────────────────── */}
-        {isActive && (
-          <div style={{
-            marginTop: 4,
-            paddingTop: 14,
-            borderTop: `1px solid ${color}18`,
-            display: 'flex', gap: 8,
-          }}>
-            {/* Chamar Novamente — secondary outlined */}
-            <button onClick={handleRecall} disabled={recalling} style={{
-              flex: 1, height: 42, borderRadius: 12,
-              background: recalling ? 'transparent' : 'rgba(129,140,248,0.07)',
-              border: `1.5px solid ${recalling ? 'rgba(129,140,248,0.15)' : 'rgba(129,140,248,0.4)'}`,
-              color: recalling ? 'hsl(var(--text-muted))' : '#818cf8',
-              fontWeight: 700, fontSize: 12, cursor: recalling ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              transition: 'all 0.18s', whiteSpace: 'nowrap',
-              letterSpacing: '0.01em',
-            }}>
-              <Megaphone size={13} style={{ flexShrink: 0 }}/>
-              {recalling ? 'Chamando…' : 'Chamar Nov.'}
-            </button>
-
-            {/* Confirmar Saída — primary filled */}
-            <button onClick={() => onConfirm(call.id)} style={{
-              flex: 1.4, height: 42, borderRadius: 12,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              border: 'none',
-              color: '#fff',
-              fontWeight: 800, fontSize: 13, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              transition: 'all 0.18s', whiteSpace: 'nowrap',
-              boxShadow: '0 4px 14px rgba(16,185,129,0.35)',
-              letterSpacing: '0.01em',
-            }}>
-              <CheckCircle2 size={14} style={{ flexShrink: 0 }}/> Confirmar
-            </button>
-
-            {/* Cancelar — icon-only danger */}
-            <button onClick={() => onCancel(call.id)} style={{
-              width: 42, height: 42, flexShrink: 0, borderRadius: 12,
-              background: 'rgba(239,68,68,0.06)',
-              border: '1.5px solid rgba(239,68,68,0.25)',
-              color: '#ef4444', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.18s',
-            }}>
-              <X size={14}/>
-            </button>
-          </div>
-        )}
-
-        {/* Block reason banner (when blocked) */}
+        {/* Block Reason Banner */}
         {isBlocked && call.blockReason && (
           <div style={{
-            marginTop: 4, padding: '10px 14px', borderRadius: 10,
-            background: call.blockType === 'proibido' ? 'rgba(239,68,68,0.08)' : 'rgba(249,115,22,0.07)',
-            border: `1px solid ${color}30`,
-            fontSize: 11, color: '#94a3b8', lineHeight: 1.6,
+            padding: '8px 12px', borderRadius: 8, marginBottom: 16,
+            background: `rgba(${call.blockType === 'proibido' ? '239,68,68' : '249,115,22'}, 0.15)`,
+            border: `1px solid ${color}40`, fontSize: 10, color: '#cbd5e1', lineHeight: 1.4,
           }}>
-            <span style={{ fontWeight: 800, color }}>
-              {call.blockType === 'proibido' ? '🚫 Acesso bloqueado: ' : '📅 Dia não permitido: '}
-            </span>
+            <strong style={{ color }}>{call.blockType === 'proibido' ? '🚫 PROIBIDO: ' : '📅 DIA RESTRITO: '}</strong>
             {call.blockReason}
           </div>
         )}
 
-        {isFinished && (
-          <div style={{ marginTop: 4, paddingTop: 14, borderTop: `1px solid ${color}18` }}>
-            <button onClick={() => onRevert(call.id)} style={{
-              width: '100%', height: 40, borderRadius: 12,
-              background: 'rgba(99,102,241,0.07)', border: '1.5px solid rgba(99,102,241,0.28)',
-              color: '#818cf8', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-              transition: 'all 0.18s', whiteSpace: 'nowrap',
+        {/* Footer info (Guardian & Time) */}
+        <div style={{
+          borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, marginBottom: 14,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+        }}>
+          {/* Left: Guardian */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0, paddingRight: 8 }}>
+            <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Responsável
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f8fafc', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+              <UserCheck size={12} color="#cbd5e1" style={{ flexShrink: 0 }} />
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {call.guardianName || 'Não Informado'}
+              </span>
+            </div>
+          </div>
+          
+          {/* Right: Times */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, fontSize: 10, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+               <Megaphone size={10} color={color} />
+               {fmtTime(call.calledAt)}
+             </div>
+             {call.confirmedAt && (
+               <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981' }}>
+                 <CheckCircle2 size={10} />
+                 {fmtTime(call.confirmedAt)}
+               </div>
+             )}
+          </div>
+        </div>
+
+        {/* ── ACTION BUTTONS ─────────────────────────────────────────────── */}
+        {isActive && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-modern btn-chamar" onClick={handleRecall} disabled={recalling} style={{
+              flex: 1, height: 42, borderRadius: 12,
+              fontWeight: 800, fontSize: 11, cursor: recalling ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              textTransform: 'uppercase',
             }}>
-              <RotateCcw size={13}/> Reverter para Aguardando
+              <Megaphone size={13}/> {recalling ? 'Chamando...' : 'Chamar'}
+            </button>
+
+            <button className="btn-modern btn-confirmar" onClick={() => onConfirm(call.id)} style={{
+              flex: 1.5, height: 42, borderRadius: 12,
+              fontWeight: 800, fontSize: 12, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              textTransform: 'uppercase',
+            }}>
+              <CheckCircle2 size={13}/> Confirmar
+            </button>
+
+            <button className="btn-modern btn-cancelar" onClick={() => onCancel(call.id)} style={{
+              width: 42, height: 42, flexShrink: 0, borderRadius: 12,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <X size={15}/>
             </button>
           </div>
         )}
 
+        {isFinished && (
+          <button onClick={() => onRevert(call.id)} style={{
+            width: '100%', height: 42, borderRadius: 12,
+            background: 'hsl(var(--bg-overlay))', border: '1px solid hsl(var(--border-subtle))',
+            color: 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 11, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            transition: 'all 0.2s', textTransform: 'uppercase',
+          }}>
+            <RotateCcw size={13}/> Reverter para Aguardando
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
 // ── Student search row with inline guardian buttons ───────────────────────────
-function StudentSearchRow({ student, activeCalls, onCall }: {
+function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
   student: any
   activeCalls: PickupCall[]
   onCall: (sId: string, sName: string, sClass: string, gId: string, gName: string, foto?: string | null) => void
+  showToast: (msg: string, ok?: boolean) => void
 }) {
   // Read autorizados directly from aluno.saude (set in nova-matricula)
   const saude: any = student.saude || {}
   const autorizados: any[] = saude.autorizados || []
-  const autorizaSaida: boolean = saude.autorizaSaida === true   // can leave alone
+  const autorizaSaida: boolean = student.autorizadoSairSozinho === true || saude.autorizaSaida === true   // can leave alone
+
+  const [showProibidoAlert, setShowProibidoAlert] = useState<{ name: string, message: string } | null>(null)
 
   // Day-of-week check
   const DIAS_LABEL = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom']
@@ -298,6 +318,21 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
       })
     })
   } else {
+    // Responsáveis from responsaveis array (Process first to get proibido and diasSemana!)
+    const resps: any[] = student.responsaveis || []
+    resps.forEach((r: any, i: number) => {
+      const key = (r.nome || '').toLowerCase().trim()
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        respList.push({ 
+          id: `resp-${i}`, 
+          name: r.nome, 
+          role: r.parentesco || 'Responsável',
+          proibido: r.proibido === true,
+          diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
+        })
+      }
+    })
     // Fallback to ERP fields when no saude.autorizados configured
     const erp: { name: string; role: string }[] = []
     if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
@@ -306,15 +341,6 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
     erp.forEach((c, i) => {
       const key = c.name.toLowerCase().trim()
       if (!seen.has(key)) { seen.add(key); respList.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
-    })
-    // Responsáveis from responsaveis array
-    const resps: any[] = student.responsaveis || []
-    resps.forEach((r: any, i: number) => {
-      const key = (r.nome || '').toLowerCase().trim()
-      if (key && !seen.has(key)) {
-        seen.add(key)
-        respList.push({ id: `resp-${i}`, name: r.nome, role: r.parentesco || 'Responsável' })
-      }
     })
   }
 
@@ -332,15 +358,23 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
       <div style={{ padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{
           width: 52, height: 52, borderRadius: 13, flexShrink: 0,
-          background: 'linear-gradient(135deg, #06b6d450, #6366f130)',
+          background: (student.foto || student.imagem1) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontWeight: 900, fontSize: 20, color: '#fff', fontFamily: 'Outfit, sans-serif',
-        }}>{initials}</div>
+          position: 'relative', overflow: 'hidden',
+          border: (student.foto || student.imagem1) ? '1px solid hsl(var(--border-subtle))' : 'none',
+        }}>
+          {(student.foto || student.imagem1) ? (
+            <img src={student.foto || student.imagem1} alt={student.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            initials
+          )}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 3 }}>{student.nome}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
             <GraduationCap size={11} color="#06b6d4"/>
-            <span style={{ color: '#06b6d4', fontWeight: 700 }}>{student.turma}</span>
+            <span style={{ color: '#06b6d4', fontWeight: 700 }}>{student.turmaNome || student.turma}</span>
             {student.turno && <span style={{ color: 'hsl(var(--text-muted))' }}>· {student.turno}</span>}
             {alreadyCalled && (
               <span style={{
@@ -381,34 +415,48 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
             {respList.map((g: any) => {
               const isProibido = g.proibido === true
               const dias: string[] = g.diasSemana || []
-              const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+              const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
               const todayK = remap2[new Date().getDay()]
               const diaRestrito = dias.length > 0 && !dias.includes(todayK)
-              const blocked = alreadyCalled || isProibido
+              const blocked = alreadyCalled
               return (
                 <button
                   key={g.id}
-                  onClick={() => !blocked && !diaRestrito && onCall(student.id, student.nome, student.turma, g.id, g.name, student.foto)}
-                  disabled={blocked || diaRestrito}
+                  onClick={() => {
+                    if (isProibido) {
+                      setShowProibidoAlert({ name: g.name, message: 'está PROIBIDO(A) de retirar o aluno!' })
+                      setTimeout(() => setShowProibidoAlert(null), 3000)
+                      return
+                    }
+                    if (diaRestrito) {
+                      setShowProibidoAlert({ name: g.name, message: 'não tem autorização para retirar HOJE!' })
+                      setTimeout(() => setShowProibidoAlert(null), 3000)
+                      return
+                    }
+                    if (!blocked) {
+                      onCall(student.id, student.nome, student.turmaNome || student.turma, g.id, g.name, student.foto || student.imagem1)
+                    }
+                  }}
+                  disabled={blocked}
                   title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : undefined}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '6px 12px', borderRadius: 100,
                     background: isProibido
-                      ? 'rgba(239,68,68,0.08)'
+                      ? 'rgba(239,68,68,0.15)'
                       : alreadyCalled || diaRestrito
                         ? 'hsl(var(--bg-overlay))'
                         : 'linear-gradient(135deg, #06b6d415, #6366f112)',
                     border: isProibido
-                      ? '1px solid rgba(239,68,68,0.3)'
+                      ? '1px solid rgba(239,68,68,0.5)'
                       : alreadyCalled
                         ? '1px solid hsl(var(--border-subtle))'
                         : '1px solid rgba(6,182,212,0.35)',
-                    color: isProibido ? '#f87171' : alreadyCalled || diaRestrito ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))',
+                    color: isProibido ? '#ef4444' : alreadyCalled || diaRestrito ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))',
                     fontWeight: 700, fontSize: 12,
                     cursor: blocked || diaRestrito ? 'not-allowed' : 'pointer',
                     transition: 'all 0.15s',
-                    opacity: isProibido ? 0.7 : alreadyCalled ? 0.5 : 1,
+                    opacity: isProibido ? 1 : alreadyCalled ? 0.5 : 1,
                   }}
                   onMouseEnter={e => {
                     if (blocked || diaRestrito || isProibido) return
@@ -427,6 +475,7 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
                 >
                   {isProibido ? <span style={{ fontSize: 11 }}>🚫</span> : <UserCheck size={11}/>}
                   <span>{g.name}</span>
+                  {isProibido && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444' }}>(proibido retirar)</span>}
                   <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.6, padding: '1px 5px', borderRadius: 4, background: 'rgba(0,0,0,0.08)' }}>
                     {g.role}
                   </span>
@@ -438,6 +487,593 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
             })}
           </div>
         )}
+        <AnimatePresence>
+          {showProibidoAlert && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                background: 'rgba(220, 38, 38, 0.95)',
+                zIndex: 9999, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                color: '#fff',
+              }}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
+                transition={{ repeat: Infinity, duration: 0.5 }}
+                style={{ textAlign: 'center' }}
+              >
+                <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
+                <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
+
+function CallCardSkeleton() {
+  return (
+    <div className="skeleton-shimmer" style={{
+      borderRadius: 20,
+      background: 'hsl(var(--bg-elevated))',
+      border: '1px solid hsl(var(--border-subtle))',
+      minHeight: 320,
+      aspectRatio: '1 / 1.38',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      {/* Background/Photo area placeholder */}
+      <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)' }} />
+      
+      {/* Content Area */}
+      <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Name */}
+        <div style={{ width: '80%', height: 18, borderRadius: 4, background: 'rgba(255,255,255,0.08)' }} />
+        {/* Class */}
+        <div style={{ width: '40%', height: 12, borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
+        
+        {/* Divider */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 12, marginTop: 4 }} />
+        
+        {/* Footer info placeholder */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ width: '50%', height: 10, borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
+          <div style={{ width: '20%', height: 10, borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
+        </div>
+        
+        {/* Action Buttons placeholder */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <div style={{ flex: 1, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.04)' }} />
+          <div style={{ flex: 1.5, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.04)' }} />
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.04)' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Special Exit Sticker Component ──────────────────────────────────────────
+interface SpecialLaunch {
+  id: string
+  studentId: string
+  studentName: string
+  studentClass: string
+  studentPhoto?: string | null
+  authorizedPerson: string
+  loggedBy: string
+  date: string
+  time: string
+}
+
+function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
+  const { callStudent, confirmPickup, activeCalls = [] } = useSaida()
+  const [todasTurmas] = useSupabaseArray<any>('turmas');
+  const { currentUser } = useApp()
+
+  // Form State
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
+  const [authorizedPerson, setAuthorizedPerson] = useState('')
+
+  // Launches State
+  const [launches, setLaunches] = useState<SpecialLaunch[]>([])
+
+  // Load from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('edu-special-launches')
+      if (stored) {
+        setLaunches(JSON.parse(stored))
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
+
+  // Save to localStorage
+  const saveLaunches = (list: SpecialLaunch[]) => {
+    setLaunches(list)
+    try {
+      localStorage.setItem('edu-special-launches', JSON.stringify(list))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  // Search autocomplete debounced
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 3 || selectedStudent) {
+      setResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5`)
+        if (!res.ok) throw new Error('Falha ao buscar')
+        const json = await res.json()
+        const data = json.data || []
+
+        const filtered = data.filter((a: any) =>
+          ['ativo', 'matriculado'].includes(String(a.status || '').trim().toLowerCase())
+        )
+
+        const mapped = filtered.map((a: any) => {
+          const turmaObj = (todasTurmas || []).find((t: any) => 
+            String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma
+          )
+          return { ...a, turmaNome: turmaObj?.nome || a.turma }
+        })
+        setResults(mapped)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [search, selectedStudent, todasTurmas])
+
+  const handleConfirm = () => {
+    if (!selectedStudent || !authorizedPerson.trim()) return
+
+    const operatorName = currentUser?.nome || 'Admin Logado'
+    const today = new Date()
+    const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+    // 1. Trigger the student exit call
+    const call = callStudent(
+      selectedStudent.id,
+      selectedStudent.nome,
+      selectedStudent.turmaNome || selectedStudent.turma,
+      'special-auth',
+      authorizedPerson,
+      'manual',
+      undefined,
+      selectedStudent.foto || selectedStudent.imagem1
+    )
+
+    // 2. Immediately confirm it
+    if (call) {
+      confirmPickup(call.id)
+    }
+
+    // 3. Save special launch to localStorage feed
+    const launch: SpecialLaunch = {
+      id: crypto.randomUUID(),
+      studentId: selectedStudent.id,
+      studentName: selectedStudent.nome,
+      studentClass: selectedStudent.turmaNome || selectedStudent.turma,
+      studentPhoto: selectedStudent.foto || selectedStudent.imagem1,
+      authorizedPerson: authorizedPerson.trim(),
+      loggedBy: operatorName,
+      date: dateStr,
+      time: timeStr
+    }
+
+    const updated = [launch, ...launches].slice(0, 50)
+    saveLaunches(updated)
+
+    showToast(`Saída especial de ${selectedStudent.nome} registrada com sucesso!`)
+
+    // Reset Form
+    setSelectedStudent(null)
+    setSearch('')
+    setAuthorizedPerson('')
+  }
+
+  const handleDeleteLaunch = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setTimeout(() => {
+      if (window.confirm('Excluir este lançamento do sticker?')) {
+        const updated = launches.filter(l => l.id !== id)
+        saveLaunches(updated)
+      }
+    }, 50)
+  }
+
+  return (
+    <div style={{
+      position: 'relative',
+      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.04) 100%)',
+      border: '1.5px solid rgba(245, 158, 11, 0.35)',
+      borderRadius: 24,
+      padding: '14px 18px',
+      boxShadow: 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.03)',
+      transform: 'rotate(-0.3deg)',
+      transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'flex-start',
+    }}
+    onMouseEnter={e => {
+      e.currentTarget.style.transform = 'none'
+      e.currentTarget.style.boxShadow = 'var(--shadow-xl), inset 0 0 20px rgba(245,158,11,0.05)'
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.transform = 'rotate(-0.3deg)'
+      e.currentTarget.style.boxShadow = 'var(--shadow-lg), inset 0 0 20px rgba(245,158,11,0.02)'
+    }}
+    >
+      {/* 📌 Floating Pushpin */}
+      <div style={{
+        position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)',
+        fontSize: 22, zIndex: 10, filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.25))',
+      }}>
+        📌
+      </div>
+
+      <div style={{ fontWeight: 900, fontSize: 13, color: '#d97706', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        📝 Autorização Especial do Dia
+      </div>
+
+      {/* COMPACT SIDE-BY-SIDE GRID */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 10,
+        marginBottom: 10,
+      }}>
+        {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
+        <div style={{ flex: '1 1 200px', minWidth: 0, position: 'relative' }}>
+          {!selectedStudent ? (
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar aluno..."
+                className="form-input"
+                style={{
+                  width: '100%', padding: '10px 12px 10px 34px',
+                  borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
+                  background: 'hsl(var(--bg-surface))', fontSize: 13,
+                  color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
+                  height: 38,
+                }}
+              />
+
+              {isSearching && (
+                <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                  <RefreshCw size={12} className="spin" color="#f59e0b" />
+                </div>
+              )}
+
+              {/* Autocomplete Results */}
+              {results.length > 0 && (
+                <div style={{
+                  position: 'absolute', left: 0, right: 0, top: 'calc(100% + 4px)',
+                  background: 'hsl(var(--bg-surface))', border: '1px solid rgba(245, 158, 11, 0.45)',
+                  borderRadius: 12, overflow: 'hidden', zIndex: 50,
+                  boxShadow: 'var(--shadow-xl)',
+                }}>
+                  {results.map(a => (
+                    <div
+                      key={a.id}
+                      onClick={() => { setSelectedStudent(a); setResults([]); setSearch(''); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 12px', cursor: 'pointer',
+                        borderBottom: '1px solid hsl(var(--border-subtle))',
+                        transition: 'background 0.2s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.06)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 6, overflow: 'hidden',
+                        background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 900, color: '#f59e0b',
+                      }}>
+                        {a.foto || a.imagem1 ? (
+                          <img src={a.foto || a.imagem1} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                        ) : (
+                          a.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
+                        <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{a.turmaNome || a.turma}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Selected Student Badge */
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '0 10px', borderRadius: 12, height: 38,
+              background: 'hsl(var(--bg-surface))', border: '1.5px dashed rgba(245, 158, 11, 0.45)',
+              position: 'relative', boxSizing: 'border-box',
+              boxShadow: 'var(--shadow-sm)',
+            }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: 6, overflow: 'hidden',
+                background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
+              }}>
+                {selectedStudent.foto || selectedStudent.imagem1 ? (
+                  <img src={selectedStudent.foto || selectedStudent.imagem1} alt={selectedStudent.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                ) : (
+                  selectedStudent.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 11, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selectedStudent.nome}
+                </div>
+                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', lineHeight: 1 }}>
+                  {selectedStudent.turmaNome || selectedStudent.turma}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedStudent(null); }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'hsl(var(--text-muted))', display: 'flex', padding: 4,
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                onMouseLeave={e => e.currentTarget.style.color = 'hsl(var(--text-muted))'}
+              >
+                <X size={13}/>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* COLUMN 2: AUTHORIZED PERSON */}
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+          <input
+            value={authorizedPerson}
+            onChange={e => setAuthorizedPerson(e.target.value)}
+            placeholder="Quem está autorizado a retirar?"
+            disabled={!selectedStudent}
+            className="form-input"
+            style={{
+              width: '100%', padding: '10px 12px',
+              borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
+              background: 'hsl(var(--bg-surface))', fontSize: 12,
+              color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
+              opacity: selectedStudent ? 1 : 0.5,
+              height: 38,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* CONFIRM BUTTON */}
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
+        disabled={!selectedStudent || !authorizedPerson.trim()}
+        style={{
+          width: '100%', height: 35, borderRadius: 12,
+          background: (!selectedStudent || !authorizedPerson.trim())
+            ? 'hsl(var(--bg-elevated))'
+            : 'linear-gradient(135deg, #f59e0b, #d97706)',
+          border: (!selectedStudent || !authorizedPerson.trim()) ? '1px solid hsl(var(--border-subtle))' : 'none',
+          color: (!selectedStudent || !authorizedPerson.trim()) ? 'hsl(var(--text-muted))' : '#fff',
+          fontWeight: 800, fontSize: 11, cursor: (!selectedStudent || !authorizedPerson.trim()) ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          textTransform: 'uppercase', letterSpacing: '0.02em',
+          boxShadow: (!selectedStudent || !authorizedPerson.trim()) ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.25)',
+          transition: 'all 0.2s',
+          marginBottom: 12,
+        }}
+        onMouseEnter={e => {
+          if (!selectedStudent || !authorizedPerson.trim()) return
+          e.currentTarget.style.filter = 'brightness(1.1)'
+          e.currentTarget.style.transform = 'translateY(-1px)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.filter = 'none'
+          e.currentTarget.style.transform = 'none'
+        }}
+      >
+        <CheckCircle2 size={13}/> Confirmar Saída Especial
+      </button>
+
+      {/* TIMELINE LOG OF TODAY'S RELEASES */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ borderTop: '1px solid rgba(245,158,11,0.22)', paddingTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 10, fontWeight: 900, color: '#d97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚡ Lançados Hoje</span>
+          <span style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{launches.length} total</span>
+        </div>
+
+        <div style={{
+          flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5,
+          maxHeight: 120, paddingRight: 4,
+        }}>
+          {launches.map(l => (
+            <div
+              key={l.id}
+              style={{
+                background: 'hsl(var(--bg-surface))', border: '1px solid rgba(245,158,11,0.22)',
+                borderRadius: 10, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
+                boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              <div style={{
+                width: 22, height: 22, borderRadius: 5, overflow: 'hidden',
+                background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
+              }}>
+                {l.studentPhoto ? (
+                  <img src={l.studentPhoto} alt={l.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                ) : (
+                  l.studentName.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {l.studentName}
+                </div>
+                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  retirado por: <span style={{ color: '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
+                </div>
+                <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
+                  <span>{l.time}</span>
+                  <span>·</span>
+                  <span>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{l.loggedBy}</span></span>
+                </div>
+              </div>
+              
+              {/* MICRO ACTION BUTTONS */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {/* BUTTON: CALL STUDENT */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    callStudent(
+                      l.studentId,
+                      l.studentName,
+                      l.studentClass,
+                      'special-auth',
+                      l.authorizedPerson,
+                      'manual',
+                      undefined,
+                      l.studentPhoto
+                    )
+                    showToast(`Aluno ${l.studentName} chamado novamente!`)
+                  }}
+                  title="Chamar Aluno"
+                  style={{
+                    background: 'rgba(99,102,241,0.12)', border: 'none', cursor: 'pointer',
+                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#818cf8', transition: 'all 0.2s', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#6366f1'
+                    e.currentTarget.style.color = '#fff'
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(99,102,241,0.4)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(99,102,241,0.12)'
+                    e.currentTarget.style.color = '#818cf8'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }}
+                >
+                  <Megaphone size={11} />
+                </button>
+
+                {/* BUTTON: CONFIRM PICKUP */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                    if (existingCall) {
+                      confirmPickup(existingCall.id)
+                    } else {
+                      const call = callStudent(
+                        l.studentId,
+                        l.studentName,
+                        l.studentClass,
+                        'special-auth',
+                        l.authorizedPerson,
+                        'manual',
+                        undefined,
+                        l.studentPhoto
+                      )
+                      if (call) {
+                        confirmPickup(call.id)
+                      }
+                    }
+                    showToast(`Saída de ${l.studentName} confirmada!`)
+                  }}
+                  title="Confirmar Saída"
+                  style={{
+                    background: 'rgba(16,185,129,0.12)', border: 'none', cursor: 'pointer',
+                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#34d399', transition: 'all 0.2s', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#10b981'
+                    e.currentTarget.style.color = '#fff'
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(16,185,129,0.4)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(16,185,129,0.12)'
+                    e.currentTarget.style.color = '#34d399'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }}
+                >
+                  <CheckCircle2 size={11} />
+                </button>
+
+                {/* BUTTON: DELETE LAUNCH */}
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteLaunch(l.id, e); }}
+                  title="Excluir Lançamento"
+                  style={{
+                    background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer',
+                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#ef4444'
+                    e.currentTarget.style.color = '#fff'
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(239,68,68,0.4)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)'
+                    e.currentTarget.style.color = '#ef4444'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }}
+                >
+                  <Trash2 size={11}/>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {launches.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px 0', color: 'rgba(245,158,11,0.5)', fontSize: 11, fontStyle: 'italic' }}>
+              Nenhuma saída especial registrada hoje.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -445,31 +1081,78 @@ function StudentSearchRow({ student, activeCalls, onCall }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ChamadasContent() {
-  const { activeCalls, confirmPickup, cancelCall, recallStudent, revertCall, callStudent } = useSaida()
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { activeCalls = [], confirmPickup, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
+  const [turmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
-  const [filter,        setFilter]        = useState<FilterType>('all')
+  const [filter,        setFilter]        = useState<FilterType>('waiting')
   const [callSearch,    setCallSearch]    = useState('')
-  const [studentSearch, setStudentSearch] = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
-  const showToast = (msg: string, ok = true) => {
+  // -- Busca de Alunos Refatorada Direct Supabase --
+  const [studentSearch, setStudentSearch] = useState('')
+  const [schoolResults, setSchoolResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+
+  const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3000)
-  }
+  }, [])
 
-  const schoolResults = useMemo(() => {
-    if (studentSearch.trim().length < 2) return []
-    const q = studentSearch.toLowerCase()
-    return (alunos as any[]).filter(a =>
-      a.nome?.toLowerCase().includes(q) ||
-      a.turma?.toLowerCase().includes(q) ||
-      a.id?.includes(q)
-    ).slice(0, 10)
-  }, [alunos, studentSearch])
+  // Fallback Polling 30s se o Supabase Realtime falhar ou desconectar
+  useEffect(() => {
+    if (realtimeStatus !== 'online') {
+      refreshCalls() // Dispara imediatamente
+      const iv = setInterval(() => {
+        refreshCalls()
+      }, 30000)
+      return () => clearInterval(iv)
+    }
+  }, [realtimeStatus, refreshCalls])
+
+  // Debounced search on secure server API (bypassing client RLS limitations!)
+  useEffect(() => {
+    const q = studentSearch.trim()
+    if (q.length < 3) {
+      setSchoolResults([])
+      setIsSearching(false)
+      return
+    }
+
+    setIsSearching(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10`)
+        if (!res.ok) throw new Error('Falha ao buscar alunos')
+        const json = await res.json()
+        const data = json.data || []
+
+        // Filtra apenas alunos ativos/matriculados
+        const filtered = data.filter((a: any) =>
+          ['ativo', 'matriculado'].includes(String(a.status || '').trim().toLowerCase())
+        )
+
+        const mapped = filtered.map((a: any) => {
+          const turmaObj = (turmas || []).find((t: any) => 
+            String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma
+          )
+          return { ...a, turmaNome: turmaObj?.nome || a.turma }
+        })
+
+        setSchoolResults(mapped)
+      } catch (err) {
+        console.error('Erro ao buscar alunos:', err)
+        setSchoolResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [studentSearch, turmas])
 
   const handleCall = (
     studentId: string, studentName: string, studentClass: string,
@@ -535,83 +1218,126 @@ function ChamadasContent() {
 )}</AnimatePresence>
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px' }}>
-          📢 Gestão de Chamadas
-        </h1>
-        <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
-          Histórico e controle em tempo real
-        </p>
-      </div>
-
-      {/* ── STATS ───────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: isMobile ? 8 : 12, marginBottom: 20 }}>
-        {[
-          { label: 'Aguardando', value: mounted ? waiting.length   : 0, color: '#f59e0b', icon: '⏳', bg: 'rgba(245,158,11,0.08)',  bd: 'rgba(245,158,11,0.2)' },
-          { label: 'Confirmados',value: mounted ? confirmed.length : 0, color: '#10b981', icon: '✅', bg: 'rgba(16,185,129,0.08)',  bd: 'rgba(16,185,129,0.2)' },
-          { label: 'Cancelados', value: mounted ? cancelled.length : 0, color: '#ef4444', icon: '✕',  bg: 'rgba(239,68,68,0.06)', bd: 'rgba(239,68,68,0.15)' },
-        ].map(s => (
-          <div key={s.label} style={{ padding: isMobile ? '14px 12px' : '18px 20px', borderRadius: 18, background: s.bg, border: `1px solid ${s.bd}` }}>
-            <div style={{ fontSize: isMobile ? 14 : 18, marginBottom: 4 }}>{s.icon}</div>
-            <div style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 24 : 32, color: s.color, letterSpacing: '-2px' }}>
-              {s.value}
-            </div>
-            <div style={{ fontSize: isMobile ? 9 : 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── SEARCH ─────────────────────────────────────────────────── */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(6,182,212,0.06), rgba(99,102,241,0.03))',
-        border: '1px solid rgba(6,182,212,0.2)',
-        borderRadius: 20, padding: '22px 24px', marginBottom: 28,
-      }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Search size={16} color="#06b6d4"/> Chamar Aluno
+      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            📢 Gestão de Chamadas
+          </h1>
+          <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
+            Histórico e controle em tempo real
+          </p>
         </div>
-        <div style={{ position: 'relative' }}>
-          <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
-          <input
-            value={studentSearch}
-            onChange={e => setStudentSearch(e.target.value)}
-            placeholder="Buscar aluno por nome, turma ou código..."
-            style={{
-              width: '100%', padding: '12px 40px',
-              borderRadius: 12, border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-elevated))', fontSize: 13,
-              color: 'hsl(var(--text-base))', outline: 'none', boxSizing: 'border-box',
-            }}
-          />
-          {studentSearch && (
-            <button onClick={() => setStudentSearch('')} style={{
-              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'hsl(var(--text-muted))', padding: 4, display: 'flex',
-            }}>
-              <X size={14}/>
-            </button>
+
+        {/* Connection Status Badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '6px 12px',
+          borderRadius: 10,
+          fontSize: 10,
+          fontWeight: 900,
+          letterSpacing: '0.05em',
+          background: realtimeStatus === 'online' ? 'rgba(16,185,129,0.12)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+          border: `1px solid ${realtimeStatus === 'online' ? 'rgba(16,185,129,0.25)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+          color: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+          transition: 'all 0.3s ease',
+        }}>
+          <div style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+            boxShadow: `0 0 6px ${realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444'}`,
+            animation: realtimeStatus !== 'online' ? 'pulseUrgent 1.5s infinite' : 'none'
+          }} />
+          <span style={{ textTransform: 'uppercase' }}>
+            {realtimeStatus === 'online' ? 'ONLINE' : realtimeStatus === 'connecting' ? 'CONECTANDO' : 'OFFLINE'}
+          </span>
+        </div>
+      </div>
+
+
+
+      {/* ── TOP CONTAINERS GRID (SEARCH & STICKER) ─────────────────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr',
+        gap: 20,
+        marginBottom: 28,
+        alignItems: 'start',
+      }}>
+        {/* ── SEARCH ─────────────────────────────────────────────────── */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(6,182,212,0.06), rgba(99,102,241,0.03))',
+          border: '1px solid rgba(6,182,212,0.2)',
+          borderRadius: 20, padding: '14px 18px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
+        }}>
+          <div style={{ fontWeight: 900, fontSize: 13, color: '#06b6d4', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <Search size={15} color="#06b6d4"/> Chamar Aluno
+          </div>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
+            <input
+              value={studentSearch}
+              onChange={e => setStudentSearch(e.target.value)}
+              placeholder="Buscar aluno por nome (mínimo 3 letras)..."
+              style={{
+                width: '100%', padding: '10px 12px 10px 34px',
+                borderRadius: 12, border: '1px solid hsl(var(--border-subtle))',
+                background: 'hsl(var(--bg-elevated))', fontSize: 13,
+                color: 'hsl(var(--text-base))', outline: 'none', boxSizing: 'border-box',
+                height: 38,
+              }}
+            />
+            {studentSearch && (
+              <button onClick={() => { setStudentSearch(''); }} style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'hsl(var(--text-muted))', padding: 4, display: 'flex',
+              }}>
+                <X size={14}/>
+              </button>
+            )}
+          </div>
+          
+          {studentSearch.trim().length > 0 && studentSearch.trim().length < 3 && (
+            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0' }}>
+              Digite pelo menos 3 letras do nome do aluno.
+            </div>
+          )}
+          
+          {isSearching && (
+            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <RefreshCw size={14} className="spin" /> Buscando alunos...
+            </div>
+          )}
+
+          {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {schoolResults.map((a: any) => (
+                <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
+              ))}
+            </div>
+          )}
+          
+          {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
+            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0' }}>
+              Nenhum aluno encontrado com esse nome.
+            </div>
           )}
         </div>
-        {schoolResults.length > 0 && (
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {schoolResults.map((a: any) => (
-              <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall}/>
-            ))}
-          </div>
-        )}
-        {studentSearch.trim().length >= 2 && schoolResults.length === 0 && (
-          <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0' }}>
-            Nenhum aluno encontrado para "{studentSearch}"
-          </div>
-        )}
+
+        {/* ── STICKER ────────────────────────────────────────────────── */}
+        <SpecialExitSticker showToast={showToast} />
       </div>
 
       {/* ── FILTERS ─────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', marginRight: 4 }}>HISTÓRICO</div>
         {FILTERS.map(f => (
-          <button key={f.key} onClick={() => setFilter(f.key)} style={{
+          <button key={f.key} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFilter(f.key); }} style={{
             padding: '7px 12px', borderRadius: 100, fontSize: isMobile ? 11 : 12, fontWeight: 700,
             border: `1px solid ${filter === f.key ? f.color : 'hsl(var(--border-subtle))'}`,
             background: filter === f.key ? `${f.color}12` : 'hsl(var(--bg-elevated))',
@@ -636,33 +1362,149 @@ function ChamadasContent() {
             color: 'hsl(var(--text-base))', outline: 'none', minWidth: 180,
           }}
         />
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setTimeout(() => {
+              if (window.confirm('Tem certeza que deseja zerar e excluir todas as chamadas? Esta ação não pode ser desfeita.')) {
+                clearCalls()
+                showToast('Todas as chamadas foram zeradas.')
+              }
+            }, 50)
+          }}
+          style={{
+            padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
+            border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+            cursor: 'pointer', transition: 'all 0.15s',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}
+          onMouseEnter={e => {
+            const el = e.currentTarget as HTMLButtonElement
+            el.style.background = '#ef4444'
+            el.style.color = '#fff'
+          }}
+          onMouseLeave={e => {
+            const el = e.currentTarget as HTMLButtonElement
+            el.style.background = 'rgba(239,68,68,0.1)'
+            el.style.color = '#ef4444'
+          }}
+        >
+          <X size={14}/> Zerar Chamadas
+        </button>
       </div>
 
       {/* ── CALL GRID ────────────────────────────────────────────────── */}
-      {!mounted ? null : filtered.length === 0 ? (
+      {isLoadingCalls ? (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(276px, 1fr))', gap: isMobile ? 12 : 16 }}>
+          <CallCardSkeleton />
+          <CallCardSkeleton />
+          <CallCardSkeleton />
+          <CallCardSkeleton />
+          <CallCardSkeleton />
+          <CallCardSkeleton />
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'hsl(var(--text-muted))', fontSize: 14 }}>
           <Clock size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }}/>
           <div>Nenhuma chamada {filter !== 'all' ? 'com este filtro' : 'registrada'}</div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(360px, 1fr))', gap: isMobile ? 14 : 20 }}>
-          {filtered.map(call => (
-            <CallCard
-              key={call.id}
-              call={call}
-              onConfirm={confirmPickup}
-              onCancel={cancelCall}
-              onRecall={id => recallStudent(id, () => {})}
-              onRevert={revertCall}
-            />
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(276px, 1fr))', gap: isMobile ? 12 : 16 }}>
+          {filtered.map(call => {
+            const turmaNome = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass))?.nome || call.studentClass
+            return (
+              <CallCard
+                key={call.id}
+                call={{ ...call, studentClass: turmaNome }}
+                onConfirm={confirmPickup}
+                onCancel={cancelCall}
+                onRecall={id => recallStudent(id, () => {})}
+                onRevert={revertCall}
+              />
+            )
+          })}
         </div>
       )}
 
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
         @keyframes slideDown { from{opacity:0;transform:translate(-50%,-12px)} to{opacity:1;transform:translate(-50%,0)} }
-      `}</style>
+        
+        .skeleton-shimmer {
+          position: relative;
+          overflow: hidden;
+        }
+        .skeleton-shimmer::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          transform: translateX(-100%);
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+          animation: shimmerSweep 1.6s infinite;
+        }
+        @keyframes shimmerSweep {
+          100% { transform: translateX(100%); }
+        }
+
+        .btn-modern {
+          transition: all 0.2s cubic-bezier(0.2, 1, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
+        .btn-modern:active:not(:disabled) {
+          transform: scale(0.96);
+        }
+        
+        .btn-chamar {
+          background: rgba(129,140,248,0.08);
+          border: 1.5px solid rgba(129,140,248,0.3);
+          color: #818cf8;
+        }
+        .btn-chamar:hover:not(:disabled) {
+          background: rgba(129,140,248,0.15);
+          border-color: rgba(129,140,248,0.5);
+          box-shadow: 0 6px 16px rgba(129,140,248,0.2);
+          transform: translateY(-2px);
+        }
+        .btn-chamar:disabled {
+          background: transparent;
+          border-color: rgba(129,140,248,0.15);
+          color: hsl(var(--text-muted));
+        }
+
+        .btn-confirmar {
+          background: linear-gradient(135deg, #10b981, #059669);
+          border: 1px solid rgba(16,185,129,0.3);
+          color: #fff;
+          box-shadow: 0 4px 12px rgba(16,185,129,0.25);
+        }
+        .btn-confirmar:hover {
+          box-shadow: 0 8px 24px rgba(16,185,129,0.45);
+          transform: translateY(-2px);
+          filter: brightness(1.1);
+        }
+
+        .btn-cancelar {
+          background: rgba(239,68,68,0.08);
+          border: 1.5px solid rgba(239,68,68,0.25);
+          color: #ef4444;
+        }
+        .btn-cancelar:hover {
+          background: #ef4444;
+          border-color: #ef4444;
+          color: #fff;
+          box-shadow: 0 6px 16px rgba(239,68,68,0.35);
+          transform: translateY(-2px);
+        }
+
+        @keyframes pinBob {
+          0%, 100% { transform: translate(-50%, 0px); }
+          50% { transform: translate(-50%, -4px); }
+        }
+      ` }} />
     </div>
   )
 }

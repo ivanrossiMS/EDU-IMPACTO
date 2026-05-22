@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       const loginDigits = loginInput.replace(/\D/g, '')
       alunoRecord = (alunosRows || []).find((a: any) => {
         const matricA  = (a.matricula || a.dados?.codigo || '').trim().toLowerCase()
-        const cpfA     = (a.cpf || '').replace(/\D/g, '')
+        const cpfA     = (a.cpf || a.dados?.cpf || '').replace(/\D/g, '')
         return (
           (matricA && matricA === loginInput) ||
           (cpfA && loginDigits.length >= 11 && cpfA === loginDigits)
@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
         // Try responsavel by CPF or celular
         const { data: respRows } = await supabaseAdmin
           .from('responsaveis')
-          .select('id, nome, email, cpf, celular, codigo')
+          .select('id, nome, email, celular, codigo, telefone, dados')
         
         responsavelRecord = (respRows || []).find((r: any) => {
-          const cpfR    = (r.cpf || '').replace(/\D/g, '')
-          const celR    = (r.celular || '').replace(/\D/g, '')
+          const cpfR    = (r.cpf || r.dados?.cpf || '').replace(/\D/g, '')
+          const celR    = (r.celular || r.telefone || '').replace(/\D/g, '')
           const codigoR = (r.codigo || '').trim().toLowerCase()
           return (
             (cpfR && loginDigits.length >= 11 && cpfR === loginDigits) ||
@@ -105,6 +105,22 @@ export async function POST(request: NextRequest) {
           userType          = 'responsavel'
           resolvedEmail     = loginInput
         }
+      }
+    }
+    if (userType === 'responsavel' && responsavelRecord) {
+      const { data: links } = await supabaseAdmin
+        .from('aluno_responsavel')
+        .select('resp_financeiro, resp_pedagogico')
+        .eq('responsavel_id', responsavelRecord.id)
+
+      const isAllowed = (links || []).some(
+        (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+      )
+
+      if (!isAllowed) {
+        return NextResponse.json({ 
+          error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
+        }, { status: 403 })
       }
     }
 
@@ -160,39 +176,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Credenciais inválidas.' }, { status: 401 })
     }
 
-    // ── Enrich metadata based on user type ──────────────────────────
+    // ── Enrich metadata & Database validation based on actual DB tables ──────────────────────────
     let nome   = user?.user_metadata?.nome   || rawLogin.split('@')[0]
     let cargo  = user?.user_metadata?.cargo  || 'Usuário'
     let perfil = user?.user_metadata?.perfil || 'Usuário'
 
-    if (userType === 'aluno' && alunoRecord) {
-      nome   = alunoRecord.nome || nome
-      cargo  = 'Aluno'
-      perfil = 'Família'
-    } else if (userType === 'responsavel' && responsavelRecord) {
-      nome   = responsavelRecord.nome || nome
-      cargo  = 'Responsável'
-      perfil = 'Família'
-    } else if (userType === 'system_user') {
-      // Lookup system_users
-      const { data: byId } = await supabaseAdmin
-        .from('system_users')
-        .select('id, nome, email, cargo, perfil, status')
-        .eq('id', user!.id)
-        .maybeSingle()
-      
-      let sysUser = byId
-      if (!sysUser) {
-        const { data: byEmail } = await supabaseAdmin
-          .from('system_users')
-          .select('id, nome, email, cargo, perfil, status')
-          .eq('email', resolvedEmail)
-          .maybeSingle()
-        sysUser = byEmail
-      }
+    let dbRecordExists = false
+    let responsavel_id = ''
+    let aluno_id = ''
 
-      if (sysUser) {
-        if (sysUser.status === 'inativo') {
+    // 1. Check system_users
+    const { data: dbSystemUser } = await supabaseAdmin
+      .from('system_users')
+      .select('id, nome, email, cargo, perfil, status')
+      .or(`id.eq."${user.id}",email.eq."${user.email}"`)
+      .maybeSingle()
+
+    if (dbSystemUser) {
+      dbRecordExists = true
+      if (dbSystemUser.status === 'inativo') {
+        const supabaseSignOut = createServerClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+          {
+            cookies: {
+              getAll() { return request.cookies.getAll() },
+              setAll(cookiesToSet) {
+                cookiesToSet.forEach(({ name, value, options }) => {
+                  response.cookies.set(name, value, { ...options, maxAge: 0 })
+                })
+              },
+            },
+          }
+        )
+        await supabaseSignOut.auth.signOut()
+        return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 403 })
+      }
+      nome   = dbSystemUser.nome   || nome
+      cargo  = dbSystemUser.cargo  || cargo
+      perfil = dbSystemUser.perfil || perfil
+    } else {
+      // 2. Check responsaveis
+      const { data: dbResp } = await supabaseAdmin
+        .from('responsaveis')
+        .select('id, nome, email')
+        .or(`id.eq."${user.id}",email.eq."${user.email}"`)
+        .maybeSingle()
+
+      if (dbResp) {
+        dbRecordExists = true
+        responsavel_id = dbResp.id
+        // Check active financial or pedagogical links
+        const { data: links } = await supabaseAdmin
+          .from('aluno_responsavel')
+          .select('resp_financeiro, resp_pedagogico')
+          .eq('responsavel_id', dbResp.id)
+
+        const isAllowed = (links || []).some(
+          (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+        )
+
+        if (!isAllowed) {
           const supabaseSignOut = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -208,24 +252,71 @@ export async function POST(request: NextRequest) {
             }
           )
           await supabaseSignOut.auth.signOut()
-          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 403 })
+          return NextResponse.json({ 
+            error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico com alunos ativos possuem login.' 
+          }, { status: 403 })
         }
-        nome   = sysUser.nome   || nome
-        cargo  = sysUser.cargo  || cargo
-        perfil = sysUser.perfil || perfil
+
+        nome   = dbResp.nome || nome
+        cargo  = 'Responsável'
+        perfil = 'Família'
+      } else {
+        // 3. Check alunos
+        const { data: dbAluno } = await supabaseAdmin
+          .from('alunos')
+          .select('id, nome, email, status')
+          .or(`id.eq."${user.id}",email.eq."${user.email}"`)
+          .maybeSingle()
+
+        if (dbAluno) {
+          dbRecordExists = true
+          aluno_id = dbAluno.id
+          nome   = dbAluno.nome || nome
+          cargo  = 'Aluno'
+          perfil = 'Família'
+        }
       }
     }
 
+    if (!dbRecordExists) {
+      const supabaseSignOut = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() { return request.cookies.getAll() },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                response.cookies.set(name, value, { ...options, maxAge: 0 })
+              })
+            },
+          },
+        }
+      )
+      await supabaseSignOut.auth.signOut()
+      
+      // Se a conta de login autenticou mas não existe na base escolar, ela é deletada imediatamente
+      if (user?.id) {
+        await supabaseAdmin.auth.admin.deleteUser(user.id).catch((e: any) => console.error('Erro ao deletar conta fantasma ao logar:', e))
+      }
+
+      return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 403 })
+    }
+
     // Persist enriched metadata
+    const userMetadataUpdate: any = { nome, cargo, perfil }
+    if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
+    if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
+
     if (user) {
       supabaseAdmin.auth.admin.updateUserById(user.id, {
-        user_metadata: { nome, cargo, perfil }
+        user_metadata: userMetadataUpdate
       }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
     }
 
     const enrichedUser = {
       ...user,
-      user_metadata: { ...user?.user_metadata, nome, cargo, perfil }
+      user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }
 
     const body = JSON.stringify({ user: enrichedUser, session: session })

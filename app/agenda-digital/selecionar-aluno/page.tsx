@@ -7,34 +7,38 @@ import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Bell, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
 
 export default function SelecionarAluno() {
   const { turmas = [] } = useData();
-  const [alunosRaw, setAlunos] = useSupabaseArray<any>('alunos');
-  const [titulosRaw, setTitulos] = useSupabaseArray<any>('titulos');
-  const alunos: any[] = Array.isArray(alunosRaw) ? alunosRaw : [];
-  const titulos: any[] = Array.isArray(titulosRaw) ? titulosRaw : [];
   const { currentUser, hydrated } = useApp()
   const router = useRouter()
 
-  useEffect(() => {
-    // Se o usuário logado for de fato um aluno (cargo === 'Aluno'), redireciona ele automaticamente
-    if (currentUser?.cargo === 'Aluno') {
-      const nomeLower = (currentUser.nome || '').toLowerCase().trim()
-      const myAluno = alunos.find(a => 
-        (a.nome || '').toLowerCase().trim() === nomeLower || 
-        (currentUser.id && currentUser.id.includes(String(a.id)))
-      )
-      if (myAluno) {
-        router.replace(`/agenda-digital/${myAluno.id}/comunicados`)
-      }
-    }
-  }, [currentUser, alunos, router])
+  // 1. Obter metadados do responsável autenticado
+  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+  const emailBusca = (currentUser?.email || '').toLowerCase().trim();
+  const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
 
-  // Block render until localStorage is hydrated to prevent SSR/client mismatch
-  if (!hydrated) return null
+  const [alunosRaw, , alunosStatus] = useSupabaseArray<any>('alunos?select=id,nome,turma,responsavel,responsavel_financeiro,responsavelPedagogico,emailResponsavel,email_responsavel,dados,status,foto,serie,unidade,responsaveis&limit=9999');
+  const [respsRaw, , respsStatus] = useSupabaseArray<any>('responsaveis?limit=9999');
+  
+  // Se o responsável autenticado tiver ID, filtra os vínculos apenas dele para alta performance e segurança
+  const linksQuery = respId ? `aluno-responsavel?responsavel_id=${respId}` : 'aluno-responsavel?limit=9999';
+  const [linksRaw, , linksStatus] = useSupabaseArray<any>(linksQuery);
+
+  const [titulosRaw] = useSupabaseArray<any>('titulos?limit=9999');
+
+  const alunos: any[] = Array.isArray(alunosRaw) ? alunosRaw : [];
+  const titulos: any[] = Array.isArray(titulosRaw) ? titulosRaw : [];
+  const links: any[] = Array.isArray(linksRaw) ? linksRaw : [];
+  const resps: any[] = Array.isArray(respsRaw) ? respsRaw : [];
+  
+  const isDataLoading = alunosStatus.loading || linksStatus.loading || respsStatus.loading;
+
+  // Use a reliable boolean: if alunos is empty, we are 100% still loading (a school always has students).
+  // Also wait for the current user to be fully hydrated.
+  const isStillLoading = !hydrated || alunos.length === 0 || (currentUser === undefined)
 
   let meusAlunos = (alunos || []).filter(a => {
     const s = a.status?.toLowerCase()
@@ -42,17 +46,46 @@ export default function SelecionarAluno() {
   })
 
   if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
-    const nomeBusca = (currentUser.nome || '').toLowerCase().trim()
-    const emailBusca = (currentUser.email || '').toLowerCase().trim()
+    // 1. Encontra todos os IDs de responsáveis que batem com o email ou nome do usuário atual
+    const matchedRespIds = new Set<string>()
+    
+    // Adiciona o ID resolvido via metadado de autenticação (método principal e mais seguro)
+    if (respId) {
+      matchedRespIds.add(String(respId))
+    }
+
+    // Fallback: faz busca no array de responsáveis carregados
+    resps.forEach(r => {
+      const rEmail = (r.email || '').toLowerCase().trim()
+      const rNome = (r.nome || '').toLowerCase().trim()
+      if ((emailBusca && rEmail === emailBusca) || (nomeBusca && rNome === nomeBusca)) {
+        matchedRespIds.add(String(r.id))
+      }
+    })
+
+    // 2. Encontra todos os aluno_ids vinculados a esses responsáveis
+    const linkedAlunoIds = new Set<string>()
+    links.forEach(l => {
+      if (matchedRespIds.has(String(l.responsavel_id))) {
+        linkedAlunoIds.add(String(l.aluno_id))
+      }
+    })
 
     meusAlunos = meusAlunos.filter(a => {
+      // Se está vinculado via tabela aluno_responsavel
+      if (linkedAlunoIds.has(String(a.id))) return true
+
+      // Fallback para campos diretos (snake_case e camelCase)
       if (a.responsavel && a.responsavel.toLowerCase().trim() === nomeBusca) return true
+      if (a.responsavelFinanceiro && a.responsavelFinanceiro.toLowerCase().trim() === nomeBusca) return true
+      if (a.responsavel_financeiro && a.responsavel_financeiro.toLowerCase().trim() === nomeBusca) return true
+      if (a.responsavelPedagogico && a.responsavelPedagogico.toLowerCase().trim() === nomeBusca) return true
+      if (a.responsavel_pedagogico && a.responsavel_pedagogico.toLowerCase().trim() === nomeBusca) return true
+
       if (a.emailResponsavel && emailBusca && a.emailResponsavel.toLowerCase().trim() === emailBusca) return true
       if ((a as any).email_responsavel && emailBusca && (a as any).email_responsavel.toLowerCase().trim() === emailBusca) return true
       if ((a as any).dados?.emailResponsavel && emailBusca && (a as any).dados.emailResponsavel.toLowerCase().trim() === emailBusca) return true
       if ((a as any).dados?.email_responsavel && emailBusca && (a as any).dados.email_responsavel.toLowerCase().trim() === emailBusca) return true
-      if (a.responsavelFinanceiro && a.responsavelFinanceiro.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavelPedagogico && a.responsavelPedagogico.toLowerCase().trim() === nomeBusca) return true
 
       // Checa array de responsáveis se existir
       const respArr = (a as any).responsaveis || (a as any)._responsaveis || []
@@ -71,6 +104,33 @@ export default function SelecionarAluno() {
     // Para administradores (apenas para simulação do protótipo) mostra no máximo 3 alunos
     meusAlunos = meusAlunos.slice(0, 3)
   }
+
+  // Effect responsavel pelo redirecionamento automatico
+  useEffect(() => {
+    if (isStillLoading) return;
+
+    if (currentUser?.cargo === 'Aluno') {
+      const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
+      if (directAlunoId) {
+        setTimeout(() => { window.location.href = `/agenda-digital/${directAlunoId}/comunicados` }, 50)
+        return
+      }
+      const nomeLower = (currentUser.nome || '').toLowerCase().trim()
+      const myAluno = alunos.find(a => 
+        (a.nome || '').toLowerCase().trim() === nomeLower || 
+        (currentUser.id && currentUser.id.includes(String(a.id)))
+      )
+      if (myAluno) {
+        setTimeout(() => { window.location.href = `/agenda-digital/${myAluno.id}/comunicados` }, 50)
+      }
+    } else if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
+      if (meusAlunos.length === 1) {
+        setTimeout(() => {
+          window.location.href = `/agenda-digital/${meusAlunos[0].id}/comunicados`
+        }, 50)
+      }
+    }
+  }, [isStillLoading, meusAlunos.length, alunos.length, currentUser])
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '8vh', paddingBottom: 60, animation: 'fadeUp 0.8s ease-out forwards', opacity: 0 }}>
@@ -268,7 +328,15 @@ export default function SelecionarAluno() {
         <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 16, opacity: 0, animation: 'fadeUp 0.6s ease-out 0.2s forwards' }}>Acesso Familiar</h2>
       )}
 
-      {meusAlunos.length === 0 ? (
+      {isStillLoading && meusAlunos.length === 0 ? (
+        <div style={{ padding: 60, textAlign: 'center', animation: 'fadeUp 0.6s ease-out forwards' }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: 'hsl(var(--primary))', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
+          <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Procurando vínculos do responsável...</p>
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          `}} />
+        </div>
+      ) : meusAlunos.length === 0 ? (
         <div style={{ padding: 60, textAlign: 'center', background: 'linear-gradient(145deg, hsl(var(--bg-surface)), transparent)', borderRadius: 32, border: '1px dashed hsl(var(--border-subtle))' }}>
           <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
             <AlertTriangle size={40} color="hsl(var(--text-muted))" opacity={0.5} />
@@ -303,10 +371,12 @@ export default function SelecionarAluno() {
                     </div>
                     <div className="premium-card-meta" style={{ fontSize: 14, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
                       {(() => {
-                        const unidadeAluno = turmas.find(t => t.nome === a.turma || t.codigo === a.turma)?.unidade || (a as any).unidade
+                        const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
+                        const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
+                        const unidadeAluno = turmaObj?.unidade || (a as any).unidade
                         return (
                           <>
-                            <span style={{ color: 'hsl(var(--primary))' }}>Turma {(a as any).turma}</span> {(a as any).serie ? `• ${(a as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
+                            <span style={{ color: 'hsl(var(--primary))' }}>Turma {nomeTurma}</span> {(a as any).serie ? `• ${(a as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
                           </>
                         )
                       })()}

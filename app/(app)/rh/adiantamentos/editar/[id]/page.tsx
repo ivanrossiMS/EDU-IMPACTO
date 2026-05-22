@@ -1,32 +1,25 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
-
 import React, { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
-import { useData, Funcionario } from '@/lib/dataContext'
-import { ArrowLeft, Save, Info, Calculator, CalendarDays, UserSquare2, Banknote, AlertCircle } from 'lucide-react'
+import { Funcionario } from '@/lib/dataContext'
+import { ArrowLeft, Save, Info, Calculator, CalendarDays, UserSquare2, Banknote, AlertCircle, ChevronRight, Sparkles, TrendingDown, Percent } from 'lucide-react'
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-}
-
-function addMonths(date: Date, months: number) {
-  const d = new Date(date.getTime())
-  d.setMonth(d.getMonth() + months)
-  return d.toISOString().split('T')[0]
 }
 
 export default function EditarAdiantamento() {
   const router = useRouter()
   const params = useParams()
   const idStr = params.id as string
-  const { adiantamentos = [], setAdiantamentos } = useData();
-  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const [adiantamentos = [], setAdiantamentos] = useSupabaseArray<any>('rh/adiantamentos', [])
+  const [funcionarios = [], setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
   const item = adiantamentos.find(a => a.id === idStr)
-  const ativos = funcionarios.filter(f => f.status === 'ativo')
+  const ativos = (funcionarios || []).filter(f => f.status === 'ativo')
 
   const [funcId, setFuncId] = useState(item?.funcionarioId || '')
   const [valorTotalStr, setValorTotalStr] = useState((item?.valorTotal || '').toString())
@@ -54,14 +47,12 @@ export default function EditarAdiantamento() {
   const previewParcelas = useMemo(() => {
     if (!isValorValid || !isQtdValid || !isDataValid) return []
     
-    // Contábil math
     const baseValue = Math.floor((valorTotal / qtdParcelas) * 100) / 100
-    // O JS aproxima dízimas as vezes, entao arredondamos para duas casas
     let totalComputed = Math.round((baseValue * qtdParcelas) * 100) / 100
     const remainder = Math.round((valorTotal - totalComputed) * 100) / 100
 
     const parcelas = []
-    let currentDate = new Date(primeiraData + 'T12:00:00Z') // Fix time to prevent timezone shift issues
+    let currentDate = new Date(primeiraData + 'T12:00:00Z')
     
     for (let i = 1; i <= qtdParcelas; i++) {
         let val = baseValue
@@ -78,8 +69,6 @@ export default function EditarAdiantamento() {
             formaQuitacao,
         })
         
-        // Add 1 month exactly maintaining day (careful with 31sts).
-        // For simplicity, just add 1 month precisely in Date obj logic.
         const nextTimeDate = new Date(currentDate.getTime())
         nextTimeDate.setMonth(nextTimeDate.getMonth() + 1)
         currentDate = nextTimeDate
@@ -94,10 +83,14 @@ export default function EditarAdiantamento() {
     return v1 !== vLast
   }, [previewParcelas])
 
+  const margemComprometida = useMemo(() => {
+    if (!func || !valorTotal) return 0
+    return Math.round((valorTotal / func.salario) * 100)
+  }, [func, valorTotal])
+
   const handleSave = () => {
     if (!func || !isValorValid || !isQtdValid || !isDataValid || !item) return
     
-    // Create new adiantamento replacing the old one
     const ad: any = {
       ...item,
       funcionarioId: func.id,
@@ -119,14 +112,11 @@ export default function EditarAdiantamento() {
          {
           id: Date.now().toString(),
           dataHora: new Date().toISOString(),
-          acao: 'Editado / Recalculado (via Painel)',
-          usuario: 'Admin Logado'
+          acao: 'Editado / Recalculado (Diretoria Financeira)',
+          usuario: 'Diretor Financeiro'
          }
       ],
-      // We overwrite ALL parcels with the new preview because a fundamental structural change occurred
       parcelas: previewParcelas.map((p, idx) => {
-         // Se estivesse quitada no array antigo mantemos a flag? Nao, recalcular = reestruturar do zero, 
-         // O usuario foi alertado. Reseta para pendente.
          return {
           id: item.parcelas[idx]?.id || `P-${Date.now()}-${idx}`,
           numero: p.numero,
@@ -135,7 +125,7 @@ export default function EditarAdiantamento() {
           status: 'pendente',
           dataPagamento: null,
           formaQuitacao: p.formaQuitacao,
-          responsavel: 'Admin Logado'
+          responsavel: 'Diretor Financeiro'
          }
       }),
       updatedAt: new Date().toISOString(),
@@ -146,48 +136,84 @@ export default function EditarAdiantamento() {
   }
 
   if (!item) {
-    return <div className="p-6">Adiantamento não encontrado.</div>
+    return <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontFamily: 'Inter, sans-serif' }}>Adiantamento não encontrado.</div>
+  }
+
+  const cardStyle = {
+    background: '#fff',
+    borderRadius: '12px',
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+    padding: '24px',
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '8px',
+    border: '1px solid #e2e8f0',
+    background: '#f8fafc',
+    fontSize: '14px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const,
+    outline: 'none',
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', width: '100%', paddingBottom: 60 }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', width: '100%', padding: '32px 20px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif', color: '#0f172a' }}>
+      
       {/* HEADER */}
-      <div className="page-header" style={{ marginBottom: 24, alignItems: 'center', display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/rh/adiantamentos" className="btn btn-ghost btn-icon" style={{ background: 'hsl(var(--bg-elevated))' }}>
+      <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <Link href="/rh/adiantamentos" style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', textDecoration: 'none' }}>
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-1">
-              <Link href="/rh/adiantamentos" className="hover:text-blue-600 transition-colors">Adiantamentos</Link>
+            <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Link href="/rh/adiantamentos" style={{ color: '#64748b', textDecoration: 'none' }}>Gestão de Adiantamentos</Link>
               <span>/</span>
-              <span className="text-slate-900 font-medium tracking-tight">Editar</span>
-            </nav>
-            <h1 className="page-title" style={{ fontSize: 24 }}>Editar Adiantamento {idStr}</h1>
+              <span style={{ fontWeight: 600, color: '#0f172a' }}>{idStr}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+               <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Análise e Edição de Adiantamento</h1>
+            </div>
           </div>
+        </div>
+        
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Status do Contrato</p>
+          <p style={{ fontWeight: 700, margin: 0, fontSize: '14px', color: '#059669' }}>ATIVO / EM ANÁLISE</p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 24 }}>
+      {/* RESUMO RÁPIDO */}
+      <div style={{ ...cardStyle, padding: '16px 24px', display: 'flex', flexWrap: 'wrap', gap: '24px', marginBottom: '24px', background: '#f8fafc' }}>
+        <div><span style={{ color: '#64748b', fontSize: '13px' }}>Beneficiário:</span> <span style={{ fontWeight: 700, fontSize: '13px' }}>{func?.nome || '--'}</span></div>
+        <div><span style={{ color: '#64748b', fontSize: '13px' }}>Valor Atual:</span> <span style={{ fontWeight: 700, fontSize: '13px' }}>{formatMoney(valorTotal)}</span></div>
+        <div><span style={{ color: '#64748b', fontSize: '13px' }}>Parcelas:</span> <span style={{ fontWeight: 700, fontSize: '13px' }}>{qtdParcelas}x</span></div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
         
-        {/* COLUNA ESQUERDA - FORM (Span 2) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* COLUNA ESQUERDA */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
-          {/* BLOCO 1: FUNCIONÁRIO */}
-          <div className="card shadow-sm relative overflow-hidden" style={{ padding: 24, borderRadius: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#047857', fontWeight: 600 }}>
-              <UserSquare2 size={18} />
-              <h3>1. Beneficiário</h3>
+          {/* BLOCO 1: BENEFICIÁRIO */}
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '14px', color: '#475569', textTransform: 'uppercase' }}>
+              <UserSquare2 size={16} />
+              <span>1. Análise do Beneficiário</span>
             </div>
-            <div className="w-full">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Selecione o Funcionário / Cargos</label>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Funcionário Vinculado</label>
               <select 
                 value={funcId} 
                 onChange={e => setFuncId(e.target.value)}
                 disabled={true}
-                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all font-medium text-slate-700 outline-none opacity-80 cursor-not-allowed"
+                style={{ ...inputStyle, opacity: 0.7, cursor: 'not-allowed' }}
               >
-                <option value="" disabled>-- Clique para selecionar --</option>
+                <option value="" disabled>-- Selecione o funcionário --</option>
                 {ativos.map(f => (
                   <option key={f.id} value={f.id}>{f.nome} — {f.cargo} ({f.unidade})</option>
                 ))}
@@ -195,163 +221,162 @@ export default function EditarAdiantamento() {
             </div>
             
             {func && (
-              <div className="mt-4 p-4 bg-emerald-50/50 border border-emerald-100 rounded-xl flex flex-col sm:flex-row sm:items-center gap-4">
-                 <div className="w-12 h-12 rounded-full border-2 border-white shadow-sm bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center shrink-0 text-lg uppercase">
-                    {func.nome.substring(0,2)}
-                 </div>
-                 <div className="flex-1">
-                    <p className="font-bold text-slate-800 text-sm leading-tight">{func.nome}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{func.departamento} • Contratado em {new Date(func.admissao).toLocaleDateString()}</p>
-                 </div>
-                 <div className="text-right">
-                    <p className="text-xs text-slate-500 uppercase font-semibold">Salário Base</p>
-                    <p className="font-bold text-emerald-700">{formatMoney(func.salario)}</p>
-                 </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Salário Base</p>
+                  <p style={{ fontWeight: 700, margin: '4px 0 0', fontSize: '15px' }}>{formatMoney(func.salario)}</p>
+                </div>
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Margem (30%)</p>
+                  <p style={{ fontWeight: 700, margin: '4px 0 0', fontSize: '15px' }}>{formatMoney(func.salario * 0.3)}</p>
+                </div>
+                <div style={{ background: margemComprometida > 30 ? '#fffbeb' : '#f8fafc', padding: '12px', borderRadius: '8px', border: margemComprometida > 30 ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Comprometimento</p>
+                  <p style={{ fontWeight: 700, margin: '4px 0 0', fontSize: '15px', color: margemComprometida > 30 ? '#b45309' : '#0f172a' }}>{margemComprometida}%</p>
+                </div>
               </div>
             )}
           </div>
 
-          {/* BLOCO 2: DADOS DO ADIANTAMENTO */}
-          <div className="card shadow-sm" style={{ padding: 24, borderRadius: 16, transition: 'opacity 300ms', opacity: !isFuncSelected ? 0.5 : 1, pointerEvents: !isFuncSelected ? 'none' : 'auto' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#1d4ed8', fontWeight: 600 }}>
-              <Banknote size={18} />
-              <h3>2. Condições Financeiras</h3>
+          {/* BLOCO 2: CONDIÇÕES */}
+          <div style={{ ...cardStyle, opacity: !isFuncSelected ? 0.5 : 1, pointerEvents: !isFuncSelected ? 'none' : 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '14px', color: '#475569', textTransform: 'uppercase' }}>
+              <Banknote size={16} />
+              <span>2. Condições do Adiantamento</span>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Valor Total Requerido (R$)</label>
-                <input 
-                  type="number" step="0.01" min="0" placeholder="ex: 1500.00"
-                  value={valorTotalStr} onChange={e => setValorTotalStr(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none"
-                />
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Valor Total</label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '12px', top: '10px', fontSize: '14px', color: '#64748b', fontWeight: 700 }}>R$</span>
+                  <input 
+                    type="number" step="0.01" min="0"
+                    value={valorTotalStr} onChange={e => setValorTotalStr(e.target.value)}
+                    style={{ ...inputStyle, paddingLeft: '36px', fontWeight: 700 }}
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Quantidade de Parcelas</label>
-                <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 transition-all">
-                  <button onClick={() => setQtdParcelas(Math.max(1, qtdParcelas-1))} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">-</button>
-                  <input type="number" min="1" max="24" value={qtdParcelas} readOnly className="w-full text-center bg-transparent outline-none font-bold text-slate-700" />
-                  <button onClick={() => setQtdParcelas(Math.min(24, qtdParcelas+1))} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">+</button>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Parcelas</label>
+                <div style={{ display: 'flex', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                  <button onClick={() => setQtdParcelas(Math.max(1, qtdParcelas-1))} style={{ width: '40px', height: '40px', background: '#f1f5f9', border: 'none', borderRight: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 700 }}>-</button>
+                  <input type="number" value={qtdParcelas} readOnly style={{ width: '100%', textAlign: 'center', border: 'none', background: 'transparent', fontWeight: 700, fontSize: '14px' }} />
+                  <button onClick={() => setQtdParcelas(Math.min(24, qtdParcelas+1))} style={{ width: '40px', height: '40px', background: '#f1f5f9', border: 'none', borderLeft: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 700 }}>+</button>
                 </div>
               </div>
             </div>
 
-            {isValorValid && func && Math.round((valorTotal / func.salario)*100) > 30 && (
-              <div className="mt-3 p-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs flex gap-2">
-                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                 <p>O valor solicitado compromete mais de 30% do salário base do funcionário ({Math.round((valorTotal / func.salario)*100)}%). Sujeito à aprovação da diretoria.</p>
-              </div>
-            )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data p/ Desconto/Pagto da 1ª</label>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Data de Início</label>
                 <input 
                   type="date"
                   value={primeiraData} onChange={e => setPrimeiraData(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-slate-700"
+                  style={inputStyle}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Estratégia de Quitação</label>
-                <select 
-                  value={formaQuitacao} onChange={e => setFormaQuitacao(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-700"
-                >
-                  <option value="desconto_folha">Desconto em Folha (Automático)</option>
-                  <option value="manual">Pagamento Manual (Caixa/PIX)</option>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Estratégia</label>
+                <select value={formaQuitacao} onChange={e => setFormaQuitacao(e.target.value)} style={inputStyle}>
+                  <option value="desconto_folha">Desconto em Folha</option>
+                  <option value="manual">Pagamento Manual</option>
                   <option value="misto">Misto</option>
                 </select>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Lançamento</label>
-                <select 
-                  value={tipo} onChange={e => setTipo(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-slate-700"
-                >
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Classificação</label>
+                <select value={tipo} onChange={e => setTipo(e.target.value)} style={inputStyle}>
                   <option value="salarial">Adiantamento de Salário</option>
                   <option value="extraordinario">Ajuda Extraordinária</option>
                   <option value="emprestimo">Empréstimo Familiar</option>
-                  <option value="outro">Outro (Especificar Motivo)</option>
+                  <option value="outro">Outro</option>
                 </select>
               </div>
               <div>
-                 <label className="block text-sm font-medium text-slate-700 mb-1">Motivo (Opcional p/ aprovação)</label>
-                 <input 
-                  type="text" placeholder="Ex: Reforma urgência, Viagem..."
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Justificativa</label>
+                <input 
+                  type="text" placeholder="Opcional"
                   value={motivo} onChange={e => setMotivo(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none text-slate-700"
+                  style={inputStyle}
                 />
               </div>
             </div>
-
           </div>
 
         </div>
 
-        {/* COLUNA DIREITA - PARCELAMENTO & SALVAR (Span 1) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transition: 'opacity 300ms', opacity: !isFuncSelected || !isValorValid ? 0.5 : 1, pointerEvents: !isFuncSelected || !isValorValid ? 'none' : 'auto' }}>
+        {/* COLUNA DIREITA */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', opacity: !isFuncSelected || !isValorValid ? 0.5 : 1, pointerEvents: !isFuncSelected || !isValorValid ? 'none' : 'auto' }}>
           
-          <div style={{ background: '#0f172a', border: '1px solid #1e293b', color: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)', position: 'relative', overflow: 'hidden' }}>
-             
-             {/* Decor element */}
-             <div style={{ position: 'absolute', top: 0, right: 0, width: 128, height: 128, background: '#3b82f6', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.2, margin: '-40px' }}></div>
-
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#93c5fd', fontWeight: 600, position: 'relative', zIndex: 10 }}>
-              <Calculator size={18} />
-              <h3>Simulação / Dízimas</h3>
+          {/* PROJEÇÃO */}
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '14px', color: '#475569', textTransform: 'uppercase' }}>
+              <Calculator size={16} />
+              <span>Projeção</span>
             </div>
             
             {previewParcelas.length === 0 ? (
-               <p className="text-slate-400 text-sm italic">Preencha o valor e parcelas para gerar a pré-visualização contábil.</p>
+               <p style={{ color: '#64748b', fontSize: '13px', fontStyle: 'italic', margin: 0 }}>Defina o valor e prazo.</p>
             ) : (
-              <div className="relative z-10">
-                 <div className="max-h-[250px] overflow-y-auto pr-2 space-y-2 no-scrollbar">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                 <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
                     {previewParcelas.map((p, index) => (
-                      <div key={p.numero} className="flex items-center justify-between bg-slate-800/50 p-3 rounded-lg border border-slate-700">
-                         <div className="flex items-center gap-3">
-                           <span className="w-6 h-6 rounded bg-slate-700 text-xs font-bold flex items-center justify-center text-slate-300">{p.numero}</span>
-                           <span className="text-sm font-medium text-slate-200">
+                      <div key={p.numero} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                           <span style={{ width: '24px', height: '24px', borderRadius: '4px', background: '#e2e8f0', color: '#475569', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>{p.numero}</span>
+                           <span style={{ fontSize: '12px', fontWeight: 500 }}>
                               {new Date(p.vencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                            </span>
                          </div>
-                         <span className={`font-bold text-sm ${index === previewParcelas.length - 1 && hasResidual ? 'text-amber-400' : 'text-blue-300'}`}>
+                         <span style={{ fontWeight: 700, fontSize: '13px', color: index === previewParcelas.length - 1 && hasResidual ? '#b45309' : '#0f172a' }}>
                            {formatMoney(p.valor)}
                          </span>
                       </div>
                     ))}
                  </div>
                  
-                 <div className="mt-4 pt-4 border-t border-slate-700">
-                   <div className="flex justify-between items-end">
-                      <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Total Simulado</span>
-                      <span className="text-xl font-bold bg-gradient-to-r from-blue-300 to-blue-100 bg-clip-text text-transparent">
-                        {formatMoney(previewParcelas.reduce((acc, curr) => acc + curr.valor, 0))}
-                      </span>
-                   </div>
+                 <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Total</span>
+                    <span style={{ fontSize: '18px', fontWeight: 800 }}>
+                      {formatMoney(previewParcelas.reduce((acc, curr) => acc + curr.valor, 0))}
+                    </span>
                  </div>
-
-                 {hasResidual && (
-                   <div className="mt-4 flex gap-2 items-start text-xs text-amber-200/80 bg-amber-900/20 p-2 rounded-lg border border-amber-900/50">
-                     <Info size={14} className="shrink-0 mt-0.5" />
-                     <p>A última parcela absorveu a dízima / diferença para fechar os centavos exatos contábeis.</p>
-                   </div>
-                 )}
               </div>
             )}
           </div>
 
+          {/* IMPACTO */}
+          <div style={cardStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontWeight: 700, fontSize: '14px', color: '#475569', textTransform: 'uppercase' }}>
+              <Percent size={16} />
+              <span>Impacto em Folha</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b' }}>Desconto Mensal:</span>
+                <span style={{ fontWeight: 700 }}>{previewParcelas.length > 0 ? formatMoney(previewParcelas[0].valor) : '--'}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#64748b' }}>Margem Utilizada:</span>
+                <span style={{ fontWeight: 700, color: margemComprometida > 30 ? '#b45309' : '#059669' }}>
+                  {func && previewParcelas.length > 0 ? `${Math.round((previewParcelas[0].valor / func.salario) * 100)}%` : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* BOTÃO */}
           <button 
             onClick={handleSave}
             disabled={!isFuncSelected || !isValorValid || !isQtdValid}
-            className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl flex flex-row items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed group"
+            style={{ height: '44px', width: '100%', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!isFuncSelected || !isValorValid || !isQtdValid) ? 0.5 : 1, cursor: (!isFuncSelected || !isValorValid || !isQtdValid) ? 'not-allowed' : 'pointer' }}
           >
-            <Save size={18} className="group-hover:scale-110 transition-transform" />
-            Salvar Adiantamento
+            <Save size={18} />
+            Efetivar Alterações
           </button>
         </div>
 

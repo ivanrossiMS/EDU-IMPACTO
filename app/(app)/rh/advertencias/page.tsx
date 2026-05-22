@@ -1,9 +1,10 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { ListSkeleton } from '@/components/skeletons/ListSkeleton';
 
 
-import { useData, Advertencia, newId } from '@/lib/dataContext'
+import { Advertencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
 import { useState, useMemo } from 'react'
 import {
@@ -44,8 +45,9 @@ const BLANK: Omit<Advertencia, 'id' | 'createdAt'> = {
 }
 
 export default function AdvertenciasPage() {
-  const { advertencias = [], setAdvertencias } = useData();
-  const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
+  const [advertencias = [], setAdvertencias, { loading: isAdvertenciasLoading }] = useSupabaseArray<any>('rh/advertencias', [])
+  const [funcionarios, setFuncionarios, { loading: isFuncsLoading }] = useSupabaseArray<any>('rh/funcionarios');
+  const isLoading = isAdvertenciasLoading || isFuncsLoading;
 
   const [form, setForm] = useState(BLANK)
   const [editId, setEditId] = useState<string | null>(null)
@@ -131,8 +133,8 @@ export default function AdvertenciasPage() {
 
   // ── VIEW DETAIL MODAL ──────────────────────────────────────────────────────
   if (viewAdv) {
-    const tcfg = TIPO_CONFIG[viewAdv.tipo]
-    const scfg = STATUS_CONFIG[viewAdv.status]
+    const tcfg = TIPO_CONFIG[viewAdv.tipo as keyof typeof TIPO_CONFIG]
+    const scfg = STATUS_CONFIG[viewAdv.status as keyof typeof STATUS_CONFIG]
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <div className="card" style={{ width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', padding: 0, boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}>
@@ -311,7 +313,9 @@ export default function AdvertenciasPage() {
       </div>
 
       {/* Timeline de advertências */}
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <ListSkeleton count={4} />
+      ) : filtered.length === 0 ? (
         <div className="card" style={{ padding: '52px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <Shield size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
@@ -327,8 +331,8 @@ export default function AdvertenciasPage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map(adv => {
-            const tcfg = TIPO_CONFIG[adv.tipo]
-            const scfg = STATUS_CONFIG[adv.status]
+            const tcfg = TIPO_CONFIG[adv.tipo as keyof typeof TIPO_CONFIG]
+            const scfg = STATUS_CONFIG[adv.status as keyof typeof STATUS_CONFIG]
             const isUrgente = !adv.ciente && adv.status === 'emitida' && (adv.tipo === 'suspensao' || adv.tipo === 'demissao_causa')
             return (
               <div key={adv.id}

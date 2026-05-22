@@ -1,8 +1,9 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { supabase } from '@/lib/supabase';
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -32,8 +33,25 @@ const STANDALONE_STYLES = `
     min-height: 100vh;
   }
   @keyframes scanPulse {
-    0%,100% { opacity:1; transform:scale(1); box-shadow:0 0 0 0 rgba(6,182,212,0.4); }
-    50%      { opacity:0.85; transform:scale(1.04); box-shadow:0 0 0 18px rgba(6,182,212,0); }
+    0%,100% { opacity:1; transform:scale(1); box-shadow:0 0 0 0 rgba(6,182,212,0.4), 0 0 0 0 rgba(6,182,212,0.2); }
+    50%      { opacity:0.85; transform:scale(1.04); box-shadow:0 0 0 24px rgba(6,182,212,0), 0 0 0 40px rgba(6,182,212,0); }
+  }
+  @keyframes laserSweep {
+    0%, 100% { top: 0%; opacity: 0; }
+    8%, 92% { opacity: 1; }
+    50% { top: 100%; opacity: 1; }
+  }
+  @keyframes radarPulse {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 6px rgba(6,182,212,0.6)); }
+    50% { transform: scale(1.08); filter: drop-shadow(0 0 20px rgba(6,182,212,0.95)); }
+  }
+  @keyframes textPulse {
+    0%, 100% { opacity: 1; text-shadow: 0 0 16px rgba(6,182,212,0.5), 0 0 32px rgba(6,182,212,0.2); }
+    50% { opacity: 0.88; text-shadow: 0 0 28px rgba(6,182,212,0.85), 0 0 48px rgba(6,182,212,0.4); }
+  }
+  @keyframes spinSlow {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
   }
   @keyframes slideUp {
     from { opacity:0; transform:translateY(28px) scale(0.97); }
@@ -62,12 +80,27 @@ const STANDALONE_STYLES = `
     opacity:0; transition:opacity 0.15s;
   }
   .student-card-btn:hover::after { opacity:1; }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    animation: shimmerSweep 1.6s infinite;
+  }
+  @keyframes shimmerSweep {
+    100% { transform: translateX(100%); }
+  }
 `
 
 // ─── Helper: verifica se hoje é dia permitido ─────────────────────────────────
 function isDiaPermitido(diasSemana: string[]): boolean {
   if (!diasSemana || diasSemana.length === 0) return true
-  const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+  const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
   return diasSemana.includes(remap[new Date().getDay()])
 }
 
@@ -209,7 +242,7 @@ function StudentCard({
           display: 'flex', alignItems: 'center', gap: 5,
           border: '1px solid rgba(255,255,255,0.1)',
         }}>
-          <GraduationCap size={10}/> {aluno.turma || '—'}
+          <GraduationCap size={10}/> {aluno.turmaNome || aluno.turma || '—'}
         </div>
 
         {/* Name overlay at bottom of photo */}
@@ -224,7 +257,7 @@ function StudentCard({
           }}>{aluno.nome}</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
             {aluno.turno}{aluno.serie ? ` · ${aluno.serie}` : ''}
-            {aluno.matricula ? ` · Cód. ` : ''}
+            {aluno.id ? ` · Cód. ${aluno.id}` : ''}
           </div>
         </div>
       </div>
@@ -306,10 +339,36 @@ function StudentCard({
 }
 
 // ─── Inner component ──────────────────────────────────────────────────────────
+function TabletCardSkeleton() {
+  return (
+    <div className="skeleton-shimmer" style={{
+      borderRadius: 24,
+      border: '2px solid rgba(255,255,255,0.05)',
+      background: 'rgba(255,255,255,0.02)',
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: 280,
+      aspectRatio: '1/1',
+      overflow: 'hidden'
+    }}>
+      {/* Photo Area placeholder */}
+      <div style={{ flex: 1, background: 'rgba(255,255,255,0.03)' }} />
+      
+      {/* Content Area */}
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+         {/* Name */}
+         <div style={{ width: '80%', height: 18, borderRadius: 4, background: 'rgba(255,255,255,0.08)' }} />
+         {/* Class */}
+         <div style={{ width: '40%', height: 12, borderRadius: 3, background: 'rgba(255,255,255,0.04)' }} />
+      </div>
+    </div>
+  )
+}
+
 function PainelTabletContent() {
   const isMobile = useIsMobile()
-  const { config, callStudent, blockAttempt, recallStudent, activeCalls } = useSaida()
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { config, callStudent, blockAttempt, recallStudent, activeCalls, realtimeStatus, refreshCalls } = useSaida()
+  const [turmas] = useSupabaseArray<any>('turmas');
 
   const [mode,              setMode]             = useState<'idle' | 'rfid' | 'manual'>('idle')
   const [rfidCode,          setRfidCode]         = useState<string | undefined>()
@@ -318,13 +377,20 @@ function PainelTabletContent() {
   const [matchedGuardianName, setMatchedGuardianName] = useState('')
   const [matchedGuardianRole, setMatchedGuardianRole] = useState('')
   const [rfidStudents,        setRfidStudents]        = useState<any[]>([])
+  
+  // Manual search states
   const [search,              setSearch]              = useState('')
+  const [manualStudents,      setManualStudents]      = useState<any[]>([])
+  const [isSearching,         setIsSearching]         = useState(false)
+  const [hasSearched,         setHasSearched]         = useState(false)
+
   const [blockInfo,           setBlockInfo]           = useState<{
     type: 'proibido' | 'dia_restrito'
     reason: string
     studentName: string
     guardianName: string
   } | null>(null)
+  const [showInactiveAlert, setShowInactiveAlert] = useState<{ name: string } | null>(null)
 
   // Ref to RFIDInput so we can clear the buffer after each scan
   const rfidRef = useRef<RFIDInputHandle>(null)
@@ -334,26 +400,89 @@ function PainelTabletContent() {
     setTimeout(() => setToast(null), 3200)
   }, [])
 
+  // ── Fallback Polling 30s se o Supabase Realtime falhar ou desconectar ──────────
+  useEffect(() => {
+    if (realtimeStatus !== 'online') {
+      refreshCalls() // Dispara imediatamente
+      const iv = setInterval(() => {
+        refreshCalls()
+      }, 30000)
+      return () => clearInterval(iv)
+    }
+  }, [realtimeStatus, refreshCalls])
+
+  // ── Debounced Search Server-side ───────────────────────────────────────────
+  useEffect(() => {
+    const q = search.trim()
+    if (q.length < 3) {
+      setManualStudents([])
+      setIsSearching(false)
+      setHasSearched(false)
+      return
+    }
+
+    setIsSearching(true)
+    setHasSearched(true)
+
+    const timer = setTimeout(async () => {
+      try {
+        let query = supabase.from('alunos').select('id, nome, matricula, turma, serie, turno, status, foto, saude')
+        
+        // Se for numérico, busca por ID ou matrícula. Se for texto, apenas por nome
+        const isNumeric = /^\d+$/.test(q)
+        if (isNumeric) {
+          query = query.or(`id.eq.${q},matricula.eq.${q}`)
+        } else {
+          query = query.ilike('nome', `%${q}%`)
+        }
+
+        // Apenas alunos ativos/matriculados
+        query = query.in('status', ['Ativo', 'matriculado', 'Ativo ', 'matriculado '])
+
+        const { data, error } = await query.limit(16)
+        if (error) throw error
+        setManualStudents(data || [])
+      } catch (err) {
+        console.error('Erro na busca manual de alunos:', err)
+        setManualStudents([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const doBlockReset = useCallback(() => {
+    rfidRef.current?.clear()
+    setTimeout(() => {
+      setBlockInfo(null); setMode('idle'); setRfidCode(undefined)
+      setRfidStudents([]); setMatchedGuardianName(''); setMatchedGuardianRole('')
+    }, 4000)
+  }, [])
+
   // ── RFID handler ───────────────────────────────────────────────────────────
-  const handleRFID = useCallback((code: string) => {
+  const handleRFID = useCallback(async (code: string) => {
     setRfidError(null)
     setBlockInfo(null)
 
-    // Find all students whose authorized list has this RFID
-    const matches: { aluno: any; aut: any }[] = []
-    for (const aluno of (alunos || [])) {
-      const autorizados: any[] = (aluno as any).saude?.autorizados || []
-      for (const aut of autorizados) {
-        if (aut.rfid && aut.rfid.trim().toUpperCase() === code.trim().toUpperCase()) {
-          matches.push({ aluno, aut })
-        }
-      }
+    // 1. Buscar responsável por RFID via API
+    console.log('Buscando responsável por RFID via API:', code.trim());
+    let resp: any = null;
+    try {
+      const res = await fetch(`/api/responsaveis?rfid=${encodeURIComponent(code.trim())}`)
+      if (!res.ok) throw new Error(res.statusText)
+      const payload = await res.json()
+      resp = payload.data && payload.data.length > 0 ? payload.data[0] : null
+    } catch (error: any) {
+      console.error('Erro ao buscar responsável via API:', error)
+      showToast('Erro ao buscar responsável. Tente novamente.', false)
+      return
     }
 
-    // ── 1. RFID not found ───────────────────────────────────────────────────
-    if (matches.length === 0) {
-      setRfidError(`RFID "${code}" não encontrado. Verifique a ficha do aluno.`)
-      showToast('RFID não cadastrado em nenhum aluno.', false)
+    if (!resp) {
+      setRfidError(`RFID "${code}" não encontrado. Verifique o cadastro do responsável.`)
+      showToast('RFID não cadastrado.', false)
       rfidRef.current?.clear()
       setTimeout(() => {
         setRfidError(null); setMode('idle'); setRfidCode(undefined)
@@ -362,48 +491,69 @@ function PainelTabletContent() {
       return
     }
 
-    const DIAS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-    const todayKey = DIAS[new Date().getDay()]
-    const aut = matches[0].aut
-    const gName = aut.nome || 'Responsável'
-    const gRole = aut.parentesco || 'Autorizado'
+    const gName = resp.nome || 'Responsável'
+    const gRole = resp.parentesco || 'Autorizado'
+    
+    // Na API, os vínculos já vêm formatados em alunosVinculados
+    const filhos = resp.alunosVinculados || []
 
-    const doBlockReset = () => {
+    if (filhos.length === 0) {
+      setRfidError(`Nenhum aluno vinculado ao responsável "${gName}".`)
+      showToast('Nenhum aluno vinculado.', false)
       rfidRef.current?.clear()
       setTimeout(() => {
-        setBlockInfo(null); setMode('idle'); setRfidCode(undefined)
+        setRfidError(null); setMode('idle'); setRfidCode(undefined)
         setRfidStudents([]); setMatchedGuardianName(''); setMatchedGuardianRole('')
-      }, 4000)
+      }, 2500)
+      return
     }
 
-    // ── 2. Proibido — absolute block ────────────────────────────────────────
-    if (aut.proibido === true) {
-      const reason = `${gName} está bloqueado(a) de retirar alunos nesta instituição.`
-      for (const { aluno } of matches) {
-        const foto = aluno.foto && aluno.foto.length > 10 ? aluno.foto : null
-        blockAttempt(aluno.id, aluno.nome, aluno.turma, `rfid-${code}`, gName, code, 'proibido', reason, foto)
-      }
-      setBlockInfo({
-        type: 'proibido', reason,
-        studentName: matches.map(m => m.aluno.nome).join(', '),
-        guardianName: gName,
-      })
-      showToast(`🚫 Acesso bloqueado: ${gName}`, false)
+    const DIAS = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
+    const todayKey = DIAS[new Date().getDay()]
+
+    const studentIds = filhos.map((f: any) => f.id).filter(Boolean)
+
+    if (studentIds.length === 0) {
+      setRfidError(`Nenhum aluno cadastrado vinculado ao responsável "${gName}".`)
+      showToast('Nenhum aluno cadastrado.', false)
+      rfidRef.current?.clear()
+      setTimeout(() => {
+        setRfidError(null); setMode('idle'); setRfidCode(undefined)
+        setRfidStudents([]); setMatchedGuardianName(''); setMatchedGuardianRole('')
+      }, 2500)
+      return
+    }
+
+    // 2. Buscar dados completos dos alunos de forma otimizada
+    let matchedStudents: any[] = []
+    try {
+      const { data, error } = await supabase
+        .from('alunos')
+        .select('id, nome, matricula, turma, serie, turno, status, foto, saude')
+        .in('id', studentIds)
+      
+      if (error) throw error
+      matchedStudents = data || []
+    } catch (err) {
+      console.error('Erro ao buscar alunos vinculados:', err)
+      showToast('Erro ao carregar dados dos alunos.', false)
       doBlockReset()
       return
     }
 
-    // ── 3. Day restriction ──────────────────────────────────────────────────
-    const diasSemana: string[] = aut.diasSemana || []
-    if (diasSemana.length > 0 && !diasSemana.includes(todayKey)) {
-      const reason = `${gName} só pode retirar alunos nos dias: ${diasSemana.join(', ')}. Hoje é ${todayKey}.`
-      for (const { aluno } of matches) {
+    // 3. Validar dias de acesso do responsável
+    const diasAcesso: string[] = resp.dias_acesso || []
+    if (diasAcesso.length > 0 && !diasAcesso.includes(todayKey)) {
+      const reason = `${gName} só pode retirar alunos nos dias: ${diasAcesso.join(', ')}. Hoje é ${todayKey}.`
+
+      for (const aluno of matchedStudents) {
         const foto = aluno.foto && aluno.foto.length > 10 ? aluno.foto : null
         blockAttempt(aluno.id, aluno.nome, aluno.turma, `rfid-${code}`, gName, code, 'dia_restrito', reason, foto)
       }
+
       setBlockInfo({
         type: 'dia_restrito', reason,
-        studentName: matches.map(m => m.aluno.nome).join(', '),
+        studentName: matchedStudents.map((m: any) => m.nome).join(', '),
         guardianName: gName,
       })
       showToast(`⚠ Dia não permitido para ${gName}`, false)
@@ -411,25 +561,71 @@ function PainelTabletContent() {
       return
     }
 
-    // ── All checks passed — show student cards ──────────────────────────────
-    const seen = new Set<string>()
+    // 4. Montar lista de alunos e verificar "proibido"
     const students: any[] = []
-    for (const { aluno, aut: a } of matches) {
-      if (!seen.has(aluno.id)) { seen.add(aluno.id); students.push({ ...aluno, _aut: a }) }
+    let isProhibited = false
+    let prohibitionReason = ''
+
+    for (const alunoCompleto of matchedStudents) {
+      const isAtivo = alunoCompleto.status === 'Ativo' || alunoCompleto.status === 'matriculado';
+      if (!isAtivo) {
+        setShowInactiveAlert({ name: alunoCompleto.nome })
+        setTimeout(() => setShowInactiveAlert(null), 3000)
+        showToast('Aluno inativo.', false)
+        doBlockReset()
+        return
+      }
+
+      // Verificar se no JSON do aluno este responsável está marcado como proibido
+      const autorizados: any[] = alunoCompleto.saude?.autorizados || []
+      const autInfo = autorizados.find((a: any) => 
+        a.nome?.trim().toLowerCase() === gName.trim().toLowerCase() ||
+        a.rfid?.trim().toUpperCase() === code.trim().toUpperCase()
+      )
+
+      const autObj = {
+        rfid: code,
+        diasSemana: diasAcesso,
+        proibido: resp.proibido || autInfo?.proibido || false,
+        parentesco: gRole
+      }
+
+      if (autObj.proibido) {
+        isProhibited = true
+        prohibitionReason = `${gName} está bloqueado(a) de retirar o aluno ${alunoCompleto.nome}.`
+        const foto = alunoCompleto.foto && alunoCompleto.foto.length > 10 ? alunoCompleto.foto : null
+        blockAttempt(alunoCompleto.id, alunoCompleto.nome, alunoCompleto.turma, `rfid-${code}`, gName, code, 'proibido', prohibitionReason, foto)
+      }
+
+      students.push({ ...alunoCompleto, _aut: autObj })
     }
+
+    if (isProhibited) {
+      setBlockInfo({
+        type: 'proibido', reason: prohibitionReason,
+        studentName: matchedStudents.map((m: any) => m.nome).join(', '),
+        guardianName: gName,
+      })
+      showToast(`🚫 Acesso bloqueado: ${gName}`, false)
+      doBlockReset()
+      return
+    }
+
     setMatchedGuardianName(gName)
     setMatchedGuardianRole(gRole)
     setRfidStudents(students)
     setRfidCode(code)
     setMode('rfid')
-  }, [alunos, showToast, blockAttempt])
+  }, [showToast, blockAttempt, doBlockReset])
 
   // ── Call student ───────────────────────────────────────────────────────────
   const handleCall = useCallback((a: any) => {
     const gId  = `rfid-${rfidCode}`
     // Convert empty string foto to null so callStudent receives proper value
     const foto = a.foto && typeof a.foto === 'string' && a.foto.length > 10 ? a.foto : null
-    const call = callStudent(a.id, a.nome, a.turma, gId, matchedGuardianName, 'rfid', rfidCode, foto)
+    const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
+    const turmaNome = tObj?.nome || a.turma
+    const call = callStudent(a.id, a.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
     if (!call) { showToast(`${a.nome} já está em chamada ativa!`, false); return }
     showToast(`📣 ${a.nome} foi chamado(a)!`)
     // Limpa buffer RFID imediatamente e volta ao idle após 1s
@@ -442,29 +638,19 @@ function PainelTabletContent() {
       setMatchedGuardianRole('')
       setRfidStudents([])
     }, 1000)
-  }, [rfidCode, matchedGuardianName, callStudent, showToast])
-
-  // ── Manual ─────────────────────────────────────────────────────────────────
-  const filteredAlunos = useMemo(() => {
-    if (!search.trim()) return (alunos || []).slice(0, 24)
-    const q = search.toLowerCase()
-    return (alunos || []).filter((a: any) =>
-      a.nome?.toLowerCase().includes(q) ||
-      a.turma?.toLowerCase().includes(q) ||
-      a.matricula?.toLowerCase?.()?.includes(q)
-    ).slice(0, 16)
-  }, [alunos, search])
+  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmas])
 
   const handleReset = useCallback(() => {
     rfidRef.current?.clear()
     setMode('idle'); setRfidCode(undefined); setRfidError(null)
     setBlockInfo(null)
     setMatchedGuardianName(''); setMatchedGuardianRole(''); setRfidStudents([]); setSearch('')
+    setManualStudents([]); setIsSearching(false); setHasSearched(false)
   }, [])
 
   return (
     <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontFamily: 'Outfit, sans-serif' }}>
-      <style>{STANDALONE_STYLES}</style>
+      <style dangerouslySetInnerHTML={{ __html: STANDALONE_STYLES }} />
       {config.rfidEnabled && <RFIDInput ref={rfidRef} onRead={handleRFID} enabled={mode === 'idle' || mode === 'rfid'}
 />}
 
@@ -592,9 +778,38 @@ function PainelTabletContent() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {/* Connection Status Badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            borderRadius: 10,
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: '0.05em',
+            background: realtimeStatus === 'online' ? 'rgba(16,185,129,0.12)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+            border: `1px solid ${realtimeStatus === 'online' ? 'rgba(16,185,129,0.25)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+            color: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+            transition: 'all 0.3s ease',
+          }}>
+            <div style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+              boxShadow: `0 0 6px ${realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444'}`,
+              animation: realtimeStatus !== 'online' ? 'pulseUrgent 1.5s infinite' : 'none'
+            }} />
+            <span style={{ textTransform: 'uppercase' }}>
+              {realtimeStatus === 'online' ? 'ONLINE' : realtimeStatus === 'connecting' ? 'CONECTANDO' : 'OFFLINE'}
+            </span>
+          </div>
+
+
           {mode !== 'idle' && (
-          <button onClick={handleReset} style={{
+            <button onClick={handleReset} style={{
               padding: isMobile ? '10px 18px' : '11px 28px', borderRadius: 12,
               border: 'none',
               background: 'linear-gradient(135deg, #dc2626, #ef4444)',
@@ -617,19 +832,47 @@ function PainelTabletContent() {
         {mode === 'idle' && (
           <div style={{ textAlign: 'center', padding: isMobile ? '48px 0' : '72px 0', animation: 'slideUp 0.4s ease' }}>
             <div style={{
-              width: isMobile ? 110 : 140, height: isMobile ? 110 : 140,
-              borderRadius: '50%', margin: '0 auto 32px',
-              background: 'radial-gradient(circle, rgba(6,182,212,0.15) 0%, rgba(6,182,212,0.03) 70%)',
-              border: '2px solid rgba(6,182,212,0.25)',
+              width: isMobile ? 180 : 250, height: isMobile ? 180 : 250,
+              borderRadius: '50%', margin: '0 auto 40px',
+              background: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, rgba(6,182,212,0.03) 75%)',
+              border: '2px solid rgba(6,182,212,0.35)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              animation: 'scanPulse 2.4s ease-in-out infinite',
+              position: 'relative',
+              boxShadow: '0 0 35px rgba(6,182,212,0.25)',
+              overflow: 'hidden',
+              animation: 'scanPulse 3s ease-in-out infinite',
             }}>
-              <Scan size={isMobile ? 46 : 60} color="#06b6d4" strokeWidth={1.4}/>
+              {/* Spinning dashed ring */}
+              <div style={{
+                position: 'absolute', inset: 8, borderRadius: '50%',
+                border: '2px dashed rgba(6,182,212,0.25)',
+                animation: 'spinSlow 15s linear infinite',
+                pointerEvents: 'none',
+              }} />
+
+              {/* Sweeping laser line */}
+              <div style={{
+                position: 'absolute', left: 0, right: 0, height: 3,
+                background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
+                boxShadow: '0 0 14px #06b6d4, 0 0 28px #06b6d4',
+                animation: 'laserSweep 3s ease-in-out infinite',
+                zIndex: 2,
+              }} />
+
+              <Scan size={isMobile ? 76 : 108} color="#06b6d4" strokeWidth={1.1} style={{ animation: 'radarPulse 3s ease-in-out infinite', zIndex: 1 }}/>
             </div>
-            <h2 style={{ fontWeight: 900, fontSize: isMobile ? 24 : 32, margin: '0 0 12px', color: '#f1f5f9', letterSpacing: '-0.03em' }}>
-              Aguardando Identificação
+            <h2 style={{
+              fontWeight: 900,
+              fontSize: isMobile ? 32 : 48,
+              margin: '0 0 16px',
+              color: '#fff',
+              letterSpacing: '-0.04em',
+              textShadow: '0 0 24px rgba(6,182,212,0.5)',
+              animation: 'textPulse 3s ease-in-out infinite',
+            }}>
+              Aguardando Leitura
             </h2>
-            <p style={{ fontSize: isMobile ? 13 : 15, color: '#64748b', margin: '0 0 32px', lineHeight: 1.6 }}>
+            <p style={{ fontSize: isMobile ? 15 : 18, color: '#64748b', margin: '0 0 32px', lineHeight: 1.6, fontWeight: 600 }}>
               Aproxime o cartão RFID do responsável
             </p>
 
@@ -734,34 +977,38 @@ function PainelTabletContent() {
               gap: 16,
               maxWidth: rfidStudents.length === 1 ? 380 : undefined,
             }}>
-              {rfidStudents.map((a, i) => (
-                <StudentCard
-                  key={a.id}
-                  aluno={a}
-                  aut={a._aut}
-                  guardianName={matchedGuardianName}
-                  rfidCode={rfidCode}
-                  onCall={() => handleCall(a)}
-                  onRecall={() => {
-                    const call = activeCalls.find(c =>
-                      c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
-                    )
-                    if (call) recallStudent(call.id, () => {})
-                    else handleCall(a)
-                    // Limpa buffer e reset para idle após 1s
-                    rfidRef.current?.clear()
-                    setTimeout(() => {
-                      setMode('idle')
-                      setRfidCode(undefined)
-                      setRfidError(null)
-                      setMatchedGuardianName('')
-                      setMatchedGuardianRole('')
-                      setRfidStudents([])
-                    }, 1000)
-                  }}
-                  index={i}
-                />
-              ))}
+              {rfidStudents.map((a, i) => {
+                const t = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
+                const alunoWithTurma = { ...a, turmaNome: t ? t.nome : a.turma }
+                return (
+                  <StudentCard
+                    key={a.id}
+                    aluno={alunoWithTurma}
+                    aut={a._aut}
+                    guardianName={matchedGuardianName}
+                    rfidCode={rfidCode}
+                    onCall={() => handleCall(a)}
+                    onRecall={() => {
+                      const call = activeCalls.find(c =>
+                        c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
+                      )
+                      if (call) recallStudent(call.id, () => {})
+                      else handleCall(a)
+                      // Limpa buffer e reset para idle após 1s
+                      rfidRef.current?.clear()
+                      setTimeout(() => {
+                        setMode('idle')
+                        setRfidCode(undefined)
+                        setRfidError(null)
+                        setMatchedGuardianName('')
+                        setMatchedGuardianRole('')
+                        setRfidStudents([])
+                      }, 1000)
+                    }}
+                    index={i}
+                  />
+                )
+              })}
             </div>
 
             {rfidStudents.length === 0 && (
@@ -802,111 +1049,152 @@ function PainelTabletContent() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {filteredAlunos.map((a: any) => {
-                const saude: any = a.saude || {}
-                const autorizados: any[] = saude.autorizados || []
-                const autorizaSaida: boolean = saude.autorizaSaida === true
-                const alreadyCalled = activeCalls.some(c =>
-                  c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
-                )
-                const initials = (a.nome || '').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
+              {search.trim().length < 3 ? (
+                <div style={{ textAlign: 'center', padding: '64px 24px', color: '#64748b', fontSize: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 16, border: '1px dashed rgba(255,255,255,0.07)' }}>
+                  <Search size={28} style={{ color: '#334155', margin: '0 auto 12px', display: 'block' }} />
+                  <div style={{ fontWeight: 700 }}>Digite pelo menos 3 caracteres para iniciar a busca.</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>Digite texto para buscar por nome, ou número para buscar por ID/Matrícula.</div>
+                </div>
+              ) : isSearching ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                   <div style={{ height: 100, borderRadius: 16, background: 'rgba(255,255,255,0.02)' }} className="skeleton-shimmer" />
+                   <div style={{ height: 100, borderRadius: 16, background: 'rgba(255,255,255,0.02)' }} className="skeleton-shimmer" />
+                   <div style={{ height: 100, borderRadius: 16, background: 'rgba(255,255,255,0.02)' }} className="skeleton-shimmer" />
+                </div>
+              ) : manualStudents.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '64px 24px', color: '#ef4444', fontSize: 14, background: 'rgba(239,68,68,0.02)', borderRadius: 16, border: '1px solid rgba(239,68,68,0.1)' }}>
+                  Nenhum aluno ativo encontrado para "{search}"
+                </div>
+              ) : (
+                manualStudents.map((a: any) => {
+                  const saude: any = a.saude || {}
+                  const autorizados: any[] = saude.autorizados || []
+                  const autorizaSaida: boolean = saude.autorizaSaida === true
+                  const alreadyCalled = activeCalls.some(c =>
+                    c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
+                  )
+                  const initials = (a.nome || '').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
 
-                // Build autorizados list with fallback to responsaveis
-                const respList: { name: string; role: string; rfid?: string; proibido: boolean; diasSemana: string[] }[] = []
-                const seen = new Set<string>()
-                autorizados.forEach(aut => {
-                  if (aut.nome?.trim() && !seen.has(aut.nome.toLowerCase())) {
-                    seen.add(aut.nome.toLowerCase())
-                    respList.push({ name: aut.nome, role: aut.parentesco || 'Autorizado', rfid: aut.rfid, proibido: aut.proibido === true, diasSemana: aut.diasSemana || [] })
+                  // Build autorizados list with fallback to responsaveis
+                  const respList: { name: string; role: string; rfid?: string; proibido: boolean; diasSemana: string[] }[] = []
+                  const seen = new Set<string>()
+                  autorizados.forEach(aut => {
+                    if (aut.nome?.trim() && !seen.has(aut.nome.toLowerCase())) {
+                      seen.add(aut.nome.toLowerCase())
+                      respList.push({ name: aut.nome, role: aut.parentesco || 'Autorizado', rfid: aut.rfid, proibido: aut.proibido === true, diasSemana: aut.diasSemana || [] })
+                    }
+                  })
+                  if (respList.length === 0 && a.responsavel?.trim()) {
+                    respList.push({ name: a.responsavel, role: 'Responsável', proibido: false, diasSemana: [] })
                   }
-                })
-                if (respList.length === 0 && a.responsavel?.trim()) {
-                  respList.push({ name: a.responsavel, role: 'Responsável', proibido: false, diasSemana: [] })
-                }
 
-                return (
-                  <div key={a.id} style={{
-                    background: '#0f1c2e',
-                    border: alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                    borderRadius: 16, overflow: 'hidden',
-                  }}>
-                    {/* Student row */}
-                    <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                      {/* Photo or initials */}
-                      {a.foto ? (
-                        <img src={a.foto} alt={a.nome} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
-                      ) : (
-                        <div style={{
-                          width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                          background: 'linear-gradient(135deg, #06b6d430, #6366f118)',
-                          border: '2px solid rgba(6,182,212,0.2)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontWeight: 900, fontSize: 20, color: '#e2e8f0',
-                        }}>{initials}</div>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
-                        <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <GraduationCap size={10}/> {a.turma}
-                          </span>
-                          {a.turno && <span>· {a.turno}</span>}
-                          {autorizaSaida && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Saída independente</span>}
-                          {alreadyCalled && <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Em chamada</span>}
+                  return (
+                    <div key={a.id} style={{
+                      background: '#0f1c2e',
+                      border: alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
+                      borderRadius: 16, overflow: 'hidden',
+                    }}>
+                      {/* Student row */}
+                      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                        {/* Photo or initials */}
+                        {a.foto ? (
+                          <img src={a.foto} alt={a.nome} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
+                        ) : (
+                          <div style={{
+                            width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+                            background: 'linear-gradient(135deg, #06b6d430, #6366f118)',
+                            border: '2px solid rgba(6,182,212,0.2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontWeight: 900, fontSize: 20, color: '#e2e8f0',
+                          }}>{initials}</div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: 15, color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
+                          <div style={{ fontSize: 12, color: '#64748b', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <GraduationCap size={10}/> {a.turma}
+                            </span>
+                            {a.turno && <span>· {a.turno}</span>}
+                            {autorizaSaida && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Saída independente</span>}
+                            {alreadyCalled && <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Em chamada</span>}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Guardian buttons */}
-                    {respList.length > 0 && (
-                      <div style={{ padding: '8px 18px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
-                        {respList.map((g, i) => {
-                          const diaOk = isDiaPermitido(g.diasSemana)
-                          const disabled = alreadyCalled || g.proibido || !diaOk
-                          return (
-                            <button key={i}
-                              onClick={() => {
-                                if (disabled) return
-                                const gId = `manual-${a.id}-${i}`
-                                const call = callStudent(a.id, a.nome, a.turma, gId, g.name, 'manual')
-                                if (!call) showToast(`${a.nome} já em chamada!`, false)
-                                else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
-                              }}
-                              disabled={disabled}
-                              style={{
-                                padding: '7px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-                                background: g.proibido
-                                  ? 'rgba(239,68,68,0.08)'
-                                  : disabled ? 'rgba(255,255,255,0.03)' : 'rgba(6,182,212,0.1)',
-                                border: g.proibido
-                                  ? '1px solid rgba(239,68,68,0.3)'
-                                  : disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(6,182,212,0.3)',
-                                color: g.proibido ? '#ef4444' : disabled ? '#334155' : '#06b6d4',
-                                cursor: disabled ? 'not-allowed' : 'pointer',
-                                display: 'inline-flex', alignItems: 'center', gap: 6,
-                                transition: 'all 0.15s',
-                              }}>
-                              {g.proibido ? <ShieldOff size={11}/> : <Phone size={10}/>}
-                              {g.name}
-                              <span style={{ opacity: 0.5, fontSize: 10 }}>{g.role}</span>
-                              {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-              {filteredAlunos.length === 0 && search && (
-                <div style={{ textAlign: 'center', padding: '48px', color: '#334155', fontSize: 14 }}>
-                  Nenhum aluno encontrado para "{search}"
-                </div>
+                      {/* Guardian buttons */}
+                      {respList.length > 0 && (
+                        <div style={{ padding: '8px 18px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
+                          {respList.map((g, i) => {
+                            const diaOk = isDiaPermitido(g.diasSemana)
+                            const disabled = alreadyCalled || g.proibido || !diaOk
+                            return (
+                              <button key={i}
+                                onClick={() => {
+                                  if (disabled) return
+                                  const gId = `manual-${a.id}-${i}`
+                                  const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
+                                  const turmaNome = tObj?.nome || a.turma
+                                  const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual')
+                                  if (!call) showToast(`${a.nome} já em chamada!`, false)
+                                  else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
+                                }}
+                                disabled={disabled}
+                                style={{
+                                  padding: '7px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
+                                  background: g.proibido
+                                    ? 'rgba(239,68,68,0.08)'
+                                    : disabled ? 'rgba(255,255,255,0.03)' : 'rgba(6,182,212,0.1)',
+                                  border: g.proibido
+                                    ? '1px solid rgba(239,68,68,0.3)'
+                                    : disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(6,182,212,0.3)',
+                                  color: g.proibido ? '#ef4444' : disabled ? '#334155' : '#06b6d4',
+                                  cursor: disabled ? 'not-allowed' : 'pointer',
+                                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                                  transition: 'all 0.15s',
+                                }}>
+                                {g.proibido ? <ShieldOff size={11}/> : <Phone size={10}/>}
+                                {g.name}
+                                <span style={{ opacity: 0.5, fontSize: 10 }}>{g.role}</span>
+                                {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
               )}
             </div>
           </div>
         )}
+
+        <AnimatePresence>
+          {showInactiveAlert && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                background: 'rgba(220, 38, 38, 0.95)',
+                zIndex: 9999, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                color: '#fff',
+              }}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
+                transition={{ repeat: Infinity, duration: 0.5 }}
+                style={{ textAlign: 'center' }}
+              >
+                <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ALUNO INATIVO</h1>
+                <p style={{ fontSize: 32, fontWeight: 700 }}>O aluno {showInactiveAlert.name} está INATIVO no sistema.</p>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

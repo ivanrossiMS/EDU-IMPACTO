@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { ControliDClient } from '@/lib/controlid'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -20,17 +21,45 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const id = body.id || crypto.randomUUID()
+    let id = body.id
+
+    const port = body.porta || (body.ip?.includes(':') ? parseInt(body.ip.split(':')[1], 10) : 443)
+    const ipOnly = body.ip ? body.ip.replace(/^https?:\/\//i, '').split(':')[0] : ''
+
+    // Tentar obter o número de série caso o dispositivo esteja online e não tenha ID definido
+    if (!id && ipOnly) {
+      try {
+        const client = new ControliDClient({
+          ip: ipOnly,
+          port: port,
+          login: body.configuracao?.login || 'admin',
+          password: body.configuracao?.password || 'admin',
+        })
+        const info = await client.getDeviceInfo()
+        if (info && info.serial) {
+          id = info.serial
+        }
+      } catch (err: any) {
+        console.warn('[Dispositivos API] Não foi possível obter o Serial do dispositivo físico:', err.message)
+      }
+    }
+
+    if (!id) {
+      id = crypto.randomUUID()
+    }
 
     const record = {
       id,
       nome: body.nome || 'Novo Dispositivo',
-      ip: body.ip || '',
-      porta: body.porta || 443,
+      ip: ipOnly,
+      porta: port,
       unidade: body.unidade || '',
       modelo: body.modelo || 'iDFace',
       status: 'offline',
-      configuracao: body.configuracao || {},
+      configuracao: {
+        ...(body.configuracao || {}),
+        ...(id && !id.includes('-') ? { serial: id } : {})
+      },
       updated_at: new Date().toISOString(),
     }
 

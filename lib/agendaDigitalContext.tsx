@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { useData } from './dataContext'
+import { useSupabaseArray } from './useSupabaseCollection'
 
 export interface ADComunicado {
   id: string
@@ -26,16 +27,36 @@ export interface ADComunicado {
   status: 'rascunho' | 'agendado' | 'enviado'
 }
 
-export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string }
-export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string }
+export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
+export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string }
 export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
+export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[] }
 export type ADMomento = { id: number | string, author: string, targetClasses: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[] }
 
 export interface ADConfig {
-  permissoes: { chat: boolean; segundaVia: boolean; comentariosMural: boolean }
+  permissoes: { 
+    chat: boolean
+    comentariosMural: boolean
+    visualizarAniversariantes?: boolean
+    visualizarRelatorios?: boolean
+    confirmarPresencaEventos?: boolean
+    visualizarFinanceiro?: boolean
+    visualizarNotas?: boolean
+    visualizarFrequencia?: boolean
+    visualizarOcorrencias?: boolean
+    chamadaAlunoPortaria?: boolean
+  }
   horarios: { inicio: string; fim: string; msgAusencia: string }
-  notificacoes: { pushComunicados: boolean; pushMomentos: boolean; pushFinanceiro: boolean; pushCalendario: boolean; pushMensagemChat: boolean }
+  notificacoes: { 
+    pushComunicados: boolean
+    pushMomentos: boolean
+    pushFinanceiro: boolean
+    pushCalendario: boolean
+    pushMensagemChat: boolean
+    pushRelatorios?: boolean
+    pushAlteracaoCalendario?: boolean
+  }
 }
 
 interface ADContextState {
@@ -43,6 +64,8 @@ interface ADContextState {
   setComunicados: (updater: (prev: ADComunicado[]) => ADComunicado[]) => void
   chatsList: ADChat[]
   setChatsList: React.Dispatch<React.SetStateAction<ADChat[]>>
+  chatGroups: ADChatGroup[]
+  setChatGroups: React.Dispatch<React.SetStateAction<ADChatGroup[]>>
   messages: Record<string, ADMessage[]>
   setMessages: React.Dispatch<React.SetStateAction<Record<string, ADMessage[]>>>
   momentosFeed: ADMomento[]
@@ -53,6 +76,8 @@ interface ADContextState {
   setAdConfig: React.Dispatch<React.SetStateAction<ADConfig>>
   adAlert: (message: string, title?: string) => void
   adConfirm: (message: string, title?: string, onConfirm?: () => void) => void
+  adLoading: boolean
+  setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const AgendaDigitalContext = createContext<ADContextState>({
@@ -60,6 +85,8 @@ const AgendaDigitalContext = createContext<ADContextState>({
   setComunicados: () => {},
   chatsList: [],
   setChatsList: () => {},
+  chatGroups: [],
+  setChatGroups: () => {},
   messages: {},
   setMessages: () => {},
   momentosFeed: [],
@@ -67,13 +94,15 @@ const AgendaDigitalContext = createContext<ADContextState>({
   bannerUrl: null,
   setBannerUrl: () => {},
   adConfig: {
-    permissoes: { chat: true, segundaVia: true, comentariosMural: false },
+    permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: true }
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true }
   },
   setAdConfig: () => {},
   adAlert: () => {},
-  adConfirm: () => {}
+  adConfirm: () => {},
+  adLoading: false,
+  setAdLoading: () => {}
 })
 
 // Dados de semente para demonstração
@@ -86,102 +115,85 @@ const MOCK_MESSAGES: Record<string, ADMessage[]> = {}
 const MOCK_MOMENTOS: ADMomento[] = []
 
 export function AgendaDigitalProvider({ children }: { children: React.ReactNode }) {
-  const [comunicados, setComunicadosState] = useState<ADComunicado[]>(MOCK_COMUNICADOS)
-  const [chatsList, setChatsList] = useState<ADChat[]>(MOCK_CHATS)
-  const [messages, setMessages] = useState<Record<string, ADMessage[]>>(MOCK_MESSAGES)
-  const [momentosFeed, setMomentosFeed] = useState<ADMomento[]>(MOCK_MOMENTOS)
+  const [comunicados, setComunicadosState] = useSupabaseArray<ADComunicado>('comunicados')
+  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats')
+  const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos')
+  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens')
+  const [momentosFeed, setMomentosFeed] = useSupabaseArray<ADMomento>('agenda/momentos')
+
+  const messages = React.useMemo(() => {
+    const record: Record<string, ADMessage[]> = {}
+    if (messagesArray) {
+      messagesArray.forEach((item: any) => {
+        record[item.id] = item.messages || []
+      })
+    }
+    return record
+  }, [messagesArray])
+
+  const setMessages = React.useCallback((updater: any) => {
+    setMessagesArray((prev: any[]) => {
+      const record: Record<string, ADMessage[]> = {}
+      if (prev) {
+        prev.forEach((item: any) => {
+          record[item.id] = item.messages || []
+        })
+      }
+      const nextRecord = typeof updater === 'function' ? updater(record) : updater
+      
+      // Converte de volta para array para salvar no banco
+      return Object.entries(nextRecord).map(([id, msgs]) => ({ id, messages: msgs })) as any[]
+    })
+  }, [setMessagesArray])
+
+  const [adLoading, setAdLoading] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
+  const [adConfig, setAdConfig] = useState<ADConfig>({
+    permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: false, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true }
+  })
 
   useEffect(() => {
-    const loadData = async () => {
+    const loadConfig = async () => {
       try {
-        const storedChats = localStorage.getItem('ad_chats_v3')
-        if (storedChats) setChatsList(JSON.parse(storedChats))
-        const storedMsgs = localStorage.getItem('ad_messages_v3')
-        if (storedMsgs) setMessages(JSON.parse(storedMsgs))
-        const storedMomentos = localStorage.getItem('ad_momentos_v3')
-        if (storedMomentos) setMomentosFeed(JSON.parse(storedMomentos))
-        const storedComunicados = localStorage.getItem('ad_comunicados_v3')
-        if (storedComunicados) setComunicadosState(JSON.parse(storedComunicados))
-
-        // Tenta buscar configurações Globais do Servidor
-        try {
-          const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config')
-          if (res.ok) {
-            const db = await res.json()
-            if (db.ad_banner) {
-              setBannerUrlState(db.ad_banner)
-              localStorage.setItem('ad_banner', db.ad_banner)
-            } else {
-              const storedBanner = localStorage.getItem('ad_banner')
-              if (storedBanner) setBannerUrlState(storedBanner)
-              else setBannerUrlState('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000')
-            }
-            if (db.ad_config) {
-              setAdConfig(db.ad_config)
-              localStorage.setItem('ad_config', JSON.stringify(db.ad_config))
-            } else {
-              const storedConfig = localStorage.getItem('ad_config')
-              if (storedConfig) setAdConfig(JSON.parse(storedConfig))
-            }
-          }
-        } catch(e) {
-          // Fallback offline
-          const storedBanner = localStorage.getItem('ad_banner')
-          if (storedBanner) setBannerUrlState(storedBanner)
-          else setBannerUrlState('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&q=80&w=2000')
-          
-          const storedConfig = localStorage.getItem('ad_config')
-          if (storedConfig) setAdConfig(JSON.parse(storedConfig))
+        const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config')
+        if (res.ok) {
+          const db = await res.json()
+          if (db.ad_banner) setBannerUrlState(db.ad_banner)
+          if (db.ad_config) setAdConfig(db.ad_config)
         }
-      } catch (e) {
-        console.error(e)
+      } catch(e) {
+        console.error('Erro ao carregar configurações da agenda:', e)
       }
       setIsLoaded(true)
     }
-    loadData()
+    loadConfig()
   }, [])
 
+  // Auto-Publish Cron Client-Side
   useEffect(() => {
-    if(chatsList !== MOCK_CHATS) {
-      try { localStorage.setItem('ad_chats_v3', JSON.stringify(chatsList)) } catch(e) { console.warn('Quota exceeded', e) }
-    }
-  }, [chatsList])
-
-  useEffect(() => {
-    if(messages !== MOCK_MESSAGES) {
-      try { localStorage.setItem('ad_messages_v3', JSON.stringify(messages)) } catch(e) { console.warn('Quota exceeded', e) }
-    }
-  }, [messages])
-
-  useEffect(() => {
-    if(momentosFeed !== MOCK_MOMENTOS) {
-      try { localStorage.setItem('ad_momentos_v3', JSON.stringify(momentosFeed)) } catch(e) { console.warn('Quota exceeded for Momentos. Using memory only.') }
-    }
-  }, [momentosFeed])
-
-  useEffect(() => {
-    if(comunicados !== MOCK_COMUNICADOS) {
-      try { localStorage.setItem('ad_comunicados_v3', JSON.stringify(comunicados)) } catch(e) { console.warn('Quota exceeded', e) }
-    }
-  }, [comunicados])
-
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  const [adConfig, setAdConfig] = useState<ADConfig>({
-    permissoes: { chat: true, segundaVia: true, comentariosMural: false },
-    horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: false, pushCalendario: true, pushMensagemChat: true }
-  })
-  
-  useEffect(() => {
-    if (isLoaded) localStorage.setItem('ad_config', JSON.stringify(adConfig))
-  }, [adConfig, isLoaded])
-
-  const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
-  
-  useEffect(() => {
-    if (isLoaded && bannerUrl) localStorage.setItem('ad_banner', bannerUrl)
-  }, [bannerUrl, isLoaded])
+    const interval = setInterval(() => {
+      setComunicadosState((prev: ADComunicado[]) => {
+        if (!prev || !prev.length) return prev;
+        let hasChanges = false;
+        const now = new Date();
+        const updated = prev.map(c => {
+          if (c.status === 'agendado' && c.dataAgendamento) {
+            const agendaData = new Date(c.dataAgendamento);
+            if (agendaData <= now) {
+              hasChanges = true;
+              return { ...c, status: 'enviado', dataEnvio: c.dataAgendamento };
+            }
+          }
+          return c;
+        });
+        return hasChanges ? updated : prev;
+      });
+    }, 60000); // Verifica a cada 60 segundos
+    return () => clearInterval(interval);
+  }, [setComunicadosState]);
 
   const setComunicados = useCallback((updater: (prev: ADComunicado[]) => ADComunicado[]) => {
     setComunicadosState(updater)
@@ -204,20 +216,24 @@ export function AgendaDigitalProvider({ children }: { children: React.ReactNode 
 
   return (
     <AgendaDigitalContext.Provider value={{
-      comunicados,
+      comunicados: comunicados || [],
       setComunicados,
-      chatsList,
+      chatsList: chatsList || [],
       setChatsList,
-      messages,
+      chatGroups: chatGroups || [],
+      setChatGroups,
+      messages: messages || {},
       setMessages,
-      momentosFeed,
+      momentosFeed: momentosFeed || [],
       setMomentosFeed,
       bannerUrl,
       setBannerUrl: setBannerUrlState,
-      adConfig,
+      adConfig: adConfig || {},
       setAdConfig,
       adAlert,
-      adConfirm
+      adConfirm,
+      adLoading,
+      setAdLoading
     }}>
       {children}
       

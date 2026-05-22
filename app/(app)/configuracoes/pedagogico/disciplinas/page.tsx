@@ -1,6 +1,9 @@
 'use client'
 import { ConfigDisciplina, newId, useData } from '@/lib/dataContext'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 import { Plus, Edit2, Trash2, Check, BookOpen, Search, Download, Layers } from 'lucide-react'
 
 const NIVEIS_OPTS = ['EI', 'EF1', 'EF2', 'EM', 'EJA']
@@ -45,8 +48,18 @@ function gerarCodigoDisc(existentes: string[]): string {
 }
 
 export default function DisciplinasPage() {
-  const { cfgDisciplinas, setCfgDisciplinas, turmas = [] } = useData()
-  const isLoading = false
+  const { data: rawConfig, isLoading: loadingDisc, isFetching } = useApiQuery<{ valor: ConfigDisciplina[] }>(['config-disciplinas'], '/api/configuracoes?chave=cfgDisciplinas')
+  const { data: rawTurmas } = useApiQuery<{ data: any[] }>(['turmas'], '/api/turmas')
+  
+  const [cfgDisciplinas, setCfgDisciplinas] = useState<ConfigDisciplina[]>([])
+  const turmas = rawTurmas?.data || []
+  const isLoading = loadingDisc
+
+  useEffect(() => {
+    if (rawConfig?.valor) {
+      setCfgDisciplinas(rawConfig.valor)
+    }
+  }, [rawConfig])
 
   const [search, setSearch] = useState('')
   const [filtroNivel, setFiltroNivel] = useState('todos')
@@ -157,7 +170,10 @@ export default function DisciplinasPage() {
       )}
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title">Disciplinas</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Disciplinas</span>
+            {isFetching && <UpdatingIndicator />}
+          </h1>
           <p className="page-subtitle">Cadastro global de disciplinas — {cfgDisciplinas.length} registradas</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -298,14 +314,33 @@ export default function DisciplinasPage() {
       )}
 
       {/* Tabela */}
-      {cfgDisciplinas.length === 0 ? (
-        <div className="card" style={{ padding: '56px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-          <BookOpen size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Nenhuma disciplina cadastrada</div>
-          <div style={{ fontSize: 13, marginBottom: 20 }}>Ex: Matemática, Português, Ciências...</div>
-          <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Cadastrar primeira disciplina</button>
-        </div>
-      ) : (
+      {isLoading && cfgDisciplinas.length === 0 ? (
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 100 }}>Código</th>
+                  <th>Nome</th>
+                  <th>Níveis de Ensino</th>
+                  <th style={{ textAlign: 'center' }}>Carga</th>
+                  <th style={{ textAlign: 'center' }}>Tipo</th>
+                  <th style={{ textAlign: 'center' }}>Situação</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                <TableSkeleton rows={10} cols={7} />
+              </tbody>
+            </table>
+          </div>
+        ) : cfgDisciplinas.length === 0 ? (
+          <div className="card" style={{ padding: '56px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+            <BookOpen size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Nenhuma disciplina cadastrada</div>
+            <div style={{ fontSize: 13, marginBottom: 20 }}>Ex: Matemática, Português, Ciências...</div>
+            <button className="btn btn-primary" onClick={openNew}><Plus size={14} />Cadastrar primeira disciplina</button>
+          </div>
+        ) : (
         <div className="table-container">
           <table>
             <thead>

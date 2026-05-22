@@ -1,320 +1,839 @@
 import { NextResponse } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { APIListQuerySchema, ZodAluno } from '@/lib/server/zodSchemas'
+import { supabaseServer as supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+import path from 'path'
+import { syncStudentToDevices } from '@/lib/portariaSync'
+
 
 export const dynamic = 'force-dynamic'
 
-// ─── Normaliza data: aceita DD/MM/AAAA ou YYYY-MM-DD → YYYY-MM-DD ou '' ───────────
-function normDate(v: string | null | undefined): string | null {
-  if (!v) return null
-  const s = v.trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
-  if (m) return `${m[3]}-${m[2]}-${m[1]}`
-  return null // formato desconhecido — não mandar pro banco
-}
-
-
+// ─── GET: Listar alunos ──────────────────────────────────────────────────────
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const serie = searchParams.get('serie')
-    const status = searchParams.get('status')
-    const q = searchParams.get('search') || searchParams.get('q')
+    const url = new URL(request.url)
+    const pageParam = url.searchParams.get('page')
+    const limitParam = url.searchParams.get('limit')
+    const all = url.searchParams.get('all') === 'true' || (!pageParam && !limitParam)
 
-    // 1. Zod Validation for queries
-    const qParams = {
-      page: searchParams.get('page') || undefined,
-      limit: searchParams.get('limit') || undefined,
-      search: q || undefined
-    }
-    const { page, limit, search } = APIListQuerySchema.parse(qParams)
+    const page = parseInt(pageParam || '1')
+    const limit = parseInt(limitParam || '10')
+    const search = url.searchParams.get('search') || ''
+    const status = url.searchParams.get('status') || 'todos'
+    const turma = url.searchParams.get('turma') || ''
 
-    // 2. Supabase Authenticated (RLS Enforced)
-    const supabase = await createProtectedClient()
-
-    let query = supabase.from('alunos').select('*', { count: 'exact' }).order('nome')
-
-    if (search) {
-      // Sanitize search to prevent PostgREST filter injection (characters like . % ( ) could manipulate or() semantics)
-      const safeSearch = search.replace(/[%_().,]/g, '')
-      if (safeSearch.length > 0) {
-        query = query.or(`nome.ilike.%${safeSearch}%,matricula.ilike.%${safeSearch}%,turma.ilike.%${safeSearch}%`)
-      }
-    }
-    if (serie && serie !== 'Todos') query = query.eq('serie', serie)
-    if (status && status !== 'Todos') query = query.eq('status', status)
-
-    // 3. Paginação no nível de Banco de Dados (Prevenindo estouro de RAM)
     const from = (page - 1) * limit
     const to = from + limit - 1
-    query = query.range(from, to)
 
-    const { data, count, error } = await query
+    let query = supabase
+      .from('alunos')
+      .select('id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at', { count: 'exact' })
 
-    if (error) throw new Error(error.message)
-
-    // Merge dados JSONB para a estrutura flat da UI
-    // CRITICAL: row.id must always win over dados.id (dados may contain stale/nested ids)
-    const result = (data || []).map(row => {
-      const { id: _ignoredId, ...dadosWithoutId } = row.dados || {}
-      return { ...dadosWithoutId, ...row }
-    })
-    
-    return NextResponse.json({
-      data: result,
-      meta: { total: count || 0, page, limit }
-    }, { 
-      headers: { 'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=59' } 
-    })
-    
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const supabase = await createProtectedClient()
-
-    if (Array.isArray(body)) {
-      if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      
-      const rows = body.map(a => buildRowAuth(a)).filter(Boolean)
-      if (rows.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      
-      // Zod Batch Validation — usa safeParse para pular registros inválidos
-      // em vez de abortar toda a operação com erro 400
-      const validRows: any[] = []
-      for (const r of rows) {
-        const zodRes = ZodAluno.safeParse(r)
-        if (zodRes.success) {
-          validRows.push(zodRes.data)
-        } else {
-          const issues = zodRes.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
-          console.warn('[POST /api/alunos batch] Pulando linha inválida:', issues, '| nome:', (r as any).nome?.slice?.(0, 30))
-        }
-      }
-      if (validRows.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      
-      const { error } = await supabase.from('alunos').upsert(validRows)
-      if (error) throw new Error(error.message)
-      
-      return NextResponse.json({ ok: true, count: validRows.length })
+    if (search) {
+      // Busca por nome, cpf ou ID
+      query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%`)
     }
 
-    const rawRow = buildRowAuth(body)
-    if (!rawRow) throw new Error("O Aluno não pode ter nome vazio ou reservado.")
+    if (status !== 'todos') {
+      query = query.eq('status', status)
+    }
+
+    if (turma) {
+      query = query.eq('turma', turma)
+    }
+
+    let queryExec = query.order('nome')
+    if (!all) {
+      queryExec = queryExec.range(from, to)
+    }
+
+    const { data: students, error: studentsError, count } = await queryExec
+
+    if (studentsError) {
+      const fs = require('fs')
+      fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Students): ${studentsError.message}\n`)
+      return NextResponse.json({ error: studentsError.message }, { status: 400 })
+    }
+
+    if (!students || students.length === 0) {
+      return NextResponse.json({ data: [], total: 0, page, limit })
+    }
+
+    const allStudentRefs = students.flatMap((s: any) => [
+      s.id, 
+      s.matricula, 
+      s.dados?.codigo, 
+      s.matricula ? String(s.matricula) : null, 
+      s.dados?.codigo ? String(s.dados?.codigo) : null
+    ]).filter(Boolean)
+
+    // 2. Busca os vínculos apenas para os alunos da página
+    const { data: links, error: linksError } = await supabase
+      .from('aluno_responsavel')
+      .select('*')
+      .in('aluno_id', allStudentRefs)
+
+    if (linksError) {
+      const fs = require('fs')
+      fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
+    }
+
+    // 2.5 Busca os dados dos responsáveis manualmente para evitar erro de ambiguidade no join
+    const respIds = links?.map((l: any) => l.responsavel_id).filter(Boolean) || []
+    let responsaveis: any[] = []
     
-    // Zod Single Validation (safeParse para não abortar o flow em campos extras)
-    const zodResult = ZodAluno.safeParse(rawRow)
-    if (!zodResult.success) {
-      const issues = zodResult.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ')
-      console.error('[POST /api/alunos] Zod validation failed:', issues, '\nPayload:', JSON.stringify(rawRow).slice(0, 500))
-      return NextResponse.json({ error: `Validação: ${issues}` }, { status: 400 })
-    }
-    const row = zodResult.data
-
-    const { data, error } = await supabase.from('alunos').upsert(row).select().single()
-    if (error) {
-      console.error('[POST /api/alunos] Supabase upsert error:', error)
-      throw new Error(error.message)
-    }
-
-    // =========================================================================
-    // FASE C: SINCRONIZAÇÃO O(1) NA CRIAÇÃO DE ALUNOS
-    // =========================================================================
-    try {
-      const rest = rawRow.dados;
-      if (rest && rest.eventosFinanceiros && Array.isArray(rest.eventosFinanceiros)) {
-          await supabase.from('fin_eventos').delete().eq('aluno_id', data.id)
-          for (const ev of rest.eventosFinanceiros) {
-             if (!ev.id) continue;
-             const evtRet = await supabase.from('fin_eventos').insert({
-                aluno_id: data.id,
-                tipo: ev.detalheCurso ? 'matricula' : 'extra', 
-                descricao: ev.descricao || 'Receita Diversa',
-                plano_contas_id: ev.planoContasId || null,
-                valor_total: Number(ev.valorOriginal || 0),
-                qtde_parcelas: ev.parcelas ? ev.parcelas.length : 1,
-                status: ev.status || 'ativo',
-                dados_legados: ev,
-             }).select().single()
-
-             if (evtRet.data && ev.parcelas && ev.parcelas.length > 0) {
-                const pacs = ev.parcelas.map((p: any, idx: number) => ({
-                   evento_id: evtRet.data.id,
-                   numero_parcela: p.num || idx + 1,
-                   descricao: p.descricao || `${evtRet.data.descricao} (${p.num}/${ev.parcelas.length})`,
-                   vencimento: p.vencimento || new Date().toISOString().split('T')[0],
-                   valor_original: Number(p.valor || 0),
-                   desconto: Number(p.desconto || 0),
-                   juros: Number(p.juros || 0),
-                   multa: Number(p.multa || 0),
-                   valor_pago: (p.status === 'pago' || p.valorPago > 0) ? Number(p.valorPago || p.valor) : null,
-                   data_pagamento: p.dataPagamento || null,
-                   status: p.status || 'pendente',
-                   dados_legados: p,
-                }))
-                await supabase.from('fin_parcelas').insert(pacs)
-             }
-          }
-      }
-    } catch(e) { console.error("Falha no interceptador ACID de parcelas v2", e) }
-
-    // =========================================================================
-    // FASE D: NORMALIZAÇÃO DE RESPONSÁVEIS E MATRÍCULAS (Proxy Relacional)
-    // =========================================================================
-    try {
-      const rest = rawRow.dados;
-      const responsaveisArray = rest?.responsaveis || [];
-      const respsGerados: Record<string, string> = {};
-      
-      for (const resp of responsaveisArray) {
-        if (!resp.nome || resp.nome.trim() === '') continue;
+    if (respIds.length > 0) {
+      const { data: respData, error: respError } = await supabase
+        .from('responsaveis')
+        .select('*')
+        .in('id', respIds)
         
-        const respRow = {
-          id: resp.id || crypto.randomUUID(),
-          nome: resp.nome,
-          cpf: resp.cpf ? String(resp.cpf).replace(/\D/g, '') : null,
-          email: resp.email || null,
-          telefone: resp.celular || resp.telefone || null,
-          codigo: resp.codigo || null,
-          rfid: resp.rfid || null,
-          profissao: resp.profissao || null,
-          dados: resp
-        };
-        
-        respsGerados[resp.nome.toLowerCase()] = respRow.id;
-        if (!resp.id) resp.id = respRow.id; 
-        
-        await supabase.from('responsaveis').upsert(respRow);
-        
-        await supabase.from('aluno_responsavel').upsert({
-          aluno_id: data.id,
-          responsavel_id: respRow.id,
-          parentesco: resp.parentesco || resp.tipo || 'Outro',
-          resp_financeiro: !!resp.respFinanceiro,
-          resp_pedagogico: !!resp.respPedagogico
-        });
-      }
-
-      // rawRow.responsavel e rawRow.responsavel_financeiro agora vivem dentro de rawRow.dados
-      // (foram movidos do flat row para o JSONB na última refatoração do buildRowAuth)
-      const rawResponsavel = rawRow.dados?.responsavel || ''
-      const rawResponsavelFinanceiro = rawRow.dados?.responsavel_financeiro || ''
-
-      if (rawResponsavel && !respsGerados[rawResponsavel.toLowerCase()]) {
-         const defId = crypto.randomUUID();
-         await supabase.from('responsaveis').upsert({
-           id: defId, nome: rawResponsavel, telefone: rawRow.telefone || null, dados: {}
-         });
-         await supabase.from('aluno_responsavel').upsert({
-           aluno_id: data.id, responsavel_id: defId, parentesco: 'Responsável Primário',
-           resp_financeiro: true, resp_pedagogico: true
-         });
-         respsGerados[rawResponsavel.toLowerCase()] = defId;
-      }
-      
-      let vf_id = null;
-      if (rawResponsavelFinanceiro && respsGerados[rawResponsavelFinanceiro.toLowerCase()]) {
-         vf_id = respsGerados[rawResponsavelFinanceiro.toLowerCase()];
+      if (respError) {
+        const fs = require('fs')
+        fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
       } else {
-         const foundFin = responsaveisArray.find((r:any) => r.respFinanceiro);
-         if (foundFin && foundFin.id) vf_id = foundFin.id;
+        responsaveis = respData || []
       }
-
-
-      const matId = rest?.matricula_id || crypto.randomUUID();
-      await supabase.from('matriculas').upsert({
-         id: matId,
-         aluno_id: data.id,
-         responsavel_financeiro_id: vf_id,
-         turma: rawRow.turma,
-         serie: rawRow.serie,
-         turno: rawRow.turno,
-         status: rawRow.status,
-         ano_letivo: new Date().getFullYear(),
-         dados_contrato: {}
-      });
-
-      if (!rest.matricula_id) {
-         rawRow.dados.matricula_id = matId;
-         await supabase.from('alunos').update({ dados: rawRow.dados }).eq('id', data.id);
-         data.dados = rawRow.dados;
-      }
-
-    } catch(e) { console.error("Falha na Sincronização Relacional de Matrículas/Responsáveis", e) }
-    
-    const { id: _pId, ...postDadosWithoutId } = data.dados || {}
-    return NextResponse.json({ ...postDadosWithoutId, ...data }, { status: 201 })
-  } catch (e: any) {
-    const msg = e?.errors ? e.errors.map((i: any) => `${i.path?.join('.')}: ${i.message}`).join('; ') : (e?.message || String(e))
-    console.error('[POST /api/alunos] catch:', msg)
-    return NextResponse.json({ error: msg }, { status: 400 })
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    let id = searchParams.get('id')
-    if (!id) {
-       try {
-          const body = await request.json()
-          if (body && body.id) id = body.id
-       } catch(e) {}
     }
-    if (!id) return NextResponse.json({ error: 'ID faltando' }, { status: 400 })
 
-    const supabase = await createProtectedClient()
-    const { error } = await supabase.from('alunos').delete().eq('id', id)
-    if (error) throw new Error(error.message)
-    
-    return NextResponse.json({ success: true, id })
+    // 3. Monta o resultado final
+    const formattedData = students.map((student: any) => {
+      const studentRefs = [
+        student.id, 
+        student.matricula, 
+        student.dados?.codigo, 
+        student.matricula ? String(student.matricula) : null, 
+        student.dados?.codigo ? String(student.dados?.codigo) : null
+      ].filter(Boolean)
+      
+      const linkedResponsaveis = links?.filter((l: any) => studentRefs.includes(l.aluno_id))
+        .map((l: any) => {
+          const resp = responsaveis.find((r: any) => r.id === l.responsavel_id) || {}
+          return {
+            ...resp,
+            parentesco: l.parentesco,
+            isFinanceiro: l.resp_financeiro,
+            isPedagogico: l.resp_pedagogico,
+            isOutro: l.resp_outro,
+            dataNasc: resp.data_nasc,
+            diasAcesso: resp.dias_acesso
+          }
+        }).filter((r: any) => r.id) || []
+
+      if (student.nome === 'ivan25') {
+        const fs = require('fs')
+        fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] ivan25 linkedResponsaveis: ${JSON.stringify(linkedResponsaveis, null, 2)}\n`)
+      }
+
+      const fallbackResponsaveis = student.dados?.responsaveis || []
+
+      return {
+        ...student,
+        ...(student.dados || {}), // Spread JSONB data
+        responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+      }
+    })
+
+    return NextResponse.json({
+      data: formattedData,
+      total: count || 0,
+      page,
+      limit
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
-function buildRowAuth(body: any) {
-  const { id, nome, matricula, turma, serie, turno, status,
-    email, cpf, dataNascimento, responsavel, responsavelFinanceiro,
-    responsavelPedagogico, telefone, inadimplente, risco_evasao,
-    media, frequencia, obs, unidade, foto, ...rest } = body
+// ─── POST: Criar ou atualizar aluno e seus responsáveis ──────────────────────────
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    
+    if (Array.isArray(body)) {
+      return NextResponse.json({ error: 'Este endpoint aceita apenas um objeto, não um array.' }, { status: 400 })
+    }
 
-  if (!nome || nome.trim().length === 0 || nome.trim().toLowerCase() === 'aluno teste' || nome === 'cec' || nome === 'Rascunho Incompleto') {
-    return null
-  }
+    const item = body
+    const row = buildRow(item)
+    
+    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
 
-  // IMPORTANTE: A tabela alunos NÃO possui colunas responsavel, responsavel_financeiro,
-  // responsavel_pedagogico. Esses dados são armazenados no campo JSONB 'dados'.
-  // Incluir colunas inexistentes causa erro 400 no Supabase silenciosamente.
-  const emailClean = email && email.trim() ? email.trim() : null
-  const dataNasc = normDate(dataNascimento)
+    // 1. Salvar o aluno (Insert para criação)
+    const { data: studentData, error: studentError } = await supabase
+      .from('alunos')
+      .insert(row)
+      .select()
+      
+    if (studentError) throw new Error(studentError.message)
+    
+    const savedStudent = studentData?.[0]
+    if (!savedStudent) throw new Error('Falha ao salvar aluno')
+    
+    // 2. Salvar responsáveis e vínculos
+    // Filtra responsáveis vazios (sem nome) para permitir salvar aluno sem responsável
+    const responsaveis = (item.responsaveis || item._responsaveis || []).filter((r: any) => r.nome && r.nome.trim() !== '')
+    const validColumns = ['id', 'nome', 'data_nasc', 'email', 'telefone', 'celular', 'profissao', 'estado_civil', 'rfid', 'codigo', 'dias_acesso', 'proibido', 'dados']
 
-  return {
-    id: id || crypto.randomUUID(),
-    nome, matricula: matricula || '', turma: turma || '',
-    serie: serie || '', turno: turno || '',
-    status: status || 'matriculado',
-    email: emailClean,
-    cpf: cpf || null,
-    data_nascimento: dataNasc,
-    telefone: telefone || null,
-    inadimplente: inadimplente || false,
-    risco_evasao: risco_evasao || 'baixo',
-    media: media ?? null,
-    frequencia: frequencia ?? 100,
-    obs: obs || null, unidade: unidade || '', foto: foto || null,
-    dados: {
-      ...rest,
-      // Campos de responsável armazenados no JSONB
-      responsavel: responsavel || '',
-      responsavel_financeiro: responsavelFinanceiro || '',
-      responsavel_pedagogico: responsavelPedagogico || '',
-    },
+    for (const resp of responsaveis) {
+      const parentesco = resp.parentesco || resp.tipo || ''
+      const isFinanceiro = resp.isFinanceiro === true || resp.respFinanceiro === true
+      const isPedagogico = resp.isPedagogico === true || resp.respPedagogico === true
+      const isOutro = resp.isOutro === true || (!isFinanceiro && !isPedagogico)
+      const respDataToSave: any = {}
+      
+      const isNewResp = !resp.id || (typeof resp.id === 'string' && resp.id.startsWith('TEMP-')) || resp.id === ''
+      
+      // Preservar e mesclar com dados existentes no banco
+      const dados = { ...(resp.dados || {}) }
+      if (!isNewResp) {
+        const { data: existingResp } = await supabase
+          .from('responsaveis')
+          .select('dados')
+          .eq('id', resp.id)
+          .maybeSingle()
+        if (existingResp?.dados) {
+          Object.assign(dados, existingResp.dados)
+        }
+      }
+      if (resp.cpf) {
+        dados.cpf = String(resp.cpf).replace(/\D/g, '')
+      }
+      if (resp.rg) {
+        dados.rg = String(resp.rg).trim()
+      }
+      if (resp.orgEmissor) dados.orgEmissor = resp.orgEmissor
+      if (resp.nacionalidade) dados.nacionalidade = resp.nacionalidade
+      if (resp.naturalidade) dados.naturalidade = resp.naturalidade
+      if (resp.uf) dados.uf = resp.uf
+      if (resp.sexo) dados.sexo = resp.sexo
+      if (resp.cep) dados.cep = resp.cep
+      if (resp.logradouro) dados.logradouro = resp.logradouro
+      if (resp.numero) dados.numero = resp.numero
+      if (resp.complemento) dados.complemento = resp.complemento
+      if (resp.bairro) dados.bairro = resp.bairro
+      if (resp.cidade) dados.cidade = resp.cidade
+      if (resp.ufEnd) dados.ufEnd = resp.ufEnd
+      respDataToSave.dados = dados
+      
+      const dataNasc = resp.dataNasc || resp.data_nasc
+      if (dataNasc) respDataToSave.data_nasc = dataNasc
+      
+      const diasAcesso = resp.diasAcesso || resp.dias_acesso
+      if (diasAcesso) respDataToSave.dias_acesso = diasAcesso
+      
+      const estadoCivil = resp.estadoCivil || resp.estado_civil
+      if (estadoCivil) respDataToSave.estado_civil = estadoCivil
+      
+      const codigo = resp.codigoAluno || resp.codigo
+      if (codigo) respDataToSave.codigo = codigo
+
+      const telefone = resp.celular || resp.telefone
+      if (telefone) respDataToSave.telefone = telefone
+      
+      for (const col of validColumns) {
+        if (respDataToSave[col] === undefined && resp[col] !== undefined) {
+          if (col === 'codigo' && !resp[col]) {
+            respDataToSave[col] = null
+          } else {
+            respDataToSave[col] = resp[col]
+          }
+        }
+      }
+      
+      if (isNewResp) {
+        delete respDataToSave.id
+      }
+      
+      let queryData: any[] | null = null
+      let respError: any = null
+      
+      if (isNewResp) {
+        const res = await supabase.from('responsaveis').insert(respDataToSave).select()
+        queryData = res.data
+        respError = res.error
+      } else {
+        const res = await supabase.from('responsaveis').update(respDataToSave).eq('id', respDataToSave.id).select()
+        queryData = res.data
+        respError = res.error
+        
+        // Se não encontrou o registro para atualizar, tenta inserir
+        if (!respError && (!queryData || queryData.length === 0)) {
+          const resInsert = await supabase.from('responsaveis').insert(respDataToSave).select()
+          queryData = resInsert.data
+          respError = resInsert.error
+        }
+      }
+        
+      if (respError) throw new Error(`Erro ao salvar responsável ${resp.nome}: ${respError.message}`)
+      
+      const savedResp = queryData && queryData.length > 0 ? queryData[0] : null
+      if (!savedResp) throw new Error(`Nenhum dado retornado para o responsável ${resp.nome}`)
+      
+      // Remove vínculo antigo se existir para evitar duplicidade
+      await supabase.from('aluno_responsavel').delete().eq('aluno_id', savedStudent.id).eq('responsavel_id', savedResp.id)
+      
+      const { error: linkError } = await supabase
+        .from('aluno_responsavel')
+        .insert({
+          aluno_id: savedStudent.id,
+          responsavel_id: savedResp.id,
+          parentesco: parentesco || '',
+          resp_financeiro: isFinanceiro || false,
+          resp_pedagogico: isPedagogico || false,
+          resp_outro: isOutro || false
+        })
+        
+      if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
+    }
+
+    // Sincroniza em segundo plano com a portaria
+    syncStudentToDevices(savedStudent.id, 'create').catch(err => 
+      console.error('[Portaria Sync Error]', err.message)
+    )
+
+    return NextResponse.json(savedStudent, { status: 201 })
+  } catch (e: any) {
+    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos POST: ${e.message}\n`)
+    return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
+// ─── PUT: Atualizar aluno ───────────────────────────────────────────────────
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json()
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id') || body.id
+
+    if (!id) return NextResponse.json({ error: 'ID é obrigatório para atualização' }, { status: 400 })
+
+    const row = buildRow(body)
+    delete row.id // Não atualiza o ID!
+
+    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
+
+    // 1. Atualizar o aluno
+    const { data: studentData, error: studentError } = await supabase
+      .from('alunos')
+      .update(row)
+      .eq('id', id)
+      .select()
+
+    if (studentError) throw new Error(studentError.message)
+    
+    const savedStudent = studentData?.[0]
+    if (!savedStudent) throw new Error('Aluno não encontrado ou não atualizado')
+
+    // 2. Salvar responsáveis e vínculos (mesma lógica do POST)
+    const responsaveis = (body.responsaveis || body._responsaveis || []).filter((r: any) => r.nome && r.nome.trim() !== '')
+    const validColumns = ['id', 'nome', 'data_nasc', 'email', 'telefone', 'celular', 'profissao', 'estado_civil', 'rfid', 'codigo', 'dias_acesso', 'proibido', 'dados']
+    const savedRespIds: string[] = []
+
+    for (const resp of responsaveis) {
+      const parentesco = resp.parentesco || resp.tipo || ''
+      const isFinanceiro = resp.isFinanceiro === true || resp.respFinanceiro === true
+      const isPedagogico = resp.isPedagogico === true || resp.respPedagogico === true
+      const isOutro = resp.isOutro === true || (!isFinanceiro && !isPedagogico)
+      const respDataToSave: any = {}
+
+      const isNewResp = !resp.id || (typeof resp.id === 'string' && resp.id.startsWith('TEMP-')) || resp.id === ''
+      
+      // Preservar e mesclar com dados existentes no banco
+      const dados = { ...(resp.dados || {}) }
+      if (!isNewResp) {
+        const { data: existingResp } = await supabase
+          .from('responsaveis')
+          .select('dados')
+          .eq('id', resp.id)
+          .maybeSingle()
+        if (existingResp?.dados) {
+          Object.assign(dados, existingResp.dados)
+        }
+      }
+      if (resp.cpf) {
+        dados.cpf = String(resp.cpf).replace(/\D/g, '')
+      }
+      if (resp.rg) {
+        dados.rg = String(resp.rg).trim()
+      }
+      if (resp.orgEmissor) dados.orgEmissor = resp.orgEmissor
+      if (resp.nacionalidade) dados.nacionalidade = resp.nacionalidade
+      if (resp.naturalidade) dados.naturalidade = resp.naturalidade
+      if (resp.uf) dados.uf = resp.uf
+      if (resp.sexo) dados.sexo = resp.sexo
+      if (resp.cep) dados.cep = resp.cep
+      if (resp.logradouro) dados.logradouro = resp.logradouro
+      if (resp.numero) dados.numero = resp.numero
+      if (resp.complemento) dados.complemento = resp.complemento
+      if (resp.bairro) dados.bairro = resp.bairro
+      if (resp.cidade) dados.cidade = resp.cidade
+      if (resp.ufEnd) dados.ufEnd = resp.ufEnd
+      respDataToSave.dados = dados
+      
+      const dataNasc = resp.dataNasc || resp.data_nasc
+      if (dataNasc) respDataToSave.data_nasc = dataNasc
+      
+      const diasAcesso = resp.diasAcesso || resp.dias_acesso
+      if (diasAcesso) respDataToSave.dias_acesso = diasAcesso
+      
+      const estadoCivil = resp.estadoCivil || resp.estado_civil
+      if (estadoCivil) respDataToSave.estado_civil = estadoCivil
+      
+      const codigo = resp.codigoAluno || resp.codigo
+      if (codigo) respDataToSave.codigo = codigo
+
+      const telefone = resp.celular || resp.telefone
+      if (telefone) respDataToSave.telefone = telefone
+      
+      for (const col of validColumns) {
+        if (respDataToSave[col] === undefined && resp[col] !== undefined) {
+          if (col === 'codigo' && !resp[col]) {
+            respDataToSave[col] = null
+          } else {
+            respDataToSave[col] = resp[col]
+          }
+        }
+      }
+      
+      if (!respDataToSave.id || (typeof respDataToSave.id === 'string' && respDataToSave.id.startsWith('TEMP-')) || respDataToSave.id === '') {
+        delete respDataToSave.id
+      }
+      
+      const { data: queryData, error: respError } = await supabase
+        .from('responsaveis')
+        .upsert(respDataToSave)
+        .select()
+        
+      if (respError) throw new Error(`Erro ao salvar responsável ${resp.nome}: ${respError.message}`)
+      
+      const savedResp = queryData && queryData.length > 0 ? queryData[0] : null
+      if (!savedResp) throw new Error(`Nenhum dado retornado para o responsável ${resp.nome}`)
+      
+      savedRespIds.push(savedResp.id)
+
+      const { error: linkError } = await supabase
+        .from('aluno_responsavel')
+        .upsert({
+          aluno_id: savedStudent.id,
+          responsavel_id: savedResp.id,
+          parentesco: parentesco || '',
+          resp_financeiro: isFinanceiro || false,
+          resp_pedagogico: isPedagogico || false,
+          resp_outro: isOutro || false
+        })
+        
+      if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
+    }
+
+    // 3. Desvincular responsáveis que foram removidos
+    const { data: currentLinks, error: fetchLinksError } = await supabase
+      .from('aluno_responsavel')
+      .select('responsavel_id')
+      .eq('aluno_id', savedStudent.id)
+
+    if (fetchLinksError) throw fetchLinksError
+
+    const linksToDelete = (currentLinks || [])
+      .map((l: any) => l.responsavel_id)
+      .filter((id: string) => !savedRespIds.includes(id))
+
+    if (linksToDelete.length > 0) {
+      // Deleta os vínculos na tabela aluno_responsavel
+      const { error: unlinkError } = await supabase
+        .from('aluno_responsavel')
+        .delete()
+        .eq('aluno_id', savedStudent.id)
+        .in('responsavel_id', linksToDelete)
+      
+      if (unlinkError) throw unlinkError
+
+      // Remove os registros órfãos da tabela de responsáveis para manter a integridade dos dados
+      for (const respId of linksToDelete) {
+        const { data: otherLinks } = await supabase
+          .from('aluno_responsavel')
+          .select('aluno_id')
+          .eq('responsavel_id', respId)
+
+        if (!otherLinks || otherLinks.length === 0) {
+          const { data: guardian } = await supabase
+            .from('responsaveis')
+            .select('*')
+            .eq('id', respId)
+            .maybeSingle()
+
+          if (guardian) {
+            const guardianEmail = (guardian.email || '').trim().toLowerCase()
+            
+            // Delete from public.responsaveis
+            await supabase.from('responsaveis').delete().eq('id', respId)
+
+            // Delete from public.system_users
+            if (guardianEmail) {
+              await supabase.from('system_users').delete().eq('email', guardianEmail)
+            }
+            await supabase.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
+          }
+        }
+      }
+    }
+
+    // Sincroniza em segundo plano com a portaria
+    syncStudentToDevices(savedStudent.id, 'update').catch(err => 
+      console.error('[Portaria Sync Error]', err.message)
+    )
+
+    return NextResponse.json(savedStudent)
+  } catch (e: any) {
+    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+// ─── DELETE: Remover aluno ───────────────────────────────────────────────────
+// ─── DELETE: Remover aluno ou todos os alunos ─────────────────────────────────
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    const all = searchParams.get('all') === 'true'
+    
+    if (!id && !all) {
+      return NextResponse.json({ error: 'ID ou parâmetro all=true é obrigatório' }, { status: 400 })
+    }
+
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // Helper to delete an auth user safely
+    const deleteAuthUserByEmailOrMeta = async (email: string, metadataKey: string, metadataValue: string) => {
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+        const users = listData?.users || []
+        
+        const targetUsers = users.filter(u => {
+          if (email && u.email?.toLowerCase() === email.toLowerCase()) return true
+          if (metadataKey && u.user_metadata?.[metadataKey] === metadataValue) return true
+          return false
+        })
+
+        for (const user of targetUsers) {
+          await supabaseAdmin.auth.admin.deleteUser(user.id)
+        }
+      } catch (err: any) {
+        console.error('Error deleting auth user:', err.message)
+      }
+    }
+
+    const deleteSingleStudent = async (studentId: string) => {
+      // 1. Fetch student information before deletion
+      const { data: student, error: fetchError } = await supabaseAdmin
+        .from('alunos')
+        .select('*')
+        .eq('id', studentId)
+        .maybeSingle()
+
+      if (!student) return
+
+      const matricula = student.matricula || student.dados?.codigo || student.id
+      const studentEmail = (student.email || student.dados?.email || '').trim().toLowerCase()
+
+      // 2. Siblingless Guardian Deletion Cascade & Auth Account Revocation
+      const { data: linkedResps } = await supabaseAdmin
+        .from('aluno_responsavel')
+        .select('responsavel_id')
+        .eq('aluno_id', studentId)
+
+      const respIds = (linkedResps || []).map(r => r.responsavel_id).filter(Boolean)
+
+      for (const respId of respIds) {
+        const { data: otherLinks } = await supabaseAdmin
+          .from('aluno_responsavel')
+          .select('aluno_id, resp_financeiro, resp_pedagogico')
+          .eq('responsavel_id', respId)
+          .neq('aluno_id', studentId)
+
+        const hasOtherActiveLink = (otherLinks || []).some(
+          (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+        )
+
+        const { data: guardian } = await supabaseAdmin
+          .from('responsaveis')
+          .select('*')
+          .eq('id', respId)
+          .maybeSingle()
+
+        if (guardian) {
+          const guardianEmail = (guardian.email || '').trim().toLowerCase()
+
+          if (!otherLinks || otherLinks.length === 0) {
+            // Delete from public.responsaveis if no links left at all
+            await supabaseAdmin.from('responsaveis').delete().eq('id', respId)
+
+            // Delete from public.system_users
+            if (guardianEmail) {
+              await supabaseAdmin.from('system_users').delete().eq('email', guardianEmail)
+            }
+            await supabaseAdmin.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
+          }
+
+          // If no links left at all, OR remaining links are NOT financial or pedagogical (e.g. only 'Outro')
+          if (!otherLinks || otherLinks.length === 0 || !hasOtherActiveLink) {
+            await deleteAuthUserByEmailOrMeta(guardianEmail, 'responsavel_id', respId)
+          }
+        }
+      }
+
+      // 3. Remove relational links and direct academic dependencies
+      await supabaseAdmin.from('aluno_responsavel').delete().eq('aluno_id', studentId)
+      await supabaseAdmin.from('ocorrencias').delete().eq('aluno_id', studentId)
+      await supabaseAdmin.from('boletins').delete().eq('aluno_id', studentId)
+      await supabaseAdmin.from('documentos_emitidos').delete().eq('aluno_id', studentId)
+      await supabaseAdmin.from('academico_notas_aluno').delete().eq('aluno_id', studentId)
+
+      // 4. Surgically pluck student entries from JSONB arrays (frequencias, lancamentos_nota)
+      const { data: freqs } = await supabaseAdmin.from('frequencias').select('*')
+      if (freqs) {
+        for (const freq of freqs) {
+          const registros = Array.isArray(freq.registros) ? freq.registros : []
+          const hasStudent = registros.some((r: any) => String(r.alunoId) === String(studentId) || String(r.aluno_id) === String(studentId))
+          if (hasStudent) {
+            const updatedRegistros = registros.filter((r: any) => String(r.alunoId) !== String(studentId) && String(r.aluno_id) !== String(studentId))
+            await supabaseAdmin.from('frequencias').update({ registros: updatedRegistros }).eq('id', freq.id)
+          }
+        }
+      }
+
+      const { data: gradebooks } = await supabaseAdmin.from('lancamentos_nota').select('*')
+      if (gradebooks) {
+        for (const book of gradebooks) {
+          const notas = Array.isArray(book.notas) ? book.notas : []
+          const hasStudent = notas.some((n: any) => String(n.alunoId) === String(studentId) || String(n.aluno_id) === String(studentId))
+          if (hasStudent) {
+            const updatedNotas = notas.filter((n: any) => String(n.alunoId) !== String(studentId) && String(n.aluno_id) !== String(studentId))
+            await supabaseAdmin.from('lancamentos_nota').update({ notas: updatedNotas }).eq('id', book.id)
+          }
+        }
+      }
+
+      // 5. Delete Exit Module entries
+      await supabaseAdmin.from('saida_calls').delete().filter('dados->>alunoId', 'eq', studentId)
+      await supabaseAdmin.from('saida_rfid').delete().filter('dados->>alunoId', 'eq', studentId)
+      await supabaseAdmin.from('saida_rfid').delete().ilike('id', `${studentId}%`)
+      await supabaseAdmin.from('saida_student_guardians').delete().filter('dados->>alunoId', 'eq', studentId)
+      await supabaseAdmin.from('saida_student_guardians').delete().ilike('id', `${studentId}%`)
+
+      // 6. Delete Digital Agenda Chats and Messages
+      const { data: chatsToDelete } = await supabaseAdmin.from('agenda_chats').select('id').ilike('id', `${studentId}%`)
+      const chatIdsToDelete = (chatsToDelete || []).map(c => c.id)
+      if (chatIdsToDelete.length > 0) {
+        await supabaseAdmin.from('agenda_mensagens').delete().in('id', chatIdsToDelete)
+        await supabaseAdmin.from('agenda_chats').delete().in('id', chatIdsToDelete)
+      }
+
+      const { data: otherChats } = await supabaseAdmin.from('agenda_chats').select('id').filter('dados->>alunoId', 'eq', studentId)
+      const otherChatIds = (otherChats || []).map(c => c.id)
+      if (otherChatIds.length > 0) {
+        await supabaseAdmin.from('agenda_mensagens').delete().in('id', otherChatIds)
+        await supabaseAdmin.from('agenda_chats').delete().in('id', otherChatIds)
+      }
+
+      // 7. Remove student from Digital Agenda Groups
+      const { data: groups } = await supabaseAdmin.from('agenda_grupos').select('*')
+      if (groups) {
+        for (const group of groups) {
+          const dados = group.dados || {}
+          const alunosIds = Array.isArray(dados.alunosIds) ? dados.alunosIds : []
+          if (alunosIds.some((a: any) => String(a) === String(studentId))) {
+            const updatedAlunosIds = alunosIds.filter((a: any) => String(a) !== String(studentId))
+            await supabaseAdmin.from('agenda_grupos').update({ dados: { ...dados, alunosIds: updatedAlunosIds } }).eq('id', group.id)
+          }
+        }
+      }
+
+      // 8. Clean up Digital Agenda Communications target lists, reads, and sign-offs
+      const { data: announcements } = await supabaseAdmin.from('comunicados').select('*')
+      if (announcements) {
+        for (const comm of announcements) {
+          const dados = comm.dados || {}
+          let changed = false
+
+          const alunosIds = Array.isArray(dados.alunosIds) ? dados.alunosIds : []
+          let updatedAlunosIds = alunosIds
+          if (alunosIds.some((a: any) => String(a) === String(studentId))) {
+            updatedAlunosIds = alunosIds.filter((a: any) => String(a) !== String(studentId))
+            changed = true
+          }
+
+          const leituras = dados.leituras ? { ...dados.leituras } : {}
+          if (leituras[studentId]) {
+            delete leituras[studentId]
+            changed = true
+          }
+          for (const rId of respIds) {
+            if (leituras[rId]) {
+              delete leituras[rId]
+              changed = true
+            }
+          }
+
+          const ciencias = dados.ciencias ? { ...dados.ciencias } : {}
+          if (ciencias[studentId]) {
+            delete ciencias[studentId]
+            changed = true
+          }
+          for (const rId of respIds) {
+            if (ciencias[rId]) {
+              delete ciencias[rId]
+              changed = true
+            }
+          }
+
+          if (changed) {
+            const destino = String(comm.destino || '').toLowerCase()
+            const turmas = Array.isArray(dados.turmas) ? dados.turmas : []
+            
+            if (updatedAlunosIds.length === 0 && destino !== 'todos' && turmas.length === 0) {
+              await supabaseAdmin.from('comunicados').delete().eq('id', comm.id)
+            } else {
+              await supabaseAdmin
+                .from('comunicados')
+                .update({
+                  dados: {
+                    ...dados,
+                    alunosIds: updatedAlunosIds,
+                    leituras,
+                    ciencias
+                  }
+                })
+                .eq('id', comm.id)
+            }
+          }
+        }
+      }
+
+      // 9. Clean up student credentials
+      if (studentEmail) {
+        await supabaseAdmin.from('system_users').delete().eq('email', studentEmail)
+      }
+      await supabaseAdmin.from('system_users').delete().filter('dados->>aluno_id', 'eq', studentId)
+
+      const virtualEmail = `aluno.${matricula}@impactoedu.local`
+      await deleteAuthUserByEmailOrMeta(studentEmail, 'aluno_id', studentId)
+      await deleteAuthUserByEmailOrMeta(virtualEmail, 'aluno_id', studentId)
+
+      // 10. Delete the student's record
+      const { error } = await supabaseAdmin.from('alunos').delete().eq('id', studentId)
+      if (error) throw error
+
+      // Remove do leitor iDFace em segundo plano
+      syncStudentToDevices(studentId, 'delete').catch(err => 
+        console.error('[Portaria Sync Error]', err.message)
+      )
+    }
+
+    if (all) {
+      // Get all student IDs in the database
+      const { data: allStudents, error: fetchAllError } = await supabaseAdmin
+        .from('alunos')
+        .select('id')
+      
+      if (fetchAllError) throw fetchAllError
+      
+      const studentIds = (allStudents || []).map(s => s.id)
+      
+      // Delete in parallel chunks of 10 to keep system responsive but fast
+      const chunkSize = 10
+      for (let i = 0; i < studentIds.length; i += chunkSize) {
+        const chunk = studentIds.slice(i, i + chunkSize)
+        await Promise.all(chunk.map(studentId => deleteSingleStudent(studentId)))
+      }
+      
+      return NextResponse.json({ ok: true, count: studentIds.length })
+    } else if (id) {
+      await deleteSingleStudent(id)
+      return NextResponse.json({ ok: true })
+    }
+
+    return NextResponse.json({ error: 'Nenhuma ação executada' }, { status: 400 })
+  } catch (e: any) {
+    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos DELETE: ${e.message}\n`)
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
+function buildRow(a: any) {
+  const { 
+    id, nome, matricula, turma, serie, turno, status, email, 
+    data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, 
+    telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto,
+    responsaveis, _responsaveis,
+    ...rest 
+  } = a
+
+  // Map fields from the UI form if they are different
+  const mappedNome = nome || a.nomeCompleto || ''
+  const mappedMatricula = matricula?.trim() || a.codigo?.trim() || null
+  const mappedEmail = email || ''
+  const mappedTelefone = telefone || ''
+  const mappedDataNasc = data_nascimento || a.dataNasc || ''
+  
+  // Handle status: if 'ativo' boolean is passed, map to 'matriculado' or 'inativo'
+  let mappedStatus = status
+  if (a.ativo !== undefined) {
+    mappedStatus = a.ativo ? 'matriculado' : 'inativo'
+  }
+
+  // Usa o código manual (a.codigo) como ID se disponível, senão usa o ID atual ou gera um novo
+  let finalId = a.codigo || id
+  if (!finalId || finalId.startsWith('TEMP-') || finalId === '') {
+    finalId = `AL-${Date.now()}-${Math.random().toString(36).slice(2,6)}`
+  }
+
+  // Encontra o responsável financeiro e pedagógico para preencher os campos legados
+  const listResps = responsaveis || a._responsaveis || []
+  const firstResp = listResps?.[0]?.nome || ''
+  const finResp = listResps?.find((r: any) => r.isFinanceiro || r.respFinanceiro)?.nome || firstResp
+  const pedResp = listResps?.find((r: any) => r.isPedagogico || r.respPedagogico)?.nome || firstResp
+
+  const extractName = (val: any) => {
+    if (!val) return ''
+    if (typeof val === 'object') return val.nome || ''
+    if (typeof val === 'string' && val.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(val)
+        return parsed.nome || val
+      } catch (e) {
+        return val
+      }
+    }
+    return val
+  }
+
+  return {
+    id: finalId,
+    nome: mappedNome,
+    matricula: mappedMatricula,
+    turma: turma || '',
+    serie: serie || '',
+    turno: turno || '',
+    status: mappedStatus || 'matriculado',
+    email: mappedEmail,
+    data_nascimento: mappedDataNasc,
+    responsavel: extractName(responsavel) || firstResp,
+    responsavel_financeiro: extractName(responsavel_financeiro) || finResp,
+    responsavel_pedagogico: extractName(responsavel_pedagogico) || pedResp,
+    telefone: mappedTelefone,
+    inadimplente: inadimplente || false,
+    risco_evasao: risco_evasao || 'baixo',
+    media: media || null,
+    frequencia: frequencia || 100,
+    obs: obs || '',
+    unidade: unidade || 'Unidade Centro',
+    foto: foto || null,
+    dados: rest, // Guarda outros campos no JSONB
+    updated_at: new Date().toISOString(),
+  }
+}

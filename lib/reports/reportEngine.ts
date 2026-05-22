@@ -61,13 +61,21 @@ function matchFilter(value: string | undefined, filter: string): boolean {
 // ─── Source Resolvers ────────────────────────────────────
 
 async function resolveAlunos(filters: Record<string, string>): Promise<Record<string, unknown>[]> {
-  const { data: alunos } = await supabase.from('alunos').select('*')
-  if (!alunos) return []
+  const [
+    { data: alunos },
+    { data: matriculas },
+    { data: arLinks },
+    { data: resps },
+    { data: turmasData }
+  ] = await Promise.all([
+    supabase.from('alunos').select('id, nome, matricula, turma, status, unidade, email, data_nascimento, telefone, dados, serie, turno'),
+    supabase.from('matriculas').select('aluno_id, turma, serie, turno, ano_letivo, status, turma_id'),
+    supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, resp_financeiro'),
+    supabase.from('responsaveis').select('id, nome, cpf'),
+    supabase.from('turmas').select('id, nome, serie, turno, dados')
+  ])
 
-  const { data: matriculas } = await supabase.from('matriculas').select('*')
-  const { data: arLinks } = await supabase.from('aluno_responsavel').select('*')
-  const { data: resps } = await supabase.from('responsaveis').select('id,nome,cpf')
-  const { data: turmasData } = await supabase.from('turmas').select('id,nome,serie,turno,dados')
+  if (!alunos) return []
 
   const matMap = new Map<string, any>()
   ;(matriculas || []).forEach(m => {
@@ -146,15 +154,21 @@ async function resolveAlunos(filters: Record<string, string>): Promise<Record<st
 
 async function resolveFinanceiro(filters: Record<string, string>, source: string): Promise<Record<string, unknown>[]> {
   // Read financial data from alunos.dados JSONB (where real data lives)
-  const { data: alunos } = await supabase.from('alunos').select('id,nome,turma,serie,turno,unidade,dados,matricula')
-  if (!alunos) return []
+  const [
+    { data: alunos },
+    { data: arLinks },
+    { data: resps },
+    { data: matriculas },
+    { data: turmasData }
+  ] = await Promise.all([
+    supabase.from('alunos').select('id, nome, turma, serie, turno, unidade, dados, matricula'),
+    supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, parentesco, resp_financeiro'),
+    supabase.from('responsaveis').select('id, nome, cpf, rg, email, telefone, celular, dados, profissao, empresa'),
+    supabase.from('matriculas').select('aluno_id, turma, serie, turma_id, ano_letivo, status, unidade'),
+    supabase.from('turmas').select('id, nome, unidade')
+  ])
 
-  const { data: arLinks } = await supabase.from('aluno_responsavel').select('*')
-  // Fetch ALL responsável fields so we can surface phone, email, address etc.
-  const { data: resps } = await supabase.from('responsaveis').select('*')
-  const { data: matriculas } = await supabase.from('matriculas').select('aluno_id,turma,serie,turma_id,ano_letivo,status,unidade')
-  // Turmas table — needed to resolve unidade from the turma when aluno.unidade is empty
-  const { data: turmasData } = await supabase.from('turmas').select('id,nome,unidade')
+  if (!alunos) return []
 
   const respMap = new Map<string, any>()
   ;(resps || []).forEach(r => respMap.set(r.id, r))
@@ -396,13 +410,21 @@ async function resolveSimpleTable(table: string, filters: Record<string, string>
 // and the latest matricula as _mat — ready for the 133-field catalog.
 
 async function resolveAlunosCompleto(filters: Record<string, string>): Promise<Record<string, unknown>[]> {
-  const { data: alunos } = await supabase.from('alunos').select('*')
-  if (!alunos) return []
+  const [
+    { data: alunos },
+    { data: matriculas },
+    { data: arLinks },
+    { data: resps },
+    { data: turmasRows }
+  ] = await Promise.all([
+    supabase.from('alunos').select('id, nome, matricula, turma, status, unidade, email, data_nascimento, telefone, dados, sexo, serie, turno'),
+    supabase.from('matriculas').select('id, aluno_id, responsavel_financeiro_id, turma, serie, turno, ano_letivo, status, dados_contrato, created_at, updated_at, data_matricula, bolsista, grupo_alunos, turma_id, responsavel_pedagogico_id, situacao, padrao_pagamento_id, data_resultado'),
+    supabase.from('aluno_responsavel').select('id, aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, created_at, tipo, updated_at, prioridade, autorizacao_retirada, resp_outro'),
+    supabase.from('responsaveis').select('id, nome, cpf, rg, email, telefone, celular, dados, profissao, empresa'),
+    supabase.from('turmas').select('id, nome, professor, sala, capacidade, matriculados, unidade, codigo, dados')
+  ])
 
-  const { data: matriculas }   = await supabase.from('matriculas').select('*')
-  const { data: arLinks }      = await supabase.from('aluno_responsavel').select('*')
-  const { data: resps }        = await supabase.from('responsaveis').select('*')
-  const { data: turmasRows }   = await supabase.from('turmas').select('id,nome,professor,sala,capacidade,matriculados,unidade,codigo,dados')
+  if (!alunos) return []
 
   // Build maps
   const matMap = new Map<string, any>()
@@ -643,11 +665,11 @@ async function resolveAlunosRelacao(filters: Record<string, string>): Promise<Re
     { data: resps },
     { data: turmasRows },
   ] = await Promise.all([
-    supabase.from('alunos').select('*'),
-    supabase.from('matriculas').select('*'),
-    supabase.from('aluno_responsavel').select('*'),
-    supabase.from('responsaveis').select('id,nome,telefone,celular,dados'),
-    supabase.from('turmas').select('id,nome,serie,turno,unidade,dados'),
+    supabase.from('alunos').select('id, nome, matricula, status, unidade, email, data_nascimento, telefone, dados, sexo, serie, turno'),
+    supabase.from('matriculas').select('id, aluno_id, turma_id, turma, status, ano_letivo, data_matricula, data_inicio, created_at, situacao, grupo_alunos'),
+    supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, resp_pedagogico, resp_financeiro'),
+    supabase.from('responsaveis').select('id, nome, telefone, celular, dados'),
+    supabase.from('turmas').select('id, nome, serie, turno, unidade, dados'),
   ])
 
   if (!alunos) return []
@@ -825,10 +847,15 @@ async function resolveAlunosRelacao(filters: Record<string, string>): Promise<Re
 // ─── Resolver: Não Rematriculados / Retenção ───────────────────────────
 
 async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<Record<string, unknown>[]> {
-  const { data: alunos } = await supabase.from('alunos').select('*')
-  const { data: arLinks } = await supabase.from('alunos_responsaveis').select('*')
-  const { data: respDb } = await supabase.from('responsaveis').select('*')
-  const { data: titulos } = await supabase.from('financeiro_titulos').select('aluno_id, valor_pago, valor, descontos, juros, multa, vencimento, situacao, status').in('status', ['aberto', 'vencido'])
+  const [
+    { data: alunos },
+    { data: arLinks },
+    { data: respDb }
+  ] = await Promise.all([
+    supabase.from('alunos').select('id, nome, matricula, status, unidade, email, data_nascimento, dados, foto_url'),
+    supabase.from('aluno_responsavel').select('aluno_id, responsavel_id, resp_pedagogico, resp_financeiro'),
+    supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados')
+  ])
 
   const respMap = new Map((respDb || []).map((r: any) => [r.id, r]))
 
@@ -836,13 +863,6 @@ async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<R
   const anoAlvo = Number(filters.anoAlvo || new Date().getFullYear())
 
   const results: Record<string, unknown>[] = []
-
-  // Check titles per student
-  const titulosPorAluno = new Map<string, any[]>()
-  for (const t of (titulos || [])) {
-    if (!titulosPorAluno.has(t.aluno_id)) titulosPorAluno.set(t.aluno_id, [])
-    titulosPorAluno.get(t.aluno_id)!.push(t)
-  }
 
   for (const a of (alunos || [])) {
     const dados = a.dados || {}
@@ -884,16 +904,30 @@ async function resolveRetencaoAlunos(filters: Record<string, string>): Promise<R
     const rped = rpedLink ? respMap.get(rpedLink.responsavel_id) : null
     const rfin = rfinLink ? respMap.get(rfinLink.responsavel_id) : null
 
-    // Financeiro (só para os que evadiram calculamos pendência para motivar automático)
+    // Financeiro (só para os que evadiram calculamos pendência diretamente do JSONB de parcelas do aluno)
     let saldoAberto = 0
     let parcelasAbertas = 0
     if (!isRematriculado) {
-      const myTitulos = titulosPorAluno.get(a.id) || []
-      saldoAberto = myTitulos.reduce((acc, t) => {
-        const principal = (Number(t.valor) || 0) + (Number(t.juros) || 0) + (Number(t.multa) || 0) - (Number(t.descontos) || 0)
-        return acc + (principal - (Number(t.valor_pago) || 0))
+      const parcelas = dados.parcelas || dados.financeiro?.parcelas || []
+      const today = new Date().toISOString().slice(0, 10)
+      const myAbertas = parcelas.filter((p: any) => p.status !== 'pago' && p.status !== 'cancelado')
+      
+      saldoAberto = myAbertas.reduce((acc: number, p: any) => {
+        const valor = Number(p.valor) || 0
+        const desc = Number(p.desconto) || 0
+        const isVencido = p.vencimento && p.vencimento < today
+        let juros = Number(p.juros) || 0
+        let multa = Number(p.multa) || 0
+        if (isVencido && juros === 0 && multa === 0) {
+          const diasAtr = Math.max(0, Math.floor((Date.now() - new Date(p.vencimento + 'T12:00:00').getTime()) / 86400000))
+          if (diasAtr >= 1) {
+            multa = Number(((valor - desc) * 0.02).toFixed(2))
+            juros = Number(((valor - desc) * 0.00033 * diasAtr).toFixed(2))
+          }
+        }
+        return acc + Math.max(0, valor - desc + juros + multa)
       }, 0)
-      parcelasAbertas = myTitulos.length
+      parcelasAbertas = myAbertas.length
     }
 
     // Motivo Salvo

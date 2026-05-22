@@ -132,6 +132,10 @@ export interface Tarefa {
   id: string; titulo: string; descricao: string; responsavel: string
   prazo: string; status: 'pendente' | 'em-andamento' | 'concluida'
   prioridade: 'baixa' | 'media' | 'alta' | 'urgente'
+  criado_por?: string
+  criado_em?: string
+  resolvido_por?: string
+  resolvido_em?: string
 }
 
 export interface Agendamento {
@@ -182,7 +186,7 @@ export interface EventoAgenda {
   turmas: string[]; local: string; cor: string
   recorrente: boolean; criadoPor: string
   confirmacaoNecessaria: boolean; confirmados: string[]
-  unidade: string; createdAt: string
+  unidade: string; createdAt: string; diaTodo?: boolean;
 }
 
 export interface RotinaItem {
@@ -229,6 +233,11 @@ export interface Ocorrencia {
   id: string; alunoId: string; alunoNome: string; turma: string
   tipo: string; descricao: string; gravidade: 'leve' | 'media' | 'grave'
   data: string; responsavel: string; ciencia_responsavel: boolean; createdAt: string
+  // Anexo (opcional)
+  anexoUrl?: string
+  anexoNome?: string
+  anexoTipo?: string
+  anexoTamanho?: number
 }
 
 export interface Transferencia {
@@ -772,13 +781,16 @@ export interface FornecedorCad {
 
 export interface ConfigCalendarioLetivo {
   id: string
-  ano: number
-  totalDiasLetivos: number    // padrão 200 (LDB)
-  frequenciaMinima: number    // % padrão 75
-  dataInicio: string          // YYYY-MM-DD
-  dataFim: string
-  observacoes: string
-  createdAt: string
+  ano: number | string
+  totalDiasLetivos?: number    // padrão 200 (LDB)
+  frequenciaMinima?: number    // % padrão 75
+  dataInicio?: string          // YYYY-MM-DD
+  dataFim?: string
+  observacoes?: string
+  createdAt?: string
+  status?: string              // Aberto, Encerrado
+  criadoEm?: string
+  isVigente?: boolean
 }
 
 export interface Advertencia {
@@ -1372,7 +1384,7 @@ interface DataState {
 }
 
 export const DEFAULT_PERFIS: Perfil[] = [
-  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/ia/copilotos','/ia/insights','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade'] },

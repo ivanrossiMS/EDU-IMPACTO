@@ -84,39 +84,26 @@ export function useSupabaseCollection<T>(
   }
 ): [T, (value: T | ((prev: T) => T)) => void, { loading: boolean; error: string | null }] {
   const lsKey = `edu-ls-${endpoint}`
+  // Make sure initialValue is never undefined
+  const safeInitialValue = initialValue !== undefined ? initialValue : ([] as any);
+  
   // Store initialValue in a ref so it stays stable across Fast Refresh / re-renders
-  const initialValueRef = useRef<T>(initialValue)
+  const initialValueRef = useRef<T>(safeInitialValue)
 
-  // Initialization priority: 1. mem-cache, 2. localStorage, 3. initialValue
+  // Initialization priority: 1. mem-cache, 2. initialValue (localStorage removed for security/UX)
   const getBootValue = (): T => {
     const cached = getCacheEntry<T>(endpoint)
-    if (cached) {
+    if (cached && cached.data !== undefined && cached.data !== null) {
       if (Array.isArray(initialValueRef.current) && !Array.isArray(cached.data)) return initialValueRef.current
       return cached.data
     }
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(lsKey)
-        if (stored) {
-          const parsed = JSON.parse(stored) as T
-          // Safety: if we expect an array but got something else, clear corruption and return initialValue
-          if (Array.isArray(initialValueRef.current) && !Array.isArray(parsed)) {
-            localStorage.removeItem(lsKey)  // clear corrupted entry
-            return initialValueRef.current
-          }
-          return parsed
-        }
-      } catch {
-        // Malformed JSON — clear it
-        try { localStorage.removeItem(lsKey) } catch {}
-      }
-    }
-    // Final fallback — always return a valid initial value
+    // Fallback: initial value (usually empty array). Loading flag will be TRUE.
     return initialValueRef.current
   }
 
   const [state, setState] = useState<T>(getBootValue)
-  const [loading, setLoading] = useState(true)
+  // If we don't have memory cache, we are actively loading. Prevents empty screen flashes.
+  const [loading, setLoading] = useState(!getCacheEntry<T>(endpoint))
   const [error, setError] = useState<string | null>(null)
   const isMounted = useRef(true)
 
@@ -150,9 +137,16 @@ export function useSupabaseCollection<T>(
     const doFetch = options?.fetcher
       ? () => options.fetcher!()
       : () => fetch(`/api/${endpoint}`)
-          .then(r => {
+          .then(async r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`)
-            return r.json() as Promise<T>
+            const text = await r.text()
+            if (!text) return initialValueRef.current
+            try {
+              return JSON.parse(text) as T
+            } catch (err) {
+              console.warn(`[useSupabaseCollection] JSON parse failed for /${endpoint}:`, err)
+              return initialValueRef.current
+            }
           })
 
     fetchWithDedup<T>(endpoint, doFetch)
@@ -163,21 +157,23 @@ export function useSupabaseCollection<T>(
         if (data === undefined || data === null) {
           normalized = initialValueRef.current
         } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-          // Expected array but received object/null — use initial
           normalized = initialValueRef.current
+        } else if (
+          typeof data === 'object' && !Array.isArray(data) &&
+          initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
+        ) {
+          // Merge defaults with API data to avoid undefined fields
+          normalized = { ...initialValueRef.current, ...data }
+        } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
+          // Expected Object but received Array — use first element or default
+          const first = data[0]
+          normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
         }
         setState(normalized)
-        // Persist successful API response to localStorage too
-        if (typeof window !== 'undefined') {
-          try { localStorage.setItem(lsKey, JSON.stringify(normalized)) } catch {}
-        }
         setLoading(false)
       })
       .catch((err) => {
         if (cancelled || !isMounted.current) return
-        // API failed — do NOT read from localStorage as "truth"
-        // Keep whatever is already in state (from cache or initialValue)
-        // but signal the error so the UI can warn the user
         setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
         setLoading(false)
       })
@@ -208,10 +204,6 @@ export function useSupabaseCollection<T>(
           return
         }
       }
-      // 4. API succeeded → update localStorage as offline cache
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem(lsKey, JSON.stringify(next)) } catch {}
-      }
       if (isMounted.current) setError(null)
     } catch (e: any) {
       console.warn(`[useSupabaseCollection] API sync failed for ${endpoint}:`, e?.message)
@@ -241,7 +233,8 @@ export function useSupabaseCollection<T>(
     persist(next);
   }, [persist, endpoint]);
 
-  return [state, set, { loading, error }]
+  const returnedState = state !== undefined && state !== null ? state : initialValueRef.current;
+  return [returnedState, set, { loading, error }]
 }
 
 /**
@@ -253,22 +246,30 @@ export function useSupabaseArray<T>(
   endpoint: string,
   initialValue: T[] = []
 ): [T[], (value: T[] | ((prev: T[]) => T[])) => void, { loading: boolean; error: string | null }] {
-  return useSupabaseCollection<T[]>(endpoint, initialValue, {
+  const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
+  return useSupabaseCollection<T[]>(endpoint, safeInitial, {
     fetcher: () =>
       fetch(`/api/${endpoint}`)
         .then(async r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const payload = await r.json();
-            // Always return an array — never return an object or null
-            if (Array.isArray(payload)) return payload
-            if (Array.isArray(payload?.data)) return payload.data
-            // API returned error object or unexpected shape — return empty array
-            console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
-            return []
+            const text = await r.text();
+            if (!text) return [];
+            try {
+              const payload = JSON.parse(text);
+              // Always return an array — never return an object or null
+              if (Array.isArray(payload)) return payload
+              if (Array.isArray(payload?.data)) return payload.data
+              // API returned error object or unexpected shape — return empty array
+              console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
+              return []
+            } catch (err) {
+              console.warn(`[useSupabaseArray] JSON parse failed for /${endpoint}:`, err)
+              return []
+            }
         })
         .catch(err => {
             console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
-            return [] as T[]
+            throw err
         }),
     persister: async (arr) => {
       await fetch(`/api/${endpoint}`, {

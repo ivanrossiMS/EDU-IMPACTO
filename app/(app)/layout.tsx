@@ -1,14 +1,21 @@
 'use client'
 
 import { Sidebar } from '@/components/layout/Sidebar'
-import { Topbar } from '@/components/layout/Topbar'
 import { RouteGuard } from '@/components/layout/RouteGuard'
 import { useApp } from '@/lib/context'
 import { DataProvider } from '@/lib/dataContext'
 import { DialogProvider } from '@/lib/dialogContext'
-import { useEffect, useRef, useState } from 'react'
+import { AgendaDigitalProvider } from '@/lib/agendaDigitalContext'
+import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { WebVitalsReporter } from '@/lib/webVitals'
+import dynamic from 'next/dynamic'
+
+// Lazy load do FloatingChat — 36KB que só carrega após o shell principal já estar ativo
+const FloatingChat = dynamic(
+  () => import('@/components/FloatingChat').then(m => ({ default: m.FloatingChat })),
+  { ssr: false, loading: () => null }
+)
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, setCurrentUser, currentUser } = useApp()
@@ -128,15 +135,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-          {/* Topbar fantasma */}
-          <div
-            className="topbar"
-            style={{ background: 'hsl(var(--bg-topbar, 220 25% 9%))', display: 'flex', alignItems: 'center', gap: 12, padding: '0 20px' }}
-          >
-            <div style={{ flex: 1, height: 20, maxWidth: 280, background: 'rgba(255,255,255,0.05)', borderRadius: 8 }} />
-            <div style={{ height: 36, width: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-          </div>
-
           {/* Conteúdo — spinner minimalista centrado */}
           <main className="page-content" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             <div
@@ -163,11 +161,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="app-wrapper">
           <Sidebar />
           <div className={`main-content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-            <Topbar />
             <RouteGuard>
-              <main className="page-content">
-                {children}
-              </main>
+              <AgendaDigitalProvider>
+                <main className="page-content">
+                  {children}
+                </main>
+                <FloatingChat />
+              </AgendaDigitalProvider>
             </RouteGuard>
           </div>
         </div>

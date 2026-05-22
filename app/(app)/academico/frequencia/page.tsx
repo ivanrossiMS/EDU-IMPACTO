@@ -1,648 +1,2032 @@
 'use client'
 
 import { useData, newId } from '@/lib/dataContext'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
-  ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight,
-  AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info
+  ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
+  AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
+  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles
 } from 'lucide-react'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
 
-type PresStatus = 'P' | 'F' | 'J' | 'A'
-
-const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; full: string }> = {
-  P: { bg:'rgba(16,185,129,0.12)', color:'#10b981', border:'rgba(16,185,129,0.3)', label:'P', full:'Presente' },
-  F: { bg:'rgba(239,68,68,0.12)',  color:'#ef4444', border:'rgba(239,68,68,0.3)',  label:'F', full:'Falta' },
-  J: { bg:'rgba(245,158,11,0.12)', color:'#f59e0b', border:'rgba(245,158,11,0.3)', label:'J', full:'Justificada' },
-  A: { bg:'rgba(107,114,128,0.12)',color:'#6b7280', border:'rgba(107,114,128,0.3)',label:'A', full:'Atestado' },
+const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; glow: string }> = {
+  P: { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', label: 'P', glow: 'rgba(34, 197, 94, 0.2)' },
+  F: { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca', label: 'F', glow: 'rgba(239, 68, 68, 0.2)' },
+  J: { bg: '#fef3c7', color: '#b45309', border: '#fde68a', label: 'J', glow: 'rgba(245, 158, 11, 0.2)' },
+  A: { bg: '#e5e7eb', color: '#374151', border: '#d1d5db', label: 'A', glow: 'rgba(107, 114, 128, 0.2)' },
 }
 
-const STATUS_CYCLE: Record<PresStatus, PresStatus> = { P:'F', F:'J', J:'A', A:'P' }
-const SEG_COLORS: Record<string,string> = { EI:'#10b981', EF1:'#3b82f6', EF2:'#8b5cf6', EM:'#f59e0b', EJA:'#ec4899' }
-const DISCIPLINAS = ['Matemática','Português','Ciências','História','Geografia','Inglês','Artes','Educação Física','Física','Química','Biologia','Filosofia','Sociologia']
+function renderRegrasModal(isOpen: boolean, onClose: () => void) {
+  if (!isOpen) return null;
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(15, 23, 42, 0.55)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      padding: '20px',
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '24px',
+        maxWidth: '650px',
+        width: '100%',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 40px rgba(37, 99, 235, 0.05)',
+        border: '1px solid #e2e8f0',
+        overflow: 'hidden',
+        animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+      }}>
+        {/* Header do Modal */}
+        <div style={{
+          padding: '24px 32px',
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ background: '#2563eb', color: '#fff', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Sparkles size={18} style={{ color: '#fff' }} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '18px', color: '#0f172a' }}>
+                Regras e Métricas de Frequência
+              </h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                Diretrizes oficiais para contabilização de faltas e presença
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              border: 'none',
+              background: 'none',
+              color: '#64748b',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Conteúdo do Modal */}
+        <div style={{ padding: '32px', maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Regra Educação Infantil & Fund I */}
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '16px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#16a34a', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ background: '#10b981', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>EI</span>
+              Educação Infantil e Ensino Fundamental I
+            </h4>
+            <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: '#14532d', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <li>
+                <strong>Métrica Diária:</strong> As faltas são calculadas por <strong>dia letivo completo</strong> (não por períodos individuais).
+              </li>
+              <li>
+                <strong>Tolerância de Atraso:</strong> Até <strong>07:20 (Matutino)</strong> ou <strong>13:20 (Vespertino)</strong> = Presente no 1º tempo. Até <strong>07:50 / 13:50</strong> = Falta no 1º tempo, Presente no restante.
+              </li>
+              <li>
+                <strong>Falta no 1º e 2º tempos:</strong> Atrasos após 07:50 ou 13:50 (ou falta consecutiva nos dois primeiros tempos) configuram <strong>Falta no dia completo</strong>.
+              </li>
+            </ul>
+
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Educação Infantil</span>
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Matutino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 8h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>8h - 9h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>9h - 10h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>10h - 11h</strong></div>
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Vespertino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 14h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>14h - 15h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>15h - 16h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>16h - 17h</strong></div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Fundamental I</span>
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Matutino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 8h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>8h - 9h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>9h20 - 10h20</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>10h20 - 11h20</strong></div>
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Vespertino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 14h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>14h - 15h</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>15h20 - 16h20</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>16h20 - 17h20</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regra Fund II & Ensino Médio */}
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '20px', borderRadius: '16px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#2563eb', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ background: '#3b82f6', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>EM</span>
+              Ensino Fundamental II e Ensino Médio
+            </h4>
+            <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: '#1e3a8a', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <li>
+                <strong>Métrica por Período:</strong> Cada tempo de aula ausente soma exatamente <strong>uma falta individual</strong> e reduz proporcionalmente a frequência (%).
+              </li>
+              <li>
+                <strong>Tolerância de Atraso:</strong> Mesma tolerância de 20min (Presente no 1º) e 50min (Falta no 1º, Presente nos demais).
+              </li>
+              <li>
+                <strong>Regra de Bloqueio Consecutivo:</strong> Se o aluno tiver falta tanto no <strong>1º quanto no 2º tempo</strong> (atraso &gt; 50min), todos os tempos subsequentes daquele dia são automaticamente marcados como falta.
+              </li>
+            </ul>
+
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #dbeafe' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Fundamental II</span>
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Matutino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 7h50</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>7h50 - 8h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>8h40 - 9h30</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>9h50 - 10h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>10h40 - 11h30</strong></div>
+                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Vespertino</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 13h50</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>13h50 - 14h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>14h40 - 15h30</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>15h50 - 16h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>16h40 - 17h30</strong></div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #dbeafe' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Médio</span>
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Matutino (Integral)</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 7h50</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>7h50 - 8h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>8h55 - 9h45</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>9h45 - 10h35</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>10h50 - 11h40</strong></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>6º tempo:</span> <strong>11h40 - 12h30</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regra Geral / Justificativa */}
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '20px', borderRadius: '16px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#d97706', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Shield size={16} />
+              Ausências Justificadas (J)
+            </h4>
+            <p style={{ margin: 0, fontSize: '13px', color: '#78350f', lineHeight: '1.6' }}>
+              Qualquer tempo marcado como <strong>Justificada (J)</strong> é desconsiderado na contagem de faltas daquele dia, ou seja, o aluno é dispensado do tempo e a falta <strong>não prejudica a porcentagem (%)</strong> de presença geral.
+            </p>
+          </div>
+
+        </div>
+
+        {/* Footer do Modal */}
+        <div style={{
+          padding: '20px 32px',
+          borderTop: '1px solid #f1f5f9',
+          textAlign: 'right',
+          background: '#f8fafc'
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 24px',
+              background: '#0f172a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '10px',
+              fontWeight: 700,
+              fontSize: '13px',
+              cursor: 'pointer',
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
+            onMouseLeave={e => e.currentTarget.style.background = '#0f172a'}
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getTempoEntrada(horaRegistro: string | null, segment: string, turno: string = 'Matutino'): string | null {
+  if (!horaRegistro) return null;
+  const parts = horaRegistro.split(':');
+  if (parts.length < 2) return null;
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(minutes)) return null;
+  const arrivalMinutes = hours * 60 + minutes;
+  const firstPresentIndex = getFirstPresentTempoIndex(arrivalMinutes, segment, turno);
+  return `${firstPresentIndex + 1}º Tempo`;
+}
 
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
-function fmtDate(s: string, mode: 'short'|'full' = 'short') {
-  if (!s) return '—'
-  const [y, m, d] = s.split('-')
-  const days = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
-  const dn = days[new Date(s).getDay()] || ''
-  return mode === 'short' ? `${d}/${m}` : `${dn}, ${d}/${m}/${y}`
-}
-
 export default function FrequenciaPage() {
-  const { turmas = [], frequencias = [], setFrequencias, cfgCalendarioLetivo } = useData()
+  const { turmas = [], setFrequencias, cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData()
   
-  const { data: apiResponse, isLoading: isLoadingAlunos } = useApiQuery<{data: any[], meta: any}>(
+  const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
     '/api/alunos', 
     { limit: 2000 }
   )
   const alunos = apiResponse?.data || []
 
-  const [turmaSel, setTurmaSel] = useState<string|null>(null)
-  const [vista, setVista] = useState<'chamada'|'disciplina'|'relatorio'>('chamada')
+  const { data: allFreqs, isLoading: loadingAllFreqs, isFetching: fetchingAllFreqs, refetch: refetchAllFreqs } = useApiQuery<any[]>(
+    ['all-frequencias'],
+    '/api/academico/frequencias'
+  )
 
+  const [turmaSel, setTurmaSel] = useState<string|null>(null)
+  const [showRegrasModal, setShowRegrasModal] = useState(false)
+  const [showRelatorioModal, setShowRelatorioModal] = useState(false)
+  const [buscaRelatorio, setBuscaRelatorio] = useState('')
+  const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
+  
   // Filtros home
-  const [filtroAno, setFiltroAno] = useState('todos')
+  const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString())
+  const [filtroSegmento, setFiltroSegmento] = useState('')
   const [filtroBusca, setFiltroBusca] = useState('')
-  const anosDisponiveis = useMemo(() => [...new Set(turmas.map(t => t.ano))].sort().reverse(), [turmas])
+  
+  const anosDisponiveis = useMemo(() => {
+    const fromConfig = (cfgCalendarioLetivo || []).map((c: any) => c.ano.toString())
+    const fromTurmas = (turmas || []).map(t => t.ano.toString())
+    return [...new Set([...fromConfig, ...fromTurmas])].sort().reverse()
+  }, [cfgCalendarioLetivo, turmas])
+
+  // Sincronizar ano vigente inicial
+  useEffect(() => {
+    const vigente = (cfgCalendarioLetivo || []).find((c: any) => c.isVigente)?.ano?.toString()
+    if (vigente) setFiltroAno(vigente)
+  }, [cfgCalendarioLetivo])
 
   // Estado chamada
   const [dataSel, setDataSel] = useState(todayStr())
-  const [modoLancamento, setModoLancamento] = useState<'geral'|'disciplina'>('geral')
-  const [disciplinaSel, setDisciplinaSel] = useState(DISCIPLINAS[0])
   const [buscaAluno, setBuscaAluno] = useState('')
   const [salvo, setSalvo] = useState(false)
-
-  const activeDisc = modoLancamento === 'geral' ? 'Geral' : disciplinaSel
+  const diasPeriodo = useMemo(() => [dataSel], [dataSel])
 
   const today = todayStr()
-  const anoAtual = new Date().getFullYear()
-  const calAtual = useMemo(() => cfgCalendarioLetivo.find(c => c.ano === anoAtual), [cfgCalendarioLetivo, anoAtual])
-  const freqMinima = calAtual?.frequenciaMinima ?? 75
-  const totalDiasLetivos = calAtual?.totalDiasLetivos ?? 200
+  const freqMinima = 75 // Padrão
 
-  const turmaObj = turmaSel ? turmas.find(t => t.nome === turmaSel) : null
-  const turmaId = turmaObj?.id ?? ''
-  const color = SEG_COLORS[turmaObj?.serie ?? ''] ?? '#3b82f6'
+  const turmaObj = turmaSel ? turmas.find(t => String(t.id) === String(turmaSel)) : null
+  const turmaId = turmaObj?.id ? String(turmaObj.id) : ''
   
   const { getNumeroChamada, ordenarPorChamada, formatarNumero } = useEnsalamento(turmaObj)
 
   const alunosDaTurma = useMemo(() => {
-    const lista = turmaSel ? alunos.filter((a: any) => a.turma === turmaSel) : []
+    const lista = turmaSel ? alunos.filter((a: any) => String(a.turma) === String(turmaSel)) : []
     return ordenarPorChamada(lista)
   }, [alunos, turmaSel, ordenarPorChamada])
+  
   const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
 
-  // Registros da turma
-  const regsFromTurma = useMemo(() => frequencias.filter(f => f.turmaId === turmaId), [frequencias, turmaId])
+  // Registros da turma via API
+  const { data: freqTurma, refetch: refetchFreq, isLoading: loadingFreqTurma, isFetching: fetchingFreqTurma } = useApiQuery<any[]>(
+    ['frequencias-turma', turmaId],
+    `/api/academico/frequencias`,
+    { turma_id: turmaId },
+    { enabled: !!turmaId, noCache: true }
+  )
 
-  const getRegDia = useCallback((data: string, disc: string) =>
-    frequencias.find(f => f.turmaId === turmaId && f.data === data && (f as any).disciplina === disc),
-    [frequencias, turmaId])
+  const [absences, setAbsences] = useState<Record<string, Record<string, Record<string, PresStatus>>>>({})
 
-  const getStatus = useCallback((alunoId: string, data: string = dataSel, disc: string = activeDisc): PresStatus => {
-    const reg = getRegDia(data, disc)
-    if (!reg) return 'P'
-    return (reg.registros.find(r => r.alunoId === alunoId)?.status ?? 'P') as PresStatus
-  }, [getRegDia, dataSel, activeDisc])
+  useEffect(() => {
+    if (freqTurma) {
+      console.log('Frequências carregadas:', freqTurma.length)
+      const newAbsences: Record<string, Record<string, Record<string, PresStatus>>> = {}
+      freqTurma.forEach(f => {
+        const aId = String(f.aluno_id)
+        if (!newAbsences[aId]) newAbsences[aId] = {}
+        const dia = String(f.data).split('T')[0]
+        
+        if (f.tempos) {
+          newAbsences[aId][dia] = { ...f.tempos }
+        } else {
+          // Mapeia registros antigos/binários para todos os tempos da turma
+          const overallStatus: PresStatus = f.justificativa === 'Justificada' ? 'J' : (f.presente ? 'P' : 'F')
+          const schedule = getTurmaSchedule(turmaObj)
+          const temposMap: Record<string, PresStatus> = {}
+          schedule.tempos.forEach(t => {
+            temposMap[t.id] = overallStatus
+          })
+          newAbsences[aId][dia] = temposMap
+        }
+      })
+      setAbsences(newAbsences)
+    }
+  }, [freqTurma, turmaObj])
 
-  const setStatus = (alunoId: string, statusNext: PresStatus, data = dataSel, disc = activeDisc) => {
-    setFrequencias(prev => {
-      const existe = prev.find(f => f.turmaId === turmaId && f.data === data && (f as any).disciplina === disc)
-      if (existe) {
-        return prev.map(f => {
-          if (f.turmaId !== turmaId || f.data !== data || (f as any).disciplina !== disc) return f
-          const hasReg = f.registros.find(r => r.alunoId === alunoId)
-          const registros = hasReg
-            ? f.registros.map(r => r.alunoId === alunoId ? { ...r, status: statusNext } : r)
-            : [...f.registros, { alunoId, status: statusNext }]
-          return { ...f, registros }
+  const getStatus = useCallback((alunoId: string, dia: string, tempoId: string): PresStatus => {
+    const studentDay = absences[String(alunoId)]?.[dia]
+    if (studentDay && studentDay[tempoId]) {
+      return studentDay[tempoId]
+    }
+    
+    // Se já houver qualquer registro lançado para este dia nesta turma,
+    // o padrão para alunos sem registro passa a ser Falta (pois não passaram na catraca / não foram lançados).
+    const temAlgumRegistroNoDia = Object.keys(absences).some(aId => !!absences[aId]?.[dia])
+    if (temAlgumRegistroNoDia) {
+      return 'F'
+    }
+    
+    return 'P'
+  }, [absences])
+
+  const setStatus = (alunoId: string, dia: string, tempoId: string, statusNext: PresStatus) => {
+    const aId = String(alunoId)
+    setAbsences(prev => {
+      const studentData = prev[aId] || {}
+      const dayData = studentData[dia] || {}
+      return {
+        ...prev,
+        [aId]: {
+          ...studentData,
+          [dia]: {
+            ...dayData,
+            [tempoId]: statusNext
+          }
+        }
+      }
+    })
+  }
+
+  const handleSave = async () => {
+    const recordsToSave: any[] = []
+    const schedule = getTurmaSchedule(turmaObj)
+    
+    alunosDaTurma.forEach(a => {
+      diasPeriodo.forEach(dia => {
+        const studentDay = absences[String(a.id)]?.[dia] || {}
+        const tempos: Record<string, PresStatus> = {}
+        schedule.tempos.forEach(t => {
+          tempos[t.id] = studentDay[t.id] || 'P'
+        })
+        
+        // Aplicar as regras específicas do segmento
+        const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+        
+        const existing = freqTurma?.find(f => String(f.aluno_id) === String(a.id) && String(f.data).startsWith(dia))
+        
+        recordsToSave.push({
+          id: existing?.id,
+          alunoId: a.id,
+          turmaId: turmaId,
+          data: dia,
+          anoLetivo: filtroAno,
+          presente: calc.presente,
+          justificativa: calc.justificativa,
+          tempos: calc.temposEfetivos // Salvamos os tempos efetivos com as regras auto-aplicadas
+        })
+      })
+    })
+
+    try {
+      const response = await fetch('/api/academico/frequencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recordsToSave)
+      })
+
+      if (response.ok) {
+        setSalvo(true)
+        refetchFreq()
+        if (refetchAllFreqs) refetchAllFreqs()
+        setTimeout(() => {
+          setSalvo(false)
+          setTurmaSel(null)
+        }, 1200)
+      } else {
+        const err = await response.json()
+        alert('Erro ao salvar: ' + (err.error || response.statusText))
+      }
+    } catch (error: any) {
+      alert('Erro na requisição: ' + error.message)
+    }
+  }
+
+  // Calc freq geral do aluno na turma (baseado em tempos)
+  const calcFreqGeral = useCallback((alunoId: string) => {
+    const datasAtivas = new Set<string>()
+    Object.values(absences).forEach(studentDays => {
+      Object.keys(studentDays).forEach(dia => datasAtivas.add(dia))
+    })
+
+    if (datasAtivas.size === 0) return null
+
+    let totalContabilizado = 0
+    let faltasContabilizadas = 0
+    const schedule = getTurmaSchedule(turmaObj)
+    
+    datasAtivas.forEach(dia => {
+      let tempos: Record<string, PresStatus> = {}
+      schedule.tempos.forEach(t => {
+        tempos[t.id] = getStatus(alunoId, dia, t.id)
+      })
+      
+      const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+      totalContabilizado += calc.totalTemposContabilizados
+      faltasContabilizadas += calc.faltasContabilizadas
+    })
+    
+    const presencas = totalContabilizado - faltasContabilizadas
+    return totalContabilizado > 0 ? Math.round((presencas / totalContabilizado) * 100) : 100
+  }, [absences, turmaObj, getStatus])
+
+  // Obter lista de alunos ausentes no dia (respeitando escopo global ou de turma)
+  const getAbsenteesList = useCallback(() => {
+    const list: any[] = []
+    
+    // Obter todas as frequências correspondentes à data selecionada (dataSel)
+    const freqsNoDia = (allFreqs || []).filter(f => String(f.data).startsWith(dataSel))
+    
+    // Criar um mapeamento rápido de frequência por aluno
+    const freqMap = new Map<string, any>()
+    freqsNoDia.forEach(f => {
+      freqMap.set(String(f.aluno_id), f)
+    })
+
+    // Identificar turmas que tiveram chamada lançada no dia (pelo menos um registro na tabela frequencias)
+    const turmasComChamada = new Set(freqsNoDia.map(f => String(f.turma_id)))
+
+    // Filtrar alunos baseados na seleção da turma e filtros globais
+    const targetAlunos = turmaSel 
+      ? alunosDaTurma 
+      : alunos.filter((aluno: any) => {
+          const tObj = turmas.find(t => String(t.id) === String(aluno.turma))
+          if (!tObj) return false
+          const matchesSegmento = !filtroSegmento || (tObj as any).dados?.segmento === filtroSegmento
+          const matchesBusca = !filtroBusca || tObj.nome.toLowerCase().includes(filtroBusca.toLowerCase())
+          return matchesSegmento && matchesBusca
+        })
+
+    targetAlunos.forEach((aluno: any) => {
+      const tObj = turmas.find(t => String(t.id) === String(aluno.turma))
+      if (!tObj) return
+      
+      const schedule = getTurmaSchedule(tObj)
+      const freqRecord = freqMap.get(String(aluno.id))
+      
+      let tempos: Record<string, PresStatus> = {}
+      
+      if (freqRecord) {
+        // Tem registro no banco para esse dia
+        if (freqRecord.tempos) {
+          tempos = { ...freqRecord.tempos }
+        } else {
+          const overallStatus: PresStatus = freqRecord.justificativa === 'Justificada' ? 'J' : (freqRecord.presente ? 'P' : 'F')
+          schedule.tempos.forEach(t => {
+            tempos[t.id] = overallStatus
+          })
+        }
+      } else {
+        // Não tem registro no banco para esse dia.
+        // Se a turma do aluno teve chamada lançada nesse dia (pela catraca ou manual), ele faltou (F).
+        // Se a turma não teve nenhuma chamada, assumimos Presença padrão.
+        const turmaTeveChamada = turmasComChamada.has(String(aluno.turma))
+        const defaultStatus: PresStatus = turmaTeveChamada ? 'F' : 'P'
+        schedule.tempos.forEach(t => {
+          tempos[t.id] = defaultStatus
         })
       }
-      return [...prev, {
-        id: newId('RF'), turmaId, data,
-        registros: alunosDaTurma.map(a => ({ alunoId: a.id, status: a.id === alunoId ? statusNext : 'P' as PresStatus })),
-        criadoPor: 'Usuário', createdAt: new Date().toISOString(),
-        disciplina: disc,
-      } as any]
+
+      // Agora calcular se há faltas nos tempos efetivos
+      const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+      
+      const temposFaltosos: string[] = []
+      schedule.tempos.forEach(t => {
+        if (calc.temposEfetivos[t.id] === 'F') {
+          temposFaltosos.push(t.id)
+        }
+      })
+
+      if (temposFaltosos.length > 0) {
+        const totalTempos = schedule.tempos.length
+        const isInfantilOuFundI = schedule.segmento === 'Educação Infantil' || schedule.segmento === 'Ensino Fundamental I'
+        const isFaltaTotal = isInfantilOuFundI 
+          ? !calc.presente 
+          : temposFaltosos.length === totalTempos
+
+        list.push({
+          id: aluno.id,
+          nome: aluno.nome,
+          turmaId: aluno.turma,
+          turmaNome: tObj.nome,
+          turno: aluno.turno || tObj.turno || 'N/A',
+          segmento: schedule.segmento,
+          responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
+          faltasStr: isFaltaTotal ? 'Falta Total' : `Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`,
+          faltasCount: temposFaltosos.length,
+          totalTempos: totalTempos,
+          temposFalta: temposFaltosos,
+          horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
+        })
+      }
     })
+
+    return list
+  }, [alunos, turmas, turmaSel, dataSel, filtroSegmento, filtroBusca, allFreqs, alunosDaTurma])
+
+  // Ação de Impressão do Relatório de Faltas
+  const handlePrintRelatorio = () => {
+    const list = getAbsenteesList()
+    const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
+    
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const formattedDate = new Date(dataSel + 'T00:00:00').toLocaleDateString('pt-BR')
+    const rowsHtml = list.map(a => {
+      const entryTime = a.horaRegistro 
+        ? `Entrada: ${a.horaRegistro} (${getTempoEntrada(a.horaRegistro, a.segmento, a.turno) || ''})` 
+        : 'Sem Registro'
+      return `
+        <tr>
+          <td style="font-weight: 600;">${a.nome}</td>
+          <td>${a.id}</td>
+          <td>${a.turmaNome}</td>
+          <td>${a.turno}</td>
+          <td style="color: #dc2626; font-weight: 700;">${a.faltasStr}</td>
+          <td>${entryTime}</td>
+        </tr>
+      `
+    }).join('')
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Relatório de Ausências - ${formattedDate}</title>
+          <style>
+            body { font-family: 'Inter', sans-serif; padding: 40px; color: #0f172a; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+            .logo-placeholder { font-weight: 800; font-size: 20px; color: #2563eb; }
+            .title { font-size: 24px; font-weight: 800; margin: 0; }
+            .meta { font-size: 14px; color: #64748b; margin-top: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #e2e8f0; padding: 12px 16px; text-align: left; font-size: 13px; }
+            th { background-color: #f8fafc; font-weight: 700; color: #475569; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+            .signature-row { display: flex; justify-content: space-between; margin-top: 60px; }
+            .signature-box { border-top: 1px solid #cbd5e1; width: 200px; text-align: center; padding-top: 8px; font-size: 12px; color: #475569; }
+            @media print {
+              body { padding: 0; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Relatório de Ausências Diárias</h1>
+              <div class="meta">Filtro: ${scopeName} | Data: ${formattedDate}</div>
+            </div>
+            <div class="logo-placeholder">EDU-IMPACTO App</div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Nome do Aluno</th>
+                <th>ID</th>
+                <th>Turma</th>
+                <th>Turno</th>
+                <th>Tempos de Falta</th>
+                <th>Registro de Acesso</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="6" style="text-align: center; color: #64748b; padding: 24px;">Nenhuma ausência registrada para este dia.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="signature-row">
+            <div class="signature-box">Assinatura do Inspetor</div>
+            <div class="signature-box">Assinatura da Direção</div>
+          </div>
+
+          <div class="footer">
+            Gerado automaticamente em ${new Date().toLocaleString('pt-BR')} pelo ERP EDU-IMPACTO.
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
   }
 
-  const marcarTodos = (status: PresStatus) => {
-    setFrequencias(prev => {
-      const existe = prev.find(f => f.turmaId === turmaId && f.data === dataSel && (f as any).disciplina === activeDisc)
-      const regs = alunosDaTurma.map(a => ({ alunoId: a.id, status }))
-      if (existe) return prev.map(f => f.turmaId === turmaId && f.data === dataSel && (f as any).disciplina === activeDisc ? { ...f, registros: regs } : f)
-      return [...prev, { id: newId('RF'), turmaId, data: dataSel, registros: regs, criadoPor: 'Usuário', createdAt: new Date().toISOString(), disciplina: activeDisc } as any]
+  // Ação de Exportar CSV
+  const handleExportar = () => {
+    const list = getAbsenteesList()
+    const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
+    
+    const formattedDate = dataSel.replace(/-/g, '')
+    const headers = ['Nome', 'ID', 'Turma', 'Turno', 'Tempos com Falta', 'Horário de Entrada', 'Período de Entrada']
+    const rows = list.map(a => [
+      a.nome,
+      a.id,
+      a.turmaNome,
+      a.turno,
+      a.faltasStr,
+      a.horaRegistro || 'Sem Registro',
+      a.horaRegistro ? (getTempoEntrada(a.horaRegistro, a.segmento, a.turno) || '') : ''
+    ])
+
+    let csvContent = '\ufeff' // UTF-8 BOM para Excel em PT-BR
+    csvContent += headers.join(';') + '\n'
+    rows.forEach(r => {
+      csvContent += r.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';') + '\n'
     })
-    setSalvo(true); setTimeout(() => setSalvo(false), 2000)
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `ausencias_${scopeName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${formattedDate}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
-  // Calc freq geral do aluno (todas as disciplinas)
-  const calcFreqGeral = useCallback((alunoId: string) => {
-    if (!regsFromTurma.length) return null
-    const pres = regsFromTurma.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === alunoId)?.status ?? 'P')).length
-    return Math.round((pres / regsFromTurma.length) * 100)
-  }, [regsFromTurma])
-
-  // Freq por disciplina para um aluno
-  const freqPorDisc = useCallback((alunoId: string) => {
-    const discs: Record<string, { total: number; pres: number }> = {}
-    regsFromTurma.forEach(r => {
-      const disc = (r as any).disciplina || 'Geral'
-      if (!discs[disc]) discs[disc] = { total: 0, pres: 0 }
-      discs[disc].total++
-      const st = r.registros.find(rr => rr.alunoId === alunoId)?.status ?? 'P'
-      if (['P','J'].includes(st)) discs[disc].pres++
-    })
-    return Object.entries(discs).map(([disc, d]) => ({ disc, ...d, pct: Math.round((d.pres / d.total) * 100) }))
-  }, [regsFromTurma])
-
-  // Disciplinas com registros
-  const disciplinasComReg = useMemo(() => {
-    const set = new Set<string>()
-    regsFromTurma.forEach(r => set.add((r as any).disciplina || 'Geral'))
-    return [...set].sort()
-  }, [regsFromTurma])
-
-  // Alunos em risco (freq < freqMinima)
-  const alunosEmRisco = useMemo(() => {
-    if (!turmaSel) {
-      return alunos.flatMap(a => {
-        const tid = turmas.find(t => t.nome === a.turma)?.id ?? ''
-        const regs = frequencias.filter(f => f.turmaId === tid)
-        if (!regs.length) return []
-        const pres = regs.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === a.id)?.status ?? 'P')).length
-        const freq = Math.round((pres / regs.length) * 100)
-        return freq < freqMinima ? [{ nome: a.nome, turma: a.turma, freq, critico: freq < freqMinima * 0.8 }] : []
-      }).sort((a, b) => a.freq - b.freq)
+  // Ação de Enviar WhatsApp Notificação
+  const handleSendWhatsApp = (aluno: any) => {
+    const formattedDate = new Date(dataSel + 'T00:00:00').toLocaleDateString('pt-BR')
+    const msg = `Olá! Informamos que o(a) aluno(a) ${aluno.nome} não compareceu à aula no dia ${formattedDate} (${aluno.faltasStr}). Por favor, justifique a ausência. Equipe de Direção EDU-IMPACTO.`
+    const phone = aluno.responsavel_telefone || aluno.telefone || ''
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, '')
+      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+    } else {
+      const confirmCopy = window.confirm(`Nenhum telefone cadastrado para o aluno ${aluno.nome}.\n\nDeseja copiar a mensagem de notificação para a área de transferência?\n\n"${msg}"`)
+      if (confirmCopy) {
+        navigator.clipboard.writeText(msg)
+        alert('Mensagem copiada com sucesso!')
+      }
     }
-    return alunosDaTurma.flatMap(a => {
-      const freq = calcFreqGeral(a.id)
-      if (freq === null || freq >= freqMinima) return []
-      return [{ nome: a.nome, turma: a.turma, freq, critico: freq < freqMinima * 0.8 }]
-    })
-  }, [alunos, turmas, frequencias, turmaSel, alunosDaTurma, calcFreqGeral, freqMinima])
+  }
 
-  // ── HOME ──────────────────────────────────────────────────────────────────
-  if (!turmaSel) {
-    const turmasFiltradas = turmas.filter(t =>
-      (filtroAno === 'todos' || String(t.ano) === filtroAno) &&
-      (!filtroBusca || t.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
+  // Abertura do Modal de Relatório com expansão padrão das turmas
+  const handleOpenRelatorio = () => {
+    const allAbsentees = getAbsenteesList()
+    const initialExpanded: Record<string, boolean> = {}
+    allAbsentees.forEach(a => {
+      initialExpanded[a.turmaNome] = true
+    })
+    setTurmasExpandidas(initialExpanded)
+    setShowRelatorioModal(true)
+  }
+
+  const toggleTurmaExpandida = (key: string) => {
+    setTurmasExpandidas(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
+  // Render do modal de relatório de ausências
+  const renderRelatorioModal = () => {
+    if (!showRelatorioModal) return null
+
+    const allAbsentees = getAbsenteesList()
+    
+    // Filtrar a lista de ausências com base na busca dentro do modal
+    const filteredAbsentees = allAbsentees.filter(a => 
+      a.nome.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
+      a.id.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
+      a.turmaNome.toLowerCase().includes(buscaRelatorio.toLowerCase())
     )
-    const turmasComAlunos = turmas.filter(t => alunos.some(a => a.turma === t.nome))
-    const turmasHoje = turmasComAlunos.filter(t => frequencias.some(f => f.turmaId === t.id && f.data === today)).length
-    const turmasSemHoje = turmasComAlunos.length - turmasHoje
+
+    const totalFaltasTotal = allAbsentees.filter(a => a.faltasStr === 'Falta Total').length
+    const totalFaltasParcial = allAbsentees.length - totalFaltasTotal
+    const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
+    const formattedDate = new Date(dataSel + 'T00:00:00').toLocaleDateString('pt-BR')
 
     return (
-      <div>
-        <div className="page-header">
-          <div>
-            <h1 className="page-title">Controle de Frequência</h1>
-            <p className="page-subtitle">Presença por aula e disciplina • Freq. mínima: {freqMinima}% ({totalDiasLetivos} dias letivos)</p>
-          </div>
-        </div>
-
-        {turmasSemHoje > 0 && turmasComAlunos.length > 0 && (
-          <div style={{ display:'flex', alignItems:'center', gap:14, padding:'13px 20px', background:'rgba(245,158,11,0.07)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:14, marginBottom:20, borderLeft:'4px solid #f59e0b' }}>
-            <div style={{ fontSize:24 }}>⚠️</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:700, fontSize:13, color:'#f59e0b' }}>{turmasSemHoje} turma{turmasSemHoje>1?'s':''} sem chamada registrada hoje</div>
-              <div style={{ fontSize:12, color:'hsl(var(--text-secondary))' }}>Registre antes do fim do dia letivo</div>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(15, 23, 42, 0.55)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '20px',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <div style={{
+          background: '#fff',
+          borderRadius: '24px',
+          maxWidth: '850px',
+          width: '100%',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 40px rgba(37, 99, 235, 0.05)',
+          border: '1px solid #e2e8f0',
+          overflow: 'hidden',
+          animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: '90vh'
+        }}>
+          {/* Header do Modal */}
+          <div style={{
+            padding: '24px 32px',
+            borderBottom: '1px solid #f1f5f9',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ background: '#ef4444', color: '#fff', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '18px', color: '#0f172a' }}>
+                  Relatório de Alunos Faltantes
+                </h3>
+                <p style={{ margin: 0, fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                  Visualização de faltas em tempo real • {scopeName} • {formattedDate}
+                </p>
+              </div>
             </div>
-            <div style={{ fontSize:11, fontWeight:700, color:'#f59e0b', background:'rgba(245,158,11,0.1)', padding:'4px 12px', borderRadius:20 }}>{turmasHoje}/{turmasComAlunos.length}</div>
+            <button
+              onClick={() => {
+                setShowRelatorioModal(false)
+                setBuscaRelatorio('')
+              }}
+              style={{
+                border: 'none',
+                background: 'none',
+                color: '#64748b',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <X size={20} />
+            </button>
           </div>
-        )}
 
-        {/* Alunos em risco */}
-        {alunosEmRisco.length > 0 && (
-          <div className="card" style={{ padding:'20px', borderLeft:'4px solid #ef4444', marginBottom:22 }}>
-            <div style={{ fontWeight:800, fontSize:13, marginBottom:12 }}>🚨 {alunosEmRisco.length} Aluno{alunosEmRisco.length>1?'s':''} em Risco de Reprovação por Faltas</div>
-            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-              {alunosEmRisco.slice(0,8).map(a => (
-                <div key={a.nome} style={{ padding:'6px 12px', borderRadius:20, background:a.critico?'rgba(220,38,38,0.1)':'rgba(245,158,11,0.1)', border:`1px solid ${a.critico?'rgba(220,38,38,0.3)':'rgba(245,158,11,0.3)'}`, fontSize:11, fontWeight:700, color:a.critico?'#dc2626':'#f59e0b' }}>
-                  {a.nome} — {a.freq}% {a.critico?'⛔':'⚠'}
-                </div>
-              ))}
-              {alunosEmRisco.length > 8 && <span style={{ fontSize:11, color:'hsl(var(--text-muted))', alignSelf:'center' }}>+{alunosEmRisco.length-8} mais</span>}
+          {/* Cards de Métricas Rápidas */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', padding: '24px 32px 0 32px' }}>
+            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700, textTransform: 'uppercase' }}>Faltas Registradas</span>
+                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#991b1b', fontFamily: 'Outfit, sans-serif' }}>{allAbsentees.length}</h4>
+              </div>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertCircle size={18} />
+              </div>
+            </div>
+            <div style={{ background: '#fff1f2', border: '1px solid #ffe4e6', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: '#be123c', fontWeight: 700, textTransform: 'uppercase' }}>Falta Total (Dia Todo)</span>
+                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#be123c', fontFamily: 'Outfit, sans-serif' }}>{totalFaltasTotal}</h4>
+              </div>
+              <div style={{ background: 'rgba(225, 29, 72, 0.1)', color: '#e11d48', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <XCircle size={18} />
+              </div>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: '11px', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Falta Parcial (Tempos)</span>
+                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#92400e', fontFamily: 'Outfit, sans-serif' }}>{totalFaltasParcial}</h4>
+              </div>
+              <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Info size={18} />
+              </div>
             </div>
           </div>
-        )}
 
-        {/* Filtros + grid turmas */}
-        <div style={{ display:'flex', gap:10, marginBottom:18, alignItems:'center', flexWrap:'wrap', padding:'12px 16px', background:'hsl(var(--bg-elevated))', borderRadius:12, border:'1px solid hsl(var(--border-subtle))' }}>
-          <div style={{ position:'relative', flex:1, minWidth:160 }}>
-            <Search size={13} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))', pointerEvents:'none' }} />
-            <input className="form-input" style={{ paddingLeft:30, fontSize:12 }} placeholder="Buscar turma..." value={filtroBusca} onChange={e => setFiltroBusca(e.target.value)} />
-          </div>
-          <select className="form-input" style={{ width:'auto', fontSize:12 }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
-            <option value="todos">Todos os anos</option>
-            {anosDisponiveis.map(a => <option key={a} value={String(a)}>{a}</option>)}
-          </select>
-          <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>{turmasFiltradas.length}/{turmas.length}</span>
-        </div>
-
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))', gap:16 }}>
-          {turmasFiltradas.map(turma => {
-            const c = SEG_COLORS[turma.serie] ?? '#3b82f6'
-            const alunosTurma = alunos.filter(a => a.turma === turma.nome)
-            const temHoje = frequencias.some(f => f.turmaId === turma.id && f.data === today)
-            const regs = frequencias.filter(f => f.turmaId === turma.id)
-            const disciplinas = [...new Set(regs.map(r => (r as any).disciplina).filter(x => x !== 'Geral'))]
-            const emRiscoTurma = alunosTurma.filter(a => {
-              if (!regs.length) return false
-              const pres = regs.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === a.id)?.status ?? 'P')).length
-              return Math.round((pres / regs.length) * 100) < freqMinima
-            }).length
-            return (
-              <button key={turma.id} onClick={() => { setTurmaSel(turma.nome); setDataSel(today); setVista('chamada') }}
-                style={{ textAlign:'left', background:'hsl(var(--bg-elevated))', border:`1px solid ${emRiscoTurma>0?'rgba(239,68,68,0.35)':temHoje?'rgba(16,185,129,0.35)':c+'25'}`, borderRadius:16, padding:'22px', cursor:'pointer', transition:'all 0.2s', display:'block', width:'100%', position:'relative', overflow:'hidden' }}
-                onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow=`0 12px 32px ${c}25` }}
-                onMouseLeave={e => { e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-                <div style={{ position:'absolute', top:0, left:0, right:0, height:4, background:`linear-gradient(90deg,${c},${c}80)` }} />
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
-                  <div>
-                    <div style={{ fontSize:20, fontWeight:900, color:c, fontFamily:'Outfit,sans-serif' }}>{turma.nome}</div>
-                    <div style={{ fontSize:11, color:'hsl(var(--text-muted))', marginTop:3 }}>{turma.serie} • {turma.turno} • {alunosTurma.length} alunos</div>
-                  </div>
-                  {alunosTurma.length === 0
-                    ? <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(107,114,128,0.1)', color:'#6b7280', fontWeight:700, height:'fit-content' }}>Sem alunos</span>
-                    : temHoje
-                      ? <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:700, height:'fit-content' }}>✓ Hoje</span>
-                      : <span style={{ fontSize:10, padding:'3px 8px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontWeight:700, height:'fit-content' }}>⚠ Pendente</span>
-                  }
-                </div>
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                  <span style={{ fontSize:10, padding:'2px 7px', borderRadius:20, background:'hsl(var(--bg-overlay))', color:'hsl(var(--text-secondary))', fontWeight:600 }}>Diário Global</span>
-                  {disciplinas.slice(0,3).map(d => (
-                    <span key={d} style={{ fontSize:10, padding:'2px 7px', borderRadius:20, background:`${c}10`, color:c, fontWeight:600 }}>{d}</span>
-                  ))}
-                  {disciplinas.length > 3 && <span style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>+{disciplinas.length-3}</span>}
-                </div>
-                {emRiscoTurma > 0 && (
-                  <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:6, fontSize:11, color:'#ef4444', fontWeight:700 }}>
-                    <AlertTriangle size={11} /> {emRiscoTurma} aluno{emRiscoTurma>1?'s':''} em risco de reprovação
-                  </div>
-                )}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}>
-                  <span style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{regs.length} registros no diário</span>
-                  <ChevronRight size={16} style={{ color:c }} />
-                </div>
+          {/* Barra de Filtros Interna */}
+          <div style={{ padding: '16px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                className="form-input"
+                style={{ paddingLeft: '38px', height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                placeholder="Buscar por aluno, ID ou turma..."
+                value={buscaRelatorio}
+                onChange={e => setBuscaRelatorio(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  const groupedKeys = Object.keys(filteredAbsentees.reduce((acc: Record<string, any>, student) => {
+                    acc[student.turmaNome] = true
+                    return acc
+                  }, {}))
+                  const next: Record<string, boolean> = {}
+                  groupedKeys.forEach(k => {
+                    next[k] = true
+                  })
+                  setTurmasExpandidas(next)
+                }}
+                style={{ fontSize: '12px', fontWeight: 700, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+              >
+                Expandir Todas
               </button>
-            )
-          })}
-        </div>
-
-        {turmasFiltradas.length === 0 && (
-          <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-            <BookOpen size={40} style={{ margin:'0 auto 14px', opacity:0.15 }} />
-            <div style={{ fontSize:14, fontWeight:600 }}>{turmas.length===0?'Nenhuma turma cadastrada':'Nenhuma turma com esses filtros'}</div>
+              <button
+                onClick={() => setTurmasExpandidas({})}
+                style={{ fontSize: '12px', fontWeight: 700, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+              >
+                Recolher Todas
+              </button>
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+              Exibindo {filteredAbsentees.length} de {allAbsentees.length} registros
+            </div>
           </div>
-        )}
+
+          {/* Tabela / Lista de Faltantes Agrupada por Turma */}
+          <div style={{ padding: '20px 32px', overflowY: 'auto', flex: 1 }}>
+            {filteredAbsentees.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
+                <Users size={48} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
+                <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>Nenhum aluno faltoso encontrado.</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>Todos os alunos estão presentes ou não há registros na data selecionada.</p>
+              </div>
+            ) : (
+              Object.entries(
+                filteredAbsentees.reduce((acc: Record<string, typeof filteredAbsentees>, student) => {
+                  const key = student.turmaNome
+                  if (!acc[key]) acc[key] = []
+                  acc[key].push(student)
+                  return acc
+                }, {})
+              ).map(([turmaKey, students]) => {
+                const firstStudent = students[0]
+                const turmaNome = firstStudent.turmaNome
+                const turno = firstStudent.turno
+                const segmento = firstStudent.segmento
+                const isExpanded = !!turmasExpandidas[turmaKey]
+                
+                return (
+                  <div key={turmaKey} style={{ marginBottom: '12px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', background: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                    {/* Header da Turma */}
+                    <div 
+                      onClick={() => toggleTurmaExpandida(turmaKey)}
+                      style={{ 
+                        padding: '12px 16px', 
+                        background: isExpanded ? '#f8fafc' : '#fff', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        cursor: 'pointer', 
+                        borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none',
+                        transition: 'background 0.2s',
+                        userSelect: 'none',
+                        gap: '12px',
+                        flexWrap: 'wrap'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc' }}
+                      onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = '#fff' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {isExpanded ? <ChevronDown size={18} style={{ color: '#475569' }} /> : <ChevronRight size={18} style={{ color: '#475569' }} />}
+                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{turmaNome}</span>
+                        <span style={{ padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
+                          {turno}
+                        </span>
+                        <span style={{ padding: '3px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
+                          {segmento}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', background: '#fef2f2', padding: '4px 10px', borderRadius: '20px', border: '1px solid #fee2e2' }}>
+                          {students.length} {students.length === 1 ? 'faltoso' : 'faltosos'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Alunos Faltantes da Turma (Accordion Content) */}
+                    {isExpanded && (
+                      <div style={{ background: '#fff' }}>
+                        {/* Table Header Fictício no topo do Accordion para alinhamento */}
+                        <div style={{ display: 'flex', width: '100%', padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', gap: '16px' }}>
+                          <div style={{ width: '40%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Aluno</div>
+                          <div style={{ width: '25%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Tipo de Falta</div>
+                          <div style={{ width: '20%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Acesso</div>
+                          <div style={{ width: '15%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Ações</div>
+                        </div>
+
+                        {students.map((student, idx) => {
+                          const isTotal = student.faltasStr === 'Falta Total'
+                          return (
+                            <div 
+                              key={student.id} 
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                width: '100%', 
+                                padding: '12px 16px', 
+                                borderBottom: idx === students.length - 1 ? 'none' : '1px solid #f1f5f9',
+                                gap: '16px'
+                              }}
+                            >
+                              {/* Aluno Avatar e Informações */}
+                              <div style={{ width: '40%', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                <div style={{ 
+                                  width: '32px', 
+                                  height: '32px', 
+                                  borderRadius: '50%', 
+                                  background: isTotal ? '#fee2e2' : '#fef3c7', 
+                                  color: isTotal ? '#ef4444' : '#d97706', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  flexShrink: 0
+                                }}>
+                                  {getInitials(student.nome)}
+                                </div>
+                                <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={student.nome}>
+                                    {student.nome}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{student.id}</div>
+                                </div>
+                              </div>
+
+                              {/* Tipo de Falta */}
+                              <div style={{ width: '25%', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                                <span style={{
+                                  alignSelf: 'flex-start',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  background: isTotal ? '#fee2e2' : '#fef3c7',
+                                  color: isTotal ? '#991b1b' : '#92400e',
+                                  border: `1px solid ${isTotal ? '#fecaca' : '#fde68a'}`,
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {student.faltasStr}
+                                </span>
+                                {student.temposFalta && student.temposFalta.length > 0 && !isTotal && (
+                                  <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 500 }}>
+                                    Tempos: {student.temposFalta.join(', ')}º
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Registro de Catraca / Entrada */}
+                              <div style={{ width: '20%', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                                {student.horaRegistro ? (
+                                  <>
+                                    <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>
+                                      Entrada: {student.horaRegistro}
+                                    </span>
+                                    {(() => {
+                                      const tempoEntrada = getTempoEntrada(student.horaRegistro, student.segmento, student.turno)
+                                      return tempoEntrada ? (
+                                        <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase' }}>
+                                          Entrou no {tempoEntrada}
+                                        </span>
+                                      ) : null
+                                    })()}
+                                  </>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                                    Sem Registro (Catraca)
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Ações */}
+                              <div style={{ width: '15%', display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
+                                <button
+                                  onClick={() => handleSendWhatsApp(student)}
+                                  title="Notificar Responsável via WhatsApp"
+                                  style={{
+                                    border: 'none',
+                                    background: '#22c55e',
+                                    color: '#fff',
+                                    borderRadius: '8px',
+                                    padding: '6px 12px',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    boxShadow: '0 2px 4px rgba(34, 197, 94, 0.2)',
+                                    transition: 'transform 0.15s',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                >
+                                  <span>WhatsApp</span>
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {/* Footer do Modal */}
+          <div style={{
+            padding: '20px 32px',
+            borderTop: '1px solid #f1f5f9',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: '#f8fafc'
+          }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={handlePrintRelatorio}
+                style={{
+                  padding: '10px 18px',
+                  background: '#fff',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+              >
+                <Printer size={15} />
+                <span>Imprimir PDF</span>
+              </button>
+              <button
+                onClick={handleExportar}
+                style={{
+                  padding: '10px 18px',
+                  background: '#fff',
+                  color: '#334155',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+              >
+                <Download size={15} />
+                <span>Exportar CSV</span>
+              </button>
+            </div>
+            
+            <button
+              onClick={() => {
+                setShowRelatorioModal(false)
+                setBuscaRelatorio('')
+              }}
+              style={{
+                padding: '10px 24px',
+                background: '#0f172a',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
+              onMouseLeave={e => e.currentTarget.style.background = '#0f172a'}
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
 
-  // ── VISTA INTERNA ─────────────────────────────────────────────────────────
-  const presentes = alunosDaTurma.filter(a => getStatus(a.id) === 'P').length
-  const faltas = alunosDaTurma.filter(a => getStatus(a.id) === 'F').length
-  const justificadas = alunosDaTurma.filter(a => getStatus(a.id) === 'J').length
-  const atestados = alunosDaTurma.filter(a => getStatus(a.id) === 'A').length
-  const pctPresenca = alunosDaTurma.length > 0 ? Math.round((presentes / alunosDaTurma.length) * 100) : 0
-  const jaRegistrado = !!frequencias.find(f => f.turmaId === turmaId && f.data === dataSel && (f as any).disciplina === activeDisc)
+  // Estatísticas para a visão de Diretor
+  const statsGlobal = useMemo(() => {
+    const totalTurmas = turmas.length
+    const freqs = allFreqs || []
+    
+    const turmasComChamadaHoje = turmas.filter(t => freqs.some(f => String(f.turma_id) === String(t.id) && String(f.data).startsWith(dataSel))).length
+    
+    let somaPresenca = 0
+    let totalAulas = 0
+    
+    const grouped = freqs.reduce((acc: any, f) => {
+      const key = `${f.data}-${f.turma_id}`
+      if (!acc[key]) acc[key] = []
+      acc[key].push(f)
+      return acc
+    }, {})
+    
+    Object.entries(grouped).forEach(([key, regs]: [string, any]) => {
+      const turmaIdStr = key.split('-')[1]
+      const tObj = turmas.find(t => String(t.id) === turmaIdStr)
+      if (!tObj) return
+      
+      const schedule = getTurmaSchedule(tObj)
+      const totalContabilizadoTurma = 0
+      let totalContabilizadoTurmaVal = 0
+      let faltasContabilizadasTurma = 0
+      
+      regs.forEach((r: any) => {
+        let tempos: Record<string, PresStatus> = {}
+        if (r.tempos) {
+          tempos = { ...r.tempos }
+        } else {
+          const overallStatus: PresStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
+          schedule.tempos.forEach(t => {
+            tempos[t.id] = overallStatus
+          })
+        }
+        
+        const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+        totalContabilizadoTurmaVal += calc.totalTemposContabilizados
+        faltasContabilizadasTurma += calc.faltasContabilizadas
+      })
+      
+      if (totalContabilizadoTurmaVal > 0) {
+        const presencasTurma = totalContabilizadoTurmaVal - faltasContabilizadasTurma
+        somaPresenca += (presencasTurma / totalContabilizadoTurmaVal)
+        totalAulas++
+      }
+    })
+    
+    const mediaPresenca = totalAulas > 0 ? Math.round((somaPresenca / totalAulas) * 100) : 100
 
-  return (
-    <div>
-      <div className="page-header" style={{ marginBottom: 24 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <button className="btn btn-ghost btn-icon" onClick={() => setTurmaSel(null)}><ArrowLeft size={18} /></button>
+    const alunosEmRisco = alunos.filter(a => {
+      const tObj = turmas.find(t => t.nome === a.turma || String(t.id) === String(a.turma))
+      if (!tObj) return false
+      const regs = freqs.filter(f => String(f.turma_id) === String(tObj.id) && String(f.aluno_id) === String(a.id))
+      if (!regs.length) return false
+      
+      const schedule = getTurmaSchedule(tObj)
+      let totalContabilizadoT = 0
+      let faltasContabilizadasT = 0
+      
+      regs.forEach((r: any) => {
+        let tempos: Record<string, PresStatus> = {}
+        if (r.tempos) {
+          tempos = { ...r.tempos }
+        } else {
+          const overallStatus: PresStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
+          schedule.tempos.forEach(t => {
+            tempos[t.id] = overallStatus
+          })
+        }
+        
+        const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+        totalContabilizadoT += calc.totalTemposContabilizados
+        faltasContabilizadasT += calc.faltasContabilizadas
+      })
+      
+      const presT = totalContabilizadoT - faltasContabilizadasT
+      return totalContabilizadoT > 0 ? (Math.round((presT / totalContabilizadoT) * 100) < freqMinima) : false
+    }).length
+
+    return { totalTurmas, turmasComChamadaHoje, mediaPresenca, alunosEmRisco }
+  }, [turmas, allFreqs, alunos, dataSel])
+
+  // ── HOME (VISÃO DE DIRETOR) ───────────────────────────────────────────────
+  if (!turmaSel) {
+    const turmasFiltradas = turmas.filter(t =>
+      (filtroAno === 'todos' || t.ano.toString() === filtroAno) &&
+      (!filtroSegmento || (t as any).dados?.segmento === filtroSegmento) &&
+      (!filtroBusca || t.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
+    )
+
+    return (
+      <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+
+        {/* Header Ultra Moderno */}
+        <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <h1 className="page-title" style={{ marginBottom:0 }}>Diário de Frequência</h1>
-              <span style={{ padding:'3px 12px', borderRadius:20, background:`${color}15`, color, fontSize:12, fontWeight:800 }}>{turmaSel}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Sparkles size={20} style={{ color: '#2563eb' }} />
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '1px' }}>Dashboard de Gestão</span>
             </div>
-            <p className="page-subtitle">{alunosDaTurma.length} alunos cadastrados nesta turma</p>
+            <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              Frequência Escolar
+              {(fetchingAllFreqs || fetchingAlunos) && (
+                <span style={{ fontSize: '14px', color: '#3b82f6', fontWeight: 600 }}>• Atualizando...</span>
+              )}
+            </h1>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Monitore a assiduidade e identifique riscos de evasão em tempo real.</p>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowRegrasModal(true)}
+              style={{
+                height: '42px',
+                padding: '0 16px',
+                background: 'rgba(37, 99, 235, 0.08)',
+                color: '#2563eb',
+                border: '1px dashed #2563eb',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)'}
+            >
+              <Info size={16} />
+              <span>Regras de Cálculo</span>
+            </button>
+            <button 
+              onClick={handleOpenRelatorio}
+              style={{ height: '42px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+            >
+              <Printer size={16} />
+              <span>Relatório</span>
+            </button>
+            <button 
+              onClick={handleExportar}
+              style={{ height: '42px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+            >
+              <Download size={16} />
+              <span>Exportar</span>
+            </button>
           </div>
         </div>
-        <div style={{ display:'flex', gap:10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><Printer size={13} />Imprimir Diário</button>
+
+        {/* Cards de Métricas Premium */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+          {/* Card 1 */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fff, rgba(37, 99, 235, 0.02))', 
+            padding: '16px 20px', 
+            borderRadius: '20px', 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 4px 20px -2px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            cursor: 'pointer'
+          }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(37, 99, 235, 0.06)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none'
+              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0,0,0,0.02)'
+            }}
+          >
+            <div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: 0, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total de Turmas</p>
+              <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '4px 0 0 0', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>{statsGlobal.totalTurmas}</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+              <div style={{ background: 'rgba(37, 99, 235, 0.08)', color: '#2563eb', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <School size={20} />
+              </div>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase' }}>Ativo</span>
+            </div>
+          </div>
+
+          {/* Card 2 */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fff, rgba(16, 185, 129, 0.02))', 
+            padding: '16px 20px', 
+            borderRadius: '20px', 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 4px 20px -2px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            cursor: 'pointer'
+          }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(16, 185, 129, 0.06)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none'
+              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0,0,0,0.02)'
+            }}
+          >
+            <div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: 0, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Presença Média</p>
+              <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', margin: '4px 0 0 0', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>{statsGlobal.mediaPresenca}%</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+              <div style={{ background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <TrendingUp size={20} />
+              </div>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#10b981', background: 'rgba(16, 185, 129, 0.08)', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase' }}>Excelente</span>
+            </div>
+          </div>
+
+          {/* Card 3 */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fff, rgba(245, 158, 11, 0.02))', 
+            padding: '16px 20px', 
+            borderRadius: '20px', 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 4px 20px -2px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            cursor: 'pointer'
+          }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(245, 158, 11, 0.06)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none'
+              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0,0,0,0.02)'
+            }}
+          >
+            <div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: 0, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Chamadas Feitas</p>
+              <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', margin: '4px 0 0 0', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {statsGlobal.turmasComChamadaHoje}
+                <span style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 700 }}>/{statsGlobal.totalTurmas}</span>
+              </h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+              <div style={{ background: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Calendar size={20} />
+              </div>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#f59e0b', background: 'rgba(245, 158, 11, 0.08)', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase' }}>Hoje</span>
+            </div>
+          </div>
+
+          {/* Card 4 */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fff, rgba(239, 68, 68, 0.02))', 
+            padding: '16px 20px', 
+            borderRadius: '20px', 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 4px 20px -2px rgba(0,0,0,0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            position: 'relative',
+            overflow: 'hidden',
+            transition: 'transform 0.2s, box-shadow 0.2s',
+            cursor: 'pointer'
+          }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(239, 68, 68, 0.06)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none'
+              e.currentTarget.style.boxShadow = '0 4px 20px -2px rgba(0,0,0,0.02)'
+            }}
+          >
+            <div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: 0, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alunos Críticos</p>
+              <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', margin: '4px 0 0 0', fontFamily: 'Outfit,sans-serif', letterSpacing: '-0.02em', lineHeight: 1 }}>{statsGlobal.alunosEmRisco}</h3>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: 0 }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={20} />
+              </div>
+              <span style={{ fontSize: '9px', fontWeight: 800, color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)', padding: '2px 6px', borderRadius: '100px', textTransform: 'uppercase' }}>Atenção</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Abas Superiores */}
-      <div className="tab-list" style={{ marginBottom:20, width:'fit-content' }}>
-        <button className={`tab-trigger ${vista==='chamada'?'active':''}`} onClick={() => setVista('chamada')}>📋 Fazer Chamada</button>
-        <button className={`tab-trigger ${vista==='disciplina'?'active':''}`} onClick={() => setVista('disciplina')}>📊 Histórico/Disciplinas</button>
-        <button className={`tab-trigger ${vista==='relatorio'?'active':''}`} onClick={() => setVista('relatorio')}>📑 Diário do Aluno</button>
-      </div>
-
-      {/* ── ABA CHAMADA ── */}
-      {vista === 'chamada' && (
-        <>
-          {/* Controles de Lançamento (Toolbar Produtividade) */}
-          <div style={{ padding:'16px 20px', background:'hsl(var(--bg-elevated))', borderRadius:16, border:'1px solid hsl(var(--border-subtle))', marginBottom:20, display:'flex', flexDirection:'column', gap:16, boxShadow:'0 4px 20px rgba(0,0,0,0.02)' }}>
+        {/* Barra de Ações e Filtros */}
+        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
+            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+              <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input 
+                className="form-input" 
+                style={{ paddingLeft: '42px', height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} 
+                placeholder="Pesquisar turma por nome..." 
+                value={filtroBusca} 
+                onChange={e => setFiltroBusca(e.target.value)} 
+              />
+            </div>
             
-            {/* Top Toolbar */}
-            <div style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:20, alignItems:'center' }}>
-              
-              <div style={{ display:'flex', gap:16, flexWrap:'wrap', alignItems:'center' }}>
-                {/* Data Selector */}
-                <div style={{ display:'flex', alignItems:'center', gap:8, background:'hsl(var(--bg-overlay))', padding:'6px 12px', borderRadius:10 }}>
-                  <Calendar size={15} style={{ color:'hsl(var(--text-muted))' }} />
-                  <input className="form-input" style={{ width:'auto', background:'transparent', border:'none', padding:0, height:24, fontWeight:600, fontSize:14 }} type="date" value={dataSel} onChange={e => setDataSel(e.target.value)} />
-                </div>
-
-                <div style={{ width:1, height:24, background:'hsl(var(--border-subtle))' }} />
-
-                {/* Switch Diário x Disciplina */}
-                <div style={{ display:'flex', gap:4, padding:4, background:'hsl(var(--bg-overlay))', borderRadius:10 }}>
-                  <button onClick={() => setModoLancamento('geral')} style={{ padding:'6px 14px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'none', background: modoLancamento === 'geral' ? 'hsl(var(--bg-elevated))' : 'transparent', color: modoLancamento === 'geral' ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', boxShadow: modoLancamento==='geral'?'0 2px 8px rgba(0,0,0,0.05)':'none', transition:'all 0.2s' }}>
-                    Diário Geral da Turma
-                  </button>
-                  <button onClick={() => setModoLancamento('disciplina')} style={{ padding:'6px 14px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', border:'none', background: modoLancamento === 'disciplina' ? 'hsl(var(--bg-elevated))' : 'transparent', color: modoLancamento === 'disciplina' ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', boxShadow: modoLancamento==='disciplina'?'0 2px 8px rgba(0,0,0,0.05)':'none', transition:'all 0.2s' }}>
-                    Por Disciplina
-                  </button>
-                </div>
-                
-                {/* Selector Condicional */}
-                {modoLancamento === 'disciplina' && (
-                  <div style={{ display:'flex', alignItems:'center', gap:8, animation:'fade-in 0.2s ease' }}>
-                    <BookOpen size={14} style={{ color:'hsl(var(--text-muted))' }} />
-                    <select className="form-input" style={{ width:'auto', fontSize:13, height:36, borderRadius:8 }} value={disciplinaSel} onChange={e => setDisciplinaSel(e.target.value)}>
-                      {DISCIPLINAS.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              {/* Mega CTA Preenchimento Automático */}
-              <button 
-                onClick={() => marcarTodos('P')} 
-                style={{ 
-                  background: salvo ? '#10b981' : 'linear-gradient(135deg, #10b981, #059669)', 
-                  color:'#fff', border:'none', padding:'0 24px', height:44, borderRadius:12, fontWeight:800, fontSize:14, 
-                  display:'flex', alignItems:'center', gap:8, cursor:'pointer', transition:'all 0.2s',
-                  boxShadow: '0 8px 16px rgba(16,185,129,0.25)', flexShrink:0
-                }}
-                onMouseEnter={e => e.currentTarget.style.transform='translateY(-2px)'}
-                onMouseLeave={e => e.currentTarget.style.transform='translateY(0)'}
-              >
-                {salvo ? <CheckCircle size={18} /> : <span>✔️</span>}
-                {salvo ? 'Presenças Salvas!' : 'Preencher Todos como Presentes'}
-              </button>
-
+            <div style={{ width: '160px' }}>
+              <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
+                <option value="todos">Anos Letivos</option>
+                {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             </div>
 
-            <div style={{ height:1, background:'hsl(var(--border-subtle))' }} />
+             <div style={{ width: '200px' }}>
+               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroSegmento} onChange={e => setFiltroSegmento(e.target.value)}>
+                 <option value="">Todos Segmentos</option>
+                 {cfgNiveisEnsino?.map((n: any) => (
+                   <option key={n.id} value={n.nome}>{n.nome}</option>
+                 ))}
+               </select>
+             </div>
 
-            {/* Bottom Toolbar: KPIs and Search */}
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:10 }}>
-               
-               <div style={{ display:'flex', gap:14, alignItems:'center' }}>
-                 {jaRegistrado && <span style={{ padding:'4px 10px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', gap:5 }}><Check size={13}/> Diário do dia contêm salvamentos</span>}
-                 {!jaRegistrado && <span style={{ padding:'4px 10px', borderRadius:20, background:'rgba(245,158,11,0.1)', color:'#f59e0b', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', gap:5 }}><Info size={13}/> Chamada Pendente Oficialmente</span>}
-                 
-                 <div style={{ borderLeft:'2px solid hsl(var(--border-subtle))', paddingLeft:14, display:'flex', gap:14 }}>
-                    <div style={{ display:'flex', flexDirection:'column' }}><span style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600}}>Presentes</span><span style={{fontSize:14,fontWeight:900,color:'#10b981'}}>{presentes}</span></div>
-                    <div style={{ display:'flex', flexDirection:'column' }}><span style={{fontSize:10,color:'hsl(var(--text-muted))',fontWeight:600}}>Faltas</span><span style={{fontSize:14,fontWeight:900,color:faltas>0?'#ef4444':'hsl(var(--text-muted))'}}>{faltas}</span></div>
-                 </div>
-               </div>
+             <div style={{ width: '160px' }}>
+               <input 
+                 type="date"
+                 className="form-input" 
+                 style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '13px' }} 
+                 value={dataSel} 
+                 onChange={e => setDataSel(e.target.value)} 
+               />
+             </div>
+           </div>
 
-               <div style={{ position:'relative', width:260 }}>
-                 <Search size={14} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))', pointerEvents:'none' }} />
-                 <input className="form-input" style={{ paddingLeft:34, fontSize:13, borderRadius:10, background:'hsl(var(--bg-overlay))', border:'none' }} placeholder="Procurar aluno pelo nome..." value={buscaAluno} onChange={e => setBuscaAluno(e.target.value)} />
-               </div>
-
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Filtrando: </span>
+            <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{turmasFiltradas.length} turmas</span>
           </div>
-
-          {/* Legenda Helper */}
-          <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-            <span style={{ fontSize:11, color:'hsl(var(--text-muted))', fontWeight:700 }}>ATALHOS DA LISTA:</span>
-            {(Object.entries(S_CONFIG) as [PresStatus, typeof S_CONFIG['P']][]).map(([k,v]) => (
-              <div key={k} style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 12px', borderRadius:8, background:v.bg, border:`1px solid ${v.border}` }}>
-                <div style={{ width:16,height:16,borderRadius:4,background:v.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#fff' }}>{k}</div>
-                <span style={{ fontSize:11, color:v.color, fontWeight:700 }}>{v.full}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Lista alunos Ledger-style */}
-          {alunosDaTurma.length === 0 ? (
-            <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-              <Users size={40} style={{ margin:'0 auto 16px', opacity:0.2 }} />
-              <div style={{ fontSize:16, fontWeight:700 }}>Nenhum aluno cadastrado nesta turma.</div>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              {/* Header Listagem */}
-              <div style={{ display:'grid', gridTemplateColumns:'44px 1fr repeat(4, 52px) 140px', gap:12, padding:'0 16px 8px 16px', borderBottom:'2px solid hsl(var(--border-subtle))', alignItems:'center' }}>
-                <div style={{ fontSize:10, fontWeight:800, color:'hsl(var(--text-muted))' }}>Nº</div>
-                <div style={{ fontSize:10, fontWeight:800, color:'hsl(var(--text-muted))' }}>NOME DO ALUNO</div>
-                {['P','F','J','A'].map(h => (
-                   <div key={h} style={{ fontSize:11, fontWeight:900, color:'hsl(var(--text-primary))', textAlign:'center' }}>{h}</div>
-                ))}
-                <div style={{ fontSize:10, fontWeight:800, color:'hsl(var(--text-muted))', textAlign:'right' }}>% ATUAL (GERAL)</div>
-              </div>
-
-              {alunosFiltrados.map((aluno, idx) => {
-                const statusAtual = getStatus(aluno.id)
-                const isFalta = statusAtual === 'F'
-                const isWarning = statusAtual === 'J' || statusAtual === 'A'
-                
-                const freqGeral = calcFreqGeral(aluno.id)
-                const geralBad = freqGeral !== null && freqGeral < freqMinima
-                const alertPct = freqMinima * 1.05
-
-                return (
-                  <div key={aluno.id}
-                    style={{ 
-                      display:'grid', gridTemplateColumns:'44px 1fr repeat(4, 52px) 140px', gap:12, padding:'14px 16px', 
-                      background: isFalta ? 'rgba(239,68,68,0.04)' : isWarning ? 'rgba(245,158,11,0.03)' : 'hsl(var(--bg-elevated))', 
-                      borderRadius:12, 
-                      border: `1px solid ${isFalta ? 'rgba(239,68,68,0.3)' : isWarning ? 'rgba(245,158,11,0.3)' : 'hsl(var(--border-subtle))'}`, 
-                      borderLeft: isFalta ? '4px solid #ef4444' : isWarning ? '4px solid #f59e0b' : '4px solid transparent',
-                      alignItems:'center', transition:'all 0.15s' 
-                    }}
-                    onMouseEnter={e => { if(!isFalta) e.currentTarget.style.background='hsl(var(--bg-overlay))' }}
-                    onMouseLeave={e => { if(!isFalta) e.currentTarget.style.background='hsl(var(--bg-elevated))' }}
-                  >
-                    <div style={{ width:34,height:34,borderRadius:10,background:`${color}12`,color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:900,fontFamily:'Outfit,monospace' }}>
-                      {formatarNumero(aluno.id)}
-                    </div>
-                    
-                    <div style={{ display:'flex', alignItems:'center', gap:12, overflow:'hidden' }}>
-                      <div style={{ width:34,height:34,borderRadius:10,background:S_CONFIG[statusAtual].bg,color:S_CONFIG[statusAtual].color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0, transition:'all 0.2s' }}>
-                        {getInitials(aluno.nome)}
-                      </div>
-                      <div style={{ minWidth:0, overflow:'hidden' }}>
-                        <div style={{ fontSize:14, fontWeight:800, color: isFalta ? '#ef4444' : 'hsl(var(--text-primary))', whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden' }}>{aluno.nome}</div>
-                        {geralBad && <div style={{ fontSize:9, color:'#ef4444', fontWeight:800, marginTop:1, display:'flex', gap:3, alignItems:'center' }}><AlertTriangle size={9}/> Risco de reprovação ({freqGeral}%)</div>}
-                      </div>
-                    </div>
-
-                    {/* Botões Lançamento (Chunky Targets) */}
-                    {(['P','F','J','A'] as PresStatus[]).map(s => {
-                      const isSel = statusAtual === s
-                      return (
-                        <div key={s} style={{ display:'flex', justifyContent:'center' }}>
-                          <button onClick={() => !isSel && setStatus(aluno.id, s)}
-                            style={{ 
-                              width:44, height:44, borderRadius:12, fontWeight:900, fontSize:15, cursor:isSel?'default':'pointer', transition:'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-                              background: isSel ? S_CONFIG[s].bg : 'hsl(var(--bg-overlay))',
-                              border: isSel ? `2px solid ${S_CONFIG[s].border}` : '1px solid hsl(var(--border-subtle))',
-                              color: isSel ? S_CONFIG[s].color : 'hsl(var(--text-muted))',
-                              transform: isSel ? 'scale(1.08)' : 'scale(1)',
-                              boxShadow: isSel ? `0 4px 12px ${S_CONFIG[s].bg}` : 'none'
-                             }}>
-                            {s}
-                          </button>
-                        </div>
-                      )
-                    })}
-
-                    {/* Freq. geral lateral */}
-                    <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end' }}>
-                      {freqGeral !== null ? (
-                        <>
-                          <div style={{ fontSize:15, fontWeight:900, color:geralBad?'#ef4444':freqGeral<alertPct?'#f59e0b':'#10b981', fontFamily:'Outfit,sans-serif' }}>{freqGeral}%</div>
-                          <div style={{ width:60, height:4, borderRadius:2, background:'hsl(var(--bg-overlay))', marginTop:4, overflow:'hidden' }}>
-                            <div style={{ width:`${Math.min(freqGeral,100)}%`, height:'100%', background:geralBad?'#ef4444':freqGeral<alertPct?'#f59e0b':'#10b981' }} />
-                          </div>
-                        </>
-                      ) : <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>—</span>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ── ABA POR DISCIPLINA ── */}
-      {vista === 'disciplina' && (
-        <div>
-          <div style={{ fontWeight:700, fontSize:14, marginBottom:16 }}>📊 Histórico de Frequência vs Disciplinas</div>
-          {disciplinasComReg.length === 0 ? (
-            <div className="card" style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-              <BarChart2 size={40} style={{ margin:'0 auto 12px', opacity:0.2 }} />
-              <div style={{ fontWeight:700 }}>Sem dados para exibir.</div>
-              <div style={{ fontSize:12 }}>Use a opção 'Por Disciplina' ou 'Diário Geral' para gerar relatórios.</div>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-              {disciplinasComReg.map(disc => {
-                const regsDisc = regsFromTurma.filter(r => (r as any).disciplina === disc)
-                const alunosComRisco = alunosDaTurma.filter(a => {
-                  const p = regsDisc.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === a.id)?.status ?? 'P')).length
-                  return regsDisc.length > 0 && Math.round((p / regsDisc.length) * 100) < freqMinima
-                })
-                const mediaFreq = alunosDaTurma.length > 0 ? Math.round(
-                  alunosDaTurma.reduce((acc, a) => {
-                    const p = regsDisc.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === a.id)?.status ?? 'P')).length
-                    return acc + (regsDisc.length > 0 ? p / regsDisc.length : 0)
-                  }, 0) / alunosDaTurma.length * 100
-                ) : 0
-                return (
-                  <div key={disc} className="card" style={{ padding:'24px', borderLeft:`4px solid ${mediaFreq<freqMinima?'#ef4444':color}` }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-                      <div>
-                        <div style={{ fontWeight:900, fontSize:18 }}>{disc === 'Geral' ? 'Diário Global (Sem Disciplina Curricular)' : disc}</div>
-                        <div style={{ fontSize:12, color:'hsl(var(--text-muted))', fontWeight:600, marginTop:2 }}>{regsDisc.length} dias lançados oficialmente</div>
-                      </div>
-                      <div style={{ textAlign:'right', background:'hsl(var(--bg-overlay))', padding:'10px 20px', borderRadius:12 }}>
-                        <div style={{ fontSize:10, color:'hsl(var(--text-muted))', fontWeight:800, letterSpacing:1 }}>MÉDIA DA TURMA</div>
-                        <div style={{ fontSize:32, fontWeight:900, color:mediaFreq<freqMinima?'#ef4444':'#10b981', fontFamily:'Outfit,sans-serif', lineHeight:1.1 }}>{mediaFreq}%</div>
-                      </div>
-                    </div>
-                    {alunosComRisco.length > 0 && (
-                      <div style={{ marginBottom:16, padding:'10px 16px', background:'rgba(239,68,68,0.06)', borderRadius:10, fontSize:12, color:'#ef4444', fontWeight:700, display:'flex', alignItems:'center', gap:8 }}>
-                        <AlertTriangle size={14} /> {alunosComRisco.length} aluno{alunosComRisco.length>1?'s':''} com frequência abaixo da meta estipulada de {freqMinima}% nesta aba
-                      </div>
-                    )}
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:10 }}>
-                      {alunosDaTurma.map(a => {
-                        const p = regsDisc.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === a.id)?.status ?? 'P')).length
-                        const pct = regsDisc.length > 0 ? Math.round((p / regsDisc.length) * 100) : null
-                        const bad = pct !== null && pct < freqMinima
-                        return (
-                          <div key={a.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'hsl(var(--bg-overlay))', borderRadius:10, border:`1px solid ${bad?'rgba(239,68,68,0.3)':'transparent'}` }}>
-                            <div style={{ width:30,height:30,borderRadius:8,background:`${color}15`,color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,flexShrink:0 }}>{getInitials(a.nome)}</div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ fontSize:12, fontWeight:800, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:bad?'#ef4444':'hsl(var(--text-primary))' }}>{a.nome}</div>
-                              <div style={{ height:4, borderRadius:2, background:'hsl(var(--border-subtle))', marginTop:4 }}>
-                                <div style={{ width:`${Math.min(pct??0,100)}%`, height:'100%', borderRadius:2, background:bad?'#ef4444':'#10b981' }} />
-                              </div>
-                            </div>
-                            <div style={{ fontSize:13, fontWeight:900, color:bad?'#ef4444':'#10b981', fontFamily:'Outfit,sans-serif', flexShrink:0 }}>{pct !== null ? `${pct}%` : '—'}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
-      )}
 
-      {/* ── ABA RELATÓRIO DO ALUNO ── */}
-      {vista === 'relatorio' && (
-        <div>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-            <div style={{ fontWeight:700, fontSize:15 }}>📑 Resumo Consolidado de Extrato do Diário</div>
-            <button className="btn btn-secondary btn-sm" onClick={() => window.print()}><Printer size={13} />Imprimir Relatório Formato Tabela</button>
-          </div>
-          <div className="card" style={{ overflowX:'auto', padding:'2px', borderRadius:16 }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+        {/* Grid de Turmas Ultra Moderno */}
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
               <thead>
-                <tr style={{ background:'hsl(var(--bg-overlay))' }}>
-                  <th style={{ padding:'14px 16px', textAlign:'left', fontWeight:800, fontSize:11, color:'hsl(var(--text-muted))', whiteSpace:'nowrap', borderTopLeftRadius:14 }}>NOME DO ESTUDANTE</th>
-                  {disciplinasComReg.map(d => (
-                    <th key={d} style={{ padding:'14px 10px', textAlign:'center', fontWeight:800, fontSize:10, color:'hsl(var(--text-muted))' }}>{d.toUpperCase() === 'GERAL' ? 'GLOBAL' : d.toUpperCase()}</th>
-                  ))}
-                  <th style={{ padding:'14px 16px', textAlign:'center', fontWeight:900, fontSize:11, color:'hsl(var(--text-primary))' }}>AGREGADO TOTAL</th>
-                  <th style={{ padding:'14px 16px', textAlign:'center', fontWeight:800, fontSize:11, color:'hsl(var(--text-muted))', borderTopRightRadius:14 }}>SITUAÇÃO</th>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Turma</th>
+                  <th style={{ textAlign: 'left', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Segmento</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alunos</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequência</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status na Data</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ação</th>
                 </tr>
               </thead>
               <tbody>
-                {alunosDaTurma.map((aluno, i) => {
-                  const freqGeral = calcFreqGeral(aluno.id)
-                  const geralBad = freqGeral !== null && freqGeral < freqMinima
+                {loadingAllFreqs || loadingAlunos ? (
+                  <TableSkeleton rows={5} cols={6} />
+                ) : (
+                   turmasFiltradas.map(turma => {
+                    const freqs = allFreqs || []
+                    const regs = freqs.filter(f => String(f.turma_id) === String(turma.id))
+                    const temHoje = regs.some(f => String(f.data).startsWith(dataSel))
+                    
+                    const schedule = getTurmaSchedule(turma)
+                    let totalContabilizadoTurma = 0
+                    let faltasContabilizadasTurma = 0
+                    
+                    regs.forEach((r: any) => {
+                      let tempos: Record<string, any> = {}
+                      if (r.tempos) {
+                        tempos = { ...r.tempos }
+                      } else {
+                        const overallStatus = r.justificativa === 'Justificada' ? 'J' : (r.presente ? 'P' : 'F')
+                        schedule.tempos.forEach((t: any) => {
+                          tempos[t.id] = overallStatus
+                        })
+                      }
+                      
+                      const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+                      totalContabilizadoTurma += calc.totalTemposContabilizados
+                      faltasContabilizadasTurma += calc.faltasContabilizadas
+                    })
+                    
+                    const presencasTurma = totalContabilizadoTurma - faltasContabilizadasTurma
+                    const pctPresenca = totalContabilizadoTurma > 0 ? Math.round((presencasTurma / totalContabilizadoTurma) * 100) : 100
+                    const isLow = pctPresenca < freqMinima
+
+                  const totalAlunosTurma = alunos.filter((a: any) => String(a.turma) === String(turma.id)).length
+
                   return (
-                    <tr key={aluno.id} style={{ borderBottom: i === alunosDaTurma.length-1 ? 'none' : '1px solid hsl(var(--border-subtle))', background: i%2===0?'transparent':'hsl(var(--bg-overlay))' }}>
-                      <td style={{ padding:'12px 16px', fontWeight:700, whiteSpace:'nowrap' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <div style={{ width:28,height:28,borderRadius:8,background:`${color}15`,color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:900 }}>{getInitials(aluno.nome)}</div>
-                          {aluno.nome}
+                    <tr key={turma.id} style={{ background: '#fff', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                      <td style={{ padding: '16px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
+                        <div>
+                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{turma.nome}</p>
+                          <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{turma.serie} • {turma.turno}</p>
                         </div>
                       </td>
-                      {disciplinasComReg.map(disc => {
-                        const regsDisc = regsFromTurma.filter(r => (r as any).disciplina === disc)
-                        const p = regsDisc.filter(r => ['P','J'].includes(r.registros.find(rr => rr.alunoId === aluno.id)?.status ?? 'P')).length
-                        const pct = regsDisc.length > 0 ? Math.round((p / regsDisc.length) * 100) : null
-                        const bad = pct !== null && pct < freqMinima
-                        return (
-                          <td key={disc} style={{ padding:'12px 10px', textAlign:'center', fontWeight:800, color:pct===null?'hsl(var(--text-muted))':bad?'#ef4444':'#10b981', fontFamily:'Outfit,sans-serif' }}>
-                            {pct !== null ? `${pct}%` : '—'}
-                          </td>
-                        )
-                      })}
-                      <td style={{ padding:'12px 16px', textAlign:'center', fontWeight:900, fontSize:14, color:geralBad?'#ef4444':'#10b981', fontFamily:'Outfit,sans-serif' }}>
-                        {freqGeral !== null ? `${freqGeral}%` : '—'}
+                      <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                        <span style={{ fontSize: '13px', color: '#0f172a' }}>{(turma as any).dados?.segmento || '--'}</span>
                       </td>
-                      <td style={{ padding:'12px 16px', textAlign:'center' }}>
-                        {geralBad
-                          ? <span style={{ fontSize:10, padding:'3px 10px', borderRadius:20, background:'rgba(239,68,68,0.1)', color:'#ef4444', fontWeight:800 }}>⛔ Risco Reprov.</span>
-                          : <span style={{ fontSize:10, padding:'3px 10px', borderRadius:20, background:'rgba(16,185,129,0.1)', color:'#10b981', fontWeight:800 }}>✓ Amparado</span>
-                        }
+                      <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                        <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 600 }}>{totalAlunosTurma}</span>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                          <span style={{ 
+                            fontSize: '13px', 
+                            fontWeight: 700, 
+                            color: isLow ? '#ef4444' : '#10b981',
+                            background: isLow ? '#fee2e2' : '#dcfce7',
+                            padding: '4px 8px',
+                            borderRadius: '6px'
+                          }}>
+                            {pctPresenca}%
+                          </span>
+                          <div style={{ width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pctPresenca}%`, height: '100%', background: isLow ? '#ef4444' : '#10b981', borderRadius: '3px' }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                        {temHoje ? (
+                          <span style={{ padding: '4px 10px', background: '#dcfce7', color: '#15803d', borderRadius: '20px', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Check size={12} strokeWidth={3} /> Realizada
+                          </span>
+                        ) : (
+                          <span style={{ padding: '4px 10px', background: '#fef3c7', color: '#b45309', borderRadius: '20px', fontSize: '11px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertCircle size={12} strokeWidth={3} /> Pendente
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
+                        <button 
+                          onClick={() => setTurmaSel(turma.id)}
+                          style={{ background: 'transparent', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          Abrir <ChevronRight size={16} />
+                        </button>
                       </td>
                     </tr>
                   )
-                })}
+                  })
+                )}
               </tbody>
             </table>
           </div>
         </div>
-      )}
+        {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
+        {renderRelatorioModal()}
+      </div>
+    )
+  }
 
-      <style>{`@media print { .page-header button, .tab-list { display:none!important; } }
-      
-      @keyframes fade-in {
-        from { opacity: 0; transform: translateX(-5px); }
-        to { opacity: 1; transform: translateX(0); }
+  // ── VISTA INTERNA (LANÇAMENTO DE FALTAS) ──────────────────────────────────
+  const schedule = getTurmaSchedule(turmaObj)
+  
+  const datasAtivasDaTurma = new Set<string>()
+  Object.values(absences).forEach(studentDays => {
+    Object.keys(studentDays).forEach(dia => datasAtivasDaTurma.add(dia))
+  })
+
+  // Calcular número de faltas individuais no dia selecionado e alunos com pelo menos uma falta
+  let totalFaltasDia = 0
+  let alunosComFalta = 0
+  alunosDaTurma.forEach(a => {
+    let studentHasFalta = false
+    schedule.tempos.forEach(t => {
+      const status = getStatus(a.id, dataSel, t.id)
+      if (status === 'F') {
+        totalFaltasDia++
+        studentHasFalta = true
       }
-      `}</style>
+    })
+    if (studentHasFalta) alunosComFalta++
+  })
+
+  return (
+    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+
+      {/* Header Ultra Moderno */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <button 
+            onClick={() => setTurmaSel(null)} 
+            style={{ border: '1px solid #e2e8f0', background: '#fff', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ padding: '4px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Gestão de Classe</span>
+              <span style={{ padding: '4px 8px', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>{turmaSel}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Diário de Frequência</h1>
+              <button
+                onClick={() => setShowRegrasModal(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'rgba(37, 99, 235, 0.08)',
+                  color: '#2563eb',
+                  border: '1px dashed #2563eb',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  alignSelf: 'center'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.15)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)'}
+              >
+                <Info size={14} />
+                Regras de Cálculo
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
+              Segmento: <strong style={{ color: '#2563eb' }}>{schedule.segmento}</strong> ({schedule.tempos.length} Tempos). Clique nas caixas para alternar (P / F / J).
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas no Dia</span>
+            <p style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', margin: 0, fontFamily: 'Outfit,sans-serif' }}>
+              {totalFaltasDia} <span style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 700 }}>({alunosComFalta} {alunosComFalta === 1 ? 'aluno' : 'alunos'})</span>
+            </p>
+          </div>
+          
+          <button 
+            onClick={handleSave}
+            style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+          >
+            {salvo ? <CheckCircle size={18} /> : <Save size={18} />}
+            {salvo ? 'Salvo com Sucesso!' : 'Salvar Registros'}
+          </button>
+        </div>
+      </div>
+
+      {/* Toolbar Premium */}
+      <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {/* Calendário */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <Calendar size={18} style={{ color: '#64748b' }} />
+            <input 
+              className="form-input" 
+              style={{ background: 'transparent', border: 'none', padding: 0, height: 'auto', fontWeight: 700, fontSize: '14px', color: '#0f172a', outline: 'none' }} 
+              type="date" 
+              value={dataSel} 
+              onChange={e => setDataSel(e.target.value)} 
+            />
+          </div>
+
+          {/* Busca Aluno */}
+          <div style={{ position: 'relative', width: '250px' }}>
+            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input 
+              className="form-input" 
+              style={{ paddingLeft: '40px', height: '42px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} 
+              placeholder="Buscar aluno..." 
+              value={buscaAluno} 
+              onChange={e => setBuscaAluno(e.target.value)} 
+            />
+          </div>
+        </div>
+
+        {/* Ações da Turma */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={handleOpenRelatorio}
+            style={{ height: '42px', padding: '0 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+          >
+            <Printer size={14} />
+            <span>Relatório</span>
+          </button>
+          <button 
+            onClick={handleExportar}
+            style={{ height: '42px', padding: '0 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+          >
+            <Download size={14} />
+            <span>Exportar</span>
+          </button>
+        </div>
+
+        {/* Legenda Premium */}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Legenda:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '3px' }}></span>
+            <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>Presença (P)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '3px' }}></span>
+            <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>Falta (F)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '3px' }}></span>
+            <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>Justificada (J)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela de Grade Ultra Moderna */}
+      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '150px' }}>Freq. Total</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Justificadas</th>
+                {diasPeriodo.map(dia => {
+                  const dateObj = new Date(dia + 'T00:00:00')
+                  const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+                  return (
+                    <th key={dia} style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, minWidth: '320px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ textTransform: 'uppercase', fontSize: '11px', color: '#94a3b8' }}>{diaSemana}</span>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{dia.split('-')[2]}/{dia.split('-')[1]}</span>
+                        </div>
+                        {/* Ações em lote para a turma */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            onClick={() => {
+                              alunosFiltrados.forEach(a => {
+                                schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'P'))
+                              })
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
+                          >
+                            Presença Geral (Turma)
+                          </button>
+                          <button
+                            onClick={() => {
+                              alunosFiltrados.forEach(a => {
+                                schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'F'))
+                              })
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                          >
+                            Falta Geral (Turma)
+                          </button>
+                        </div>
+                      </div>
+                    </th>
+                  )
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {loadingFreqTurma ? (
+                <TableSkeleton rows={5} cols={4 + diasPeriodo.length} />
+              ) : alunosFiltrados.map((aluno: any) => {
+                const freqGeral = calcFreqGeral(aluno.id)
+                const isLow = freqGeral !== null && freqGeral < freqMinima
+                
+                // Calcular faltas e justificativas a nível de tempos usando os dias ativos
+                let totalFaltas = 0
+                let totalJustificadas = 0
+                datasAtivasDaTurma.forEach(dia => {
+                  let tempos: Record<string, PresStatus> = {}
+                  schedule.tempos.forEach(t => {
+                    tempos[t.id] = getStatus(aluno.id, dia, t.id)
+                  })
+                  
+                  const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+                  totalFaltas += calc.faltasContabilizadas
+                  totalJustificadas += calc.justificadasContabilizadas
+                })
+
+                return (
+                  <tr key={aluno.id} style={{ background: '#fff', transition: 'all 0.2s' }}>
+                    {/* Nome do Aluno */}
+                    <td style={{ padding: '16px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '36px', height: '36px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>
+                          {getInitials(aluno.nome)}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
+                          <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Freq. Total */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      {freqGeral !== null ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                          <span style={{ 
+                            fontSize: '13px', 
+                            fontWeight: 700, 
+                            color: isLow ? '#ef4444' : '#10b981',
+                            background: isLow ? '#fee2e2' : '#dcfce7',
+                            padding: '2px 6px',
+                            borderRadius: '4px'
+                          }}>
+                            {freqGeral}%
+                          </span>
+                          <div style={{ width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${freqGeral}%`, height: '100%', background: isLow ? '#ef4444' : '#10b981', borderRadius: '3px' }} />
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>--</span>
+                      )}
+                    </td>
+
+                    {/* Faltas */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '13px', color: totalFaltas > 5 ? '#ef4444' : '#0f172a', fontWeight: 600 }}>{totalFaltas}</span>
+                    </td>
+
+                    {/* Justificadas */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '13px', color: '#64748b' }}>{totalJustificadas}</span>
+                    </td>
+
+                    {/* Dias de Frequência (com controle de tempos) */}
+                    {diasPeriodo.map(dia => {
+                      return (
+                        <td 
+                          key={dia} 
+                          style={{ padding: '6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}
+                        >
+                          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
+                            {/* Tempos individuais */}
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                              {schedule.tempos.map(tempo => {
+                                const status = getStatus(aluno.id, dia, tempo.id)
+                                const cfg = S_CONFIG[status]
+                                
+                                return (
+                                  <div key={tempo.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                    <button
+                                      onClick={() => {
+                                        const nextStatus = status === 'P' ? 'F' : (status === 'F' ? 'J' : 'P')
+                                        setStatus(aluno.id, dia, tempo.id, nextStatus)
+                                      }}
+                                      title={`${tempo.label}: ${tempo.horario}`}
+                                      style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        border: `1px solid ${cfg.border}`,
+                                        background: cfg.bg,
+                                        color: cfg.color,
+                                        fontWeight: 800,
+                                        fontSize: '11px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: `0 2px 4px ${cfg.glow}`,
+                                        position: 'relative'
+                                      }}
+                                      onMouseEnter={e => {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.boxShadow = `0 4px 6px ${cfg.glow}`;
+                                      }}
+                                      onMouseLeave={e => {
+                                        e.currentTarget.style.transform = 'scale(1)';
+                                        e.currentTarget.style.boxShadow = `0 2px 4px ${cfg.glow}`;
+                                      }}
+                                    >
+                                      {cfg.label}
+                                    </button>
+                                    <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700 }}>{tempo.id}º</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* Ações rápidas */}
+                            <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <button
+                                title="Marcar presença em todos os tempos"
+                                onClick={() => {
+                                  schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
+                                }}
+                                style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                              >
+                                P. Geral
+                              </button>
+                              <button
+                                title="Marcar falta em todos os tempos"
+                                onClick={() => {
+                                  schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
+                                }}
+                                style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                              >
+                                F. Geral
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
+      {renderRelatorioModal()}
     </div>
   )
 }

@@ -1,300 +1,668 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
-
-import { useState, useEffect, useMemo } from 'react'
-import { useData, Turma } from '@/lib/dataContext'
-import { ConfirmModal, EmptyState } from '@/components/ui/CrudModal'
-import TurmaModal from '@/components/turmas/TurmaModal'
-import { Plus, Search, Grid, List, Pencil, Trash2, Users, BookOpen, Clock } from 'lucide-react'
-
-const SEG_COLORS: Record<string, string> = {
-  '1': '#ec4899', '2': '#3b82f6', '3': '#8b5cf6', '4': '#10b981', '5': '#f59e0b',
-  EI: '#10b981', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#f59e0b', EJA: '#ec4899',
-}
-
-function OccupancyRing({ pct, color }: { pct: number; color: string }) {
-  return (
-    <div style={{ position: 'relative', width: 52, height: 52, flexShrink: 0 }}>
-      <svg width={52} height={52} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={26} cy={26} r={20} fill="none" stroke="hsl(var(--bg-overlay))" strokeWidth={5} />
-        <circle cx={26} cy={26} r={20} fill="none" stroke={color} strokeWidth={5}
-          strokeDasharray={`${(pct / 100) * 125.7} 125.7`} strokeLinecap="round" />
-      </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color }}>
-        {pct}%
-      </div>
-    </div>
-  )
-}
+import { useState, useEffect } from 'react'
+import { 
+  Users, Search, Plus, Filter, 
+  School, Calendar, BookOpen, 
+  ChevronLeft, ChevronRight, Edit, Trash2,
+  FileSpreadsheet
+} from 'lucide-react'
+import { useData } from '@/lib/dataContext'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
+import ImportarTurmasModal from '@/components/turmas/ImportarTurmasModal'
 
 export default function TurmasPage() {
-  const { cfgTurnos: _cfgTurnos, cfgNiveisEnsino: _cfgNiveis, cfgPadroesPagamento, logSystemAction, turmas = [], setTurmas } = useData();
-  const [_alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const alunos = Array.isArray(_alunos) ? _alunos : []
-  const cfgTurnos = Array.isArray(_cfgTurnos) ? _cfgTurnos : []
-  const cfgNiveisEnsino = Array.isArray(_cfgNiveis) ? _cfgNiveis : []
-  const isLoading = false
-
-  const [view, setView] = useState<'grid' | 'lista'>('grid')
-  const [segmento, setSegmento] = useState('Todos')
-  const [turno, setTurno] = useState('Todos')
-  const [filtroAno, setFiltroAno] = useState('Todos')
+  const { cfgNiveisEnsino, cfgTurnos, cfgCalendarioLetivo, logSystemAction } = useData()
+  const queryClient = useQueryClient()
+  
   const [search, setSearch] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [confirmId, setConfirmId] = useState<string | null>(null)
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [ano, setAno] = useState(new Date().getFullYear().toString())
+  const [segmento, setSegmento] = useState('')
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isAlunosModalOpen, setIsAlunosModalOpen] = useState(false)
+  const [alunosDaTurma, setAlunosDaTurma] = useState<any[]>([])
+  const [loadingAlunos, setLoadingAlunos] = useState(false)
+  const [selectedTurma, setSelectedTurma] = useState<any>(null)
+  const [isEditing, setIsEditing] = useState(false)
 
-  // Mapear segmentos e turnos do ERP
-  const SEGMENTOS = useMemo(() => {
-    if (!cfgNiveisEnsino || cfgNiveisEnsino.length === 0) return [
-      { codigo: 'EI', nome: 'Educação Infantil' }, 
-      { codigo: 'EF1', nome: 'Ensino F. I' }, 
-      { codigo: 'EF2', nome: 'Ensino F. II' }, 
-      { codigo: 'EM', nome: 'Ensino Médio' }, 
-      { codigo: 'EJA', nome: 'EJA' }
-    ]
-    return cfgNiveisEnsino.filter(n => n.situacao === 'ativo').map(n => ({ codigo: n.codigo, nome: n.nome }))
-  }, [cfgNiveisEnsino])
-
-  const TURNOS = useMemo(() => {
-    if (!cfgTurnos || cfgTurnos.length === 0) return ['Matutino', 'Vespertino', 'Noturno', 'Integral']
-    return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
-  }, [cfgTurnos])
-
-  // Conta alunos: prioriza turmaId (vínculo direto) e faz fallback pelo nome da turma
-  const alunosDaTurma = (turmaId: string, turmaNome: string) =>
-    alunos.filter(a =>
-      (a as any).turmaId === turmaId ||
-      (!((a as any).turmaId) && a.turma === turmaNome)
-    ).length
-  const anosDisponiveis = [...new Set(turmas.map(t => String(t.ano)).filter(Boolean))].sort().reverse()
-
-  const filtered = turmas.filter(t => {
-    const matchSeg = segmento === 'Todos' || t.serie === segmento
-    const matchTurno = turno === 'Todos' || t.turno === turno
-    const matchAno = filtroAno === 'Todos' || String(t.ano) === filtroAno
-    const matchSearch = search.trim().length < 3 || (t.nome.toLowerCase().includes(search.toLowerCase()) || t.professor.toLowerCase().includes(search.toLowerCase()))
-    return matchSeg && matchTurno && matchAno && matchSearch
+  // Sincronizar ano vigente inicial
+  useEffect(() => {
+    const vigente = (cfgCalendarioLetivo || []).find((c: any) => c.isVigente)?.ano?.toString()
+    if (vigente) {
+      setAno(vigente)
+      setFormData(prev => ({ ...prev, ano: vigente }))
+    }
+  }, [cfgCalendarioLetivo])
+  
+  // Form para nova turma
+  const [formData, setFormData] = useState({
+    nome: '',
+    serie: '',
+    segmento: '',
+    turno: 'Matutino',
+    ano: new Date().getFullYear().toString(),
+    capacidade: '30'
   })
 
-  const handleDelete = () => {
-    if (confirmId) {
-      const turmaAntiga = turmas.find((t: any) => t.id === confirmId)
-      setTurmas((prev: any[]) => prev.filter(t => t.id !== confirmId))
-      logSystemAction('Acadêmico (Turmas)', 'Exclusão', `Exclusão permanente da turma`, { registroId: turmaAntiga?.codigo, nomeRelacionado: turmaAntiga?.nome })
-      setConfirmId(null)
+  const [itensPorPagina, setItensPorPagina] = useState(10)
+
+  // Query para buscar turmas (Cache via React Query)
+  const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ data: any[], total: number }>(
+    ['turmas-paginadas'],
+    '/api/turmas',
+    { page: paginaAtual, limit: itensPorPagina, search: searchQuery, ano: ano, segmento: segmento }
+  )
+
+  const turmas = apiResponse?.data || []
+  const totalItens = apiResponse?.total || 0
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    setPaginaAtual(1)
+    setSearchQuery(search)
+  }
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const url = '/api/turmas'
+      const method = isEditing ? 'PUT' : 'POST'
+      const body = isEditing ? { ...formData, id: selectedTurma.id } : formData
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      
+      if (res.ok) {
+        const savedData = await res.json()
+        const realId = savedData.id || selectedTurma?.id
+        logSystemAction(
+          'Acadêmico (Turmas)',
+          isEditing ? 'Edição' : 'Cadastro',
+          `${isEditing ? 'Atualização' : 'Cadastro'} da turma ${formData.nome}`,
+          { registroId: realId, detalhesDepois: formData }
+        )
+        
+        setIsModalOpen(false)
+        setIsEditing(false)
+        setSelectedTurma(null)
+        setFormData({
+          nome: '',
+          serie: '',
+          segmento: '',
+          turno: 'Matutino',
+          ano: new Date().getFullYear().toString(),
+          capacidade: '30'
+        })
+        queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
+      }
+    } catch (error) {
+      console.error('Erro ao salvar turma:', error)
     }
   }
 
-  const totalAlunos = turmas.reduce((s, t) => s + alunosDaTurma(t.id, t.nome), 0)
-  const totalVagas = turmas.reduce((s, t) => s + (t.capacidade - alunosDaTurma(t.id, t.nome)), 0)
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta turma?')) return
+    try {
+      const res = await fetch(`/api/turmas?id=${id}`, {
+        method: 'DELETE'
+      })
+      if (res.ok) {
+        const turmaExcluida = apiResponse?.data?.find((t: any) => t.id === id)
+        const nomeTurma = turmaExcluida?.nome || id
+        logSystemAction(
+          'Acadêmico (Turmas)',
+          'Exclusão',
+          `Exclusão da turma ${nomeTurma}`,
+          { registroId: id, detalhesAntes: turmaExcluida }
+        )
+        queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
+      }
+    } catch (error) {
+      console.error('Erro ao excluir turma:', error)
+    }
+  }
+
+  const handleEdit = (turma: any) => {
+    setIsEditing(true)
+    setSelectedTurma(turma)
+    setFormData({
+      nome: turma.nome,
+      serie: turma.serie,
+      segmento: turma.dados?.segmento || '',
+      turno: turma.turno,
+      ano: turma.ano.toString(),
+      capacidade: turma.capacidade.toString()
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setIsEditing(false)
+    setSelectedTurma(null)
+    setFormData({
+      nome: '',
+      serie: '',
+      segmento: '',
+      turno: 'Matutino',
+      ano: new Date().getFullYear().toString(),
+      capacidade: '30'
+    })
+  }
+
+  const handleOpenCreateModal = () => {
+    setIsEditing(false)
+    setSelectedTurma(null)
+    setFormData({
+      nome: '',
+      serie: '',
+      segmento: '',
+      turno: 'Matutino',
+      ano: new Date().getFullYear().toString(),
+      capacidade: '30'
+    })
+    setIsModalOpen(true)
+  }
+
+  const handleOpenAlunos = async (turma: any) => {
+    setSelectedTurma(turma)
+    setIsAlunosModalOpen(true)
+    setLoadingAlunos(true)
+    try {
+      const res = await fetch(`/api/alunos?turma=${turma.id}&limit=100`)
+      const data = await res.json()
+      setAlunosDaTurma(data.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar alunos da turma:', error)
+    } finally {
+      setLoadingAlunos(false)
+    }
+  }
+
+
+  const totalPaginas = Math.ceil(totalItens / itensPorPagina)
+
+  const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === formData.segmento)
+  const seriesDisponiveis = selectedNivel?.series || []
 
   return (
-    <div>
-      <div className="page-header">
+    <div style={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 className="page-title">Turmas & Ensalamento</h1>
-          <p className="page-subtitle" suppressHydrationWarning>
-            {mounted ? `${turmas.length} turmas • ${totalAlunos} alunos ensalados • ${totalVagas} vagas livres` : 'Carregando...'}
-          </p>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            Gestão de Turmas
+            {isFetching && <UpdatingIndicator />}
+          </h1>
+          <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Gerencie as turmas e organizações escolares</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div className="tab-list" style={{ padding: '3px' }}>
-            <button className={`tab-trigger ${view === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')}><Grid size={13} />Cards</button>
-            <button className={`tab-trigger ${view === 'lista' ? 'active' : ''}`} onClick={() => setView('lista')}><List size={13} />Lista</button>
-          </div>
-          <button className="btn btn-primary btn-sm" onClick={() => { setEditingId(null); setShowModal(true) }}>
-            <Plus size={13} />Nova Turma
+        
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            onClick={() => setIsImportModalOpen(true)}
+            className="neo-btn neo-btn-secondary"
+            style={{ padding: '10px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer' }}
+          >
+            <FileSpreadsheet size={16} /> Importar Turmas
+          </button>
+          <button 
+            onClick={handleOpenCreateModal}
+            className="neo-btn neo-btn-primary"
+            style={{ padding: '10px 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}
+          >
+            <Plus size={16} /> Nova Turma
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
-      {turmas.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 12, marginBottom: 20 }}>
-          {[
-            { label: 'Total Turmas', value: turmas.length, color: '#3b82f6', icon: '📚' },
-            { label: 'Vagas Livres', value: totalVagas, color: '#10b981', icon: '📋' },
-            { label: 'Alunos Ensalados', value: totalAlunos, color: '#8b5cf6', icon: '👥' },
-            { label: 'Turmas Lotadas', value: turmas.filter(t => alunosDaTurma(t.id, t.nome) >= t.capacidade).length, color: '#ef4444', icon: '⚠️' },
-            { label: 'Median Ocup.', value: turmas.length > 0 ? `${Math.round(turmas.reduce((s, t) => s + (t.capacidade > 0 ? alunosDaTurma(t.id, t.nome) / t.capacidade * 100 : 0), 0) / turmas.length)}%` : '0%', color: '#f59e0b', icon: '📊' },
-          ].map(c => (
-            <div key={c.label} className="kpi-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 18 }}>{c.icon}</span>
-                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{c.label}</span>
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 800, color: c.color, fontFamily: 'Outfit, sans-serif' }}>{c.value}</div>
+      {/* Stats Cards */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '10px', borderRadius: '8px' }}>
+              <School size={20} />
             </div>
-          ))}
+            <div>
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Total de Turmas</p>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{totalItens}</h3>
+            </div>
+          </div>
         </div>
-      )}
+        
+        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '10px', borderRadius: '8px' }}>
+              <Users size={20} />
+            </div>
+            <div>
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Alunos Matriculados</p>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{turmas.reduce((acc, t) => acc + (t.matriculados || 0), 0)}</h3>
+            </div>
+          </div>
+        </div>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-          <Search size={13} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Buscar turma ou professor..." value={search} onChange={e => setSearch(e.target.value)} />
+        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '10px', borderRadius: '8px' }}>
+              <BookOpen size={20} />
+            </div>
+            <div>
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Vagas Ocupadas</p>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                {Math.round((turmas.reduce((acc, t) => acc + (t.matriculados || 0), 0) / turmas.reduce((acc, t) => acc + (t.capacidade || 30), 0)) * 100) || 0}%
+              </h3>
+            </div>
+          </div>
         </div>
-        <div className="tab-list">
-          <button className={`tab-trigger ${segmento === 'Todos' ? 'active' : ''}`} onClick={() => setSegmento('Todos')}>Todos</button>
-          {SEGMENTOS.map((s: any) => (
-            <button key={s.codigo} className={`tab-trigger ${segmento === s.codigo ? 'active' : ''}`} onClick={() => setSegmento(s.codigo)}>{s.nome}</button>
-          ))}
-        </div>
-        <select className="form-input" style={{ width: 'auto' }} value={turno} onChange={e => setTurno(e.target.value)}>
-          {['Todos', ...TURNOS].map(t => <option key={t}>{t}</option>)}
-        </select>
-        {anosDisponiveis.length > 0 && (
-          <select className="form-input" style={{ width: 'auto' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
-            <option value="Todos">Todos os anos</option>
-            {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        )}
-        {(segmento !== 'Todos' || turno !== 'Todos' || filtroAno !== 'Todos' || search) && (
-          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => { setSegmento('Todos'); setTurno('Todos'); setFiltroAno('Todos'); setSearch('') }}>✕ Limpar</button>
-        )}
-        <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{filtered.length}/{turmas.length} turma(s)</span>
       </div>
 
-      {isLoading ? (
-        <div style={{ textAlign:'center', padding:'48px 24px', color:'hsl(var(--text-muted))' }}>
-          <div style={{ width: 40, height: 40, border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-          <div style={{ fontWeight:600 }}>Carregando dados das turmas e ensalamento...</div>
+      {/* Toolbar / Filters */}
+      <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
+            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input 
+              className="form-input" 
+              style={{ paddingLeft: '36px', width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }} 
+              placeholder="Buscar por nome ou código..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          
+          <div style={{ width: '120px' }}>
+            <select 
+              className="form-input" 
+              style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+              value={ano}
+              onChange={e => setAno(e.target.value)}
+            >
+              {(cfgCalendarioLetivo && cfgCalendarioLetivo.length > 0) ? (
+                [...cfgCalendarioLetivo].sort((a,b) => Number(b.ano) - Number(a.ano)).map((c: any) => (
+                  <option key={c.id} value={c.ano}>{c.ano}</option>
+                ))
+              ) : (
+                <>
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                  <option value="2024">2024</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          <div style={{ width: '180px' }}>
+            <select 
+              className="form-input" 
+              style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+              value={segmento}
+              onChange={e => setSegmento(e.target.value)}
+            >
+              <option value="">Todos Segmentos</option>
+              {cfgNiveisEnsino?.map((n: any) => (
+                <option key={n.id} value={n.nome}>{n.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          <button 
+            type="submit"
+            className="neo-btn neo-btn-secondary"
+            style={{ height: '40px', padding: '0 16px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontSize: '13px' }}
+          >
+            <Filter size={16} /> Filtrar
+          </button>
+        </form>
+      </div>
+
+      {/* Table */}
+      <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>ID</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Nome da Turma</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Série</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Segmento</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Turno</th>
+              <th style={{ textAlign: 'center', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Alunos</th>
+              <th style={{ textAlign: 'center', padding: '14px 16px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableSkeleton rows={10} cols={7} />
+            ) : turmas.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Nenhuma turma encontrada.</td>
+              </tr>
+            ) : (
+              turmas.map(turma => (
+                <tr key={turma.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                  <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{turma.id}</td>
+                  <td 
+                    style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 500, color: '#2563eb', cursor: 'pointer' }} 
+                    onClick={() => handleOpenAlunos(turma)}
+                  >
+                    {turma.nome}
+                  </td>
+                  <td style={{ padding: '14px 16px', fontSize: '13px', color: '#475569' }}>{turma.serie}</td>
+                  <td style={{ padding: '14px 16px', fontSize: '13px', color: '#475569' }}>
+                    <span style={{ padding: '2px 8px', background: '#e2e8f0', color: '#475569', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                      {turma.dados?.segmento || 'Não definido'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 16px', fontSize: '13px', color: '#475569' }}>
+                    <span style={{ padding: '2px 8px', background: turma.turno === 'Matutino' ? '#dbeafe' : '#fef3c7', color: turma.turno === 'Matutino' ? '#1e40af' : '#b45309', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                      {turma.turno}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{turma.matriculados || 0}</span>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}> / {turma.capacidade || 30}</span>
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                      <button 
+                        style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }} 
+                        title="Editar"
+                        onClick={() => handleEdit(turma)}
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button 
+                        style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} 
+                        title="Excluir"
+                        onClick={() => handleDelete(turma.id)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        
+        {/* Pagination */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <span style={{ fontSize: '13px', color: '#64748b' }}>
+              Mostrando {turmas.length} de {totalItens} turmas
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Exibir:</span>
+              <select 
+                value={itensPorPagina} 
+                onChange={(e) => {
+                  setItensPorPagina(parseInt(e.target.value))
+                  setPaginaAtual(1)
+                }}
+                style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: '6px', padding: '2px 6px', fontSize: '12px', cursor: 'pointer', color: '#0f172a', fontWeight: 600 }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              disabled={paginaAtual === 1}
+              onClick={() => setPaginaAtual(prev => prev - 1)}
+              style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: '6px', padding: '4px 8px', cursor: paginaAtual === 1 ? 'not-allowed' : 'pointer', opacity: paginaAtual === 1 ? 0.5 : 1 }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span style={{ fontSize: '13px', display: 'flex', alignItems: 'center', padding: '0 8px', fontWeight: 700 }}>
+              {paginaAtual} de {totalPaginas || 1}
+            </span>
+            <button 
+              disabled={paginaAtual === totalPaginas || totalPaginas === 0}
+              onClick={() => setPaginaAtual(prev => prev + 1)}
+              style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: '6px', padding: '4px 8px', cursor: paginaAtual === totalPaginas || totalPaginas === 0 ? 'not-allowed' : 'pointer', opacity: paginaAtual === totalPaginas || totalPaginas === 0 ? 0.5 : 1 }}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
-      ) : turmas.length === 0 ? (
-        <EmptyState icon="📚" title="Nenhuma turma criada"
-          description="Crie as turmas do ano letivo para iniciar o ensalamento de alunos."
-          action={<button className="btn btn-primary" onClick={() => { setEditingId(null); setShowModal(true) }}><Plus size={14} />Criar Primeira Turma</button>} />
-      ) : view === 'grid' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
-          {filtered.map(turma => {
-            const mat = alunosDaTurma(turma.id, turma.nome)
-            const pct = turma.capacidade > 0 ? Math.round((mat / turma.capacidade) * 100) : 0
-            const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
-            const lotada = mat >= turma.capacidade
-            return (
-              <div key={turma.id} className="card" style={{ padding: '20px', border: `1px solid ${color}20`, cursor: 'pointer', transition: 'border-color 0.2s' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = `${color}50`)}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = `${color}20`)}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-                  <OccupancyRing pct={pct} color={lotada ? '#ef4444' : pct >= 85 ? '#f59e0b' : color} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color }}>{turma.nome}</div>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => { setEditingId(turma.id); setShowModal(true) }}><Pencil size={12} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} title="Excluir" onClick={() => setConfirmId(turma.id)}><Trash2 size={12} /></button>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                      <span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
-                        {SEGMENTOS.find(s => s.codigo === turma.serie)?.nome || turma.serie}
-                      </span>
-                      <span className="badge badge-neutral">{turma.turno}</span>
-                      {turma.ano && <span className="badge badge-neutral">{turma.ano}</span>}
-                      {turma.unidade && <span className="badge badge-neutral" style={{ border: '1px dashed hsl(var(--border-subtle))' }}>🏢 {turma.unidade}</span>}
-                      {lotada && <span className="badge badge-danger">Lotada</span>}
-                    </div>
-                  </div>
+      </div>
+
+      {/* Modal Nova Turma */}
+      {isModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', width: '100%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 20, color: '#0f172a', margin: 0 }}>{isEditing ? 'Editar Turma' : 'Criar Nova Turma'}</h2>
+              <button onClick={handleCloseModal} style={{ border: 'none', background: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+            </div>
+            
+            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Nome da Turma *</label>
+                <input 
+                  className="form-input" 
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                  placeholder="Ex: 1º Ano A" 
+                  value={formData.nome}
+                  onChange={e => setFormData({ ...formData, nome: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Ano Letivo *</label>
+                <select 
+                  className="form-input" 
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                  value={formData.ano}
+                  onChange={e => setFormData({ ...formData, ano: e.target.value })}
+                  required
+                >
+                  <option value="">Selecione…</option>
+                  {cfgCalendarioLetivo?.map((c: any) => (
+                    <option key={c.id} value={c.ano}>{c.ano}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Segmento *</label>
+                <select 
+                  className="form-input" 
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                  value={formData.segmento}
+                  onChange={e => setFormData({ ...formData, segmento: e.target.value, serie: '' })}
+                  required
+                >
+                  <option value="">Selecione…</option>
+                  {cfgNiveisEnsino?.map((n: any) => (
+                    <option key={n.id} value={n.nome}>{n.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Série / Ano Escolar *</label>
+                <select 
+                  className="form-input" 
+                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                  value={formData.serie}
+                  onChange={e => setFormData({ ...formData, serie: e.target.value })}
+                  required
+                  disabled={!formData.segmento}
+                >
+                  <option value="">Selecione…</option>
+                  {seriesDisponiveis.map((s: any) => (
+                    <option key={s.id} value={s.nome}>{s.nome}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Turno</label>
+                  <select 
+                    className="form-input" 
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                    value={formData.turno}
+                    onChange={e => setFormData({ ...formData, turno: e.target.value })}
+                  >
+                    <option value="">Selecione…</option>
+                    {cfgTurnos?.map((t: any) => (
+                      <option key={t.id} value={t.nome}>{t.nome}</option>
+                    ))}
+                  </select>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '10px 12px', background: 'hsl(var(--bg-elevated))', borderRadius: 8, marginBottom: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>Alunos</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color }}>{mat}<span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>/{turma.capacidade}</span></div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>Sala</div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{turma.sala || '—'}</div>
-                  </div>
-                  <div style={{ gridColumn: '1/-1' }}>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>Professor(a) Responsável</div>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{turma.professor || '—'}</div>
-                  </div>
-                  <div style={{ gridColumn: '1/-1', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 6, marginTop: 2 }}>
-                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginBottom: 2 }}>Padrões de Pagamento</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {((turma as any).padraoPagamentoIds || []).length > 0 ? (
-                        ((turma as any).padraoPagamentoIds || []).map((pId: string) => {
-                          const p = (cfgPadroesPagamento || []).find((c: any) => c.id === pId)
-                          if (!p) return null
-                          return <span key={pId} className="badge badge-neutral" style={{ fontSize: 9, padding: '2px 6px', background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))' }}>{p.nome}</span>
-                        })
-                      ) : (
-                        <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Nenhum padrão vinculado</span>
-                      )}
-                    </div>
-                  </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Capacidade</label>
+                  <input 
+                    type="number"
+                    className="form-input" 
+                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '0 12px', fontSize: '13px' }}
+                    value={formData.capacidade}
+                    onChange={e => setFormData({ ...formData, capacidade: e.target.value })}
+                  />
                 </div>
+              </div>
 
-                <button className="btn btn-secondary btn-sm" style={{ width: '100%', fontSize: 12 }} onClick={() => { setEditingId(turma.id); setShowModal(true) }}>
-                  Ver detalhes e gerenciar
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                <button 
+                  type="button"
+                  onClick={handleCloseModal}
+                  style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  Cancelar
+                </button>
+                 <button 
+                  type="submit"
+                  className="neo-btn neo-btn-primary"
+                  style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', cursor: 'pointer', fontSize: '13px', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)' }}
+                >
+                  {isEditing ? 'Salvar Alterações' : 'Criar Turma'}
                 </button>
               </div>
-            )
-          })}
-        </div>
-      ) : (
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr><th>Turma</th><th>Segmento</th><th>Turno</th><th>Professor(a)</th><th>Sala</th><th>Ano</th><th>Padrões Pgto</th><th>Ocupacao</th><th>Acoes</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map(turma => {
-                const mat = alunosDaTurma(turma.id, turma.nome)
-                const pct = turma.capacidade > 0 ? Math.round((mat / turma.capacidade) * 100) : 0
-                const color = SEG_COLORS[turma.serie] ?? '#3b82f6'
-                const pgtoIds = (turma as any).padraoPagamentoIds || []
-                const padroes = (cfgPadroesPagamento || []).filter(p => pgtoIds.includes(p.id))
-                return (
-                  <tr key={turma.id}>
-                    <td>
-                      <span style={{ fontWeight: 800, fontSize: 15, color, fontFamily: 'Outfit,sans-serif' }}>{turma.nome}</span>
-                    </td>
-                    <td>
-                      <span className="badge badge-primary" style={{ background: `${color}20`, color, border: `1px solid ${color}40` }}>
-                        {SEGMENTOS.find(s => s.codigo === turma.serie)?.nome || turma.serie}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: 12 }}>{turma.turno}</td>
-                    <td style={{ fontSize: 12 }}>{turma.professor || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{turma.sala || '—'}</td>
-                    <td style={{ fontSize: 12, fontWeight: 700 }}>{turma.ano}</td>
-                    <td style={{ fontSize: 11, color: 'hsl(var(--text-muted))', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={padroes.map(p => p.nome).join(', ')}>
-                      {padroes.length > 0 ? padroes.map(p => p.nome).join(', ') : '—'}
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div className="progress-bar" style={{ width: 60 }}>
-                          <div className="progress-fill" style={{ width: `${Math.min(pct, 100)}%`, background: pct >= 100 ? '#ef4444' : pct >= 85 ? '#f59e0b' : color }} />
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: pct >= 100 ? '#ef4444' : 'hsl(var(--text-secondary))' }}>{mat}/{turma.capacidade}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Gerenciar" onClick={() => { setEditingId(turma.id); setShowModal(true) }}><Pencil size={12} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" style={{ color: '#f87171' }} onClick={() => setConfirmId(turma.id)}><Trash2 size={12} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {filtered.length === 0 && <div style={{ padding: '28px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>Nenhuma turma com esses filtros</div>}
+            </form>
+          </div>
         </div>
       )}
 
-      <TurmaModal open={showModal} onClose={() => setShowModal(false)} editingId={editingId} />
+      {/* Modal Listagem de Alunos */}
+      {isAlunosModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '700px', maxHeight: '80vh', overflow: 'hidden', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Header Gradiente Ultra Moderno */}
+            <div style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)', padding: '24px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', zIndex: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 10px rgba(255,255,255,0.3)' }}>
+                  <Users size={24} color="#fff" />
+                </div>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 22, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>Alunos da Turma</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
+                    <span style={{ fontWeight: 700, color: '#fff' }}>{selectedTurma?.nome}</span>
+                    <span>•</span>
+                    <span>{selectedTurma?.serie}</span>
+                    <span>•</span>
+                    <span style={{ padding: '1px 6px', background: 'rgba(255,255,255,0.2)', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{selectedTurma?.turno}</span>
+                    <span>•</span>
+                    <span>{selectedTurma?.ano}</span>
+                    <span>•</span>
+                    <span style={{ fontWeight: 700, color: '#fff' }}>{alunosDaTurma.length}/{selectedTurma?.capacidade}</span> Vagas
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setIsAlunosModalOpen(false)} style={{ border: 'none', background: 'rgba(255,255,255,0.1)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}>&times;</button>
+            </div>
+            
+            {/* Conteúdo com Scroll */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              {loadingAlunos ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>Carregando alunos...</div>
+              ) : alunosDaTurma.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>Nenhum aluno matriculado nesta turma.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {alunosDaTurma.map((aluno: any) => (
+                    <div key={aluno.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#f8fafc', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
+                      
+                      {/* Aluno (Foto + Nome + Matrícula) */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: aluno.foto ? `url(${aluno.foto}) center/cover` : '#cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: '18px' }}>
+                          {!aluno.foto && aluno.nome.charAt(0)}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
+                          <p style={{ fontSize: '11px', color: '#64748b', margin: 0 }}>Matrícula: {aluno.matricula || aluno.id}</p>
+                        </div>
+                      </div>
 
-      <ConfirmModal open={confirmId !== null} onClose={() => setConfirmId(null)} onConfirm={handleDelete}
-        message="A turma sera excluida permanentemente. Os alunos matriculados ficao sem turma." />
+                      {/* Responsáveis (Todas as linhas) */}
+                      <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '20px' }}>
+                        {aluno.responsaveis && aluno.responsaveis.length > 0 ? (
+                          aluno.responsaveis.map((resp: any, idx: number) => (
+                            <div key={idx} style={{ fontSize: '12px', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>{resp.nome}</span>
+                              <span style={{ padding: '1px 6px', background: '#e2e8f0', color: '#475569', borderRadius: '8px', fontSize: '10px', fontWeight: 700 }}>
+                                {resp.parentesco || 'N/A'}
+                              </span>
+                              {resp.isFinanceiro && (
+                                <span style={{ padding: '1px 4px', background: '#dbeafe', color: '#1e40af', borderRadius: '4px', fontSize: '9px', fontWeight: 700 }}>Fin</span>
+                              )}
+                              {resp.isPedagogico && (
+                                <span style={{ padding: '1px 4px', background: '#fef3c7', color: '#b45309', borderRadius: '4px', fontSize: '9px', fontWeight: 700 }}>Ped</span>
+                              )}
+                              {resp.isOutro && (
+                                <span style={{ padding: '1px 4px', background: '#e2e8f0', color: '#475569', borderRadius: '4px', fontSize: '9px', fontWeight: 700 }}>Outro</span>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Nenhum responsável</span>
+                        )}
+                      </div>
+
+                      {/* Status */}
+                      <span style={{ padding: '2px 8px', background: aluno.status === 'Ativo' ? '#dbeafe' : '#f3f4f6', color: aluno.status === 'Ativo' ? '#1e40af' : '#475569', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                        {aluno.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button 
+                  onClick={() => setIsAlunosModalOpen(false)}
+                  style={{ height: '40px', padding: '0 20px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '13px' }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ImportarTurmasModal 
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })}
+      />
     </div>
   )
 }

@@ -9,8 +9,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase.from('adiantamentos').select('*')
     if (error) throw new Error(error.message)
     
-    // Extract everything from jsonb 'dados' to keep interface flat
-    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    const result = (data || []).map(({ dados, ...row }) => ({ ...row, ...(dados || {}) }))
     
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=59' }
@@ -26,7 +25,19 @@ export async function POST(request: Request) {
     const supabase = await createProtectedClient()
 
     if (Array.isArray(body)) {
+      // 1. Fetch current IDs
+      const { data: current } = await supabase.from('adiantamentos').select('id')
+      const currentIds = (current || []).map(r => r.id)
+      const incomingIds = body.map(r => r.id).filter(Boolean)
+      
+      // 2. Identify deletions
+      const toDelete = currentIds.filter(id => !incomingIds.includes(id))
+      if (toDelete.length > 0) {
+        await supabase.from('adiantamentos').delete().in('id', toDelete)
+      }
+
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
+      
       const rows = body.map(buildRowAuth)
       const { error } = await supabase.from('adiantamentos').upsert(rows)
       if (error) throw new Error(error.message)

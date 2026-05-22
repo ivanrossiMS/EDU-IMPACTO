@@ -1,973 +1,894 @@
 'use client'
-import { useApiQuery } from '@/hooks/useApi';
+
+import React, { useState, useMemo, useEffect } from 'react'
+import { Plus, Search, Trash2, Edit2, Phone, Mail, Users, Filter, Download, Tag, CreditCard, X, Save, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
 import { useData } from '@/lib/dataContext'
-import { useState, useMemo, useRef, useEffect } from 'react'
-import Link from 'next/link'
-import {
-  Users, Search, Phone, Mail, MessageSquare,
-  ChevronRight, AlertTriangle, CheckCircle, Edit,
-  Wallet, UserCheck, Download, Plus, Settings, MapPin,
-  BookOpen, X, TrendingDown, Shield, Heart, User, ChevronDown,
-  Cpu, Briefcase, GraduationCap, ExternalLink, Zap,
-} from 'lucide-react'
-import { getInitials } from '@/lib/utils'
-import { CadastroResponsavelModal } from '@/components/alunos/CadastroResponsavelModal'
-
-interface Responsavel {
-  id?: string
-  codigo?: string
-  rfid?: string
-  rg?: string
-  profissao?: string
-  enderecoStr?: string
-  nome: string
-  telefone: string
-  email: string
-  cpf?: string
-  parentesco?: string
-  tipo?: string
-  respPedagogico?: boolean
-  respFinanceiro?: boolean
-  filhos: {
-    id: string; nome: string; turma: string; serie: string
-    frequencia: number; inadimplente: boolean; risco_evasao: string
-  }[]
-  inadimplente: boolean
-  totalFilhos: number
-}
-
-const RISCO_COLOR = { alto: '#ef4444', medio: '#f59e0b', baixo: '#10b981' }
-const RISCO_LABEL = { alto: '⚠ Alto', medio: '⚡ Médio', baixo: '✓ Baixo' }
 
 export default function ResponsaveisPage() {
-  // Data fetching via useApiQuery (modernizado para evitar staleness do localStorage)
-  const [responsaveisRaw, setResponsaveisRaw] = useState<any[]>([])
+  const queryClient = useQueryClient()
+  const { logSystemAction } = useData()
   
-  const { data: resResp } = useApiQuery<any>(
-    ['responsaveis'],
-    '/api/responsaveis?incluir_vinculos=1&limit=2000'
-  )
-  
-  useEffect(() => {
-    if (resResp) {
-      setResponsaveisRaw(Array.isArray(resResp.data) ? resResp.data : (Array.isArray(resResp) ? resResp : []))
-    }
-  }, [resResp])
-
-  const { data: resAlunos } = useApiQuery<any>(
-    ['alunos-raw'],
-    '/api/alunos?limit=2000'
-  )
-  const alunos = Array.isArray(resAlunos?.data) ? resAlunos.data : (Array.isArray(resAlunos) ? resAlunos : [])
-
   const [search, setSearch] = useState('')
-  const [searchResults, setSearchResults] = useState<Responsavel[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchDone, setSearchDone] = useState(false)
-  const [selecionado, setSelecionado] = useState<Responsavel & { _raw?: any } | null>(null)
-  const [showContato, setShowContato] = useState(false)
-  const [showCadastroModal, setShowCadastroModal] = useState(false)
-  const [responsavelEdicao, setResponsavelEdicao] = useState<any>(null)
-  const [mounted, setMounted]       = useState(false)
-  const [activeKpi, setActiveKpi]   = useState<string | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const [itensPorPagina, setItensPorPagina] = useState(10)
 
-  useEffect(() => setMounted(true), [])
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingResponsavel, setEditingResponsavel] = useState<any | null>(null)
+  const [buscaAluno, setBuscaAluno] = useState('')
+  const [resultadosAlunos, setResultadosAlunos] = useState<any[]>([])
+  
+  // Estado do formulário do modal
+  const [formResponsaveis, setFormResponsaveis] = useState([{ 
+    id: '', nome: '', dataNasc: '', 
+    email: '', telefone: '', profissao: '', rfid: '', 
+    parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
+    isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false,
+    alunosVinculados: [] as string[]
+  }])
+  const [loading, setLoading] = useState(false)
+
+  // Query para buscar responsáveis (Cache via React Query)
+  const { data: apiResponse, isLoading: loadingList, isFetching } = useApiQuery<{ data: any[], total: number }>(
+    ['responsaveis', String(paginaAtual), String(itensPorPagina), search],
+    '/api/responsaveis',
+    { page: paginaAtual, limit: itensPorPagina, search: search }
+  )
+
+  const responsaveis = apiResponse?.data || []
+  const total = apiResponse?.total || 0
 
   useEffect(() => {
-    const id = 'kpi-resp-style'
-    if (document.getElementById(id)) return
-    const st = document.createElement('style')
-    st.id = id
-    st.textContent = `
-      @keyframes resp-slide-in { from{opacity:0;transform:translateY(-10px)} to{opacity:1;transform:translateY(0)} }
-      @keyframes spin { to { transform: rotate(360deg) } }
-      @keyframes resp-card-in { from{opacity:0;transform:translateY(16px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
-      @keyframes rfid-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(99,102,241,0.4)} 50%{box-shadow:0 0 0 6px rgba(99,102,241,0)} }
-      .resp-kpi-panel { animation: resp-slide-in 0.22s ease; }
-      .resp-card-premium { animation: resp-card-in 0.28s cubic-bezier(0.34,1.56,0.64,1) both; }
-      .resp-card-premium:hover .resp-card-glow { opacity:1 !important; }
-      .resp-card-premium:hover .resp-card-inner { transform: translateY(-4px); box-shadow: 0 24px 60px rgba(0,0,0,0.22), 0 8px 20px rgba(0,0,0,0.12) !important; }
-      .resp-card-inner { transition: transform 0.22s cubic-bezier(0.34,1.2,0.64,1), box-shadow 0.22s ease; }
-      .resp-action-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
-      .resp-action-btn { transition: all 0.15s; }
-      .rfid-chip { animation: rfid-pulse 2.5s infinite; }
-    `
-
-    document.head.appendChild(st)
-  }, [])
-
-  // ── Transformando dados da tabela de responsáveis ───────────────────────
-  const responsaveis = useMemo<Responsavel[]>(() => {
-    return (responsaveisRaw || []).map(r => {
-        const filhos = (r._vinculos || []).map((v:any) => ({
-           id: v.aluno?.id || v.aluno_id,
-           nome: v.aluno?.nome || 'Aluno Desconhecido',
-           turma: v.aluno?.turma || '',
-           serie: v.aluno?.serie || '',
-           frequencia: v.aluno?.frequencia || 0,
-           inadimplente: v.aluno?.inadimplente || false,
-           risco_evasao: v.aluno?.risco_evasao || 'baixo',
-           foto: v.aluno?.foto || v.aluno?.dados?.foto || ''
-        }))
-
-        return {
-          id: r.id, codigo: r.codigo, rfid: r.rfid, rg: r.rg, profissao: r.profissao, 
-          enderecoStr: r.endereco?.logradouro ? `${r.endereco.logradouro}, ${r.endereco.numero || 'SN'}` : '',
-          nome: r.nome, telefone: r.celular || r.telefone || 'Não informado', email: r.email || '',
-          cpf: r.cpf, parentesco: r.parentesco, tipo: r.tipo,
-          respPedagogico: r.dados?.respPedagogico || false,
-          respFinanceiro: r.dados?.respFinanceiro || false,
-          inadimplente: filhos.some((f:any) => f.inadimplente),
-          filhos,
-          totalFilhos: filhos.length,
-          _raw: r 
+    if (buscaAluno.length >= 3) {
+      const fetchAlunos = async () => {
+        try {
+          const res = await fetch(`/api/alunos?search=${buscaAluno}`)
+          const json = await res.json()
+          setResultadosAlunos(json.data || [])
+        } catch (e) {
+          console.error('Error searching students:', e)
         }
-    }).sort((a:any, b:any) => a.nome.localeCompare(b.nome))
-  }, [responsaveisRaw])
-
-  // ── Search-as-you-type: servidor, mínimo 3 chars, debounce 300ms ──────────
-  const transformResp = (r: any): Responsavel => {
-    const filhos = (r._vinculos || []).map((v: any) => ({
-      id: v.aluno?.id || v.aluno_id,
-      nome: v.aluno?.nome || 'Aluno Desconhecido',
-      turma: v.aluno?.turma || '',
-      serie: v.aluno?.serie || '',
-      frequencia: v.aluno?.frequencia || 0,
-      inadimplente: v.aluno?.inadimplente || false,
-      risco_evasao: v.aluno?.risco_evasao || 'baixo',
-      foto: v.aluno?.foto || v.aluno?.dados?.foto || ''
-    }))
-    return {
-      id: r.id, codigo: r.codigo, rfid: r.rfid, rg: r.rg, profissao: r.profissao,
-      enderecoStr: r.endereco?.logradouro ? `${r.endereco.logradouro}, ${r.endereco.numero || 'SN'}` : '',
-      nome: r.nome, telefone: r.celular || r.telefone || 'Não informado', email: r.email || '',
-      cpf: r.cpf, parentesco: r.parentesco, tipo: r.tipo,
-      respPedagogico: r.dados?.respPedagogico || false,
-      respFinanceiro: r.dados?.respFinanceiro || false,
-      inadimplente: filhos.some((f: any) => f.inadimplente),
-      filhos, totalFilhos: filhos.length,
-      _raw: r
-    } as any
-  }
-
-  useEffect(() => {
-    const q = search.trim()
-    if (q.length < 3) {
-      setSearchResults([])
-      setSearchDone(false)
-      setSearchLoading(false)
-      return
+      }
+      fetchAlunos()
+    } else {
+      setResultadosAlunos([])
     }
-    setSearchLoading(true)
-    setSearchDone(false)
-    const timer = setTimeout(() => {
-      let cancelled = false
-      fetch(`/api/responsaveis?q=${encodeURIComponent(q)}&incluir_vinculos=1&limit=50`)
-        .then(r => r.json())
-        .then(json => {
-          if (cancelled) return
-          const lista = Array.isArray(json) ? json : (json.data ?? [])
-          setSearchResults(lista.map(transformResp))
-          setSearchDone(true)
-        })
-        .catch(() => { if (!cancelled) { setSearchResults([]); setSearchDone(true) } })
-        .finally(() => { if (!cancelled) setSearchLoading(false) })
-    }, 300)
-    return () => { clearTimeout(timer) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search])
+  }, [buscaAluno])
 
-
-
-  // ── KPI data ──────────────────────────────────────────────────────────────
-  const totalResp     = mounted ? responsaveis.length : 0
-  const inadimplentes = mounted ? responsaveis.filter(r => r.inadimplente).length : 0
-  const comRisco      = mounted ? responsaveis.filter(r => r.filhos.some(f => f.risco_evasao !== 'baixo')).length : 0
-  const freqCrit      = mounted ? responsaveis.filter(r => r.filhos.some(f => f.frequencia < 75)).length : 0
-  const semProblemas  = mounted ? responsaveis.filter(r => !r.inadimplente && r.filhos.every(f => f.risco_evasao === 'baixo')).length : 0
-
-  // Tipos de responsável
-  const totalMae = mounted ? responsaveis.filter(r => r.tipo === 'mae').length : 0
-  const totalPai = mounted ? responsaveis.filter(r => r.tipo === 'pai').length : 0
-  const totalPed = mounted ? responsaveis.filter(r => r.respPedagogico).length : 0
-  const totalFin = mounted ? responsaveis.filter(r => r.respFinanceiro).length : 0
-
-  // Filtros por KPI
-  const KPI_FILTERS: Record<string, (r: Responsavel) => boolean> = {
-    total:       () => true,
-    inadimpl:    r => r.inadimplente,
-    risco:       r => r.filhos.some(f => f.risco_evasao !== 'baixo'),
-    freq:        r => r.filhos.some(f => f.frequencia < 75),
-    semProbl:    r => !r.inadimplente && r.filhos.every(f => f.risco_evasao === 'baixo'),
-    mae:         r => r.tipo === 'mae',
-    pai:         r => r.tipo === 'pai',
-    pedagogico:  r => !!r.respPedagogico,
-    financeiro:  r => !!r.respFinanceiro,
+  const totalPaginas = Math.ceil(total / itensPorPagina)
+  
+  const getPageNumbers = () => {
+    const pages = []
+    const maxVisiblePages = 5
+    
+    if (totalPaginas <= maxVisiblePages) {
+      for (let i = 1; i <= totalPaginas; i++) {
+        pages.push(i)
+      }
+    } else {
+      let start = Math.max(1, paginaAtual - 2)
+      let end = Math.min(totalPaginas, paginaAtual + 2)
+      
+      if (paginaAtual <= 3) {
+        start = 1
+        end = maxVisiblePages
+      } else if (paginaAtual >= totalPaginas - 2) {
+        start = totalPaginas - maxVisiblePages + 1
+        end = totalPaginas
+      }
+      
+      for (let i = start; i <= end; i++) {
+        pages.push(i)
+      }
+    }
+    return pages
   }
 
-  type KpiItem = {
-    id: string; label: string; value: number; sub: string
-    color: string; bg: string; border: string; Icon: any
-    trend?: string | null; clickable: boolean; row: number
+  const responsaveisPaginados = responsaveis
+
+  const handleNovoResponsavel = () => {
+    setEditingResponsavel(null)
+    setFormResponsaveis([{ 
+      id: '', nome: '', dataNasc: '', 
+      email: '', telefone: '', profissao: '', rfid: '', 
+      parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 
+      isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false,
+      alunosVinculados: []
+    }])
+    setIsModalOpen(true)
   }
 
-  const KPIS: KpiItem[] = [
-    // Linha 1 – status
-    { id:'total',    label:'Total Responsáveis',  value:totalResp,     sub:`${(alunos || []).length} aluno(s) vinculado(s)`, color:'#6366f1', bg:'rgba(99,102,241,0.08)', border:'rgba(99,102,241,0.2)',  Icon:Users,          trend:null,                       clickable:false,        row:1 },
-    { id:'inadimpl', label:'Com Inadimplência',   value:inadimplentes, sub:totalResp?`${((inadimplentes/totalResp)*100).toFixed(1)}% do total`:'—',                color:'#ef4444', bg:'rgba(239,68,68,0.08)',   border:'rgba(239,68,68,0.2)',   Icon:Wallet,         trend:inadimplentes>0?'danger':'ok', clickable:inadimplentes>0, row:1 },
-    { id:'risco',    label:'Filhos em Risco',     value:comRisco,      sub:'família(s) com alertas',                 color:'#f59e0b', bg:'rgba(245,158,11,0.08)', border:'rgba(245,158,11,0.2)', Icon:AlertTriangle,  trend:comRisco>0?'warn':'ok',     clickable:comRisco>0,   row:1 },
-    { id:'freq',     label:'Freq. Crítica (<75%)',value:freqCrit,      sub:'responsável(is) afetados',               color:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.2)',  Icon:TrendingDown,   trend:freqCrit>0?'warn':'ok',     clickable:freqCrit>0,   row:1 },
-    { id:'semProbl', label:'Sem Pendências',      value:semProblemas,  sub:'situação regular',                       color:'#10b981', bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.2)',  Icon:Shield,         trend:null,                       clickable:false,        row:1 },
-    // Linha 2 – tipos
-    { id:'mae',         label:'Mães',              value:totalMae, sub:'responsáveis do tipo Mãe',   color:'#ec4899', bg:'rgba(236,72,153,0.08)',  border:'rgba(236,72,153,0.2)',  Icon:Heart,  trend:null, clickable:totalMae>0,  row:2 },
-    { id:'pai',         label:'Pais',              value:totalPai, sub:'responsáveis do tipo Pai',   color:'#3b82f6', bg:'rgba(59,130,246,0.08)',  border:'rgba(59,130,246,0.2)',  Icon:User,   trend:null, clickable:totalPai>0,  row:2 },
-    { id:'pedagogico',  label:'Resp. Pedagógico',  value:totalPed, sub:'autorização pedagógica',     color:'#8b5cf6', bg:'rgba(139,92,246,0.08)', border:'rgba(139,92,246,0.2)',  Icon:BookOpen, trend:null, clickable:totalPed>0, row:2 },
-    { id:'financeiro',  label:'Resp. Financeiro',  value:totalFin, sub:'responsável de pagamento',   color:'#10b981', bg:'rgba(16,185,129,0.08)', border:'rgba(16,185,129,0.2)',  Icon:Wallet, trend:null, clickable:totalFin>0,  row:2 },
-  ]
-
-  const kpiFiltered = useMemo(() => {
-    if (!activeKpi || !mounted) return []
-    return responsaveis.filter(KPI_FILTERS[activeKpi] ?? (() => true))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeKpi, responsaveis, mounted])
-
-  const activeKpiData = KPIS.find(k => k.id === activeKpi)
-  const toggleKpi = (id: string) => setActiveKpi(p => p === id ? null : id)
-
-  const renderKpiCard = (k: KpiItem) => {
-    const isActive = activeKpi === k.id
-    return (
-      <div key={k.id}
-        onClick={() => k.clickable && toggleKpi(k.id)}
-        style={{
-          background: isActive ? k.bg.replace('0.08','0.16') : k.bg,
-          border:`2px solid ${isActive ? k.color : k.border}`,
-          borderRadius:16, padding:'18px 20px',
-          display:'flex', flexDirection:'column', gap:10,
-          cursor: k.clickable ? 'pointer' : 'default',
-          boxShadow: isActive ? `0 6px 24px ${k.color}30` : 'none',
-          transition:'all 0.18s', position:'relative',
-        }}
-        onMouseEnter={e => { if (!isActive && k.clickable) { const el = e.currentTarget as HTMLDivElement; el.style.transform='translateY(-3px)'; el.style.boxShadow=`0 8px 24px ${k.color}22` }}}
-        onMouseLeave={e => { if (!isActive) { const el = e.currentTarget as HTMLDivElement; el.style.transform='translateY(0)'; el.style.boxShadow=isActive?`0 6px 24px ${k.color}30`:'none' }}}
-      >
-        {isActive && (
-          <div style={{ position:'absolute', top:10, right:10, width:20, height:20, borderRadius:'50%', background:k.color, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <ChevronDown size={11} color="#fff"/>
-          </div>
-        )}
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-          <div style={{ width:40, height:40, borderRadius:12, background:`${k.color}20`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <k.Icon size={20} color={k.color}/>
-          </div>
-          {k.trend === 'danger' && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:'rgba(239,68,68,0.12)', color:'#ef4444', fontWeight:700 }}>⚠ Atenção</span>}
-          {k.trend === 'warn'   && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:'rgba(245,158,11,0.12)', color:'#f59e0b', fontWeight:700 }}>⚠ Atenção</span>}
-          {k.trend === 'ok'     && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:'rgba(16,185,129,0.12)', color:'#10b981', fontWeight:700 }}>✓ OK</span>}
-        </div>
-        <div>
-          <div style={{ fontSize:32, fontWeight:900, color:k.color, fontFamily:'Outfit,sans-serif', lineHeight:1 }}>{mounted ? k.value : '—'}</div>
-          <div style={{ fontWeight:700, fontSize:12, marginTop:4 }}>{k.label}</div>
-          <div suppressHydrationWarning style={{ fontSize:11, color:'hsl(var(--text-muted))', marginTop:2 }}>{k.sub}</div>
-        </div>
-        {k.clickable && (
-          <div style={{ fontSize:10, color:isActive ? k.color : 'hsl(var(--text-muted))', fontWeight:600 }}>
-            {isActive ? '▲ Fechar lista' : '▼ Ver responsáveis'}
-          </div>
-        )}
-      </div>
-    )
+  const handleEdit = (resp: any) => {
+    setEditingResponsavel(resp)
+    setFormResponsaveis([{
+      id: resp.id || '',
+      nome: resp.nome || '',
+      dataNasc: resp.data_nasc || resp.dataNasc || '',
+      email: resp.email || '',
+      telefone: resp.telefone || '',
+      profissao: resp.profissao || '',
+      rfid: resp.rfid || '',
+      parentesco: resp.alunosVinculados?.find((a: any) => a.parentesco)?.parentesco || resp.parentesco || '',
+      diasAcesso: resp.dias_acesso || resp.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+      isFinanceiro: resp.alunosVinculados?.some((a: any) => a.isFinanceiro) || false,
+      isPedagogico: resp.alunosVinculados?.some((a: any) => a.isPedagogico) || false,
+      isOutro: resp.alunosVinculados?.some((a: any) => a.isOutro) || false,
+      proibido: resp.proibido === true,
+      alunosVinculados: resp.alunosVinculados || resp.aluno_responsavel?.map((ar: any) => ar.aluno_id) || []
+    }])
+    setIsModalOpen(true)
   }
 
-  // Subcomponente: painel de responsáveis filtrados ─────────────────────────
-  const KpiPanel = () => {
-    if (!activeKpi || !activeKpiData || !mounted) return null
-    return (
-      <div className="resp-kpi-panel" style={{ marginBottom:24, borderRadius:16, border:`2px solid ${activeKpiData.color}40`, overflow:'hidden', background:'hsl(var(--bg-elevated))' }}>
-        <div style={{ padding:'14px 20px', background:activeKpiData.bg, borderBottom:'1px solid hsl(var(--border-subtle))', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ width:32, height:32, borderRadius:9, background:`${activeKpiData.color}20`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <activeKpiData.Icon size={15} color={activeKpiData.color}/>
-            </div>
-            <div>
-              <div style={{ fontWeight:800, fontSize:13 }}>{activeKpiData.label}</div>
-              <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{kpiFiltered.length} responsável{kpiFiltered.length!==1?'is':''}</div>
-            </div>
-          </div>
-          <button onClick={() => setActiveKpi(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', gap:4, fontSize:13 }}>
-            <X size={15}/> Fechar
-          </button>
-        </div>
-
-        {kpiFiltered.length === 0 ? (
-          <div style={{ padding:'40px', textAlign:'center', color:'hsl(var(--text-muted))' }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>🎉</div>
-            <div style={{ fontWeight:600 }}>Nenhum responsável nesta categoria</div>
-          </div>
-        ) : (
-          <div style={{ maxHeight:460, overflowY:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse' }}>
-              <thead>
-                <tr style={{ background:'hsl(var(--bg-overlay))' }}>
-                  {['Responsável','Parentesco','Resp.Ped.','Resp.Fin.','Celular','Financeiro','Filhos','Ação'].map(h => (
-                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:'hsl(var(--text-muted))', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {kpiFiltered.map((r, i) => {
-                  const riscoMax = r.filhos.some(f => f.risco_evasao === 'alto') ? 'alto' : r.filhos.some(f => f.risco_evasao === 'medio') ? 'medio' : 'baixo'
-                  const rc = RISCO_COLOR[riscoMax as keyof typeof RISCO_COLOR]
-                  return (
-                    <tr key={i} style={{ borderTop:'1px solid hsl(var(--border-subtle))' }}>
-                      <td>
-                        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                          <div className="avatar" style={{ width:34, height:34, fontSize:12, background:`${rc}20`, color:rc, borderRadius:10, border:`2px solid ${rc}30`, flexShrink:0 }}>
-                            {getInitials(r.nome)}
-                          </div>
-                          <div>
-                            <div style={{ fontSize:13, fontWeight:700 }}>{r.nome}</div>
-                            {r.cpf && <div style={{ fontSize:10, color:'hsl(var(--text-muted))', fontFamily:'monospace' }}>{r.cpf}</div>}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background:'rgba(99,102,241,0.1)', color:'#818cf8', fontWeight:700 }}>
-                          {r.parentesco || r.tipo || '—'}
-                        </span>
-                      </td>
-                      <td style={{ textAlign:'center' }}>
-                        {r.respPedagogico ? <span className="badge badge-success" style={{ fontSize:10 }}>✓ Sim</span> : <span style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>—</span>}
-                      </td>
-                      <td style={{ textAlign:'center' }}>
-                        {r.respFinanceiro ? <span className="badge badge-success" style={{ fontSize:10 }}>✓ Sim</span> : <span style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>—</span>}
-                      </td>
-                      <td>
-                        {r.telefone && r.telefone !== 'Não informado'
-                          ? <a href={`tel:${r.telefone}`} style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#3b82f6', textDecoration:'none' }}><Phone size={11}/>{r.telefone}</a>
-                          : <span style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>—</span>}
-                      </td>
-                      <td>
-                        {r.inadimplente
-                          ? <span className="badge badge-danger" style={{ fontSize:10 }}>💳 Inadimplente</span>
-                          : <span className="badge badge-success" style={{ fontSize:10 }}>Regular</span>}
-                      </td>
-                      <td>
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
-                          {r.filhos.map(f => (
-                            <Link key={f.id} href={`/academico/alunos/ficha?id=${f.id}`}>
-                              <span style={{ fontSize:10, padding:'2px 8px', borderRadius:8, background:'rgba(99,102,241,0.1)', color:'#818cf8', fontWeight:700, cursor:'pointer' }}>
-                                {f.nome.split(' ')[0]}
-                              </span>
-                            </Link>
-                          ))}
-                        </div>
-                      </td>
-                      <td>
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize:11 }} onClick={() => setSelecionado(r)}>
-                          <UserCheck size={11}/> Detalhar
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    )
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este responsável?')) return
+    try {
+      const respExcluido = apiResponse?.data?.find((r: any) => r.id === id)
+      const nomeResp = respExcluido?.nome || id
+      const res = await fetch(`/api/responsaveis?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Erro ao excluir')
+      
+      logSystemAction(
+        'Acadêmico (Responsáveis)',
+        'Exclusão',
+        `Exclusão do responsável ${nomeResp}`,
+        { registroId: id, detalhesAntes: respExcluido }
+      )
+      
+      queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+    } catch (e: any) {
+      alert(e.message)
+    }
   }
+
+  const handleInputChange = (field: string, value: any, index: number) => {
+    const updated = [...formResponsaveis]
+    updated[index] = { ...updated[index], [field]: value }
+    setFormResponsaveis(updated)
+  }
+
+  const handleSave = async () => {
+    setLoading(true)
+    try {
+      const resp = formResponsaveis[0] // Assume apenas um item
+      const payload = {
+        ...resp,
+        alunos_vinculados: resp.alunosVinculados.map((aluno: any) => ({
+          aluno_id: typeof aluno === 'object' ? aluno.id : aluno,
+          parentesco: resp.parentesco,
+          resp_pedagogico: resp.isPedagogico,
+          resp_financeiro: resp.isFinanceiro,
+          resp_outro: resp.isOutro
+        }))
+      }
+
+      const method = editingResponsavel ? 'PUT' : 'POST'
+      const url = editingResponsavel ? `/api/responsaveis?id=${editingResponsavel.id}` : '/api/responsaveis'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json()
+        throw new Error(errorData.error || 'Erro ao salvar responsável')
+      }
+      
+      const savedData = await res.json()
+      const realId = savedData.id || editingResponsavel?.id || payload.id
+      logSystemAction(
+        'Acadêmico (Responsáveis)',
+        editingResponsavel ? 'Edição' : 'Cadastro',
+        `${editingResponsavel ? 'Atualização' : 'Cadastro'} do responsável ${payload.nome}`,
+        { registroId: realId, detalhesDepois: payload }
+      )
+      
+      queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+      setIsModalOpen(false)
+      setEditingResponsavel(null)
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
 
   return (
-    <div>
-      {/* ── Header ── */}
-      <div className="page-header" style={{ marginBottom:28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="page-container" style={{ padding: 24, background: '#f8fafc', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">Responsáveis</h1>
-          <p className="page-subtitle" suppressHydrationWarning>
-            {mounted ? responsaveis.length : '—'} responsável(is) cadastrado(s) · {mounted ? (alunos || []).length : '—'} aluno(s) no sistema
-          </p>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            Responsáveis
+            {isFetching && <UpdatingIndicator />}
+          </h1>
+          <p style={{ fontSize: 14, color: '#64748b', marginTop: 4 }}>Gerenciamento de pais e responsáveis do sistema</p>
         </div>
-        <div>
-          <button 
-             className="btn btn-primary" 
-             onClick={() => { setResponsavelEdicao(null); setShowCadastroModal(true); }}>
-             <Plus size={16}/> Novo Responsável
-          </button>
-        </div>
+        <button
+          onClick={handleNovoResponsavel}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '10px 20px',
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.4)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.3)';
+          }}
+        >
+          <Plus size={16} /> Novo Responsável
+        </button>
       </div>
 
-      {/* Orientação */}
-      {mounted && responsaveis.length > 0 && (
-        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12, fontSize:12, color:'hsl(var(--text-muted))' }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:'#6366f1', display:'inline-block' }}/>
-          Clique em qualquer card para filtrar e ver a lista de responsáveis
-        </div>
-      )}
-
-      {/* ══ KPI Cards — Linha 1: Status ══ */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:14, marginBottom: ['total','inadimpl','risco','freq','semProbl'].includes(activeKpi||'') ? 0 : 16 }}>
-        {KPIS.filter(k => k.row === 1).map(renderKpiCard)}
-      </div>
-
-      {/* Panel linha 1 */}
-      {['total','inadimpl','risco','freq','semProbl'].includes(activeKpi||'') && <KpiPanel/>}
-
-
-
-      {/* ── Hero Search ── */}
-      <div style={{
-        display:'flex', flexDirection:'column', alignItems:'center', gap:16,
-        padding:'28px 24px', marginBottom:24,
-        background:'linear-gradient(135deg,rgba(99,102,241,0.04),rgba(16,185,129,0.03))',
-        border:'1px solid hsl(var(--border-subtle))', borderRadius:20,
-      }}>
-        <div style={{ textAlign:'center' }}>
-          <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>🔍 Buscar Responsável</div>
-          <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            Digite ao menos <strong>3 letras</strong> para buscar por nome, sobrenome, CPF ou iniciais
-          </div>
-        </div>
-        <div style={{ position:'relative', width:'100%', maxWidth:560 }}>
-          <Search size={18} style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', color:'hsl(var(--text-muted))' }}/>
-          {searchLoading && (
-            <div style={{ position:'absolute', right:search?44:16, top:'50%', transform:'translateY(-50%)', width:16, height:16, borderRadius:'50%', border:'2px solid rgba(99,102,241,0.3)', borderTopColor:'#6366f1', animation:'spin 0.7s linear infinite' }}/>
-          )}
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
+          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
           <input
-            ref={searchRef}
             className="form-input"
-            style={{ paddingLeft:48, paddingRight:search?44:16, fontSize:15, height:52, borderRadius:14,
-              boxShadow: search.length>=3 ? '0 0 0 3px rgba(99,102,241,0.15)' : 'none',
-              transition:'box-shadow 0.2s'
-            }}
-            placeholder="Ex: Ivan Rossi, Fra, 123.456... (mín. 3 letras)"
+            style={{ paddingLeft: 36, background: '#fff' }}
+            placeholder="Buscar por nome, e-mail, telefone ou RFID..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            autoFocus
+            onChange={e => {
+              setSearch(e.target.value)
+              setPaginaAtual(1)
+            }}
           />
-          {search && (
-            <button onClick={() => { setSearch(''); setSearchResults([]); setSearchDone(false); }}
-              style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'hsl(var(--text-muted))', display:'flex' }}>
-              <X size={16}/>
-            </button>
-          )}
         </div>
-
-        {/* Status da busca */}
-        {search.length === 0 && (
-          <div style={{ fontSize:11, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', gap:6 }}>
-            <span style={{ width:6, height:6, borderRadius:'50%', background:'#6366f1', display:'inline-block', opacity:.5 }}/>
-            Nenhum responsável exibido antes da busca
-          </div>
-        )}
-        {search.length > 0 && search.length < 3 && (
-          <div style={{ fontSize:12, color:'#f59e0b', fontWeight:600, display:'flex', alignItems:'center', gap:6 }}>
-            <span>⏳</span> Mais {3 - search.length} letra{3 - search.length > 1 ? 's' : ''} para iniciar a busca…
-          </div>
-        )}
-        {searchDone && !searchLoading && search.length >= 3 && (
-          <div style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-            {searchResults.length === 0
-              ? '🕵️ Nenhum resultado encontrado'
-              : <><strong style={{ color:'#6366f1' }}>{searchResults.length}</strong> resultado{searchResults.length !== 1 ? 's' : ''} encontrado{searchResults.length !== 1 ? 's' : ''}</>
-            }
-          </div>
-        )}
+        <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
+          <Filter size={16} /> Filtros
+        </button>
+        <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
+          <Download size={16} /> Exportar
+        </button>
       </div>
 
-      {/* ── Results ── */}
-      <div suppressHydrationWarning>
-        {!mounted ? null : search.length < 3 ? (
-          /* Estado inicial: aguardando busca */
-          <div style={{ textAlign:'center', padding:'52px 24px', color:'hsl(var(--text-muted))', borderRadius:20, border:'1.5px dashed hsl(var(--border-subtle))', background:'hsl(var(--bg-elevated))' }}>
-            <Search size={40} style={{ margin:'0 auto 16px', opacity:0.15 }}/>
-            <div style={{ fontSize:15, fontWeight:700, marginBottom:8, color:'hsl(var(--text-secondary))' }}>Busque para ver os responsáveis</div>
-            <div style={{ fontSize:13, maxWidth:360, margin:'0 auto' }}>
-              Digite ao menos <strong style={{ color:'#6366f1' }}>3 letras</strong> no campo acima para buscar por nome, sobrenome ou CPF.
-            </div>
-            {mounted && responsaveis.length > 0 && (
-              <div style={{ marginTop:20, fontSize:12, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
-                <span style={{ width:6, height:6, borderRadius:'50%', background:'#6366f1', display:'inline-block' }}/>
-                {responsaveis.length} responsável(is) no sistema — use os cards acima para filtrar por categoria
-              </div>
+      {/* Table */}
+      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', color: '#fff' }}>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>ID</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Nome Completo</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Alunos Vinculados</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Tipo</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Contato</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Dias de Acesso</th>
+              <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Permissão</th>
+              <th style={{ textAlign: 'center', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingList ? (
+              <TableSkeleton rows={10} cols={8} />
+            ) : responsaveisPaginados.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>
+                  Nenhum responsável encontrado.
+                </td>
+              </tr>
+            ) : (
+              responsaveisPaginados.map(resp => (
+                <tr key={resp.id} style={{ borderBottom: '1px solid #e2e8f0', background: '#fff', transition: 'background 0.2s' }}>
+                  <td style={{ padding: '14px 16px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{resp.codigo || resp.id?.substring(0, 8)}</td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 700, color: '#1e293b' }}>{resp.nome}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {resp.alunosVinculados && resp.alunosVinculados.length > 0 ? (
+                        resp.alunosVinculados.map((aluno: any) => (
+                          <span key={aluno.id} style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Users size={12} style={{ color: '#3b82f6' }} /> {aluno.nome || `ID: ${aluno.id}`}
+                            {aluno.parentesco && <span style={{ marginLeft: 4, padding: '2px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '12px', fontSize: 10, fontWeight: 700, textTransform: 'capitalize' }}>{aluno.parentesco}</span>}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum aluno</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {resp.alunosVinculados?.some((aluno: any) => aluno.isFinanceiro) && (
+                        <span style={{ padding: '2px 8px', background: '#10b981', color: '#fff', borderRadius: '12px', fontSize: 11, fontWeight: 700 }}>Financeiro</span>
+                      )}
+                      {resp.alunosVinculados?.some((aluno: any) => aluno.isPedagogico) && (
+                        <span style={{ padding: '2px 8px', background: '#8b5cf6', color: '#fff', borderRadius: '12px', fontSize: 11, fontWeight: 700 }}>Pedagógico</span>
+                      )}
+                      {resp.alunosVinculados?.some((aluno: any) => aluno.isOutro) && (
+                        <span style={{ padding: '2px 8px', background: '#f59e0b', color: '#fff', borderRadius: '12px', fontSize: 11, fontWeight: 700 }}>Outro</span>
+                      )}
+                      {!resp.alunosVinculados?.some((aluno: any) => aluno.isFinanceiro || aluno.isPedagogico || aluno.isOutro) && (
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>-</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {resp.telefone && (
+                        <span style={{ fontSize: 12, color: '#475569', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Phone size={12} style={{ color: '#10b981' }} /> {resp.telefone}
+                        </span>
+                      )}
+                      {resp.email && (
+                        <span style={{ fontSize: 12, color: '#475569', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Mail size={12} style={{ color: '#3b82f6' }} /> {resp.email}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {resp.dias_acesso && resp.dias_acesso.length > 0 ? (
+                        resp.dias_acesso.map((dia: string) => (
+                          <span key={dia} style={{ padding: '2px 6px', background: '#f1f5f9', color: '#475569', borderRadius: '4px', fontSize: 11, fontWeight: 700 }}>
+                            {dia}
+                          </span>
+                        ))
+                      ) : (
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>Nenhum dia</span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ 
+                      padding: '4px 10px', 
+                      borderRadius: '20px', 
+                      fontSize: 11, 
+                      fontWeight: 700, 
+                      textTransform: 'uppercase',
+                      background: resp.proibido ? '#fee2e2' : '#dcfce7',
+                      color: resp.proibido ? '#991b1b' : '#166534'
+                    }}>
+                      {resp.proibido ? 'Proibido' : 'Liberado'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+                      <button
+                        onClick={() => handleEdit(resp)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: '1px solid #e2e8f0',
+                          background: '#fff',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Editar"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(resp.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: '1px solid #fecaca',
+                          background: '#fef2f2',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                        title="Excluir"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
             )}
-          </div>
-        ) : searchLoading ? (
-          /* Carregando */
-          <div style={{ textAlign:'center', padding:'52px 24px', color:'hsl(var(--text-muted))' }}>
-            <div style={{ width:36, height:36, borderRadius:'50%', border:'3px solid rgba(99,102,241,0.2)', borderTopColor:'#6366f1', animation:'spin 0.7s linear infinite', margin:'0 auto 16px' }}/>
-            <div style={{ fontSize:13, fontWeight:600 }}>Buscando &quot;{search}&quot;…</div>
-          </div>
-        ) : searchResults.length === 0 ? (
-          /* Sem resultados */
-          <div style={{ textAlign:'center', padding:'48px', color:'hsl(var(--text-muted))' }}>
-            <div style={{ fontSize:36, marginBottom:12 }}>🕵️</div>
-            <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Nenhum responsável encontrado</div>
-            <div style={{ fontSize:13 }}>Tente outro nome, sobrenome ou CPF</div>
-          </div>
-        ) : (
-          /* Resultados */
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(400px, 1fr))', gap:20 }}>
-            {searchResults.map((resp, cardIdx) => {
-              const riscoMax = resp.filhos.some(f => f.risco_evasao === 'alto') ? 'alto' : resp.filhos.some(f => f.risco_evasao === 'medio') ? 'medio' : 'baixo'
-              const rc = RISCO_COLOR[riscoMax as keyof typeof RISCO_COLOR]
-              const accentColor = resp.inadimplente ? '#ef4444' : riscoMax === 'alto' ? '#ef4444' : riscoMax === 'medio' ? '#f59e0b' : '#6366f1'
-              const gradientBg = resp.inadimplente
-                ? 'linear-gradient(135deg,rgba(239,68,68,0.06) 0%,rgba(239,68,68,0.02) 100%)'
-                : riscoMax === 'medio'
-                  ? 'linear-gradient(135deg,rgba(245,158,11,0.05) 0%,rgba(99,102,241,0.04) 100%)'
-                  : 'linear-gradient(135deg,rgba(99,102,241,0.06) 0%,rgba(16,185,129,0.03) 100%)'
-              return (
-                <div
-                  key={resp.id || resp.nome}
-                  className="resp-card-premium"
-                  style={{ position:'relative', animationDelay:`${cardIdx * 0.04}s` }}
-                >
-                  {/* Glow layer */}
-                  <div className="resp-card-glow" style={{
-                    position:'absolute', inset:-1, borderRadius:22,
-                    background:`radial-gradient(ellipse at 30% 0%, ${accentColor}25 0%, transparent 65%)`,
-                    opacity:0, transition:'opacity 0.3s', pointerEvents:'none', zIndex:0
-                  }}/>
-
-                  <div className="resp-card-inner" style={{
-                    position:'relative', zIndex:1,
-                    background:`hsl(var(--bg-base))`,
-                    backgroundImage: gradientBg,
-                    borderRadius:20,
-                    border:`1.5px solid ${accentColor}30`,
-                    boxShadow:`0 4px 20px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.06)`,
-                    overflow:'hidden',
-                  }}>
-
-                    {/* ── Top accent bar ── */}
-                    <div style={{ height:3, background:`linear-gradient(90deg, ${accentColor}, ${accentColor}60, transparent)` }}/>
-
-                    {/* ── Main content ── */}
-                    <div style={{ padding:'20px 22px 0' }}>
-
-                      {/* Header Row */}
-                      <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16 }}>
-
-                        {/* Avatar */}
-                        <div style={{
-                          width:56, height:56, borderRadius:16, flexShrink:0,
-                          background:`linear-gradient(135deg, ${accentColor}25, ${accentColor}10)`,
-                          border:`2px solid ${accentColor}35`,
-                          display:'flex', alignItems:'center', justifyContent:'center',
-                          fontSize:18, fontWeight:900, color:accentColor,
-                          fontFamily:'Outfit,sans-serif', letterSpacing:-0.5,
-                          boxShadow:`0 4px 16px ${accentColor}20`,
-                        }}>
-                          {getInitials(resp.nome)}
-                        </div>
-
-                        {/* Identity */}
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:6 }}>
-                            <span style={{ fontSize:15, fontWeight:800, color:'hsl(var(--text-base))', fontFamily:'Outfit,sans-serif', letterSpacing:-0.3 }}>
-                              {resp.nome}
-                            </span>
-                            {resp.codigo && (
-                              <span style={{ fontSize:10, padding:'2px 6px', borderRadius:6, background:'var(--bg-overlay)', border:'1px solid var(--border-subtle)', color:'var(--text-muted)', fontWeight:700, fontFamily:'monospace' }}>
-                                #{resp.codigo}
-                              </span>
-                            )}
-                            {resp.inadimplente && (
-                              <span style={{ fontSize:9, padding:'2px 7px', borderRadius:20, background:'rgba(239,68,68,0.12)', border:'1px solid rgba(239,68,68,0.25)', color:'#f87171', fontWeight:800, letterSpacing:0.5 }}>INADIMPLENTE</span>
-                            )}
-                          </div>
-
-                          {/* Badges row */}
-                          <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                            {resp.parentesco && (
-                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:`${accentColor}15`, border:`1px solid ${accentColor}30`, color:accentColor, fontWeight:700 }}>
-                                {resp.parentesco}
-                              </span>
-                            )}
-                            {resp.respPedagogico && (
-                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:'rgba(99,102,241,0.1)', border:'1px solid rgba(99,102,241,0.2)', color:'#818cf8', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
-                                <GraduationCap size={9}/> Pedagógico
-                              </span>
-                            )}
-                            {resp.respFinanceiro && (
-                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.2)', color:'#10b981', fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
-                                <Wallet size={9}/> Financeiro
-                              </span>
-                            )}
-                            {riscoMax !== 'baixo' && (
-                              <span style={{ fontSize:10, padding:'3px 9px', borderRadius:20, background:`${rc}15`, border:`1px solid ${rc}30`, color:rc, fontWeight:700 }}>
-                                {RISCO_LABEL[riscoMax as keyof typeof RISCO_LABEL]}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Edit btn */}
-                        <button
-                          onClick={e => { e.stopPropagation(); setResponsavelEdicao((resp as any)._raw); setShowCadastroModal(true) }}
-                          style={{ width:34, height:34, borderRadius:10, border:`1px solid hsl(var(--border-subtle))`, background:'hsl(var(--bg-elevated))', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', color:'hsl(var(--text-muted))', flexShrink:0, transition:'all 0.15s' }}
-                          onMouseEnter={e => { (e.currentTarget as any).style.borderColor=accentColor; (e.currentTarget as any).style.color=accentColor }}
-                          onMouseLeave={e => { (e.currentTarget as any).style.borderColor=''; (e.currentTarget as any).style.color='' }}
-                          title="Editar responsável"
-                        >
-                          <Edit size={14}/>
-                        </button>
-                      </div>
-
-                      {/* ── Info Grid ── */}
-                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-                        {/* Telefone */}
-                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
-                          <Phone size={12} color="#60a5fa" style={{ flexShrink:0 }}/>
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>Celular</div>
-                            <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))' }}>
-                              {resp.telefone !== 'Não informado' ? resp.telefone : <span style={{ fontStyle:'italic' }}>Não informado</span>}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Email */}
-                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
-                          <Mail size={12} color="#a78bfa" style={{ flexShrink:0 }}/>
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>E-mail</div>
-                            <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color: resp.email ? 'hsl(var(--text-base))' : 'hsl(var(--text-muted))' }}>
-                              {resp.email || <span style={{ fontStyle:'italic' }}>Não informado</span>}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Profissão */}
-                        {resp.profissao && (
-                          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background:'hsl(var(--bg-elevated))', border:'1px solid hsl(var(--border-subtle))' }}>
-                            <Briefcase size={12} color="#34d399" style={{ flexShrink:0 }}/>
-                            <div style={{ minWidth:0 }}>
-                              <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>Profissão</div>
-                              <div style={{ fontSize:12, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{resp.profissao}</div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* RFID */}
-                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, background: resp.rfid ? 'rgba(99,102,241,0.06)' : 'hsl(var(--bg-elevated))', border:`1px solid ${resp.rfid ? 'rgba(99,102,241,0.25)' : 'hsl(var(--border-subtle))'}` }}>
-                          {resp.rfid
-                            ? <Cpu size={12} color="#818cf8" className="rfid-chip" style={{ flexShrink:0 }}/>
-                            : <Cpu size={12} color="hsl(var(--text-muted))" style={{ flexShrink:0 }}/>
-                          }
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:9, color:'hsl(var(--text-muted))', fontWeight:700, textTransform:'uppercase', letterSpacing:.5, marginBottom:1 }}>RFID</div>
-                            <div style={{ fontSize:12, fontWeight:600, fontFamily: resp.rfid ? 'monospace' : 'inherit', color: resp.rfid ? '#818cf8' : 'hsl(var(--text-muted))', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                              {resp.rfid || <span style={{ fontStyle:'italic', fontFamily:'inherit', fontWeight:400 }}>Não cadastrado</span>}
-                            </div>
-                          </div>
-                          {resp.rfid && (
-                            <div style={{ marginLeft:'auto', flexShrink:0 }}>
-                              <Zap size={10} color="#818cf8"/>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* ── Alunos Vinculados ── */}
-                      {resp.filhos.length > 0 && (
-                        <div style={{ marginBottom:16 }}>
-                          <div style={{ fontSize:10, fontWeight:800, color:'hsl(var(--text-muted))', textTransform:'uppercase', letterSpacing:1, marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
-                            <GraduationCap size={11}/>
-                            {resp.filhos.length} Aluno{resp.filhos.length > 1 ? 's' : ''} Vinculado{resp.filhos.length > 1 ? 's' : ''}
-                          </div>
-                          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                            {resp.filhos.map(filho => {
-                              const rc2 = RISCO_COLOR[filho.risco_evasao as keyof typeof RISCO_COLOR] ?? '#10b981'
-                              const freqColor = filho.frequencia < 60 ? '#ef4444' : filho.frequencia < 75 ? '#f59e0b' : '#10b981'
-                              const freqPct = Math.min(100, Math.max(0, filho.frequencia))
-                              return (
-                                <div
-                                  key={filho.id}
-                                  style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12, background:'hsl(var(--bg-elevated))', border:`1px solid ${rc2}20`, borderLeft:`3px solid ${rc2}`, transition:'background 0.15s' }}
-                                  onClick={e => e.stopPropagation()}
-                                  onMouseEnter={e => (e.currentTarget as any).style.background='hsl(var(--bg-overlay))'}
-                                  onMouseLeave={e => (e.currentTarget as any).style.background='hsl(var(--bg-elevated))'}
-                                >
-                                  {/* Avatar Expanded / Ultra Premium */}
-                                  <div style={{
-                                    width:48, height:48, borderRadius:12, flexShrink:0,
-                                    background:`linear-gradient(135deg, ${rc2}20, ${rc2}05)`,
-                                    border:`2px solid ${rc2}30`,
-                                    boxShadow:`0 4px 10px rgba(0,0,0,0.05), inset 0 2px 4px rgba(255,255,255,0.2)`,
-                                    display:'flex', alignItems:'center', justifyContent:'center',
-                                    fontSize:13, fontWeight:900, color:rc2, fontFamily:'Outfit,sans-serif',
-                                    overflow:'hidden'
-                                  }}>
-                                    {(filho as any).foto ? (
-                                      <img src={(filho as any).foto} alt={filho.nome} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                                    ) : (
-                                      getInitials(filho.nome)
-                                    )}
-                                  </div>
-
-                                  {/* Info */}
-                                  <div style={{ flex:1, minWidth:0 }}>
-                                    <div style={{ fontSize:12, fontWeight:700, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:3 }}>{filho.nome}</div>
-                                    {(filho.turma || filho.serie) && (
-                                      <div style={{ fontSize:9, color:'hsl(var(--text-muted))', display:'flex', alignItems:'center', gap:6 }}>
-                                        {filho.turma && <span>{filho.turma}</span>}
-                                        {filho.turma && filho.serie && <span style={{ opacity:.4 }}>·</span>}
-                                        {filho.serie && <span>{filho.serie}</span>}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Freq bar + badge */}
-                                  <div style={{ flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
-                                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                                      <span style={{ fontSize:11, fontWeight:800, color:freqColor }}>{filho.frequencia}%</span>
-                                      {filho.inadimplente && (
-                                        <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, background:'rgba(239,68,68,0.15)', color:'#f87171', fontWeight:800, border:'1px solid rgba(239,68,68,0.2)' }}>$</span>
-                                      )}
-                                    </div>
-                                    {/* Mini freq bar */}
-                                    <div style={{ width:52, height:3, borderRadius:3, background:'rgba(0,0,0,0.08)' }}>
-                                      <div style={{ width:`${freqPct}%`, height:'100%', borderRadius:3, background:freqColor, transition:'width 0.5s ease' }}/>
-                                    </div>
-                                  </div>
-
-                                  {/* Ficha link */}
-                                  <Link
-                                    href={`/academico/alunos/ficha?id=${filho.id}`}
-                                    onClick={e => e.stopPropagation()}
-                                    style={{ display:'flex', alignItems:'center', gap:3, fontSize:10, color:'hsl(var(--text-muted))', textDecoration:'none', padding:'4px 8px', borderRadius:7, border:'1px solid hsl(var(--border-subtle))', background:'hsl(var(--bg-base))', transition:'all 0.15s', flexShrink:0 }}
-                                    onMouseEnter={e => { (e.currentTarget as any).style.borderColor=rc2; (e.currentTarget as any).style.color=rc2 }}
-                                    onMouseLeave={e => { (e.currentTarget as any).style.borderColor=''; (e.currentTarget as any).style.color='' }}
-                                  >
-                                    <ExternalLink size={9}/> Ficha
-                                  </Link>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── Action Bar ── */}
-                    <div style={{ display:'flex', gap:0, borderTop:`1px solid ${accentColor}15`, background:`${accentColor}05` }}>
-                      <button
-                        className="resp-action-btn"
-                        onClick={e => { e.stopPropagation(); window.open(`tel:${resp.telefone}`) }}
-                        disabled={resp.telefone === 'Não informado'}
-                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: resp.telefone === 'Não informado' ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : '#60a5fa', borderRight:'1px solid hsl(var(--border-subtle))' }}
-                      >
-                        <Phone size={12}/> Ligar
-                      </button>
-                      <button
-                        className="resp-action-btn"
-                        onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${resp.telefone.replace(/\D/g, '')}`) }}
-                        disabled={resp.telefone === 'Não informado'}
-                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: resp.telefone === 'Não informado' ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.telefone === 'Não informado' ? 'hsl(var(--text-muted))' : '#34d399', borderRight:'1px solid hsl(var(--border-subtle))' }}
-                      >
-                        <MessageSquare size={12}/> WhatsApp
-                      </button>
-                      <button
-                        className="resp-action-btn"
-                        onClick={e => { e.stopPropagation(); resp.email && window.open(`mailto:${resp.email}`) }}
-                        disabled={!resp.email}
-                        style={{ flex:1, padding:'11px 0', border:'none', background:'none', cursor: !resp.email ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:700, color: resp.email ? '#a78bfa' : 'hsl(var(--text-muted))', borderRight: resp.inadimplente ? '1px solid hsl(var(--border-subtle))' : 'none' }}
-                      >
-                        <Mail size={12}/> E-mail
-                      </button>
-                      {resp.inadimplente && (
-                        <Link
-                          href="/financeiro/inadimplencia"
-                          onClick={e => e.stopPropagation()}
-                          style={{ flex:1, padding:'11px 0', display:'flex', alignItems:'center', justifyContent:'center', gap:5, fontSize:11, fontWeight:800, color:'#f87171', textDecoration:'none', background:'rgba(239,68,68,0.05)', transition:'all 0.15s' }}
-                          onMouseEnter={e => (e.currentTarget as any).style.background='rgba(239,68,68,0.12)'}
-                          onMouseLeave={e => (e.currentTarget as any).style.background='rgba(239,68,68,0.05)'}
-                        >
-                          <Wallet size={12}/> Cobrar
-                        </Link>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+          </tbody>
+        </table>
       </div>
 
-      {/* ── Modal Detalhe ── */}
-      {selecionado && (
-        <div className="modal-overlay" onClick={() => setSelecionado(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:560, padding:24, width:'100%' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-                <div className="avatar" style={{ width:52, height:52, fontSize:18, background:selecionado.inadimplente?'rgba(239,68,68,0.15)':'rgba(59,130,246,0.15)', color:selecionado.inadimplente?'#f87171':'#60a5fa' }}>
-                  {getInitials(selecionado.nome)}
-                </div>
-                <div>
-                  <div style={{ fontWeight:800, fontSize:17, fontFamily:'Outfit,sans-serif' }}>{selecionado.nome}</div>
-                  <div style={{ fontSize:12, color:'hsl(var(--text-muted))', marginTop:2 }}>
-                    {selecionado.totalFilhos} filho(s) matriculado(s)
-                    {selecionado.inadimplente && <span style={{ color:'#f87171', marginLeft:8 }}>• Inadimplente</span>}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                 <button className="btn btn-ghost" onClick={() => { setShowCadastroModal(true); setResponsavelEdicao(selecionado._raw); setSelecionado(null); }}>
-                    <Edit size={16}/> Editar
-                 </button>
-                 <button className="btn btn-ghost btn-icon" onClick={() => setSelecionado(null)}><X size={16}/></button>
-              </div>
+      {/* Pagination Footer */}
+      {total > 0 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: 24,
+          padding: '16px 24px',
+          background: '#fff',
+          borderRadius: '16px',
+          boxShadow: '0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04)',
+          border: '1px solid #e2e8f0',
+          flexWrap: 'wrap',
+          gap: 16
+        }}>
+          {/* Left Side: Items selection & summary */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>Exibir</span>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={itensPorPagina}
+                onChange={e => {
+                  setItensPorPagina(Number(e.target.value))
+                  setPaginaAtual(1)
+                }}
+                style={{
+                  appearance: 'none',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '6px 32px 6px 12px',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#1e293b',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  transition: 'all 0.2s',
+                  minWidth: 70
+                }}
+                className="select-itens-pagina"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span style={{
+                position: 'absolute',
+                right: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: 10,
+                color: '#64748b',
+                pointerEvents: 'none'
+              }}>▼</span>
             </div>
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+              por página. Mostrando <strong style={{ color: '#0f172a' }}>{Math.min(total, (paginaAtual - 1) * itensPorPagina + 1)}-{Math.min(total, paginaAtual * itensPorPagina)}</strong> de <strong style={{ color: '#0f172a' }}>{total}</strong> responsáveis.
+            </span>
+          </div>
 
-            <div className="card" style={{ padding:'16px', marginBottom:16, background:'hsl(var(--bg-elevated))' }}>
-              <div style={{ fontWeight:700, fontSize:13, marginBottom:12 }}>Dados do Responsável</div>
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {[
-                  { icon:<User size={14}/>, label:'ID do Responsável / Código', value: selecionado.codigo || selecionado.id || 'Não informado' },
-                  { icon:<Shield size={14}/>, label:'RFID / Acesso', value: selecionado.rfid || 'Não cadastrado' },
-                  { icon:<BookOpen size={14}/>, label:'CPF / RG', value: `${selecionado.cpf||'Não informado'} ${selecionado.rg ? `| RG: ${selecionado.rg}` : ''}` },
-                  { icon:<Phone size={14}/>, label:'Telefone / WhatsApp', value:selecionado.telefone },
-                  { icon:<Mail size={14}/>, label:'E-mail', value:selecionado.email||'Não informado' },
-                  { icon:<User size={14}/>, label:'Profissão', value: selecionado.profissao, hide: !selecionado.profissao },
-                  { icon:<MapPin size={14}/>, label:'Endereço', value: selecionado.enderecoStr, hide: !selecionado.enderecoStr },
-                ].filter(i=>!i.hide).map(item => (
-                  <div key={item.label} style={{ display:'flex', alignItems:'center', gap:12 }}>
-                    <div style={{ color:'#60a5fa', flexShrink:0 }}>{item.icon}</div>
-                    <div>
-                      <div style={{ fontSize:10, color:'hsl(var(--text-muted))' }}>{item.label}</div>
-                      <div style={{ fontSize:13, fontWeight:600 }}>{item.value}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display:'flex', gap:8, marginTop:14 }}>
-                <button className="btn btn-primary btn-sm" style={{ flex:1, fontSize:12 }} onClick={() => window.open(`https://wa.me/${selecionado.telefone.replace(/\D/g, '')}`)}><MessageSquare size={12}/> WhatsApp</button>
-                <button className="btn btn-secondary btn-sm" style={{ flex:1, fontSize:12 }} onClick={() => window.open(`mailto:${selecionado.email}`)}><Mail size={12}/> E-mail</button>
-                <button className="btn btn-secondary btn-sm" style={{ flex:1, fontSize:12 }} onClick={() => window.open(`tel:${selecionado.telefone}`)}><Phone size={12}/> Ligar</button>
-              </div>
-            </div>
+          {/* Right Side: Page numbering navigation */}
+          {totalPaginas > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Previous button */}
+              <button
+                onClick={() => setPaginaAtual(p => Math.max(1, p - 1))}
+                disabled={paginaAtual === 1}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: paginaAtual === 1 ? '#f1f5f9' : '#fff',
+                  color: paginaAtual === 1 ? '#94a3b8' : '#475569',
+                  cursor: paginaAtual === 1 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: paginaAtual === 1 ? 'none' : '0 2px 4px rgba(0,0,0,0.02)'
+                }}
+                className="pagination-arrow-btn"
+                title="Página Anterior"
+              >
+                <ChevronLeft size={16} />
+              </button>
 
-            <div style={{ fontWeight:700, fontSize:13, marginBottom:10 }}>Filhos Matriculados</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              {selecionado.filhos.map(filho => {
-                const rc = RISCO_COLOR[filho.risco_evasao as keyof typeof RISCO_COLOR] ?? '#10b981'
-                const sit = filho.frequencia < 75 ? 'Freq. crítica' : filho.inadimplente ? 'Inadimplente' : filho.risco_evasao !== 'baixo' ? 'Risco de evasão' : 'Regular'
+              {/* Numbered buttons */}
+              {getPageNumbers().map(num => {
+                const isActive = num === paginaAtual
                 return (
-                  <div key={filho.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 14px', background:'hsl(var(--bg-elevated))', borderRadius:10, border:`1px solid hsl(var(--border-subtle))`, borderLeft:`3px solid ${rc}` }}>
-                    <div className="avatar" style={{ width:36, height:36, fontSize:12, background:`${rc}20`, color:rc, flexShrink:0 }}>{getInitials(filho.nome)}</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:13, fontWeight:700 }}>{filho.nome}</div>
-                      <div style={{ fontSize:11, color:'hsl(var(--text-muted))' }}>{filho.turma} · {filho.serie}</div>
-                    </div>
-                    <div style={{ textAlign:'right', flexShrink:0 }}>
-                      <div style={{ fontSize:13, fontWeight:800, color:filho.frequencia < 75 ? '#f87171' : '#34d399' }}>{filho.frequencia}% freq.</div>
-                      <div style={{ fontSize:11, color:rc }}>{sit}</div>
-                    </div>
-                    <Link href={`/academico/alunos/ficha?id=${filho.id}`} onClick={() => setSelecionado(null)} className="btn btn-secondary btn-sm" style={{ fontSize:11, flexShrink:0 }}>
-                      <UserCheck size={11}/> Ficha 360°
-                    </Link>
-                  </div>
+                  <button
+                    key={num}
+                    onClick={() => setPaginaAtual(num)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 36,
+                      height: 36,
+                      borderRadius: '10px',
+                      border: isActive ? 'none' : '1px solid #e2e8f0',
+                      background: isActive ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : '#fff',
+                      color: isActive ? '#fff' : '#475569',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: isActive ? '0 4px 12px rgba(37, 99, 235, 0.3)' : '0 2px 4px rgba(0,0,0,0.02)'
+                    }}
+                    className={isActive ? 'pagination-num-btn active' : 'pagination-num-btn'}
+                  >
+                    {num}
+                  </button>
                 )
               })}
+
+              {/* Next button */}
+              <button
+                onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))}
+                disabled={paginaAtual === totalPaginas}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 36,
+                  height: 36,
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  background: paginaAtual === totalPaginas ? '#f1f5f9' : '#fff',
+                  color: paginaAtual === totalPaginas ? '#94a3b8' : '#475569',
+                  cursor: paginaAtual === totalPaginas ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: paginaAtual === totalPaginas ? 'none' : '0 2px 4px rgba(0,0,0,0.02)'
+                }}
+                className="pagination-arrow-btn"
+                title="Próxima Página"
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Modal Registrar Contato ── */}
-      {showContato && (
-        <div className="modal-overlay" onClick={() => setShowContato(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:460, padding:24, width:'100%' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
-              <div style={{ fontWeight:700, fontSize:16 }}>Registrar Contato com Responsável</div>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowContato(false)}><X size={16}/></button>
+      {/* Modal Idêntico ao de Alunos Passo Responsável com Cabeçalho Gradiente */}
+      {isModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 16, width: 'min(900px, 95vw)', maxHeight: '90vh', overflowY: 'auto', padding: 24, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+            
+            {/* Header do Modal com Gradiente Escuro Ultra Moderno */}
+            <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', margin: '-24px -24px 20px -24px', padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
+              <div>
+                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0 }}>{editingResponsavel ? 'Editar Responsável' : 'Novo Responsável'}</h2>
+                <p style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Preencha os dados do responsável abaixo</p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                <X size={20} />
+              </button>
             </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-              <div>
-                <label className="form-label">Responsável *</label>
-                <select className="form-input">
-                  <option>Selecionar...</option>
-                  {responsaveis.map(r => <option key={r.nome}>{r.nome}</option>)}
-                </select>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div>
-                  <label className="form-label">Canal</label>
-                  <select className="form-input"><option>WhatsApp</option><option>Ligação</option><option>E-mail</option><option>Presencial</option></select>
+
+            {/* Conteúdo do Modal */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {formResponsaveis.map((resp, index) => (
+                <div key={index} style={{ border: '1px solid #e2e8f0', padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.5)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Dados do Responsável #{index + 1}</h3>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('isFinanceiro', !resp.isFinanceiro, index)}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isFinanceiro ? '#10b981' : '#e2e8f0',
+                          background: resp.isFinanceiro ? '#10b981' : '#fff',
+                          color: resp.isFinanceiro ? '#fff' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Financeiro
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('isPedagogico', !resp.isPedagogico, index)}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isPedagogico ? '#8b5cf6' : '#e2e8f0',
+                          background: resp.isPedagogico ? '#8b5cf6' : '#fff',
+                          color: resp.isPedagogico ? '#fff' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Pedagógico
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('isOutro', !resp.isOutro, index)}
+                        style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.isOutro ? '#f59e0b' : '#e2e8f0',
+                          background: resp.isOutro ? '#f59e0b' : '#fff',
+                          color: resp.isOutro ? '#fff' : '#64748b',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        Outro
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Linha 1 */}
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: '1', maxWidth: '100px' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID</label>
+                        <input className="form-input" placeholder="Ex: RESP001" value={resp.id} onChange={e => handleInputChange('id', e.target.value, index)} />
+                      </div>
+                      <div style={{ flex: '3.5' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
+                        <input className="form-input" placeholder="Nome do responsável" value={resp.nome} onChange={e => handleInputChange('nome', e.target.value, index)} />
+                      </div>
+                      <div style={{ flex: '1.5' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Parentesco *</label>
+                        <select className="form-input" value={resp.parentesco} onChange={e => handleInputChange('parentesco', e.target.value, index)}>
+                          <option value="">Selecione…</option>
+                          <option value="pai">Pai</option>
+                          <option value="mae">Mãe</option>
+                          <option value="outro">Outro</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Linha 2 */}
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: '1.5' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Data de Nascimento</label>
+                        <input type="date" className="form-input" value={resp.dataNasc} onChange={e => handleInputChange('dataNasc', e.target.value, index)} />
+                      </div>
+                      <div style={{ flex: '2.5' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail *</label>
+                        <input type="email" className="form-input" placeholder="email@exemplo.com" value={resp.email} onChange={e => handleInputChange('email', e.target.value, index)} />
+                      </div>
+                      <div style={{ flex: '1.5' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone *</label>
+                        <input className="form-input" placeholder="(00) 00000-0000" value={resp.telefone} onChange={e => handleInputChange('telefone', e.target.value, index)} />
+                      </div>
+                    </div>
+
+                    {/* Linha 3 */}
+                    <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ flex: '2' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Profissão</label>
+                        <input className="form-input" placeholder="Ex: Professor" value={resp.profissao} onChange={e => handleInputChange('profissao', e.target.value, index)} />
+                      </div>
+                      <div style={{ flex: '2' }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Cartão RFID</label>
+                        <div style={{ position: 'relative' }}>
+                          <CreditCard size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                          <input className="form-input" style={{ paddingLeft: 36 }} placeholder="Aproxime o cartão…" value={resp.rfid} onChange={e => handleInputChange('rfid', e.target.value, index)} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dias de Acesso */}
+                  <div style={{ marginTop: 16 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Dias Permitidos para Retirada (RFID)</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'].map(dia => {
+                        const isSelected = resp.diasAcesso?.includes(dia);
+                        const showAsSelected = isSelected && !resp.proibido;
+                        return (
+                          <button
+                            key={dia}
+                            type="button"
+                            onClick={() => {
+                              if (resp.proibido) return;
+                              const currentDias = resp.diasAcesso || [];
+                              const newDias = isSelected
+                                ? currentDias.filter((d: string) => d !== dia)
+                                : [...currentDias, dia];
+                              handleInputChange('diasAcesso', newDias, index);
+                            }}
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: '50%',
+                              border: '1px solid',
+                              borderColor: showAsSelected ? '#10b981' : '#ef4444',
+                              background: showAsSelected ? '#10b981' : '#fff',
+                              color: showAsSelected ? '#fff' : '#ef4444',
+                              fontWeight: 700,
+                              fontSize: 12,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: resp.proibido ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.2s',
+                              boxShadow: showAsSelected ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
+                              opacity: resp.proibido ? 0.7 : 1
+                            }}
+                          >
+                            {dia.substring(0, 1)}
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => handleInputChange('proibido', !resp.proibido, index)}
+                        style={{
+                          height: 40,
+                          padding: '0 16px',
+                          borderRadius: '20px',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          border: '1px solid',
+                          borderColor: resp.proibido ? '#ef4444' : '#10b981',
+                          background: resp.proibido ? '#ef4444' : '#10b981',
+                          color: '#fff',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginLeft: 'auto'
+                        }}
+                      >
+                        {resp.proibido ? 'Proibido' : 'Liberado'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Vínculo com Alunos */}
+                  <div style={{ marginTop: 16 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>Vincular Alunos (Pesquise por nome)</label>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                      <input
+                        className="form-input"
+                        style={{ paddingLeft: 36 }}
+                        placeholder="Digite o nome do aluno..."
+                        value={buscaAluno}
+                        onChange={e => setBuscaAluno(e.target.value)}
+                      />
+                      {buscaAluno.length >= 3 && (
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflowY: 'auto' }}>
+                          {resultadosAlunos.length === 0 ? (
+                            <div style={{ padding: '12px', color: '#64748b', fontSize: 12, textAlign: 'center' }}>Nenhum aluno encontrado</div>
+                          ) : (
+                            resultadosAlunos.map((a: any) => (
+                              <div
+                                key={a.id}
+                                style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                                onClick={() => {
+                                  const current = resp.alunosVinculados || [];
+                                  const currentIds = current.map((item: any) => typeof item === 'object' ? item.id : item);
+                                  if (!currentIds.includes(a.id)) {
+                                    handleInputChange('alunosVinculados', [...current, a], index);
+                                  }
+                                  setBuscaAluno('');
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                              >
+                                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{a.nome}</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>Código: {a.codigo || a.id}</div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Alunos Vinculados (Apenas ID) */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                      {resp.alunosVinculados?.map((aluno: any) => {
+                        const id = typeof aluno === 'object' ? aluno.id : aluno;
+                        return (
+                          <span key={id} style={{ padding: '4px 10px', background: '#ede9fe', color: '#7c3aed', borderRadius: '6px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {typeof aluno === 'object' ? `${aluno.nome} (${aluno.codigo || id})` : `ID: ${id}`}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = resp.alunosVinculados || [];
+                                handleInputChange('alunosVinculados', current.filter((item: any) => (typeof item === 'object' ? item.id : item) !== id), index);
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#7c3aed', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="form-label">Data</label>
-                  <input className="form-input" type="date" defaultValue={new Date().toISOString().slice(0, 10)}/>
-                </div>
-              </div>
-              <div>
-                <label className="form-label">Assunto</label>
-                <select className="form-input">
-                  <option>Frequência</option><option>Financeiro / Inadimplência</option>
-                  <option>Desempenho acadêmico</option><option>Ocorrência disciplinar</option>
-                  <option>Risco de evasão</option><option>Outro</option>
-                </select>
-              </div>
-              <div>
-                <label className="form-label">Resumo do contato</label>
-                <textarea className="form-input" rows={3} placeholder="Descreva o resultado da conversa, próximos passos..."/>
-              </div>
-              <div>
-                <label className="form-label">Próximo contato agendado</label>
-                <input className="form-input" type="date"/>
-              </div>
+              ))}
+
+              {!editingResponsavel && (
+                <button 
+                  onClick={() => setFormResponsaveis([...formResponsaveis, { id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, alunosVinculados: [] }])} 
+                  style={{ 
+                    width: '100%', 
+                    padding: '16px', 
+                    borderRadius: '12px', 
+                    border: '2px dashed #3b82f6', 
+                    background: 'rgba(59, 130, 246, 0.05)',
+                    color: '#3b82f6',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.05)'}
+                >
+                  <Plus size={16} /> Adicionar Outro Responsável
+                </button>
+              )}
             </div>
-            <div style={{ display:'flex', gap:10, marginTop:18, justifyContent:'flex-end' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowContato(false)}>Cancelar</button>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowContato(false)}><CheckCircle size={13}/> Salvar Contato</button>
+
+            {/* Footer do Modal */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', color: '#475569', padding: '10px 20px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  opacity: loading ? 0.7 : 1,
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                }}
+              >
+                {loading ? <Loader2 size={14} style={{ animation: 'spin .8s linear infinite' }} /> : <Save size={14} />}
+                {editingResponsavel ? 'Salvar Alterações' : 'Criar Responsável'}
+              </button>
             </div>
           </div>
+          <style>{`
+            @keyframes spin { to { transform: rotate(360deg); } }
+          `}</style>
         </div>
       )}
-
-      <CadastroResponsavelModal 
-         isOpen={showCadastroModal}
-         onClose={() => { setShowCadastroModal(false); setResponsavelEdicao(null); }}
-         responsavelInicial={responsavelEdicao}
-         onSaved={(saved) => {
-            setShowCadastroModal(false)
-            setResponsavelEdicao(null)
-
-            // 1. Atualiza a lista base (KPIs e filtros)
-            setResponsaveisRaw(prev => {
-              const exists = (prev || []).some((r: any) => r.id === saved.id)
-              if (exists) return (prev || []).map((r: any) => r.id === saved.id ? { ...r, ...saved } : r)
-              return [saved, ...(prev || [])]
-            })
-
-            // 2. Atualiza em tempo real os resultados da busca ativa
-            if (search.length >= 3) {
-              setSearchResults(prev => {
-                const exists = prev.some(r => r.id === saved.id)
-                const updated = exists
-                  ? prev.map(r => r.id === saved.id ? transformResp({ ...(r as any)._raw, ...saved } as any) : r)
-                  : [transformResp(saved), ...prev]
-                return updated
-              })
-            }
-         }}
-         onDeleted={(id) => {
-            setShowCadastroModal(false)
-            setResponsavelEdicao(null)
-
-            // 1. Remove da lista base
-            setResponsaveisRaw(prev => (prev || []).filter((r: any) => r.id !== id))
-
-            // 2. Remove em tempo real dos resultados da busca ativa
-            setSearchResults(prev => prev.filter(r => r.id !== id))
-         }}
-      />
     </div>
   )
 }
-
-

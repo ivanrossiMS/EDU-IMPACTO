@@ -1,6 +1,9 @@
 'use client'
 import { useData, RotinaItem, newId } from '@/lib/dataContext'
 import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 import { Save, Download, Check, Filter, Plus, Edit2, Trash2, Clock, CheckCircle2, AlertCircle, Users, ChevronLeft, Calendar } from 'lucide-react'
 
 const DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
@@ -30,7 +33,22 @@ function getColorFromName(name: string) {
 }
 
 export default function HorarioAulasPage() {
-  const { turmas = [], rotinaItems = [], setRotinaItems, cfgDisciplinas } = useData()
+  const { data: rawTurmas, isLoading: loadingTurmas, isFetching: fetchingTurmas } = useApiQuery<any[]>(['turmas'], '/api/turmas')
+  const { data: rawRotina, isLoading: loadingRotina, isFetching: fetchingRotina } = useApiQuery<RotinaItem[]>(['rotina'], '/api/academico/rotina')
+  const { data: rawDisciplinas } = useApiQuery<{ valor: any[] }>(['config-disciplinas'], '/api/configuracoes?chave=cfgDisciplinas')
+  
+  const [rotinaItems, setRotinaItems] = useState<RotinaItem[]>([])
+  const turmas = rawTurmas || []
+  const cfgDisciplinas = rawDisciplinas?.valor || []
+  
+  const isLoading = loadingTurmas || loadingRotina
+  const isFetching = fetchingTurmas || fetchingRotina
+
+  useEffect(() => {
+    if (rawRotina) {
+      setRotinaItems(rawRotina)
+    }
+  }, [rawRotina])
 
   // Navigation State
   const [viewMode, setViewMode] = useState<'lista' | 'grade'>('lista')
@@ -206,7 +224,10 @@ export default function HorarioAulasPage() {
       <div className="page-container animation-fade-in">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Grade de Horários</h1>
+            <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>Grade de Horários</span>
+              {isFetching && <UpdatingIndicator />}
+            </h1>
             <p className="page-subtitle">Selecione uma turma para organizar e gerenciar a grade de aulas</p>
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -223,7 +244,13 @@ export default function HorarioAulasPage() {
           </div>
         </div>
 
-        {turmasFiltradas.length === 0 ? (
+        {isLoading && turmas.length === 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+            <div className="card" style={{ padding: '24px', minHeight: 160 }}><CardSkeleton /></div>
+            <div className="card" style={{ padding: '24px', minHeight: 160 }}><CardSkeleton /></div>
+            <div className="card" style={{ padding: '24px', minHeight: 160 }}><CardSkeleton /></div>
+          </div>
+        ) : turmasFiltradas.length === 0 ? (
           <div className="card" style={{ padding: '64px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
             <Users size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: 'hsl(var(--text-primary))' }}>
@@ -293,7 +320,8 @@ export default function HorarioAulasPage() {
           </button>
           <div style={{ paddingTop: '2px' }}>
             <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              Turma {nomeTurmaAtual}
+              <span>Turma {nomeTurmaAtual}</span>
+              {isFetching && <UpdatingIndicator />}
             </h1>
             <p className="page-subtitle">Personalize as linhas de tempo, aulas e intervalos nesta grade</p>
           </div>

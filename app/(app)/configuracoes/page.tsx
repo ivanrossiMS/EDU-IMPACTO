@@ -5,19 +5,14 @@ import { Save, Shield, Bell, Palette, Eye, EyeOff, Upload, RefreshCw, Plus, Tras
 import { useApp } from '@/lib/context'
 import { newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
-import TestDataSection from '@/components/configuracoes/TestDataSection'
 import BackupSection from '@/components/configuracoes/BackupSection'
-import ImportacaoDadosSection from '@/components/configuracoes/ImportacaoDadosSection'
 import { FormModal, ConfirmModal } from '@/components/ui/CrudModal'
 
 /* ─── Section definitions ─────────────────────────────────────── */
 const CONFIG_SECTIONS = [
   { id: 'aparencia',   icon: '🎨', label: 'Aparência & White-label', desc: 'Logo, cores, tema, sidebar' },
   { id: 'notificacoes',icon: '🔔', label: 'Notificações', desc: 'Email, push, SMS, WhatsApp' },
-  { id: 'integracoes', icon: '🔌', label: 'Integrações & APIs', desc: 'Webhooks, sistemas externos' },
   { id: 'seguranca',   icon: '🔒', label: 'Segurança & LGPD', desc: 'Senha, 2FA, auditoria' },
-  { id: 'importacao',  icon: '📥', label: 'Importação de Dados', desc: 'CSV, XLSX, fotos e migração' },
-  { id: 'ferramentas', icon: '🧪', label: 'Dados de Teste', desc: 'Inserir/excluir dados reais' },
   { id: 'backup',      icon: '💾', label: 'Backup & Exportação', desc: 'Exportar dados reais do sistema' },
 ]
 
@@ -39,14 +34,7 @@ const MODULES_CONFIG = [
   { key: 'crm', icon: '🎯', nome: 'CRM & Captação' },
 ]
 
-const INTEGRACOES_LIST = [
-  { id: 'google', nome: 'Google Workspace', icon: '🔵', desc: 'Gmail, Drive, Classroom e Meet', status: true, config: 'Domínio: @escola.com.br' },
-  { id: 'pix', nome: 'PIX & Boleto Bancário', icon: '🏦', desc: 'Banco — Cobrança automática', status: true, config: 'Chave PIX configurada' },
-  { id: 'whatsapp', nome: 'WhatsApp Business API', icon: '💬', desc: 'Comunicação com famílias', status: false, config: 'Não configurado' },
-  { id: 'gemini', nome: 'Gemini / Google AI', icon: '🤖', desc: 'IA para Copilotos e Insights', status: false, config: 'Não configurado' },
-  { id: 'mec', nome: 'EDUCACENSO / MEC', icon: '📊', desc: 'Censo Escolar INEP', status: false, config: 'INEP não configurado' },
-  { id: 'stripe', nome: 'Stripe / Mercado Pago', icon: '💳', desc: 'Pagamentos com cartão', status: false, config: 'Não configurado' },
-]
+
 
 /* ─── User type ───────────────────────────────────────────────── */
 interface SysUser {
@@ -80,7 +68,7 @@ export default function ConfiguracoesPage() {
   /* Security / notifications / integrations */
   const [securityToggles, setSecurityToggles] = useLocalStorage<ToggleState>('edu-security', { twofa: false, sessoes: false, auditoria: true, inatividade: true, lgpd: true })
   const [notifToggles, setNotifToggles] = useLocalStorage<ToggleState>('edu-notif', { email: false, push: false, whatsapp: false, sms: false, telegram: false })
-  const [integToggles, setIntegToggles] = useLocalStorage<ToggleState>('edu-integrations', Object.fromEntries(INTEGRACOES_LIST.map(i => [i.id, i.status])))
+
 
   const toggle = (state: ToggleState, setState: (v: ToggleState) => void, key: string) => setState({ ...state, [key]: !state[key] })
 
@@ -216,28 +204,7 @@ export default function ConfiguracoesPage() {
             </div>
           )}
 
-          {/* ── INTEGRAÇÕES ── */}
-          {section === 'integracoes' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {INTEGRACOES_LIST.map(integ => (
-                <div key={integ.id} className="card" style={{ padding: '18px', display: 'flex', gap: 14, alignItems: 'center' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'hsl(var(--bg-elevated))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{integ.icon}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{integ.nome}</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{integ.desc}</div>
-                    <div style={{ fontSize: 11, color: '#60a5fa', marginTop: 4, fontFamily: 'monospace' }}>{integ.config}</div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span className={`badge ${integToggles[integ.id] ? 'badge-success' : 'badge-neutral'}`}>{integToggles[integ.id] ? '✓ Ativo' : 'Inativo'}</span>
-                      <Toggle active={integToggles[integ.id]} onToggle={() => toggle(integToggles, setIntegToggles, integ.id)} />
-                    </div>
-                    <button className="btn btn-secondary btn-sm" style={{ fontSize: 11 }}>Configurar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+
 
           {/* ── SEGURANÇA ── */}
           {section === 'seguranca' && (
@@ -270,12 +237,6 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
-
-          {/* ── IMPORTAÇÃO ── */}
-          {section === 'importacao' && <ImportacaoDadosSection />}
-
-          {/* ── DADOS DE TESTE ── */}
-          {section === 'ferramentas' && <TestDataSection />}
 
           {/* ── BACKUP ── */}
           {section === 'backup' && <BackupSection />}

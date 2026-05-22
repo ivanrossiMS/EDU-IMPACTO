@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
       const { data: resp } = await supabaseAdmin
         .from('responsaveis')
-        .select('id, nome, email, cpf, celular')
+        .select('id, nome, email, celular')
         .eq('id', realId)
         .maybeSingle()
 

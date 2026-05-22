@@ -92,3 +92,4 @@ tmp-grep.txt
 tsc*.txt
 scratch*.js
 .agent/scripts/
+scratch/

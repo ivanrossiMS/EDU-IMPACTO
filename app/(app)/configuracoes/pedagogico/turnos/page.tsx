@@ -1,6 +1,9 @@
 'use client'
 import { useData, ConfigTurno, newId } from '@/lib/dataContext'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 import { Plus, Edit2, Trash2, Check, Clock, Search } from 'lucide-react'
 
 const BLANK: Omit<ConfigTurno, 'id' | 'createdAt'> = {
@@ -15,7 +18,15 @@ const PADROES_TURNOS = [
 ] as const
 
 export default function TurnosPage() {
-  const { cfgTurnos, setCfgTurnos } = useData()
+  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigTurno[] }>(['config-turnos'], '/api/configuracoes?chave=cfgTurnos')
+  
+  const [cfgTurnos, setCfgTurnos] = useState<ConfigTurno[]>([])
+
+  useEffect(() => {
+    if (rawConfig?.valor) {
+      setCfgTurnos(rawConfig.valor)
+    }
+  }, [rawConfig])
   const [search, setSearch] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState<'todos' | 'ativo' | 'inativo'>('todos')
   const [form, setForm] = useState(BLANK)
@@ -82,7 +93,10 @@ export default function TurnosPage() {
     <div>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title">Turnos Escolares</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Turnos Escolares</span>
+            {isFetching && <UpdatingIndicator />}
+          </h1>
           <p className="page-subtitle">Personalize os turnos de aula da instituição</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -162,7 +176,10 @@ export default function TurnosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(t => (
+            {isLoading && cfgTurnos.length === 0 ? (
+              <TableSkeleton rows={5} cols={6} />
+            ) : (
+              filtered.map(t => (
               <tr key={t.id}>
                 <td><code style={{ fontSize: 12, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4, color: '#60a5fa', fontWeight: 800 }}>{t.codigo}</code></td>
                 <td style={{ fontWeight: 600, fontSize: 14 }}>{t.nome}</td>
@@ -178,7 +195,8 @@ export default function TurnosPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
         {filtered.length === 0 && (

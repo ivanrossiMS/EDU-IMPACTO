@@ -25,7 +25,14 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  return NextResponse.json({ user: user.user_metadata || {} }, {
+  // Combine top-level auth data (id, email) with user_metadata
+  const userData = {
+    ...user.user_metadata,
+    id: user.id,
+    email: user.email,
+  };
+
+  return NextResponse.json({ user: userData }, {
     headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
   });
 }

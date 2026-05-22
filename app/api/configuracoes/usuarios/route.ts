@@ -28,54 +28,69 @@ export async function GET(req: Request) {
     
     const mappedSys = sysUsers?.map(u => ({ ...u, ultimoAcesso: u.ultimoacesso || u.ultimoAcesso })) || []
 
-    // Buscar alunos para prover acesso virtual à família/alunos
-    const { data: alunosData } = await supabase.from('alunos').select('*')
+    // Buscar alunos de forma LEVE para prover acesso virtual a alunos
+    const { data: alunosData } = await supabase.from('alunos').select('id, nome, email, dados')
 
     const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
-       // 1. Criar Virtual User para o Aluno
        const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
        if (alunoEmail) {
           acc.push({
              id: `virtual-${aluno.id}`,
              nome: aluno.nome,
              email: alunoEmail,
-             cargo: 'Aluno',
+             cargo: 'Alunos',
              perfil: 'Família',
              status: 'ativo',
              ultimoAcesso: 'Nunca'
           })
        }
-       
-       // 2. Criar Virtual User para o Responsável (email DIFERENTE do aluno)
-       const realRespEmail = (
-         aluno.dados?.emailResponsavel ||
-         aluno.dados?.email_responsavel ||
-         aluno.email_responsavel ||
-         aluno.emailResponsavel ||
-         aluno.dados?.responsaveis?.[0]?.email ||
-         (Array.isArray(aluno.responsaveis) ? aluno.responsaveis[0]?.email : null)
-       )?.trim().toLowerCase()
-       
-       // Só adicionar responsável se tiver email diferente do aluno
-       if (realRespEmail && realRespEmail !== alunoEmail) {
-          const respNome = aluno.responsavel || aluno.dados?.responsavel || `Responsável por ${aluno.nome}`
-          if (!acc.some(u => u.email === realRespEmail)) {
-             acc.push({
-               id: `virtual-resp-${aluno.id}`, 
-               nome: respNome,
-               email: realRespEmail,
-               cargo: 'Responsável',
-               perfil: 'Família',
-               status: 'ativo',
-               ultimoAcesso: 'Nunca'
-             })
-          }
-       }
-       
        return acc
     }, [])
 
-    return NextResponse.json([...mappedSys, ...mappedAlunos])
+    // Fetch active Auth users to check their actual existence and map orphaned records
+    const supabaseAdmin = require('@supabase/supabase-js').createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
+    const authUsersList = authData?.users || []
+
+    // Buscar responsáveis e seus vínculos no banco
+    const { data: respData } = await supabase.from('responsaveis').select('id, nome, email')
+    const { data: linksData } = await supabase.from('aluno_responsavel').select('responsavel_id, resp_financeiro, resp_pedagogico')
+
+    const mappedResps: any[] = []
+
+    // 1. Processar responsáveis cadastrados no banco
+    if (respData && Array.isArray(respData)) {
+      respData.forEach((resp: any) => {
+        const email = (resp.email || '').trim().toLowerCase()
+        if (!email) return
+
+        const links = (linksData || []).filter((l: any) => l.responsavel_id === resp.id)
+        const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
+        
+        // APENAS responsáveis com vínculos financeiros ou pedagógicos ativos são listados
+        if (!hasActiveLink) return
+
+        // Localiza se o responsável possui uma conta Auth correspondente
+        const authUser = authUsersList.find((au: any) => au.email?.toLowerCase() === email)
+
+        mappedResps.push({
+          id: authUser ? authUser.id : `virtual-resp-${resp.id}`,
+          nome: resp.nome,
+          email: email,
+          cargo: 'Responsáveis',
+          perfil: 'Família',
+          status: authUser ? 'ativo' : 'inativo',
+          ultimoAcesso: authUser?.last_sign_in_at 
+            ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+            : 'Nunca'
+        })
+      })
+    }
+
+    return NextResponse.json([...mappedSys, ...mappedAlunos, ...mappedResps])
   } catch (err: any) {
     console.error('[API GET configuracoes/usuarios]', err)
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 })

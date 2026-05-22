@@ -24,7 +24,7 @@ export default function ColaboradorComunicadosPage() {
   const handleCiencia = (comunicadoId: string) => {
     setComunicados(prev => prev.map(c => {
       if (c.id === comunicadoId) {
-        return { ...c, ciencias: { ...c.ciencias, [userSlug]: new Date().toISOString() } }
+        return { ...c, ciencias: { ...(c.ciencias || {}), [userSlug]: new Date().toISOString() } }
       }
       return c
     }))
@@ -113,7 +113,7 @@ export default function ColaboradorComunicadosPage() {
       </div>
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {comunicados.length === 0 ? (
+        {(comunicados || []).length === 0 ? (
           <EmptyStateCard 
             title="Nenhum comunicado"
             description="Você está em dia com os comunicados da diretoria e comunicados internos."
@@ -128,7 +128,7 @@ export default function ColaboradorComunicadosPage() {
                 cursor: 'pointer', 
                 transition: 'all 0.2s', 
                 position: 'relative',
-                borderLeft: (!c.leituras[userSlug] && c.prioridade !== 'alta' && c.prioridade !== 'urgente') ? '4px solid #3b82f6' : 
+                borderLeft: (!(c.leituras || {})[userSlug] && c.prioridade !== 'alta' && c.prioridade !== 'urgente') ? '4px solid #3b82f6' : 
                             c.prioridade === 'alta' ? '4px solid #ef4444' : 
                             c.prioridade === 'urgente' ? '4px solid #f97316' : '4px solid transparent', 
                 display: 'flex', 
@@ -138,8 +138,8 @@ export default function ColaboradorComunicadosPage() {
               }}
               onClick={() => {
                 setSelectedComunicado(c)
-                if (!c.leituras[userSlug]) {
-                  setComunicados(prev => prev.map(x => x.id === c.id ? { ...x, leituras: { ...x.leituras, [userSlug]: new Date().toISOString() } } : x))
+                if (!(c.leituras || {})[userSlug]) {
+                  setComunicados(prev => prev.map(x => x.id === c.id ? { ...x, leituras: { ...(x.leituras || {}), [userSlug]: new Date().toISOString() } } : x))
                 }
               }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateX(4px)'}
@@ -156,12 +156,21 @@ export default function ColaboradorComunicadosPage() {
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', lineHeight: 1.2 }}>
                       <span>Enviado por <strong style={{ color: 'hsl(var(--text-secondary))' }}>{c.autor}</strong></span>
                       <span>•</span>
-                      <span>{new Date(c.dataEnvio).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{(() => {
+                        const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
+                        try {
+                          const parsedDate = new Date(rawDate);
+                          if (isNaN(parsedDate.getTime())) throw new Error();
+                          return parsedDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' });
+                        } catch(e) {
+                          return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' });
+                        }
+                      })()}</span>
                     </div>
                   </div>
                 </div>
                 
-                {!c.leituras[userSlug] ? (
+                {!(c.leituras || {})[userSlug] ? (
                   <span className="badge" style={{ background: '#3b82f6', color: 'white' }}>NOVO</span>
                 ) : (
                   <span className="badge badge-neutral">Lido</span>
@@ -184,19 +193,19 @@ export default function ColaboradorComunicadosPage() {
 
               {c.exigeCiencia && (
                 <div style={{ 
-                  background: c.ciencias[userSlug] ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', 
+                  background: (c.ciencias || {})[userSlug] ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', 
                   padding: '12px 16px', 
                   borderRadius: 8,
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  border: c.ciencias[userSlug] ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(245,158,11,0.2)',
+                  border: (c.ciencias || {})[userSlug] ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(245,158,11,0.2)',
                   marginTop: 8
                 }}>
-                  <div style={{ fontSize: 13, color: c.ciencias[userSlug] ? '#15803d' : '#d97706', fontWeight: 600 }}>
-                    {c.ciencias[userSlug] ? 'Ciência de servidor registrada.' : 'Exige ciência obrigatória.'}
+                  <div style={{ fontSize: 13, color: (c.ciencias || {})[userSlug] ? '#15803d' : '#d97706', fontWeight: 600 }}>
+                    {(c.ciencias || {})[userSlug] ? 'Ciência de servidor registrada.' : 'Exige ciência obrigatória.'}
                   </div>
-                  {!c.ciencias[userSlug] ? (
+                  {!(c.ciencias || {})[userSlug] ? (
                     <button onClick={(e) => { e.stopPropagation(); handleCiencia(c.id) }} className="btn btn-primary btn-sm">Dar Ciência</button>
                   ) : (
                     <CheckCircle2 color="#15803d" size={20} />
@@ -253,8 +262,8 @@ export default function ColaboradorComunicadosPage() {
 
             {selectedComunicado.exigeCiencia && (
               <div style={{ textAlign: 'right' }}>
-                {!selectedComunicado.ciencias[userSlug] ? (
-                   <button onClick={() => { handleCiencia(selectedComunicado.id); setSelectedComunicado({...selectedComunicado, ciencias: {...selectedComunicado.ciencias, [userSlug]: true}}) }} className="btn btn-primary" style={{ background: '#3b82f6', color: '#fff', border: 'none' }}>
+                {!(selectedComunicado.ciencias || {})[userSlug] ? (
+                   <button onClick={() => { handleCiencia(selectedComunicado.id); setSelectedComunicado({...selectedComunicado, ciencias: {...(selectedComunicado.ciencias || {}), [userSlug]: true}}) }} className="btn btn-primary" style={{ background: '#3b82f6', color: '#fff', border: 'none' }}>
                      Declaro estar ciente
                    </button>
                 ) : (

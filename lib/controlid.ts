@@ -25,7 +25,9 @@ export class ControliDClient {
   private password: string
 
   constructor(config: ControliDConfig) {
-    this.baseUrl = `https://${config.ip}:${config.port}`
+    const protocol = config.port === 80 ? 'http' : 'https'
+    const cleanIp = config.ip.replace(/^https?:\/\//i, '')
+    this.baseUrl = `${protocol}://${cleanIp}:${config.port}`
     this.login = config.login || 'admin'
     this.password = config.password || 'admin'
   }
@@ -137,6 +139,30 @@ export class ControliDClient {
     return res.json()
   }
 
+  async getUserImage(userId: number): Promise<string> {
+    if (!this.session) await this.authenticate()
+
+    const res = await fetch(
+      `${this.baseUrl}/user_get_image.fcgi?user_id=${userId}`,
+      {
+        method: 'POST',
+        headers: {
+          Cookie: `session=${this.session}`,
+        },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(15000),
+      }
+    )
+
+    if (!res.ok) {
+      throw new Error(`Get image failed: ${res.status}`)
+    }
+
+    const buffer = await res.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString('base64')
+    return `data:image/jpeg;base64,${base64}`
+  }
+
   // ─── Access Logs ──────────────────────────────────────────────────
   async loadAccessLogs(limit = 100): Promise<any> {
     return this.request('load_objects.fcgi', {
@@ -179,13 +205,57 @@ export class ControliDClient {
 
   /** Configure iDFace to push events to our webhook */
   async setMonitorConfig(webhookUrl: string): Promise<any> {
+    // Extrai o host (IP ou domínio) e a porta da URL recebida
+    let hostname = webhookUrl
+    let port = 80
+    let path = '/api/portaria/webhook'
+    
+    try {
+      const parsed = new URL(webhookUrl)
+      hostname = parsed.hostname
+      port = parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === 'https:' ? 443 : 80)
+      path = parsed.pathname + parsed.search
+    } catch {
+      // Fallback em caso de string que não seja URL absoluta completa
+      hostname = webhookUrl.replace(/^https?:\/\//i, '').split(':')[0]
+      port = webhookUrl.includes('https') ? 443 : 80
+    }
+
     return this.request('set_configuration.fcgi', {
       monitor: {
-        request_timeout: 3000,
-        hostname: webhookUrl,
-        port: 443,
-        path: '/api/portaria/webhook',
+        request_timeout: '5000',
+        hostname,
+        port: String(port),
+        path,
       },
+    })
+  }
+
+  // ─── Gate Control & Relay (Abertura Remota) ────────────────────────
+  async openDoor(): Promise<any> {
+    return this.request('execute_actions.fcgi', {
+      actions: [
+        {
+          action: 'door',
+          parameters: 'door=1'
+        }
+      ]
+    })
+  }
+
+  // ─── System Controls ──────────────────────────────────────────────
+  async reboot(): Promise<any> {
+    return this.request('reboot.fcgi', {})
+  }
+
+  async setSystemTime(date: Date): Promise<any> {
+    return this.request('set_system_time.fcgi', {
+      day: date.getDate(),
+      month: date.getMonth() + 1,
+      year: date.getFullYear(),
+      hour: date.getHours(),
+      minute: date.getMinutes(),
+      second: date.getSeconds()
     })
   }
 }

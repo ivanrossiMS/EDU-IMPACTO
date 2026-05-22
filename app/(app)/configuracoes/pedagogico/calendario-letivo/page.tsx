@@ -1,7 +1,10 @@
 'use client'
 
 import { useData, ConfigCalendarioLetivo, newId } from '@/lib/dataContext'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
+import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 import {
   Calendar, Plus, Save, Trash2, Edit3, X,
   BookOpen, AlertTriangle, CheckCircle2, Clock,
@@ -37,7 +40,7 @@ function Modal({ form, onChange, onSave, onClose, editing }: {
     return dias
   }, [form.dataInicio, form.dataFim])
 
-  const maxFaltas = Math.floor(form.totalDiasLetivos * (1 - form.frequenciaMinima / 100))
+  const maxFaltas = Math.floor((form.totalDiasLetivos ?? 200) * (1 - (form.frequenciaMinima ?? 75) / 100))
 
   return (
     <div className="modal-overlay">
@@ -79,8 +82,8 @@ function Modal({ form, onChange, onSave, onClose, editing }: {
                 style={{ paddingRight: 32 }} />
               <span style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: '#6366f1', fontWeight: 700 }}>%</span>
             </div>
-            <div style={{ fontSize: 10, color: form.frequenciaMinima < 75 ? '#ef4444' : 'hsl(var(--text-muted))', marginTop: 3 }}>
-              {form.frequenciaMinima < 75 && '⚠ Abaixo da exigência mínima (LDB Art. 24) · '}
+            <div style={{ fontSize: 10, color: (form.frequenciaMinima ?? 75) < 75 ? '#ef4444' : 'hsl(var(--text-muted))', marginTop: 3 }}>
+              {(form.frequenciaMinima ?? 75) < 75 && '⚠ Abaixo da exigência mínima (LDB Art. 24) · '}
               Máximo de faltas: {maxFaltas} aulas
             </div>
           </div>
@@ -108,10 +111,10 @@ function Modal({ form, onChange, onSave, onClose, editing }: {
           <div style={{ fontWeight: 700, fontSize: 12, marginBottom: 8, color: '#6366f1' }}>📊 Cálculo Automático</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
             {[
-              { label: 'Dias Letivos', value: form.totalDiasLetivos },
-              { label: 'Freq. Mínima', value: `${form.frequenciaMinima}%` },
+              { label: 'Dias Letivos', value: form.totalDiasLetivos ?? 200 },
+              { label: 'Freq. Mínima', value: `${form.frequenciaMinima ?? 75}%` },
               { label: 'Máx. Faltas', value: maxFaltas },
-              { label: 'Mín. Presenças', value: form.totalDiasLetivos - maxFaltas },
+              { label: 'Mín. Presenças', value: (form.totalDiasLetivos ?? 200) - maxFaltas },
             ].map(item => (
               <div key={item.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 20, fontWeight: 900, color: '#6366f1', fontFamily: 'Outfit,sans-serif' }}>{item.value}</div>
@@ -134,7 +137,15 @@ function Modal({ form, onChange, onSave, onClose, editing }: {
 }
 
 export default function CalendarioLetivoPage() {
-  const { cfgCalendarioLetivo, setCfgCalendarioLetivo } = useData()
+  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigCalendarioLetivo[] }>(['config-calendario-letivo'], '/api/configuracoes?chave=cfgCalendarioLetivo')
+  
+  const [cfgCalendarioLetivo, setCfgCalendarioLetivo] = useState<ConfigCalendarioLetivo[]>([])
+
+  useEffect(() => {
+    if (rawConfig?.valor) {
+      setCfgCalendarioLetivo(rawConfig.valor)
+    }
+  }, [rawConfig])
   const [modal, setModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormCal>(BLANK)
@@ -168,13 +179,16 @@ export default function CalendarioLetivoPage() {
 
   const handleDelete = (id: string) => setCfgCalendarioLetivo(prev => prev.filter(c => c.id !== id))
 
-  const maxFaltas = (c: ConfigCalendarioLetivo) => Math.floor(c.totalDiasLetivos * (1 - c.frequenciaMinima / 100))
+  const maxFaltas = (c: ConfigCalendarioLetivo) => Math.floor((c.totalDiasLetivos ?? 200) * (1 - (c.frequenciaMinima ?? 75) / 100))
 
   return (
     <div>
       <div className="page-header" style={{ marginBottom: 28 }}>
         <div>
-          <h1 className="page-title">Calendário Letivo</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>Calendário Letivo</span>
+            {isFetching && <UpdatingIndicator />}
+          </h1>
           <p className="page-subtitle">
             Defina os dias letivos e frequência mínima exigida por lei (LDB, Art. 24)
           </p>
@@ -203,8 +217,8 @@ export default function CalendarioLetivoPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
           {[
             { label: 'Ano Letivo Atual', value: calendarioAtual.ano, color: '#6366f1', icon: '📅' },
-            { label: 'Dias Letivos', value: calendarioAtual.totalDiasLetivos, color: '#3b82f6', icon: '📚' },
-            { label: 'Freq. Mínima', value: `${calendarioAtual.frequenciaMinima}%`, color: '#10b981', icon: '✅' },
+            { label: 'Dias Letivos', value: calendarioAtual.totalDiasLetivos ?? 200, color: '#3b82f6', icon: '📚' },
+            { label: 'Freq. Mínima', value: `${calendarioAtual.frequenciaMinima ?? 75}%`, color: '#10b981', icon: '✅' },
             { label: 'Máx. Faltas Permitidas', value: maxFaltas(calendarioAtual), color: '#ef4444', icon: '❌' },
           ].map(c => (
             <div key={c.label} style={{ padding: '18px 20px', background: 'hsl(var(--bg-elevated))', borderRadius: 14, border: `1px solid ${c.color}20`, position: 'relative', overflow: 'hidden' }}>
@@ -218,23 +232,28 @@ export default function CalendarioLetivoPage() {
       )}
 
       {/* Lista */}
-      {cfgCalendarioLetivo.length === 0 ? (
-        <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-          <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Nenhum calendário letivo configurado</div>
-          <div style={{ fontSize: 12, marginBottom: 20 }}>
-            Configure o calendário do ano letivo para habilitar alertas automáticos de frequência.
+      {isLoading && cfgCalendarioLetivo.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="card" style={{ padding: '22px 24px', minHeight: 120 }}><CardSkeleton /></div>
+            <div className="card" style={{ padding: '22px 24px', minHeight: 120 }}><CardSkeleton /></div>
           </div>
-          <button className="btn btn-primary" onClick={openNew}>
-            <Plus size={14} /> Configurar Calendário {ANO_ATUAL}
-          </button>
-        </div>
-      ) : (
+        ) : cfgCalendarioLetivo.length === 0 ? (
+          <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+            <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.15 }} />
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Nenhum calendário letivo configurado</div>
+            <div style={{ fontSize: 12, marginBottom: 20 }}>
+              Configure o calendário do ano letivo para habilitar alertas automáticos de frequência.
+            </div>
+            <button className="btn btn-primary" onClick={openNew}>
+              <Plus size={14} /> Configurar Calendário {ANO_ATUAL}
+            </button>
+          </div>
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {[...cfgCalendarioLetivo].sort((a, b) => b.ano - a.ano).map(cal => {
+          {[...cfgCalendarioLetivo].sort((a, b) => Number(b.ano) - Number(a.ano)).map(cal => {
             const isCurrent = cal.ano === ANO_ATUAL
             const mf = maxFaltas(cal)
-            const minPresencas = cal.totalDiasLetivos - mf
+            const minPresencas = (cal.totalDiasLetivos ?? 200) - mf
             const diasUteis = (() => {
               if (!cal.dataInicio || !cal.dataFim) return 0
               const ini = new Date(cal.dataInicio), fim = new Date(cal.dataFim)
@@ -269,8 +288,8 @@ export default function CalendarioLetivoPage() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
                   {[
-                    { label: 'Dias Letivos', value: cal.totalDiasLetivos, color: '#3b82f6', icon: '📚' },
-                    { label: 'Freq. Mínima', value: `${cal.frequenciaMinima}%`, color: '#10b981', icon: '✅' },
+                    { label: 'Dias Letivos', value: cal.totalDiasLetivos ?? 200, color: '#3b82f6', icon: '📚' },
+                    { label: 'Freq. Mínima', value: `${cal.frequenciaMinima ?? 75}%`, color: '#10b981', icon: '✅' },
                     { label: 'Máx. Faltas', value: mf, color: '#ef4444', icon: '❌' },
                     { label: 'Mín. Presenças', value: minPresencas, color: '#6366f1', icon: '✓' },
                     { label: 'Dias Úteis Período', value: diasUteis, color: '#f59e0b', icon: '📆' },
@@ -285,17 +304,17 @@ export default function CalendarioLetivoPage() {
 
                 {/* Alertas */}
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {cal.frequenciaMinima < 75 && (
+                  {(cal.frequenciaMinima ?? 75) < 75 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#ef4444', background: 'rgba(239,68,68,0.08)', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(239,68,68,0.2)' }}>
                       <AlertTriangle size={11} /> Frequência mínima abaixo da exigência LDB (75%)
                     </div>
                   )}
-                  {cal.totalDiasLetivos < 200 && (
+                  {(cal.totalDiasLetivos ?? 200) < 200 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.08)', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(245,158,11,0.2)' }}>
                       <AlertTriangle size={11} /> Dias letivos abaixo do mínimo LDB (200 dias)
                     </div>
                   )}
-                  {cal.frequenciaMinima >= 75 && cal.totalDiasLetivos >= 200 && (
+                  {(cal.frequenciaMinima ?? 75) >= 75 && (cal.totalDiasLetivos ?? 200) >= 200 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#10b981', background: 'rgba(16,185,129,0.08)', padding: '4px 10px', borderRadius: 20, border: '1px solid rgba(16,185,129,0.2)' }}>
                       <CheckCircle2 size={11} /> Configuração em conformidade com a LDB
                     </div>

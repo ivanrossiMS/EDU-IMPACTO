@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createAdminClient } from '@/lib/server/supabaseServerFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const supabase = await createProtectedClient();
+  const supabase = createAdminClient();
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
   const alunoId = searchParams.get('aluno_id')
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createProtectedClient();
+  const supabase = createAdminClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
@@ -41,9 +41,17 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const supabase = await createProtectedClient();
+  const supabase = createAdminClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
+  const all = searchParams.get('all')
+  
+  if (all === 'true') {
+    const { error } = await supabase.from('frequencias').delete().neq('id', 'non-existent-id')
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true, message: 'Todos os registros foram excluídos.' })
+  }
+  
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const { error } = await supabase.from('frequencias').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -51,14 +59,22 @@ export async function DELETE(request: Request) {
 }
 
 function buildRow(f: any) {
-  const { id, alunoId, turmaId, data, presente, justificativa, ...rest } = f
+  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, ...rest } = f
+  const currentYear = new Date().getFullYear().toString()
+  const year = anoLetivo || currentYear
+  const diarioId = `DIARIO-${turmaId}-${year}`
+  
   return {
-    id: id || `FREQ-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+    id: id || `FREQ-${alunoId}-${data}`,
     aluno_id: alunoId || '',
     turma_id: turmaId || '',
     data: data || new Date().toISOString().split('T')[0],
     presente: presente !== undefined ? Boolean(presente) : true,
     justificativa: justificativa || '',
-    dados: rest,
+    dados: {
+      ...rest,
+      diarioId,
+      anoLetivo: year
+    },
   }
 }

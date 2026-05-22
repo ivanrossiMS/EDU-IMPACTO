@@ -156,11 +156,19 @@ export default function LoginPage() {
         nome: nomeReal, 
         email: email, 
         cargo: cargoReal, 
-        perfil: perfilReal 
+        perfil: perfilReal,
+        aluno_id: meta.aluno_id || '',
+        responsavel_id: meta.responsavel_id || ''
       })
 
-      if (perfilReal === 'Família' || cargoReal === 'Aluno' || cargoReal === 'Responsável') {
-        window.location.href = '/agenda-digital'
+      if (cargoReal === 'Aluno') {
+        if (meta.aluno_id) {
+          window.location.href = `/agenda-digital/${meta.aluno_id}/comunicados`
+        } else {
+          window.location.href = '/agenda-digital'
+        }
+      } else if (perfilReal === 'Família' || cargoReal === 'Responsável') {
+        window.location.href = '/agenda-digital/selecionar-aluno'
       } else if (perfilReal === 'Professor') {
         window.location.href = '/professor'
       } else {

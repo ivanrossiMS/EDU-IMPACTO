@@ -15,6 +15,18 @@ export default function PortariaEntradasPage() {
   const [filtroData, setFiltroData] = useState(new Date().toISOString().slice(0, 10))
   const [modalEvento, setModalEvento] = useState<any>(null)
 
+  const formatDateTimeUTC = (dateStr: string) => {
+    if (!dateStr) return '—'
+    const d = new Date(dateStr)
+    const day = String(d.getUTCDate()).padStart(2, '0')
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const year = d.getUTCFullYear()
+    const h = String(d.getUTCHours()).padStart(2, '0')
+    const m = String(d.getUTCMinutes()).padStart(2, '0')
+    const s = String(d.getUTCSeconds()).padStart(2, '0')
+    return `${day}/${month}/${year} ${h}:${m}:${s}`
+  }
+
   const { data: eventosRes, isLoading } = useApiQuery<{ data: any[] }>(
     ['portaria-entradas', filtroData],
     '/api/portaria/eventos',
@@ -101,11 +113,11 @@ export default function PortariaEntradasPage() {
         borderRadius: 18, overflow: 'hidden',
       }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '140px 80px 1fr 160px 100px 60px',
+          display: 'grid', gridTemplateColumns: '140px 80px 1.2fr 1.2fr 1.2fr 100px 60px',
           gap: 12, padding: '12px 20px',
           borderBottom: '1px solid hsl(var(--border-subtle))',
         }}>
-          {['DATA/HORA', 'CÓDIGO', 'ALUNO', 'DISPOSITIVO', 'STATUS', ''].map(h => (
+          {['DATA/HORA', 'CÓDIGO', 'ALUNO', 'TURMA', 'DISPOSITIVO', 'STATUS', ''].map(h => (
             <div key={h} style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>{h}</div>
           ))}
         </div>
@@ -124,11 +136,12 @@ export default function PortariaEntradasPage() {
           <div style={{ maxHeight: 520, overflow: 'auto' }}>
             {filtered.map((e, i) => {
               const badge = statusBadge(e.status)
+              const nomeTurma = e.aluno_turma ? (e.aluno_turma.includes(' - ') ? e.aluno_turma.split(' - ')[1] : e.aluno_turma) : '—'
               return (
                 <div
                   key={e.id || i}
                   style={{
-                    display: 'grid', gridTemplateColumns: '140px 80px 1fr 160px 100px 60px',
+                    display: 'grid', gridTemplateColumns: '140px 80px 1.2fr 1.2fr 1.2fr 100px 60px',
                     gap: 12, padding: '12px 20px', alignItems: 'center',
                     borderBottom: '1px solid hsl(var(--border-subtle))',
                     transition: 'background 0.15s', cursor: 'pointer',
@@ -138,15 +151,34 @@ export default function PortariaEntradasPage() {
                   onClick={() => setModalEvento(e)}
                 >
                   <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontFamily: 'monospace', fontWeight: 600 }}>
-                    {new Date(e.data_hora).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {formatDateTimeUTC(e.data_hora)}
                   </div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: ACCENT, fontFamily: 'monospace' }}>
                     {e.user_id_equipamento || '—'}
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {e.aluno_nome || '—'}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%',
+                      overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+                      flexShrink: 0
+                    }}>
+                      {e.aluno_foto ? (
+                        <img src={e.aluno_foto} alt={e.aluno_nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ fontSize: 8, fontWeight: 800, color: 'hsl(var(--text-muted))' }}>
+                          {(e.aluno_nome || 'U').split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {e.aluno_nome || '—'}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {nomeTurma}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {e.dispositivo_nome || 'Desconhecido'}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: badge.bg, color: badge.color }}>
@@ -177,15 +209,36 @@ export default function PortariaEntradasPage() {
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 800, fontSize: 18, margin: 0 }}>Detalhes do Evento</h2>
-              <button onClick={() => setModalEvento(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}><X size={18} /></button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                <div style={{
+                  width: 50, height: 62, borderRadius: 10,
+                  background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))',
+                  overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 10px rgba(0,0,0,0.05)', flexShrink: 0
+                }}>
+                  {modalEvento.aluno_foto ? (
+                    <img src={modalEvento.aluno_foto} alt="Official ERP" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>Sem Foto</div>
+                  )}
+                </div>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 800, fontSize: 18, margin: 0, color: 'hsl(var(--text-primary))' }}>
+                    {modalEvento.aluno_nome || 'Usuário Não Cadastrado'}
+                  </h2>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                    Turma: {modalEvento.aluno_turma || 'Sem turma'} · Turno: {modalEvento.aluno_turno || 'Todos'}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setModalEvento(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))', padding: 4 }}><X size={18} /></button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               {[
                 ['Aluno', modalEvento.aluno_nome || '—'],
                 ['Código', modalEvento.user_id_equipamento || '—'],
-                ['Data/Hora', new Date(modalEvento.data_hora).toLocaleString('pt-BR')],
+                ['Data/Hora', formatDateTimeUTC(modalEvento.data_hora)],
                 ['Dispositivo', modalEvento.dispositivo_nome || '—'],
                 ['Status', modalEvento.status],
                 ['Confiança', `${modalEvento.confianca || 0}%`],

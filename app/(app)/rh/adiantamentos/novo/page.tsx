@@ -20,7 +20,8 @@ function addMonths(date: Date, months: number) {
 
 export default function NovoAdiantamento() {
   const router = useRouter()
-  const { adiantamentos = [], setAdiantamentos, logSystemAction } = useData();
+  const { logSystemAction } = useData();
+  const [adiantamentos = [], setAdiantamentos] = useSupabaseArray<any>('rh/adiantamentos', []);
   const [funcionarios, setFuncionarios] = useSupabaseArray<any>('rh/funcionarios');
   
   const ativos = funcionarios.filter(f => f.status === 'ativo')
@@ -284,50 +285,68 @@ export default function NovoAdiantamento() {
         {/* COLUNA DIREITA - PARCELAMENTO & SALVAR (Span 1) */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, transition: 'opacity 300ms', opacity: !isFuncSelected || !isValorValid ? 0.3 : 1, pointerEvents: !isFuncSelected || !isValorValid ? 'none' : 'auto' }}>
           
-          <div style={{ background: 'var(--gradient-dark)', border: '1px solid hsl(var(--border-subtle))', color: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', position: 'relative', overflow: 'hidden' }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#93c5fd', fontWeight: 600, position: 'relative', zIndex: 10 }}>
-              <Calculator size={18} />
-              <h3>Simulação / Dízimas</h3>
+          <div style={{ 
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', 
+            border: '1px solid rgba(255,255,255,0.1)', 
+            color: '#fff', 
+            borderRadius: 20, 
+            padding: 24, 
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2)', 
+            position: 'relative', 
+            overflow: 'hidden' 
+          }}>
+             {/* Decor elements */}
+             <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '160px', height: '160px', background: '#3b82f6', borderRadius: '50%', filter: 'blur(80px)', opacity: 0.3 }}></div>
+             <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '120px', height: '120px', background: '#10b981', borderRadius: '50%', filter: 'blur(60px)', opacity: 0.15 }}></div>
+
+             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#93c5fd', fontWeight: 600, position: 'relative', zIndex: 10 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <Calculator size={16} />
+              </div>
+              <span style={{ fontSize: 14, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Simulação / Dízimas</span>
             </div>
             
             {previewParcelas.length === 0 ? (
-               <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontStyle: 'italic' }}>Preencha o valor e parcelas para gerar a pré-visualização contábil.</p>
+               <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontStyle: 'italic', position: 'relative', zIndex: 10 }}>Preencha o valor e parcelas para gerar a pré-visualização contábil.</p>
             ) : (
               <div style={{ position: 'relative', zIndex: 10 }}>
                  <div style={{ maxHeight: 250, overflowY: 'auto', paddingRight: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {previewParcelas.map((p, index) => (
-                      <div key={p.numero} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <div key={p.numero} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s' }}>
                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                           <span style={{ width: 24, height: 24, borderRadius: 4, background: 'rgba(255,255,255,0.1)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p.numero}</span>
-                           <span style={{ fontSize: 13, fontWeight: 500 }}>
+                           <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(255,255,255,0.1)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>{p.numero}</span>
+                           <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
                               {new Date(p.vencimento + 'T12:00:00Z').toLocaleDateString('pt-BR')}
                            </span>
                          </div>
-                         <span style={{ fontWeight: 800, fontSize: 13, color: index === previewParcelas.length - 1 && hasResidual ? '#fbbf24' : '#93c5fd' }}>
+                         <span style={{ fontWeight: 800, fontSize: 14, color: index === previewParcelas.length - 1 && hasResidual ? '#fbbf24' : '#60a5fa' }}>
                            {formatMoney(p.valor)}
                          </span>
                       </div>
                     ))}
                  </div>
                  
-                 <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                 <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.5)' }}>Total Simulado</span>
-                      <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>
-                        {formatMoney(previewParcelas.reduce((acc, curr) => acc + curr.valor, 0))}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.5)' }}>Total Simulado</span>
+                        <span style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: '-0.025em' }}>
+                          {formatMoney(previewParcelas.reduce((acc, curr) => acc + curr.valor, 0))}
+                        </span>
+                      </div>
                    </div>
                  </div>
 
                  {hasResidual && (
-                   <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11, color: '#fde68a', background: 'rgba(245,158,11,0.15)', padding: 12, borderRadius: 8, border: '1px solid rgba(245,158,11,0.3)' }}>
-                     <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-                     <p>A última parcela absorveu a dízima / diferença para fechar os centavos exatos contábeis.</p>
+                   <div style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11, color: '#fde68a', background: 'rgba(245,158,11,0.15)', padding: 12, borderRadius: 10, border: '1px solid rgba(245,158,11,0.2)' }}>
+                     <Info size={14} style={{ flexShrink: 0, marginTop: 2, color: '#fbbf24' }} />
+                     <p style={{ fontWeight: 500 }}>A última parcela absorveu a dízima / diferença para fechar os centavos exatos contábeis.</p>
                    </div>
                  )}
               </div>
             )}
           </div>
+
 
           <button 
             onClick={handleSave}

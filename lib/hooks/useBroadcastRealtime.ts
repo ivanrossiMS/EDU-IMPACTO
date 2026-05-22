@@ -8,6 +8,7 @@ export type RealtimeEvent =
   | 'RECALL_STUDENT'
   | 'REVERT_CALL'
   | 'CALL_UPDATE'
+  | 'CLEAR_ALL_CALLS'
 
 export interface RealtimePayload {
   event: RealtimeEvent

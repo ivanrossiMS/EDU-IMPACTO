@@ -73,15 +73,27 @@ export async function adminUpdatePassword(userIdLegacy: string, newPass: string)
   const email = dbUser?.email
   if (!email) throw new Error("Usuário legado não cadastrado ou erro sistêmico (" + (selectErr?.message || "null") + ")")
 
-  // Filtered lookup instead of loading ALL users into memory
-  const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ 
-    page: 1, 
-    perPage: 1 
-  })
-  
-  // Use direct email filter via the admin API
-  const { data: allMatches } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-  const authId = allMatches?.users?.find(u => u.email === email)?.id
+  // Scan auth users paginated to locate the exact match by email safely
+  let authId: string | undefined = undefined
+  let page = 1
+  while (true) {
+    const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+      page,
+      perPage: 100
+    })
+    
+    if (listErr) throw listErr
+    const users = listData?.users || []
+    if (users.length === 0) break
+
+    const match = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    if (match) {
+      authId = match.id
+      break
+    }
+    if (users.length < 100) break
+    page++
+  }
 
   if (!authId) throw new Error("Nenhum usuário correspondente no Auth")
 

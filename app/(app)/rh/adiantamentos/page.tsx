@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { useData } from '@/lib/dataContext'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { Plus, Banknote, Search, Filter, CheckCircle2, AlertCircle, Clock, MoreVertical, ArrowRight, Pencil, Trash2 } from 'lucide-react'
 import { ConfirmModal } from '@/components/ui/CrudModal'
 
@@ -12,7 +13,7 @@ function formatMoney(value: number) {
 }
 
 export default function AdiantamentosPage() {
-  const { adiantamentos = [], setAdiantamentos } = useData()
+  const [adiantamentos = [], setAdiantamentos, { loading: isLoading }] = useSupabaseArray<any>('rh/adiantamentos', [])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
   const [dataInicio, setDataInicio] = useState('')
@@ -25,7 +26,7 @@ export default function AdiantamentosPage() {
   const ativosCount = adiantamentos.filter(a => a.status === 'em_andamento' || a.status === 'aprovado' || a.status === 'pendente').length
   
   // Parcela vencida check:
-  const hasVencida = adiantamentos.filter(a => a.parcelas.some(p => p.status === 'vencida')).length
+  const hasVencida = adiantamentos.filter((a: any) => a.parcelas.some((p: any) => p.status === 'vencida')).length
 
   const filtered = adiantamentos.filter(a => {
     const s = searchTerm.toLowerCase()
@@ -184,9 +185,11 @@ export default function AdiantamentosPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <TableSkeleton rows={6} cols={7} />
+            ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div style={{ padding: '40px 20px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
                     <div style={{ width: 48, height: 48, background: 'hsl(var(--bg-elevated))', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                       <Banknote size={24} style={{ opacity: 0.5 }} />
@@ -198,7 +201,7 @@ export default function AdiantamentosPage() {
             ) : (
               filtered.map(item => {
                 const badge = getBadgeSpecs(item.status)
-                const pagas = item.parcelas.filter(p => ['paga', 'descontada'].includes(p.status)).length
+                const pagas = item.parcelas.filter((p: any) => ['paga', 'descontada'].includes(p.status)).length
                 const total = item.parcelas.length
                 const perc = total === 0 ? 0 : Math.round((pagas / total) * 100)
                 

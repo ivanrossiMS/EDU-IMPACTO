@@ -12,6 +12,8 @@ import { Plus, Search, Filter, X, Download, CheckCircle, Pencil, Trash2,
 } from 'lucide-react'
 import { useDebounce } from 'use-debounce'
 import { useApiQuery, useApiMutation } from '@/hooks/useApi'
+import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { UpdatingIndicator } from '@/components/skeletons/States'
 
 // ─── Constantes ────────────────────────────────────────────────────
 const METODOS_FALLBACK = ['PIX', 'Boleto', 'Cartão de Crédito', 'Cartão de Débito', 'Débito Automático', 'Dinheiro', 'Cheque', 'Transferência', 'Bolsa Integral']
@@ -88,7 +90,7 @@ export default function ContasReceberPage() {
   const itemsPerPage = 25
 
   // ⚡ Otimização 2: Bypass do contexto global para cache local assíncrono (Reduz congelamento de UI)
-  const { data: apiResponse, isLoading: loadingTitulos } = useApiQuery<{data: any[]}>(['titulos-receber', search, tabStatus, filtroMes, filtroAno, filtroMetodo], '/api/titulos', { 
+  const { data: apiResponse, isLoading: loadingTitulos, isFetching: isFetchingTitulos } = useApiQuery<{data: any[]}>(['titulos-receber', search, tabStatus, filtroMes, filtroAno, filtroMetodo], '/api/titulos', { 
     limit: 1000,
     search: search === '' ? undefined : search,
     status: tabStatus === 'todos' ? undefined : tabStatus
@@ -378,7 +380,10 @@ export default function ContasReceberPage() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Contas a Receber</h1>
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            Contas a Receber
+            {isFetchingTitulos && <UpdatingIndicator />}
+          </h1>
           <p className="page-subtitle">
             Taxa de recebimento: <strong style={{ color: '#10b981' }}>{taxaRecebimento.toFixed(1)}%</strong>
             {' '}• Carteira total: <strong style={{ color: '#3b82f6' }}>{fmtCur(totalCarteira)}</strong>
@@ -557,7 +562,28 @@ export default function ContasReceberPage() {
       )}
 
       {/* Tabela */}
-      {titulos.length === 0 ? (
+      {loadingTitulos && titulos.length === 0 ? (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Aluno / Responsável</th>
+                <th>Descrição</th>
+                <th>Vencimento</th>
+                <th style={{ textAlign: 'center' }}>Parcela</th>
+                <th style={{ textAlign: 'right' }}>Valor</th>
+                <th>Método</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <TableSkeleton rows={10} cols={9} />
+            </tbody>
+          </table>
+        </div>
+      ) : titulos.length === 0 ? (
         <div className="card" style={{ padding: '72px 24px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <DollarSign size={52} style={{ opacity: 0.1, margin: '0 auto 20px' }} />
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Nenhum título lançado</div>

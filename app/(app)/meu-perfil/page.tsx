@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react'
 import { useApp } from '@/lib/context'
 import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
-  Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock
+  Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock, Loader2
 } from 'lucide-react'
+import { getProfileUploadUrlAction, updateProfilePhotoAction } from './actions'
+import { compressImage } from '@/lib/mediaCompressor'
 
 interface UserProfile {
   bio: string
@@ -68,7 +70,7 @@ function PasswordStrength({ pw }: { pw: string }) {
 }
 
 export default function MeuPerfilPage() {
-  const { currentUser, currentUserPerfil } = useApp()
+  const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
 
   // ── Extra fields (editáveis pelo usuário)
   const [extra, setExtra] = useState<UserProfile>({ bio: '', telefone: '', unidade: '', foto: '' })
@@ -82,18 +84,69 @@ export default function MeuPerfilPage() {
   const [pwError, setPwError] = useState('')
   const [pwSuccess, setPwSuccess] = useState(false)
 
-  // Carrega o extra profile quando o usuário muda
+  const [dbEmail, setDbEmail] = useState('')
+  const [isUploading, setIsUploading] = useState(false)
+
+  // Carrega o extra profile e busca dados atualizados da API
   useEffect(() => {
     if (!currentUser) return
     const loaded = getProfileExtra(currentUser.id)
+    
+    // Se o context já tem foto mas o extra não, prioriza o context
+    if (currentUser.foto && !loaded.foto) {
+      loaded.foto = currentUser.foto
+    }
+    
     setExtra(loaded)
     setForm(loaded)
+
+    // Buscar dados completos da API de usuários
+    fetch('/api/configuracoes/usuarios')
+      .then(r => r.json())
+      .then(users => {
+        if (Array.isArray(users)) {
+          // Procurar pelo ID (prioridade), Email ou Nome (como último recurso)
+          const me = users.find(u => 
+            u.id === currentUser.id || 
+            (u.email && u.email.toLowerCase() === currentUser.email?.toLowerCase()) ||
+            (u.nome && u.nome.toLowerCase() === currentUser.nome?.toLowerCase())
+          )
+          
+          if (me) {
+             const oficialEmail = me.email || me.dados?.email
+             if (oficialEmail) setDbEmail(oficialEmail)
+             
+             // Extrair foto do campo 'foto' ou de dentro do JSON 'dados'
+             const remoteFoto = me.foto || me.dados?.foto
+             
+             const updates: any = {}
+             if (oficialEmail && oficialEmail.toLowerCase() !== currentUser.email?.toLowerCase()) {
+               updates.email = oficialEmail
+             }
+             
+             // Só atualiza a foto se receber algo válido da API E for diferente da atual
+             if (remoteFoto && remoteFoto !== currentUser.foto) {
+                updates.foto = remoteFoto
+             }
+             
+             if (Object.keys(updates).length > 0) {
+                setCurrentUser({ ...currentUser, ...updates })
+                if (updates.foto) {
+                  setExtra(p => ({ ...p, foto: updates.foto }))
+                  setForm(p => ({ ...p, foto: updates.foto }))
+                }
+             }
+          }
+        }
+      })
+      .catch(err => console.error('[MeuPerfil] Erro ao buscar dados da API:', err))
   }, [currentUser?.id])
 
   const saveProfile = () => {
     if (!currentUser) return
     setProfileExtra(currentUser.id, form)
     setExtra(form)
+    setCurrentUser({ ...currentUser, foto: form.foto })
     setEditMode(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -156,33 +209,74 @@ export default function MeuPerfilPage() {
           {/* Avatar card */}
           <div className="card" style={{ padding: '28px 20px', textAlign: 'center' }}>
             <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
-              {extra.foto ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={extra.foto} alt={displayNome} style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(96,165,250,0.3)' }} />
-              ) : (
-                <div style={{ width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: '#fff', margin: '0 auto', boxShadow: '0 0 0 4px rgba(99,102,241,0.15)' }}>
-                  {initials || '?'}
-                </div>
-              )}
-              {/* Upload foto */}
-              <label style={{ position: 'absolute', bottom: 0, right: -4, width: 28, height: 28, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                <Camera size={13} color="#fff" />
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  const reader = new FileReader()
-                  reader.onload = ev => {
-                    const foto = ev.target?.result as string
-                    setForm(p => ({ ...p, foto }))
-                    // Salva direto ao trocar foto
-                    const updated = { ...getProfileExtra(currentUser.id), foto }
-                    setProfileExtra(currentUser.id, updated)
-                    setExtra(updated)
-                  }
-                  reader.readAsDataURL(file)
-                }} />
-              </label>
-            </div>
+                {extra.foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={extra.foto} alt={displayNome} style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '3px solid rgba(96,165,250,0.3)', opacity: isUploading ? 0.5 : 1 }} />
+                ) : (
+                  <div style={{ width: 96, height: 96, borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: '#fff', margin: '0 auto', boxShadow: '0 0 0 4px rgba(99,102,241,0.15)', opacity: isUploading ? 0.5 : 1 }}>
+                    {initials || '?'}
+                  </div>
+                )}
+                
+                {isUploading && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Loader2 className="animate-spin" size={32} color="#fff" />
+                  </div>
+                )}
+
+                {/* Upload foto */}
+                <label style={{ position: 'absolute', bottom: 0, right: -4, width: 28, height: 28, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+                  <Camera size={13} color="#fff" />
+                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploading} onChange={async e => {
+                    const file = e.target.files?.[0]
+                    if (!file || !currentUser) return
+                    
+                    setIsUploading(true)
+                    try {
+                      // 1. Comprimir imagem do avatar
+                      const fileToUpload = await compressImage(file, {
+                        maxWidth: 300,
+                        maxHeight: 300,
+                        quality: 0.85,
+                        format: 'image/webp'
+                      });
+
+                      // 2. Obter URL assinada
+                      const res = await getProfileUploadUrlAction(currentUser.id, fileToUpload.name)
+                      if (res.error || !res.signedUrl) throw new Error(res.error || 'Erro ao preparar upload')
+
+                      // 3. Upload direto
+                      const upload = await fetch(res.signedUrl, {
+                        method: 'PUT',
+                        body: fileToUpload,
+                        headers: { 'Content-Type': fileToUpload.type }
+                      })
+                      if (!upload.ok) throw new Error('Falha no envio do arquivo')
+
+                      const fotoUrl = res.publicUrl
+                      
+                      // 3. Salvar no banco e Auth
+                      await updateProfilePhotoAction(currentUser.id, fotoUrl)
+
+                      // 4. Atualizar UI e isolar foto no localStorage
+                      localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)
+                      
+                      setForm(p => ({ ...p, foto: fotoUrl }))
+                      const updated = { ...getProfileExtra(currentUser.id), foto: fotoUrl }
+                      setProfileExtra(currentUser.id, updated)
+                      setExtra(updated)
+                      setCurrentUser({ ...currentUser, foto: fotoUrl })
+                      
+                      setSaved(true)
+                      setTimeout(() => setSaved(false), 3000)
+                    } catch (err: any) {
+                      alert('Erro ao atualizar foto: ' + err.message)
+                    } finally {
+                      setIsUploading(false)
+                    }
+                  }} />
+                </label>
+              </div>
 
             <div style={{ fontWeight: 800, fontSize: 17 }}>{displayNome}</div>
             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 2 }}>{displayCargo}</div>
@@ -234,7 +328,7 @@ export default function MeuPerfilPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
               {[
                 { label: 'Nome completo',  value: displayNome },
-                { label: 'E-mail',         value: displayEmail },
+                { label: 'E-mail cadastrado', value: dbEmail || displayEmail },
                 { label: 'Cargo / Função', value: displayCargo },
                 { label: 'Perfil de acesso', value: displayPerfil },
               ].map(f => (

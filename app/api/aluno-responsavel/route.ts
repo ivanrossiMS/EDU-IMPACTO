@@ -1,78 +1,133 @@
 import { NextResponse } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { ZodAlunoResponsavel } from '@/lib/server/zodSchemas'
+import { supabaseServer as supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-// ─── GET: vínculos de um aluno ────────────────────────────────────────────────
+/**
+ * GET /api/aluno-responsavel?aluno_id=XXXX
+ * Endpoint público (sem auth) para carregar responsáveis de um aluno na Agenda Digital.
+ * Usa service role key internamente para contornar RLS.
+ */
 export async function GET(request: Request) {
   try {
-    const supabase = await createProtectedClient()
-    const { searchParams } = new URL(request.url)
-    const alunoId = searchParams.get('aluno_id')
-    if (!alunoId) return NextResponse.json({ error: 'aluno_id obrigatório' }, { status: 400 })
+    const url = new URL(request.url)
+    const alunoId = url.searchParams.get('aluno_id')
+    const alunoIdsStr = url.searchParams.get('aluno_ids')
 
-    const { data, error } = await supabase
+    let alunoIds: string[] = []
+    if (alunoIdsStr) {
+      alunoIds = alunoIdsStr.split(',').filter(Boolean)
+    } else if (alunoId) {
+      alunoIds = [alunoId]
+    }
+
+    if (alunoIds.length === 0) {
+      return NextResponse.json({ error: 'aluno_id ou aluno_ids é obrigatório' }, { status: 400 })
+    }
+
+    // Build all possible refs for these students (id, matricula, codigo podem diferir)
+    let refs: string[] = [...alunoIds]
+    const refsMap: Record<string, string> = {}
+
+    // Try to find the students to get all their refs
+    const { data: students } = await supabase
+      .from('alunos')
+      .select('id, matricula, dados')
+      .in('id', alunoIds)
+
+    if (students && students.length > 0) {
+      students.forEach(student => {
+        const extraRefs = [
+          student.id,
+          student.matricula,
+          student.dados?.codigo,
+          student.matricula ? String(student.matricula) : null,
+          student.dados?.codigo ? String(student.dados?.codigo) : null,
+        ].filter(Boolean)
+        
+        extraRefs.forEach(r => {
+          refsMap[r] = student.id
+          if (!refs.includes(r)) refs.push(r)
+        })
+      })
+    }
+
+    // Fetch the links
+    const { data: links, error: linksError } = await supabase
       .from('aluno_responsavel')
-      .select('*, responsavel:responsaveis(*)')
-      .eq('aluno_id', alunoId)
-      .order('created_at')
+      .select('*')
+      .in('aluno_id', refs)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ data: data || [] })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 400 })
-  }
-}
-
-// ─── POST: criar ou atualizar vínculo ────────────────────────────────────────
-export async function POST(request: Request) {
-  try {
-    const supabase = await createProtectedClient()
-    const body = await request.json()
-
-    // Suporte a array (múltiplos vínculos de uma vez)
-    const items = Array.isArray(body) ? body : [body]
-
-    const results = []
-    for (const item of items) {
-      const validated = ZodAlunoResponsavel.parse(item)
-      const { data, error } = await supabase
-        .from('aluno_responsavel')
-        .upsert(validated, { onConflict: 'aluno_id,responsavel_id' })
-        .select()
-        .single()
-      if (error) throw new Error(error.message)
-      results.push(data)
+    if (linksError) {
+      return NextResponse.json({ error: linksError.message }, { status: 400 })
     }
 
-    return NextResponse.json(results.length === 1 ? results[0] : results, { status: 201 })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.errors || e.message }, { status: 400 })
-  }
-}
-
-// ─── DELETE: remove vínculo por id ou por aluno_id+responsavel_id ────────────
-export async function DELETE(request: Request) {
-  try {
-    const supabase = await createProtectedClient()
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    const alunoId = searchParams.get('aluno_id')
-    const responsavelId = searchParams.get('responsavel_id')
-
-    let query = supabase.from('aluno_responsavel').delete()
-    if (id) query = query.eq('id', id) as any
-    else if (alunoId && responsavelId) {
-      query = query.eq('aluno_id', alunoId).eq('responsavel_id', responsavelId) as any
-    } else {
-      return NextResponse.json({ error: 'Informe id ou aluno_id+responsavel_id' }, { status: 400 })
+    if (!links || links.length === 0) {
+      if (alunoIdsStr) {
+        return NextResponse.json({ responsaveisMap: {} })
+      }
+      return NextResponse.json({ responsaveis: [] })
     }
 
-    const { error } = await query
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ ok: true })
+    // Fetch the actual responsavel records
+    const respIds = links.map((l: any) => l.responsavel_id).filter(Boolean)
+    const { data: respData, error: respError } = await supabase
+      .from('responsaveis')
+      .select('*')
+      .in('id', respIds)
+
+    if (respError) {
+      return NextResponse.json({ error: respError.message }, { status: 400 })
+    }
+
+    // If multiple IDs requested, return a map
+    if (alunoIdsStr) {
+      const map: Record<string, any[]> = {}
+      alunoIds.forEach(id => map[id] = [])
+      
+      links.forEach((l: any) => {
+        const studentId = refsMap[l.aluno_id] || l.aluno_id
+        if (!map[studentId]) map[studentId] = []
+        
+        const resp = (respData || []).find((r: any) => r.id === l.responsavel_id) || {}
+        map[studentId].push({
+          ...resp,
+          parentesco: l.parentesco,
+          isFinanceiro: l.resp_financeiro,
+          respFinanceiro: l.resp_financeiro,
+          isPedagogico: l.resp_pedagogico,
+          respPedagogico: l.resp_pedagogico,
+          isOutro: l.resp_outro,
+        })
+      })
+      
+      // Remove empty entries or duplicates if any
+      Object.keys(map).forEach(k => {
+        map[k] = map[k].filter((r: any) => r.id)
+      })
+
+      return NextResponse.json({ responsaveisMap: map })
+    }
+
+    // If single ID requested (legacy logic for the modal)
+    const responsaveis = links
+      .filter((l: any) => refs.includes(l.aluno_id))
+      .map((l: any) => {
+        const resp = (respData || []).find((r: any) => r.id === l.responsavel_id) || {}
+        return {
+          ...resp,
+          parentesco: l.parentesco,
+          isFinanceiro: l.resp_financeiro,
+          respFinanceiro: l.resp_financeiro,
+          isPedagogico: l.resp_pedagogico,
+          respPedagogico: l.resp_pedagogico,
+          isOutro: l.resp_outro,
+        }
+      })
+      .filter((r: any) => r.id)
+
+    return NextResponse.json({ responsaveis })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 400 })
+    return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

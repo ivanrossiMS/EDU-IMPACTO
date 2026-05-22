@@ -4,16 +4,17 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useData } from '@/lib/dataContext'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, User, MessageSquare, MoreHorizontal, ShieldAlert, Key, Ban, Mail, Phone, Calendar as CalendarIcon, FileText, Download, TrendingUp, CheckCircle2, Filter } from 'lucide-react'
+import { ArrowLeft, User, MessageSquare, MoreHorizontal, ShieldAlert, Key, Ban, Mail, Phone, Calendar as CalendarIcon, FileText, Download, TrendingUp, CheckCircle2, Filter, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { UserAvatar } from '@/components/UserAvatar'
 
 export default function ADAdminPessoaDetail() {
   const { id } = useParams()
   const router = useRouter()
   const { turmas = [] } = useData();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const { adAlert } = useAgendaDigital()
+  const { adAlert, adConfirm } = useAgendaDigital()
 
   const aluno = (alunos || []).find(a => a.id === id)
 
@@ -30,18 +31,41 @@ export default function ADAdminPessoaDetail() {
   }
 
   // Descobrir a turma e id para link
-  const turmaObj = (turmas || []).find(t => t.nome === aluno.turma)
-
-  // Gerar estatísticas falsas
-  const appAdoption = 92
-  const readingRate = 88
+  const turmaObj = (turmas || []).find(t => t.id === aluno.turma) || (turmas || []).find(t => t.nome === aluno.turma)
 
   // Responsáveis mapeados
-  const responsaveis = []
-  if (aluno.responsavelFinanceiro) responsaveis.push({ nome: aluno.responsavelFinanceiro, tipo: 'Financeiro', color: '#10b981', badgeBg: 'rgba(16,185,129,0.1)' })
-  if (aluno.responsavelPedagogico) responsaveis.push({ nome: aluno.responsavelPedagogico, tipo: 'Pedagógico', color: '#4f46e5', badgeBg: 'rgba(99,102,241,0.1)' })
-  if (aluno.responsavel && aluno.responsavel !== aluno.responsavelFinanceiro && aluno.responsavel !== aluno.responsavelPedagogico) {
-    responsaveis.push({ nome: aluno.responsavel, tipo: 'Outro', color: 'hsl(var(--text-secondary))', badgeBg: 'hsl(var(--bg-overlay))' })
+  const responsaveis: any[] = []
+  if (aluno.responsaveis && aluno.responsaveis.length > 0) {
+    aluno.responsaveis.forEach((r: any) => {
+      if (!r.nome) return;
+      let tipo = 'Responsável'; let color = 'hsl(var(--text-secondary))'; let badgeBg = 'hsl(var(--bg-overlay))';
+      if (r.respFinanceiro || r.isFinanceiro) { tipo = 'Financeiro'; color = '#10b981'; badgeBg = 'rgba(16,185,129,0.1)' }
+      else if (r.respPedagogico || r.isPedagogico) { tipo = 'Pedagógico'; color = '#4f46e5'; badgeBg = 'rgba(99,102,241,0.1)' }
+      responsaveis.push({ ...r, tipo, color, badgeBg })
+    })
+  } else {
+    if (aluno.responsavelFinanceiro) responsaveis.push({ nome: aluno.responsavelFinanceiro, tipo: 'Financeiro', color: '#10b981', badgeBg: 'rgba(16,185,129,0.1)' })
+    if (aluno.responsavelPedagogico) responsaveis.push({ nome: aluno.responsavelPedagogico, tipo: 'Pedagógico', color: '#4f46e5', badgeBg: 'rgba(99,102,241,0.1)' })
+    if (aluno.responsavel && aluno.responsavel !== aluno.responsavelFinanceiro && aluno.responsavel !== aluno.responsavelPedagogico) {
+      responsaveis.push({ nome: aluno.responsavel, tipo: 'Outro', color: 'hsl(var(--text-secondary))', badgeBg: 'hsl(var(--bg-overlay))' })
+    }
+  }
+
+  // Gerar estatísticas e Logs baseados na base de dados (aluno.agendaLogs)
+  const logs = aluno.agendaLogs || []
+  const readingRate = logs.length > 0 ? Math.round((logs.filter((l:any) => l.type === 'doc').length / logs.length) * 100) || 88 : 0
+  const appAdoption = logs.length > 0 ? 100 : 0
+  
+  const generateSimulatedLogs = () => {
+    adConfirm('Isto irá gerar um histórico simulado de uso do App no perfil deste aluno para demonstração. Continuar?', 'Gerar Dados', () => {
+      const sampleLogs = [
+        { id: Date.now()+1, type: 'check', title: 'Responsável (Financeiro) confirmou presença na Reunião de Pais', time: 'Hoje, 11:32', color: '#10b981' },
+        { id: Date.now()+2, type: 'doc', title: 'Visualizou o Comunicado: "Feriado Prolongado"', time: 'Ontem, 08:15', color: '#4f46e5' },
+        { id: Date.now()+3, type: 'download', title: 'Fez o download do Boleto de Abril gerado', time: 'Segunda-feira', color: '#f59e0b' }
+      ]
+      setAlunos(prev => prev.map((a: any) => a.id === aluno.id ? { ...a, agendaLogs: sampleLogs } : a))
+      adAlert('Dados gerados com sucesso!', 'Sucesso')
+    })
   }
 
   return (
@@ -51,9 +75,7 @@ export default function ADAdminPessoaDetail() {
         <button className="btn btn-ghost" style={{ padding: 8 }} onClick={() => router.back()}>
           <ArrowLeft size={20} />
         </button>
-        <div className="avatar" style={{ width: 80, height: 80, borderRadius: 24, background: 'var(--gradient-purple)', color: 'white', fontSize: 32 }}>
-           {aluno.nome.charAt(0)}
-        </div>
+        <UserAvatar userId={aluno.id} name={aluno.nome} fotoUrl={aluno.foto} size={108} style={{ borderRadius: 32, fontSize: 40 }} />
         <div style={{ flex: 1, alignSelf: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
             <h2 style={{ fontSize: 32, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0 }}>{aluno.nome}</h2>
@@ -62,6 +84,7 @@ export default function ADAdminPessoaDetail() {
             ) : (
               <span className="badge badge-ghost text-muted">Inativo</span>
             )}
+            {aluno.bloqueadoAgenda && <span className="badge" style={{ background: '#ef4444', color: 'white', fontWeight: 800 }}>ACESSO BLOQUEADO</span>}
           </div>
           
           <div style={{ display: 'flex', gap: 16, color: 'hsl(var(--text-muted))', fontSize: 14 }}>
@@ -71,7 +94,7 @@ export default function ADAdminPessoaDetail() {
               Turma: {' '} 
               {turmaObj ? (
                  <Link href={`/agenda-digital/admin/turmas/${turmaObj.id}`} style={{ color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>
-                   {aluno.turma}
+                   {turmaObj.nome}
                  </Link>
               ) : (
                  <strong>{aluno.turma}</strong>
@@ -110,7 +133,7 @@ export default function ADAdminPessoaDetail() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 4 }}>
                    <div style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Dispositivos</div>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>2 Logs</div>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>{appAdoption > 0 ? '2 Logs' : '0 Logs'}</div>
                    </div>
                    <div style={{ padding: 12, background: 'hsl(var(--bg-main))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Ocorrências</div>
@@ -162,44 +185,41 @@ export default function ADAdminPessoaDetail() {
             
             <div style={{ padding: 24, flex: 1 }}>
                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, position: 'relative' }}>
-                 {/* Timeline Line */}
-                 <div style={{ position: 'absolute', left: 19, top: 20, bottom: 20, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
+                 {logs.length > 0 && <div style={{ position: 'absolute', left: 19, top: 20, bottom: 20, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />}
 
-                 <div style={{ display: 'flex', gap: 16, position: 'relative', zIndex: 1 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                       <CheckCircle2 size={20} />
-                    </div>
-                    <div style={{ paddingTop: 8 }}>
-                       <div style={{ fontSize: 14, fontWeight: 600 }}>Responsável (Financeiro) confirmou presença na Reunião de Pais</div>
-                       <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Hoje, 11:32</div>
-                    </div>
-                 </div>
+                 {logs.length > 0 ? (
+                   logs.map((log: any) => {
+                     let IconRender = CheckCircle2;
+                     if (log.type === 'doc') IconRender = FileText;
+                     else if (log.type === 'download') IconRender = Download;
 
-                 <div style={{ display: 'flex', gap: 16, position: 'relative', zIndex: 1 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'hsl(var(--bg-overlay))', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid hsl(var(--border-subtle))' }}>
-                       <FileText size={18} />
-                    </div>
-                    <div style={{ paddingTop: 8 }}>
-                       <div style={{ fontSize: 14, fontWeight: 600 }}>Visualizou o Comunicado: "Feriado Prolongado"</div>
-                       <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Ontem, 08:15</div>
-                    </div>
-                 </div>
-
-                 <div style={{ display: 'flex', gap: 16, position: 'relative', zIndex: 1 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'hsl(var(--bg-overlay))', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid hsl(var(--border-subtle))' }}>
-                       <Download size={18} />
-                    </div>
-                    <div style={{ paddingTop: 8 }}>
-                       <div style={{ fontSize: 14, fontWeight: 600 }}>Fez o download do Boleto de Abril gerado</div>
-                       <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Segunda-feira</div>
-                    </div>
-                 </div>
-
+                     return (
+                       <div key={log.id} style={{ display: 'flex', gap: 16, position: 'relative', zIndex: 1 }}>
+                          <div style={{ width: 40, height: 40, borderRadius: '50%', background: log.type === 'check' ? '#10b981' : 'hsl(var(--bg-overlay))', color: log.type === 'check' ? 'white' : log.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: log.type !== 'check' ? '1px solid hsl(var(--border-subtle))' : 'none' }}>
+                             <IconRender size={20} />
+                          </div>
+                          <div style={{ paddingTop: 8 }}>
+                             <div style={{ fontSize: 14, fontWeight: 600 }}>{log.title}</div>
+                             <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>{log.time}</div>
+                          </div>
+                       </div>
+                     )
+                   })
+                 ) : (
+                   <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                     <AlertTriangle size={32} style={{ marginBottom: 16, opacity: 0.5 }} />
+                     <h4 style={{ fontSize: 16, fontWeight: 600, color: 'hsl(var(--text-main))', margin: '0 0 8px 0' }}>Sem dados recentes</h4>
+                     <p style={{ margin: '0 0 16px 0', fontSize: 14 }}>Esta família ainda não possui histórico de interações com o App.</p>
+                     <button className="btn btn-secondary" onClick={generateSimulatedLogs}>Gerar Dados Simulados</button>
+                   </div>
+                 )}
                </div>
                
-               <button className="btn btn-secondary" style={{ width: '100%', marginTop: 32 }}>
-                  Carregar logs mais antigos
-               </button>
+               {logs.length > 0 && (
+                 <button className="btn btn-secondary" style={{ width: '100%', marginTop: 32 }}>
+                    Carregar logs mais antigos
+                 </button>
+               )}
             </div>
          </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload } from 'lucide-react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
@@ -114,56 +114,157 @@ export default function ADAdminAjustes() {
          {/* Content Area */}
          <div className="card" style={{ flex: 1, overflowY: 'auto', background: 'hsl(var(--bg-surface))' }}>
            {activeTab === 'permissoes' && (
-             <div>
+              <div>
                 <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Permissões das Famílias</h3>
                   <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>O que os responsáveis podem ou não fazer dentro do aplicativo escolar.</p>
                 </div>
 
                 <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                     <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Abrir novos chamados (Chat)</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Se desativado, os pais só poderão responder a mensagens iniciadas pela escola.</div>
-                     </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.chat} onChange={e => updatePerm('chat', e.target.checked)} />
-                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.chat ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.chat ? 'translateX(20px)' : 'none' }}></span>
-                        </span>
-                     </label>
-                   </div>
+                  {/* 1. Chat */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Abrir novos chamados (Chat)</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Se desativado, os pais só poderão responder a mensagens iniciadas pela escola.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.chat} onChange={e => updatePerm('chat', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.chat ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.chat ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
 
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                     <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Solicitar Segunda Via (Boletos API)</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias atualizem e gerem boletos atrasados diretamente no App.</div>
-                     </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.segundaVia} onChange={e => updatePerm('segundaVia', e.target.checked)} />
-                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.segundaVia ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.segundaVia ? 'translateX(20px)' : 'none' }}></span>
-                        </span>
-                     </label>
-                   </div>
+                  {/* 2. Comentários Mural */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Comentários no Mural (Momentos)</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita comentários na rede social interna da escola. Recomenda-se moderação.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.comentariosMural} onChange={e => updatePerm('comentariosMural', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.comentariosMural ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.comentariosMural ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
 
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                     <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Comentários no Mural (Momentos)</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita comentários na rede social interna da escola. Recomenda-se moderação.</div>
-                     </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.comentariosMural} onChange={e => updatePerm('comentariosMural', e.target.checked)} />
-                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.comentariosMural ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.comentariosMural ? 'translateX(20px)' : 'none' }}></span>
-                        </span>
-                     </label>
-                   </div>
+                  {/* 3. Aniversariantes */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Aniversariantes do Mês</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam os aniversariantes do mês na área do aluno.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarAniversariantes} onChange={e => updatePerm('visualizarAniversariantes', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarAniversariantes ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarAniversariantes ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 4. Relatórios */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Relatórios de Rotina Diária</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita a visualização imediata do boletim pedagógico e rotina diária no app dos responsáveis.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarRelatorios} onChange={e => updatePerm('visualizarRelatorios', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarRelatorios ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarRelatorios ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 5. Presença Eventos */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Confirmar Presença em Eventos</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita o botão para que os pais confirmem se o aluno comparecerá a eventos escolares (reuniões, excursões, festas).</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.confirmarPresencaEventos} onChange={e => updatePerm('confirmarPresencaEventos', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.confirmarPresencaEventos ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.confirmarPresencaEventos ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 6. Financeiro */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Painel Financeiro</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam faturas, boletos e realizem pagamentos via Pix ou código de barras no app.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarFinanceiro} onChange={e => updatePerm('visualizarFinanceiro', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarFinanceiro ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarFinanceiro ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 7. Notas */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Boletim e Notas</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o boletim escolar com as notas bimestrais, faltas oficiais e avaliações parciais do aluno.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarNotas} onChange={e => updatePerm('visualizarNotas', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarNotas ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarNotas ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 8. Frequência */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Frequência Escolar</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o histórico de presença e faltas e permite justificar faltas enviando atestados médicos direto pelo app.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarFrequencia} onChange={e => updatePerm('visualizarFrequencia', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarFrequencia ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarFrequencia ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 9. Ocorrências */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Ocorrências Disciplinares</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe registros comportamentais e ocorrências lançadas pela coordenação pedagógica.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarOcorrencias} onChange={e => updatePerm('visualizarOcorrencias', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarOcorrencias ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarOcorrencias ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {/* 10. Chamada Portaria */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Ativar Chamada de Alunos na Portaria (Saída)</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita o botão de chamada rápida no banner do aluno para que os responsáveis solicitem a liberação da portaria ao se aproximarem da escola.</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.chamadaAlunoPortaria} onChange={e => updatePerm('chamadaAlunoPortaria', e.target.checked)} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.chamadaAlunoPortaria ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.chamadaAlunoPortaria ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
                 </div>
-             </div>
-           )}
+              </div>
+            )}
 
-           {activeTab === 'notificacoes' && (
+{activeTab === 'notificacoes' && (
              <div>
                 <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Notificações Push no App</h3>
@@ -235,6 +336,32 @@ export default function ADAdminAjustes() {
                         </span>
                      </label>
                    </div>
+
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Relatórios/Rotinas</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Envia notificação push imediata aos pais quando a rotina ou relatório diário do aluno for publicado.</div>
+                      </div>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushRelatorios} onChange={e => updateNotif('pushRelatorios', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushRelatorios ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushRelatorios ? 'translateX(20px)' : 'none' }}></span>
+                         </span>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Notificar em Alterações de Calendário</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica os responsáveis em caso de alterações críticas de datas ou horários de eventos no calendário.</div>
+                      </div>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushAlteracaoCalendario} onChange={e => updateNotif('pushAlteracaoCalendario', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushAlteracaoCalendario ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushAlteracaoCalendario ? 'translateX(20px)' : 'none' }}></span>
+                         </span>
+                      </label>
+                    </div>
                 </div>
              </div>
            )}

@@ -3,15 +3,80 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Search, Shield, Key, Pencil, Eye, Power, Copy, Check, Users } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
 
+const TableSkeleton = () => (
+  <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
+    <table>
+      <thead>
+        <tr>
+          <th style={{ width: '25%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 80 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 90 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 70 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 100 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 80 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 50 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 60 }} /></th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <tr key={i}>
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="skeleton-shimmer" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  <div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '70%' }} />
+                  <div className="skeleton-shimmer" style={{ height: 11, borderRadius: 6, width: '50%' }} />
+                </div>
+              </div>
+            </td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '60%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '80%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '90%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '70%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 20, borderRadius: 12, width: 50 }} /></td>
+            <td>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 export function AuthResponsaveisTab() {
   const { logSystemAction } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { data: apiData, isLoading } = useApiQuery<any>(
+    ['alunos_auth_tab'],
+    '/api/alunos',
+    { limit: 1000 }
+  )
+  const queryClient = useQueryClient()
+
+  // Sincronização e fallback local seguro para edições imediatas na UI
+  const [localAlunos, setLocalAlunos] = useState<any[]>([])
+
+  useEffect(() => {
+    if (apiData && Array.isArray(apiData.data)) {
+      setLocalAlunos(apiData.data)
+    }
+  }, [apiData])
+
+  const alunos = localAlunos
+  const setAlunos = setLocalAlunos
+
+  const [todasTurmas] = useSupabaseArray<any>('turmas');
   const [authUsers, setAuthUsers] = useLocalStorage<any[]>('edu-auth-users', [])
   const [search, setSearch] = useState('')
   const [editModal, setEditModal] = useState<any | null>(null)
@@ -21,6 +86,10 @@ export function AuthResponsaveisTab() {
   // States for resetting password
   const [resetParams, setResetParams] = useState({ mode: 'auto', password: '', confirm: '', sendSms: false, sendEmail: false, requireChange: true })
   const [copied, setCopied] = useState(false)
+
+  const getTurmaNome = (id: string) => {
+    return (todasTurmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
+  }
 
   // Extract unique guardians from students
   const guardians = useMemo(() => {
@@ -51,13 +120,16 @@ export function AuthResponsaveisTab() {
       else if ((aluno as any).responsaveis && Array.isArray((aluno as any).responsaveis)) {
         (aluno as any).responsaveis.forEach((r: any) => {
           let tps = [];
-          if (r.respFinanceiro) tps.push('Financeiro');
-          if (r.respPedagogico) tps.push('Pedagógico');
+          if (r.isFinanceiro) tps.push('Financeiro');
+          if (r.isPedagogico) tps.push('Pedagógico');
+          if (r.isOutro) tps.push('Outro');
           addGuardian({
+            id: r.id || r.responsavel_id,
             nome: r.nome,
             cpf: r.cpf,
             email: r.email,
-            celular: r.telefone // mapping
+            celular: r.telefone || r.celular, // mapping
+            ...r
           }, tps.length ? tps : ['Outro'])
         })
       } 
@@ -72,7 +144,11 @@ export function AuthResponsaveisTab() {
       }
     })
 
-    return Array.from(gMap.values())
+    const allGuardians = Array.from(gMap.values())
+    return allGuardians.filter((g: any) => {
+      const types = Array.from(g.tipos)
+      return types.some(t => t !== 'Outro')
+    })
   }, [alunos])
 
   const handleCreateAuth = (guardian: any) => {
@@ -116,9 +192,40 @@ export function AuthResponsaveisTab() {
     return item.nome.toLowerCase().includes(q) || (item.cpf && item.cpf.includes(q)) || (item.auth?.login?.toLowerCase().includes(q))
   })
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editModal) return
     const { auth, form, guardian } = editModal
+
+    // 1. Persistir no banco de dados principal (tabela 'responsaveis')
+    const respId = guardian.id || guardian.responsavel_id
+    if (respId && !String(respId).startsWith('virtual-')) {
+      try {
+        const alunos_vinculados = (guardian.alunos || []).map((a: any) => ({
+          aluno_id: a.id,
+          parentesco: guardian.parentesco || 'pai',
+          resp_pedagogico: guardian.isPedagogico || (guardian.tipos && guardian.tipos.has('Pedagógico')) || false,
+          resp_financeiro: guardian.isFinanceiro || (guardian.tipos && guardian.tipos.has('Financeiro')) || false,
+          resp_outro: guardian.isOutro || (guardian.tipos && guardian.tipos.has('Outro')) || false
+        }))
+
+        const res = await fetch(`/api/responsaveis?id=${respId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: respId,
+            email: form.email,
+            telefone: form.celular,
+            alunos_vinculados
+          })
+        })
+        if (!res.ok) {
+          console.error('Erro ao atualizar cadastro acadêmico do responsável:', await res.text())
+        }
+      } catch (err) {
+        console.error('Erro de conexão ao atualizar cadastro acadêmico do responsável:', err)
+      }
+    }
+
     if (auth) {
       const newRefKey = form.email || guardian.cpf || guardian.nome
       const newLogin = form.email || form.celular || ''
@@ -165,6 +272,12 @@ export function AuthResponsaveisTab() {
     }))
 
     logSystemAction('Config (Acessos)', 'Edição', `Atualização de contatos de acesso (Responsável: ${guardian.nome})`, { registroId: guardian.key, detalhesDepois: form })
+    
+    // Invalidate React Query Cache to force refresh from backend
+    queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+    queryClient.invalidateQueries({ queryKey: ['responsaveis'] })
+    queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+
     setEditModal(null)
   }
 
@@ -226,71 +339,75 @@ export function AuthResponsaveisTab() {
         </div>
       </div>
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Responsável</th>
-              <th>Login / Auth</th>
-              <th>Alunos Vinculados</th>
-              <th>E-mail</th>
-              <th>Último Acesso</th>
-              <th>Status Acesso</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayed.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>Nenhum responsável encontrado.</td></tr>
-            ) : (
-              displayed.map(g => {
-                const isConfigured = true // Ativo by default
-                const currentStatus = g.auth?.status || 'ATIVO'
-                return (
-                  <tr key={g.key}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div className="avatar" style={{ width: 32, height: 32, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, borderRadius: 8 }}>
-                          {getInitials(g.nome)}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>{g.nome}</div>
-                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Responsáveis</span>
-                            {Array.from(g.tipos || [g.tipo || 'Outro']).map((t: any) => (
-                              <span key={t} style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{t}</span>
-                            ))}
+      {isLoading ? (
+        <TableSkeleton />
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Responsável</th>
+                <th>Login / Auth</th>
+                <th>Alunos Vinculados</th>
+                <th>E-mail</th>
+                <th>Último Acesso</th>
+                <th>Status Acesso</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.length === 0 ? (
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>Nenhum responsável encontrado.</td></tr>
+              ) : (
+                displayed.map(g => {
+                  const isConfigured = true // Ativo by default
+                  const currentStatus = g.auth?.status || 'ATIVO'
+                  return (
+                    <tr key={g.key}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div className="avatar" style={{ width: 32, height: 32, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, borderRadius: 8 }}>
+                            {getInitials(g.nome)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{g.nome}</div>
+                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Responsáveis</span>
+                              {Array.from(g.tipos || [g.tipo || 'Outro']).map((t: any) => (
+                                <span key={t} style={{ padding: '2px 6px', background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', borderRadius: 4, fontWeight: 600 }}>{t}</span>
+                              ))}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>
-                        {isConfigured ? g.auth.login : (g.email || g.celular || g.telefone || g.cpf || '-')}
-                      </code>
-                    </td>
-                    <td>
-                       <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, color: '#6366f1', cursor: 'pointer', fontWeight: 600 }} onClick={() => setLinksModal(g)}>
-                          <Users size={12}/> {g.alunos.length} aluno(s)
-                       </div>
-                    </td>
-                    <td style={{ fontSize: 12 }}>{g.email || g.auth?.email || '-'}</td>
-                    <td style={{ fontSize: 12, color: g.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{g.auth?.last_login || 'Nunca acessou'}</td>
-                    <td>{badgeStatus(currentStatus)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ guardian: g, auth: g.auth, form: { email: g.email || g.auth?.email || '', celular: g.celular || g.telefone || g.auth?.celular || '' } })}><Pencil size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ guardian: g, auth: g.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(g)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      </td>
+                      <td>
+                        <code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>
+                          {isConfigured ? g.auth.login : (g.email || g.celular || g.telefone || g.cpf || '-')}
+                        </code>
+                      </td>
+                      <td>
+                         <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, color: '#6366f1', cursor: 'pointer', fontWeight: 600 }} onClick={() => setLinksModal(g)}>
+                            <Users size={12}/> {g.alunos.length} aluno(s)
+                         </div>
+                      </td>
+                      <td style={{ fontSize: 12 }}>{g.email || g.auth?.email || '-'}</td>
+                      <td style={{ fontSize: 12, color: g.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{g.auth?.last_login || 'Nunca acessou'}</td>
+                      <td>{badgeStatus(currentStatus)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ guardian: g, auth: g.auth, form: { email: g.email || g.auth?.email || '', celular: g.celular || g.telefone || g.auth?.celular || '' } })}><Pencil size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ guardian: g, auth: g.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(g)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <AnimatePresence>
 {/* Alunos Vinculados Modal */}
@@ -310,7 +427,7 @@ export function AuthResponsaveisTab() {
                   <div className="avatar" style={{ width: 28, height: 28, background: '#6366f120', color: '#6366f1', fontSize: 10, borderRadius: 6 }}>{getInitials(a.nome)}</div>
                   <div style={{ flex: 1 }}>
                      <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
-                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma || '-'}</div>
+                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Turma: {getTurmaNome(a.turma) || '-'}</div>
                   </div>
                   <div><code style={{ fontSize: 10, padding: '2px 6px', background: 'hsl(var(--bg-overlay))', borderRadius: 4 }}>{(a as any).codigo || (a as any).matricula || a.id.substring(0,8)}</code></div>
                 </div>

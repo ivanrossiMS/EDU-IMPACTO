@@ -1,11 +1,13 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useApiQuery } from '@/hooks/useApi'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
 import { DataProvider, useData } from '@/lib/dataContext'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import * as XLSX from 'xlsx'
 import {
   Settings, TestTube2, BarChart3, ShieldOff, UserCheck,
   Wifi, WifiOff, Filter, Download, Search, ChevronDown,
@@ -20,16 +22,113 @@ function TabConfiguracoes() {
   const { config, updateConfig, clearLog } = useSaida()
   const voice = useVoice()
 
+  // ── States for On-Demand Saving & Draft ──
+  const [localConfig, setLocalConfig] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+
+  // Sync draft state with global config when config is loaded for the first time
+  useEffect(() => {
+    if (config) {
+      setLocalConfig((prev: any) => {
+        if (!prev) return { ...config }
+        return prev
+      })
+    }
+  }, [config])
+
+  // Helper to dynamically update fields in local draft without implicit 'any' warnings
+  const updateLocalField = (field: string, value: any) => {
+    setLocalConfig((prev: any) => (prev ? { ...prev, [field]: value } : prev))
+  }
+
+  // Reset or discard local draft changes
+  const handleDiscard = () => {
+    if (config) {
+      setLocalConfig({ ...config })
+    }
+  }
+
+  // Persist draft changes in Supabase and trigger success modal
+  const handleSave = async () => {
+    if (!localConfig) return
+    setSaving(true)
+    try {
+      await updateConfig(localConfig)
+      setShowSuccessModal(true)
+      // Auto-close success modal after 3.5 seconds
+      setTimeout(() => {
+        setShowSuccessModal(false)
+      }, 3500)
+    } catch (err) {
+      console.error('Error saving configurations:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Detect unsaved changes by deep comparison of JSON string representations
+  const hasChanges = localConfig && config && JSON.stringify(localConfig) !== JSON.stringify(config)
+
   const testVoice = () => {
     let t = '3º Ano A - 2026'
-    if (config.voiceTruncateTurma && config.voiceTruncateChar) t = t.split(config.voiceTruncateChar)[0].trim()
+    // Use localConfig for testing voice so they hear the draft!
+    const targetConfig = localConfig || config
+    if (targetConfig?.voiceTruncateTurma && targetConfig?.voiceTruncateChar) {
+      t = t.split(targetConfig?.voiceTruncateChar || '-')[0].trim()
+    }
     voice.speak(`João Silva, turma ${t}`, {
-      rate: config.voiceRate, volume: config.voiceVolume, voiceURI: config.voiceURI,
+      rate: targetConfig?.voiceRate ?? 1, 
+      pitch: targetConfig?.voicePitch ?? 1,
+      volume: targetConfig?.voiceVolume ?? 1, 
+      voiceURI: targetConfig?.voiceURI || '',
     })
   }
 
+  // Loading / Skeleton Shimmer State
+  if (!localConfig) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 620 }}>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} style={{
+            background: 'hsl(var(--bg-elevated))',
+            borderRadius: 16,
+            border: '1px solid hsl(var(--border-subtle))',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            <div style={{ width: '40%', height: 16, borderRadius: 4, background: 'rgba(255,255,255,0.06)' }} className="skeleton-shimmer" />
+            <div style={{ width: '80%', height: 12, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} className="skeleton-shimmer" />
+            <div style={{ width: '100%', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.03)' }} className="skeleton-shimmer" />
+          </div>
+        ))}
+        <style>{`
+          .skeleton-shimmer {
+            position: relative;
+            overflow: hidden;
+          }
+          .skeleton-shimmer::after {
+            content: "";
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+            animation: shimmer 1.6s infinite;
+          }
+          @keyframes shimmer {
+            100% { transform: translateX(100%); }
+          }
+        `}</style>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 620 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 620, paddingBottom: hasChanges ? 80 : 0 }}>
 
       {/* Info card */}
       <div style={{
@@ -64,10 +163,10 @@ function TabConfiguracoes() {
             <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Falar o nome do aluno ao ser chamado</div>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-            <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: config.voiceEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
-              <div style={{ position: 'absolute', top: 3, left: config.voiceEnabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+            <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.voiceEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+              <div style={{ position: 'absolute', top: 3, left: localConfig.voiceEnabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
             </div>
-            <input type="checkbox" checked={config.voiceEnabled} onChange={e => updateConfig({ voiceEnabled: e.target.checked })} style={{ display: 'none' }}/>
+            <input type="checkbox" checked={localConfig.voiceEnabled ?? false} onChange={e => updateLocalField('voiceEnabled', e.target.checked)} style={{ display: 'none' }}/>
           </label>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
@@ -76,12 +175,12 @@ function TabConfiguracoes() {
             <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Anuncia o nome da turma apenas até o caractere ao lado</div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {config.voiceTruncateTurma && (
+            {localConfig.voiceTruncateTurma && (
               <input
                 type="text"
                 maxLength={3}
-                value={config.voiceTruncateChar ?? '-'}
-                onChange={e => updateConfig({ voiceTruncateChar: e.target.value })}
+                value={localConfig.voiceTruncateChar ?? '-'}
+                onChange={e => updateLocalField('voiceTruncateChar', e.target.value)}
                 style={{
                   width: 36, padding: '4px', textAlign: 'center', borderRadius: 8,
                   border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
@@ -91,27 +190,35 @@ function TabConfiguracoes() {
               />
             )}
             <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: config.voiceTruncateTurma ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
-                <div style={{ position: 'absolute', top: 3, left: config.voiceTruncateTurma ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+              <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.voiceTruncateTurma ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: 3, left: localConfig.voiceTruncateTurma ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
               </div>
-              <input type="checkbox" checked={config.voiceTruncateTurma} onChange={e => updateConfig({ voiceTruncateTurma: e.target.checked })} style={{ display: 'none' }}/>
+              <input type="checkbox" checked={localConfig.voiceTruncateTurma ?? false} onChange={e => updateLocalField('voiceTruncateTurma', e.target.checked)} style={{ display: 'none' }}/>
             </label>
           </div>
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span>VOLUME</span><span style={{ color: '#06b6d4' }}>{Math.round(config.voiceVolume * 100)}%</span>
+            <span>VOLUME</span><span style={{ color: '#06b6d4' }}>{Math.round((localConfig.voiceVolume ?? 1) * 100)}%</span>
           </label>
-          <input type="range" min={0} max={1} step={0.05} value={config.voiceVolume}
-            onChange={e => updateConfig({ voiceVolume: +e.target.value })}
+          <input type="range" min={0} max={1} step={0.05} value={localConfig.voiceVolume ?? 1}
+            onChange={e => updateLocalField('voiceVolume', +e.target.value)}
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
         <div style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span>VELOCIDADE</span><span style={{ color: '#06b6d4' }}>{config.voiceRate}×</span>
+            <span>VELOCIDADE</span><span style={{ color: '#06b6d4' }}>{localConfig.voiceRate ?? 1}×</span>
           </label>
-          <input type="range" min={0.5} max={2} step={0.1} value={config.voiceRate}
-            onChange={e => updateConfig({ voiceRate: +e.target.value })}
+          <input type="range" min={0.5} max={2} step={0.1} value={localConfig.voiceRate ?? 1}
+            onChange={e => updateLocalField('voiceRate', +e.target.value)}
+            style={{ width: '100%', accentColor: '#06b6d4' }}/>
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span>TOM DE VOZ (PITCH)</span><span style={{ color: '#06b6d4' }}>{localConfig.voicePitch ?? 1}×</span>
+          </label>
+          <input type="range" min={0.5} max={2} step={0.1} value={localConfig.voicePitch ?? 1}
+            onChange={e => updateLocalField('voicePitch', +e.target.value)}
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
         <div style={{ marginBottom: 18 }}>
@@ -119,8 +226,8 @@ function TabConfiguracoes() {
             <span>VOZ / LOCUTOR</span>
           </label>
           <select
-            value={config.voiceURI || ''}
-            onChange={e => updateConfig({ voiceURI: e.target.value })}
+            value={localConfig.voiceURI || ''}
+            onChange={e => updateLocalField('voiceURI', e.target.value)}
             style={{
               width: '100%', padding: '10px 14px', borderRadius: 10,
               border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
@@ -128,9 +235,20 @@ function TabConfiguracoes() {
             }}
           >
             <option value="">Automático pelo Navegador (Recomendado)</option>
-            {voice.voices.filter(v => v.lang.startsWith('pt')).map(v => (
-              <option key={v.voiceURI} value={v.voiceURI}>{v.name}</option>
-            ))}
+            {voice.voices
+              .filter(v => v.lang.toLowerCase().includes('pt'))
+              .sort((a, b) => {
+                if (a.localService && !b.localService) return -1
+                if (!a.localService && b.localService) return 1
+                return a.name.localeCompare(b.name)
+              })
+              .map(v => {
+                const isBR = v.lang.toLowerCase().includes('br')
+                const isPT = v.lang.toLowerCase().includes('pt-pt')
+                const isGoogle = v.name.toLowerCase().includes('google')
+                const label = `${v.name} ${isBR ? '(Brasil 🇧🇷)' : isPT ? '(Portugal 🇵🇹)' : `(${v.lang})`} ${isGoogle ? ' [Nuvem]' : ''}`
+                return <option key={v.voiceURI} value={v.voiceURI}>{label}</option>
+              })}
           </select>
         </div>
         <button onClick={testVoice} style={{
@@ -151,10 +269,10 @@ function TabConfiguracoes() {
             <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Captura automática de cartões</div>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-            <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: config.rfidEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
-              <div style={{ position: 'absolute', top: 3, left: config.rfidEnabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
+            <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.rfidEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
+              <div style={{ position: 'absolute', top: 3, left: localConfig.rfidEnabled ? 22 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }}/>
             </div>
-            <input type="checkbox" checked={config.rfidEnabled} onChange={e => updateConfig({ rfidEnabled: e.target.checked })} style={{ display: 'none' }}/>
+            <input type="checkbox" checked={localConfig.rfidEnabled ?? true} onChange={e => updateLocalField('rfidEnabled', e.target.checked)} style={{ display: 'none' }}/>
           </label>
         </div>
       </div>
@@ -169,8 +287,8 @@ function TabConfiguracoes() {
               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Ao chamar, o auto-falante vai repetir após a primeira chamada</div>
             </div>
             <select
-              value={config.voiceRepeatCount || 0}
-              onChange={e => updateConfig({ voiceRepeatCount: +e.target.value })}
+              value={localConfig.voiceRepeatCount ?? 0}
+              onChange={e => updateLocalField('voiceRepeatCount', +e.target.value)}
               style={{
                 padding: '8px 12px', borderRadius: 8,
                 border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
@@ -185,10 +303,18 @@ function TabConfiguracoes() {
           </div>
           <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>TEMPO NO MONITOR TV APÓS CONFIRMAR</span>
-            <span style={{ color: '#06b6d4' }}>{config.tvDisplayTime}s</span>
+            <span style={{ color: '#06b6d4' }}>{localConfig.tvDisplayTime ?? 30}s</span>
           </label>
-          <input type="range" min={5} max={600} step={5} value={config.tvDisplayTime}
-            onChange={e => updateConfig({ tvDisplayTime: +e.target.value })}
+          <input type="range" min={5} max={600} step={5} value={localConfig.tvDisplayTime ?? 30}
+            onChange={e => updateLocalField('tvDisplayTime', +e.target.value)}
+            style={{ width: '100%', accentColor: '#06b6d4', marginBottom: 16 }}/>
+
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span>TEMPO PARA STATUS ATRASADO (MINUTOS)</span>
+            <span style={{ color: '#06b6d4' }}>{localConfig.tvUrgentTime ?? 5} min</span>
+          </label>
+          <input type="range" min={1} max={60} step={1} value={localConfig.tvUrgentTime ?? 5}
+            onChange={e => updateLocalField('tvUrgentTime', +e.target.value)}
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
       </div>
@@ -201,6 +327,225 @@ function TabConfiguracoes() {
           🗑 Limpar Log do Sistema
         </button>
       </div>
+
+      {/* ── Floating Action Bar for Unsaved Changes ── */}
+      {hasChanges && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 48px)',
+          maxWidth: 580,
+          background: 'rgba(15, 23, 42, 0.85)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(6, 182, 212, 0.15)',
+          borderRadius: 24,
+          padding: '14px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+          zIndex: 999,
+          animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18, animation: 'pulseEmoji 1.5s infinite' }}>⚠️</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>Alterações não salvas</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Salve ou descarte suas alterações</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleDiscard}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 12,
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.15)',
+                color: '#e2e8f0',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+              }}
+            >
+              Descartar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 12,
+                background: 'linear-gradient(135deg, #06b6d4, #6366f1)',
+                border: 'none',
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(6, 182, 212, 0.3)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 6px 18px rgba(6, 182, 212, 0.45)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(6, 182, 212, 0.3)'
+              }}
+            >
+              {saving ? 'Salvando...' : 'Salvar Alterações'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Ultra Modern Success Modal ── */}
+      {showSuccessModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(2, 6, 23, 0.75)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          animation: 'modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+        }}>
+          <div className="glass-card animate-modal" style={{
+            width: '100%',
+            maxWidth: 420,
+            background: 'hsl(var(--bg-elevated))',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.4), 0 0 40px rgba(16, 185, 129, 0.15)',
+            borderRadius: 24,
+            padding: '32px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+          }}>
+            {/* Animated Check Circle */}
+            <div className="success-circle" style={{
+              width: 72,
+              height: 72,
+              borderRadius: '50%',
+              background: 'rgba(16, 185, 129, 0.12)',
+              border: '2px dashed rgba(16, 185, 129, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline className="success-checkmark" points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+
+            <h3 style={{
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: 20,
+              fontWeight: 900,
+              color: 'hsl(var(--text-base))',
+              margin: '0 0 8px 0',
+              letterSpacing: '-0.02em'
+            }}>
+              Configurações Salvas!
+            </h3>
+            
+            <p style={{
+              fontSize: 13,
+              color: 'hsl(var(--text-muted))',
+              lineHeight: 1.6,
+              margin: '0 0 24px 0'
+            }}>
+              As alterações foram persistidas com sucesso e já estão ativas em todos os monitores e painéis de TV da portaria.
+            </p>
+
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                borderRadius: 14,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 6px 18px rgba(16, 185, 129, 0.4)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.25)'
+              }}
+            >
+              Ok, Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Keyframe Animations Styling ── */}
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translate(-50%, 40px); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
+        }
+        @keyframes pulseEmoji {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.15); }
+        }
+        @keyframes modalFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalScaleUp {
+          from { transform: scale(0.92); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes drawCheckmark {
+          to { stroke-dashoffset: 0; }
+        }
+        @keyframes scaleUpSuccess {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-modal {
+          animation: modalScaleUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .success-circle {
+          animation: scaleUpSuccess 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .success-checkmark {
+          stroke-dasharray: 50;
+          stroke-dashoffset: 50;
+          animation: drawCheckmark 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s forwards;
+        }
+      `}</style>
     </div>
   )
 }
@@ -233,12 +578,31 @@ interface AlunoRow {
 
 const DIAS_SEMANA = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 
+function normalizeDay(day: string): string {
+  if (!day) return '';
+  return day
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ABA: Relatórios
 // ─────────────────────────────────────────────────────────────────────────────
 function TabRelatorios() {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [todasTurmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
+
+  const { data: apiResponse } = useApiQuery<any>(
+    ['alunos-report'],
+    '/api/alunos?limit=1000'
+  )
+  const alunos = apiResponse?.data || []
+
+  const getTurmaNome = (id: string) => {
+    return (todasTurmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
+  }
 
   const [filter, setFilter] = useState<FilterKey>('todos')
   const [search, setSearch] = useState('')
@@ -251,15 +615,16 @@ function TabRelatorios() {
   // ── Build rows ──────────────────────────────────────────────────────────────
   const rows = useMemo<AlunoRow[]>(() => {
     return (alunos || []).map((a: any) => {
-      const saude: any = a.saude || {}
-      const autorizados: any[] = saude.autorizados || []
-      const autorizaSaida: boolean = !!saude.autorizaSaida
+      const autorizados: any[] = a.responsaveis || []
+      const autorizaSaida: boolean = !!a.autorizadoSairSozinho
 
       const temRFID = autorizados.some(r => r.rfid && r.rfid.trim().length > 0)
       const algumBloqueado = autorizados.some(r => r.proibido === true)
       const algumDiaRestrito = autorizados.some(r => {
-        const dias: string[] = r.diasSemana || []
-        return dias.length > 0 && !dias.includes(todayKey)
+        const dias: string[] = r.diasSemana || r.diasAcesso || r.dias_acesso || []
+        if (dias.length === 0) return false
+        const normalizedDias = dias.map(d => normalizeDay(d))
+        return !normalizedDias.includes(normalizeDay(todayKey))
       })
       const semResponsavel = autorizados.length === 0 && !autorizaSaida
 
@@ -315,23 +680,36 @@ function TabRelatorios() {
     sem_responsavel:  rows.filter(r => r.semResponsavel).length,
   }), [rows])
 
-  // ── Export CSV ──────────────────────────────────────────────────────────────
-  const exportCSV = () => {
-    const header = ['Nome','Turma','Turno','Pode Sair Sozinho','Tem RFID','Responsáveis','Bloqueados','Restrição Dia']
-    const lines = filtered.map(r => [
-      r.nome, r.turma, r.turno,
-      r.autorizaSaida ? 'Sim' : 'Não',
-      r.temRFID ? 'Sim' : 'Não',
-      r.autorizados.length,
-      r.autorizados.filter(x => x.proibido).length,
-      r.algumDiaRestrito ? 'Sim' : 'Não',
-    ])
-    const csv = [header, ...lines].map(l => l.join(';')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `relatorio-portaria-${new Date().toISOString().split('T')[0]}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  // ── Export Excel ────────────────────────────────────────────────────────────
+  const exportExcel = () => {
+    const rows = filtered.map(r => {
+      const row: any = {
+        'ID Aluno':          r.id,
+        'Nome':              r.nome,
+        'Turma':             getTurmaNome(r.turma),
+        'Turno':             r.turno,
+        'Pode Sair Sozinho': r.autorizaSaida ? 'Sim' : 'Não',
+        'Tem RFID':          r.temRFID ? 'Sim' : 'Não',
+        'Qtd Responsáveis':  r.autorizados.length,
+      }
+      
+      // Colunas dinâmicas para cada responsável
+      r.autorizados.forEach((resp: any, idx: number) => {
+        const num = idx + 1
+        row[`Nome Responsável ${num}`] = resp.nome || '—'
+        row[`ID Responsável ${num}`] = resp.id || '—'
+        row[`RFID Responsável ${num}`] = resp.rfid || '—'
+      })
+      
+      row['Bloqueados'] = r.autorizados.filter((x: any) => x.proibido).length
+      row['Restrição Dia'] = r.algumDiaRestrito ? 'Sim' : 'Não'
+      
+      return row
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Relatório Portaria')
+    XLSX.writeFile(wb, `relatorio-portaria-${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
   // ── Filter chips ────────────────────────────────────────────────────────────
@@ -387,14 +765,14 @@ function TabRelatorios() {
         </div>
 
         {/* Export */}
-        <button onClick={exportCSV} style={{
+        <button onClick={exportExcel} style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: '9px 16px', borderRadius: 10,
-          background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.3)',
-          color: '#06b6d4', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+          background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+          color: '#10b981', cursor: 'pointer', fontWeight: 700, fontSize: 12,
           whiteSpace: 'nowrap',
         }}>
-          <Download size={13}/> Exportar CSV
+          <Download size={13}/> Exportar Excel
         </button>
       </div>
 
@@ -490,7 +868,7 @@ function TabRelatorios() {
                       {row.nome}
                     </div>
                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
-                      {row.turma}{row.turno ? ` · ${row.turno}` : ''}
+                      {getTurmaNome(row.turma)}{row.turno ? ` · ${row.turno}` : ''}
                     </div>
                   </div>
 
@@ -556,8 +934,9 @@ function TabRelatorios() {
                           </thead>
                           <tbody>
                             {row.autorizados.map((resp: any, idx: number) => {
-                              const diasSemana: string[] = resp.diasSemana || []
-                              const diaRestrito = diasSemana.length > 0 && !diasSemana.includes(todayKey)
+                              const diasSemana: string[] = resp.diasSemana || resp.diasAcesso || resp.dias_acesso || []
+                              const normalizedDias = diasSemana.map(d => normalizeDay(d))
+                              const diaRestrito = diasSemana.length > 0 && !normalizedDias.includes(normalizeDay(todayKey))
                               const proibido = resp.proibido === true
                               const statusColor = proibido ? '#ef4444' : diaRestrito ? '#f97316' : '#10b981'
                               const statusLabel = proibido ? '🚫 Proibido' : diaRestrito ? `⚠ Não hoje (${todayKey})` : '✅ Liberado'
@@ -583,18 +962,21 @@ function TabRelatorios() {
                                     {diasSemana.length === 0
                                       ? <span style={{ color: '#10b981', fontSize: 11 }}>Todos os dias</span>
                                       : <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                                          {DIAS_SEMANA.map(d => (
-                                            <span key={d} style={{
-                                              padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                                              background: diasSemana.includes(d) ? 'rgba(6,182,212,0.15)' : 'hsl(var(--bg-overlay))',
-                                              color: diasSemana.includes(d) ? '#06b6d4' : 'hsl(var(--text-muted))',
-                                              border: d === todayKey ? '1px solid #06b6d420' : 'none',
-                                              fontStyle: !diasSemana.includes(d) ? 'italic' : 'normal',
-                                              opacity: diasSemana.includes(d) ? 1 : 0.5,
-                                            }}>
-                                              {d}
-                                            </span>
-                                          ))}
+                                          {DIAS_SEMANA.map(d => {
+                                            const hasDay = normalizedDias.includes(normalizeDay(d))
+                                            return (
+                                              <span key={d} style={{
+                                                padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                                                background: hasDay ? 'rgba(6,182,212,0.15)' : 'hsl(var(--bg-overlay))',
+                                                color: hasDay ? '#06b6d4' : 'hsl(var(--text-muted))',
+                                                border: d === todayKey ? '1px solid #06b6d420' : 'none',
+                                                fontStyle: !hasDay ? 'italic' : 'normal',
+                                                opacity: hasDay ? 1 : 0.5,
+                                              }}>
+                                                {d}
+                                              </span>
+                                            )
+                                          })}
                                         </div>
                                     }
                                   </td>

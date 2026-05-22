@@ -3,7 +3,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import React, { useState, useEffect } from 'react'
-import { X, Search, Users, ChevronRight, ChevronLeft, Check, User } from 'lucide-react'
+import { X, Search, Users, ChevronRight, ChevronLeft, Check, User, School } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 
 interface DestinatariosModalProps {
@@ -19,7 +19,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   const [search, setSearch] = useState('')
   const [activeFolder, setActiveFolder] = useState<{ id: string, name: string, type?: string } | null>(null)
   const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
-  const [grupos, setGrupos] = useState<any[]>([])
+  const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
   const [sysUsers, setSysUsers] = useState<any[]>([])
 
   useEffect(() => {
@@ -32,10 +32,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       setSelected(map)
       setSearch('')
       setActiveFolder(null)
-      const stored = localStorage.getItem('ad_grupos_manuais')
-      if (stored) {
-        try { setGrupos(JSON.parse(stored)) } catch {}
-      }
       const sysU = localStorage.getItem('edu-sys-users')
       if (sysU) {
         try { setSysUsers(JSON.parse(sysU)) } catch {}
@@ -47,14 +43,80 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   // class counts
   const classCounts: Record<string, number> = {}
-  turmas.forEach(t => classCounts[t.id] = 0)
-  alunos.forEach(a => {
-    const t = turmas.find(x => x.nome === a.turma)
+  ;(turmas || []).forEach(t => classCounts[t.id] = 0)
+  ;(alunos || []).forEach(a => {
+    const t = (turmas || []).find(x => 
+      String(x.id) === String(a.turma) || 
+      String(x.codigo) === String(a.turma) || 
+      String(x.nome) === String(a.turma)
+    )
     if (t) classCounts[t.id] = (classCounts[t.id] || 0) + 1
   })
 
   // List arrays
-  const rootGrupos = grupos.map(g => ({
+  const categoriasTurmas = [
+    { 
+      name: 'Educação Infantil', 
+      match: (t: any) => {
+        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
+        return /NÍVEL|INFANTIL|BERÇÁRIO|MATERNAL|JARDIM|PRÉ-ESCOLA/i.test(nameOrSerie);
+      }
+    },
+    { 
+      name: 'Ensino Fundamental 1', 
+      match: (t: any) => {
+        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
+        if (/MÉDIO/i.test(nameOrSerie)) return false;
+        return /(1|2|3|4|5)º?\s*ANO/i.test(nameOrSerie);
+      }
+    },
+    { 
+      name: 'Ensino Fundamental 2', 
+      match: (t: any) => {
+        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
+        if (/MÉDIO/i.test(nameOrSerie)) return false;
+        return /(6|7|8|9)º?\s*ANO/i.test(nameOrSerie);
+      }
+    },
+    { 
+      name: 'Ensino Médio', 
+      match: (t: any) => {
+        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
+        return /SÉRIE|MÉDIO/i.test(nameOrSerie);
+      }
+    },
+  ]
+
+  const turmasFolders = categoriasTurmas.map(cat => {
+    const tList = turmas.filter(cat.match)
+    const totalStudents = tList.reduce((acc, t) => acc + (classCounts[t.id] || 0), 0)
+    return {
+      id: `cat_${cat.name}`,
+      name: cat.name,
+      type: 'category' as const,
+      count: tList.length,
+      studentCount: totalStudents,
+      turmas: tList
+    }
+  }).filter(c => c.count > 0)
+
+  // Turmas que sobraram (não entraram em categorias)
+  const turmasCategorizadasIds = new Set(turmasFolders.flatMap(f => f.turmas.map(t => t.id)))
+  const turmasRestantes = turmas.filter(t => !turmasCategorizadasIds.has(t.id))
+  
+  if (turmasRestantes.length > 0) {
+    const totalStudents = turmasRestantes.reduce((acc, t) => acc + (classCounts[t.id] || 0), 0)
+    turmasFolders.push({
+      id: 'cat_outros',
+      name: 'Outros Grupos/Turmas',
+      type: 'category' as const,
+      count: turmasRestantes.length,
+      studentCount: totalStudents,
+      turmas: turmasRestantes
+    })
+  }
+  
+  const rootGrupos = (gruposManuais || []).map(g => ({
     id: `g_${g.id}`,
     name: g.nome,
     type: 'grupo' as const,
@@ -62,7 +124,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     isGrupo: true
   }))
   
-  const combinedFolders = rootGrupos
+  const combinedFolders = [...turmasFolders, ...rootGrupos]
 
   const allFilteredFolders = combinedFolders.filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
   const allFilteredAlunos = alunos.filter(a => a.nome.toLowerCase().includes(search.toLowerCase())).map(a => ({
@@ -74,40 +136,86 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }))
 
   let activeFolderMembers: any[] = []
-  if (activeFolder && activeFolder.type === 'grupo') {
-    const gObj = grupos.find(g => g.id === activeFolder.id.replace('g_', ''))
-    if (gObj) {
-      const als = alunos.filter(a => gObj.alunosIds?.includes(a.id)).map(a => ({
-         id: `a_${a.id}`, name: a.nome, type: 'aluno' as const, turmaNome: a.turma, badge: 'Aluno'
-      }))
-      const cols = sysUsers.filter(s => gObj.colaboradoresIds?.includes(s.id)).map(s => ({
-         id: `f_${s.id}`, name: s.nome, type: 'funcionario' as const, turmaNome: s.perfil || 'Gestor', badge: 'Gestor'
-      }))
-      activeFolderMembers = [...als, ...cols]
+  if (activeFolder) {
+    if (activeFolder.type === 'grupo') {
+      const gObj = gruposManuais.find(g => g.id === activeFolder.id.replace('g_', ''))
+      if (gObj) {
+        const als = alunos.filter(a => gObj.alunosIds?.includes(a.id)).map(a => ({
+           id: `a_${a.id}`, name: a.nome, type: 'aluno' as const, turmaNome: a.turma, badge: 'Aluno'
+        }))
+        const cols = sysUsers.filter(s => gObj.colaboradoresIds?.includes(s.id)).map(s => ({
+           id: `f_${s.id}`, name: s.nome, type: 'funcionario' as const, turmaNome: s.perfil || 'Gestor', badge: 'Gestor'
+        }))
+        activeFolderMembers = [...als, ...cols]
+      }
+    } else if (activeFolder.type === 'category') {
+      const cat = turmasFolders.find(c => c.id === activeFolder.id)
+      if (cat) {
+        activeFolderMembers = cat.turmas.map(t => ({
+          id: t.id,
+          name: t.nome,
+          type: 'turma' as const,
+          turmaNome: t.turno,
+          badge: 'Turma'
+        }))
+      }
     }
   }
 
-  const toggleSelect = (item: {id: string, name: string, type: "turma" | "funcionario" | "aluno"}) => {
+  const isItemFolderSelected = (item: any) => {
+    if (item.type === 'category') {
+      return item.turmas && item.turmas.length > 0 && item.turmas.every((t: any) => !!selected[t.id])
+    }
+    return !!selected[item.id]
+  }
+
+  const toggleSelect = (item: any) => {
     setSelected(prev => {
       const next = { ...prev }
-      if (next[item.id]) delete next[item.id]
-      else next[item.id] = item
+      if (item.type === 'category') {
+        const catTurmas = item.turmas || []
+        const allSelected = catTurmas.every((t: any) => !!prev[t.id])
+        if (allSelected) {
+          catTurmas.forEach((t: any) => delete next[t.id])
+        } else {
+          catTurmas.forEach((t: any) => {
+            next[t.id] = { id: t.id, name: t.nome, type: 'turma' }
+          })
+        }
+      } else {
+        if (next[item.id]) delete next[item.id]
+        else next[item.id] = item
+      }
       return next
     })
   }
 
   const handleSelectAll = (itemsToToggle: any[]) => {
-    const allSelected = itemsToToggle.every(i => !!selected[i.id])
+    const allSelected = itemsToToggle.every(i => isItemFolderSelected(i))
     if (allSelected) {
       setSelected(prev => {
         const next = { ...prev }
-        itemsToToggle.forEach(i => delete next[i.id])
+        itemsToToggle.forEach(i => {
+          if (i.type === 'category') {
+            ;(i.turmas || []).forEach((t: any) => delete next[t.id])
+          } else {
+            delete next[i.id]
+          }
+        })
         return next
       })
     } else {
       setSelected(prev => {
         const next = { ...prev }
-        itemsToToggle.forEach(i => next[i.id] = { id: i.id, name: i.name, type: i.type })
+        itemsToToggle.forEach(i => {
+          if (i.type === 'category') {
+            ;(i.turmas || []).forEach((t: any) => {
+              next[t.id] = { id: t.id, name: t.nome, type: 'turma' }
+            })
+          } else {
+            next[i.id] = { id: i.id, name: i.name, type: i.type }
+          }
+        })
         return next
       })
     }
@@ -175,19 +283,20 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                 <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={() => handleSelectAll(combinedFolders)}>
                   <div style={{
                     width: 24, height: 24, borderRadius: '50%', 
-                    border: combinedFolders.length > 0 && combinedFolders.every(i => !!selected[i.id]) ? 'none' : '2px solid #d1d5db',
-                    background: combinedFolders.length > 0 && combinedFolders.every(i => !!selected[i.id]) ? '#3b82f6' : 'transparent',
+                    border: combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i)) ? 'none' : '2px solid #d1d5db',
+                    background: combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i)) ? '#3b82f6' : 'transparent',
                     marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}>
-                    {(combinedFolders.length > 0 && combinedFolders.every(i => !!selected[i.id])) && <Check size={16} color="#fff" strokeWidth={3} />}
+                    {(combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i))) && <Check size={16} color="#fff" strokeWidth={3} />}
                   </div>
-                  <span style={{ fontSize: 16, color: '#374151' }}>Selecionar todas as turmas</span>
+                  <span style={{ fontSize: 16, color: '#374151' }}>Selecionar tudo</span>
                 </div>
                 
 
 
                 {combinedFolders.map(item => {
-                  const isSelected = !!selected[item.id]
+                  const isSelected = isItemFolderSelected(item)
+                  const isCategory = item.type === 'category'
                   return (
                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid #f3f4f6' }}>
                        <div style={{
@@ -204,7 +313,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                            {item.name}
                          </span>
                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#6b7280', fontSize: 13, marginRight: 12 }}>
-                           <Users size={14} /> {item.count}
+                           {isCategory ? (
+                             <>
+                               <School size={14} />
+                               <span>{item.count} {item.count === 1 ? 'turma' : 'turmas'}</span>
+                             </>
+                           ) : (
+                             <>
+                               <Users size={14} />
+                               <span>{item.count}</span>
+                             </>
+                           )}
                          </div>
                          <ChevronRight size={20} color="#9ca3af" />
                        </div>
@@ -253,6 +372,11 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                          </div>
                          <span style={{ fontSize: 12, color: '#9ca3af' }}>{item.turmaNome}</span>
                        </div>
+                       {item.type === 'turma' && (
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#6b7280', fontSize: 13, marginLeft: 8 }}>
+                           <Users size={14} /> {classCounts[item.id] || 0}
+                         </div>
+                       )}
                     </div>
                   )
                 })}

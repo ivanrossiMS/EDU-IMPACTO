@@ -17,7 +17,7 @@ export default function ADAdminTurmaDetail() {
   const { id } = useParams()
   const router = useRouter()
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos?limit=9999');
   const { adAlert, adConfirm } = useAgendaDigital()
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   
@@ -25,7 +25,20 @@ export default function ADAdminTurmaDetail() {
   const [selectedProf, setSelectedProf] = useState('')
 
   const turma = (turmas || []).find(t => t.id === id)
-  const alunosDaTurma = (alunos || []).filter(a => a.turma === turma?.nome)
+  const alunosDaTurma = (alunos || []).filter(a => {
+    const aTurma = String(a.turma || '').trim().toLowerCase();
+    const tNome = String(turma?.nome || '').trim().toLowerCase();
+    const tId = String(turma?.id || '').trim().toLowerCase();
+    const tCod = String(turma?.codigo || '').trim().toLowerCase();
+
+    const matchDirect = aTurma === tNome || aTurma === tId || aTurma === tCod || String(a.turmaId || '').trim().toLowerCase() === tId;
+    if (matchDirect) return true;
+
+    // Normalização extra
+    const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    const tNomeNorm = tNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+    return aTurmaNorm === tNomeNorm && aTurmaNorm !== '';
+  })
 
   if (!turma) {
     return (

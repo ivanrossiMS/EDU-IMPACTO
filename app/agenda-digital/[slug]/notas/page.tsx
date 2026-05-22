@@ -1,17 +1,30 @@
 'use client'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import { useData } from '@/lib/dataContext'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useParams } from 'next/navigation'
 import { use, useMemo } from 'react'
-import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, BookOpen } from 'lucide-react'
+import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, BookOpen, AlertCircle } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 
 export default function ADNotasPage({ params }: { params: Promise<{ slug: string }>}) {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const resolvedParams = use(params as Promise<{ slug: string }>)
-  const aluno = alunos.find(a => a.id === resolvedParams.slug)
+  const { adConfig } = useAgendaDigital();
+
+  if (adConfig?.permissoes?.visualizarNotas === false) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+        <EmptyStateCard 
+          title="Acesso Restrito"
+          description="A visualização de boletim e notas está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
+          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
+        />
+      </div>
+    );
+  }
+
+  const { aluno } = useSelectedStudent()
 
   // Mocked Disciplinas based on Student to give dynamic feel
   const disciplinas = useMemo(() => {

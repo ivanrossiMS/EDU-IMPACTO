@@ -3,15 +3,80 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Search, Shield, Key, Pencil, Eye, Smartphone, Power, Copy, Check, Users } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { getInitials } from '@/lib/utils'
+import { useApiQuery } from '@/hooks/useApi'
+import { useQueryClient } from '@tanstack/react-query'
 
+const TableSkeleton = () => (
+  <div className="table-container" style={{ animation: 'fadeIn 0.25s ease-out' }}>
+    <table>
+      <thead>
+        <tr>
+          <th style={{ width: '25%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 80 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 90 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 70 }} /></th>
+          <th style={{ width: '15%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 100 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 80 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 50 }} /></th>
+          <th style={{ width: '10%' }}><div className="skeleton-shimmer" style={{ height: 16, borderRadius: 6, width: 60 }} /></th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <tr key={i}>
+            <td>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="skeleton-shimmer" style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                  <div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '70%' }} />
+                  <div className="skeleton-shimmer" style={{ height: 11, borderRadius: 6, width: '50%' }} />
+                </div>
+              </div>
+            </td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '60%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '80%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '90%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 14, borderRadius: 6, width: '70%' }} /></td>
+            <td><div className="skeleton-shimmer" style={{ height: 20, borderRadius: 12, width: 50 }} /></td>
+            <td>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                <div className="skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
 export function AuthAlunosTab() {
   const { logSystemAction } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const { data: apiData, isLoading } = useApiQuery<any>(
+    ['alunos_auth_tab'],
+    '/api/alunos',
+    { limit: 1000 }
+  )
+  const queryClient = useQueryClient()
+
+  // Sincronização e fallback local seguro para edições imediatas na UI
+  const [localAlunos, setLocalAlunos] = useState<any[]>([])
+
+  useEffect(() => {
+    if (apiData && Array.isArray(apiData.data)) {
+      setLocalAlunos(apiData.data)
+    }
+  }, [apiData])
+
+  const alunos = localAlunos
+  const setAlunos = setLocalAlunos
+
+  const [todasTurmas] = useSupabaseArray<any>('turmas');
   const [authUsers, setAuthUsers] = useLocalStorage<any[]>('edu-auth-users', [])
   const [search, setSearch] = useState('')
   const [editModal, setEditModal] = useState<any | null>(null)
@@ -21,6 +86,10 @@ export function AuthAlunosTab() {
   // States for resetting password
   const [resetParams, setResetParams] = useState({ mode: 'auto', password: '', confirm: '', sendSms: false, sendEmail: false, requireChange: true })
   const [copied, setCopied] = useState(false)
+
+  const getTurmaNome = (id: string) => {
+    return (todasTurmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
+  }
 
   const handleCreateAuth = (academicStudent: any) => {
     // Merge if missing
@@ -44,16 +113,24 @@ export function AuthAlunosTab() {
 
   const getGuardianList = (aluno: any) => {
     const list: any[] = []
-    if (aluno._responsaveis && Array.isArray(aluno._responsaveis)) {
+    if (aluno.responsaveis && Array.isArray(aluno.responsaveis)) {
+      aluno.responsaveis.forEach((r: any) => {
+        const tipos = []
+        if (r.isFinanceiro) tipos.push('Financeiro')
+        if (r.isPedagogico) tipos.push('Pedagógico')
+        if (r.isOutro) tipos.push('Outro')
+        const tipoStr = tipos.length > 0 ? tipos.join(' / ') : 'Outro'
+        
+        list.push({
+          nome: r.nome,
+          cpf: r.cpf,
+          email: r.email,
+          celular: r.telefone || r.celular,
+          tipo: tipoStr
+        })
+      })
+    } else if (aluno._responsaveis && Array.isArray(aluno._responsaveis)) {
       list.push(...aluno._responsaveis)
-    } else if (aluno.responsaveis && Array.isArray(aluno.responsaveis)) {
-      aluno.responsaveis.forEach((r: any) => list.push({
-        nome: r.nome,
-        cpf: r.cpf,
-        email: r.email,
-        celular: r.telefone,
-        tipo: r.respFinanceiro ? 'Financeiro' : r.respPedagogico ? 'Pedagógico' : 'Outro'
-      }))
     } else if (aluno.responsavel) {
       list.push({
         nome: aluno.responsavel,
@@ -86,12 +163,35 @@ export function AuthAlunosTab() {
     return { ...aluno, auth: authRecord || defaultAuth }
   }).filter(item => {
     const q = search.toLowerCase()
-    return item.nome.toLowerCase().includes(q) || ((item as any).turma && (item as any).turma.toLowerCase().includes(q)) || (item.auth?.login?.toLowerCase().includes(q))
+    return item.nome.toLowerCase().includes(q) || (getTurmaNome((item as any).turma) && getTurmaNome((item as any).turma).toLowerCase().includes(q)) || (item.auth?.login?.toLowerCase().includes(q))
   })
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editModal) return
     const { auth, form, aluno } = editModal
+
+    // 1. Persistir no banco de dados principal (tabela 'alunos')
+    if (aluno.id && !String(aluno.id).startsWith('virtual-')) {
+      try {
+        const payload = {
+          ...aluno,
+          email: form.email,
+          celular: form.celular,
+          telefone: form.celular
+        }
+        const res = await fetch(`/api/alunos?id=${aluno.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (!res.ok) {
+          console.error('Erro ao atualizar cadastro acadêmico do aluno:', await res.text())
+        }
+      } catch (err) {
+        console.error('Erro de conexão ao atualizar cadastro acadêmico do aluno:', err)
+      }
+    }
+
     if (auth) {
       setAuthUsers(prev => prev.map(u => u.id === auth.id ? { ...u, email: form.email, celular: form.celular, login: (aluno as any).codigo || (aluno as any).matricula || u.login } : u))
     } else {
@@ -109,6 +209,12 @@ export function AuthAlunosTab() {
     } : a))
 
     logSystemAction('Config (Acessos)', 'Edição', `Atualização de contatos de acesso (Aluno: ${aluno.nome})`, { registroId: aluno.id, detalhesDepois: form })
+    
+    // Invalidate React Query Cache to force refresh from backend
+    queryClient.invalidateQueries({ queryKey: ['alunos_auth_tab'] })
+    queryClient.invalidateQueries({ queryKey: ['alunos'] })
+    queryClient.invalidateQueries({ queryKey: ['usuarios'] })
+
     setEditModal(null)
   }
 
@@ -162,7 +268,7 @@ export function AuthAlunosTab() {
   }
 
   return (
-    <div>
+<div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ position: 'relative', width: 320 }}>
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
@@ -170,65 +276,69 @@ export function AuthAlunosTab() {
         </div>
       </div>
 
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Aluno</th>
-              <th>Login / Código</th>
-              <th>Turma</th>
-              <th>E-mail</th>
-              <th>Último Acesso</th>
-              <th>Status Acesso</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayed.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>Nenhum aluno encontrado ou não registrado.</td></tr>
-            ) : (
-              displayed.map(a => {
-                const isConfigured = true // now always true logically, but we show the derived login
-                const currentStatus = a.auth?.status || 'ATIVO'
-                return (
-                  <tr key={a.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div className="avatar" style={{ width: 32, height: 32, background: 'rgba(99,102,241,0.1)', color: '#6366f1', fontSize: 11, borderRadius: 8 }}>
-                          {getInitials(a.nome)}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
-                          <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Alunos</span>
+      {isLoading ? (
+        <TableSkeleton />
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Aluno</th>
+                <th>Login / Código</th>
+                <th>Turma</th>
+                <th>E-mail</th>
+                <th>Último Acesso</th>
+                <th>Status Acesso</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.length === 0 ? (
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>Nenhum aluno encontrado ou não registrado.</td></tr>
+              ) : (
+                displayed.map(a => {
+                  const isConfigured = true // now always true logically, but we show the derived login
+                  const currentStatus = a.auth?.status || 'ATIVO'
+                  return (
+                    <tr key={a.id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div className="avatar" style={{ width: 32, height: 32, background: 'rgba(99,102,241,0.1)', color: '#6366f1', fontSize: 11, borderRadius: 8 }}>
+                            {getInitials(a.nome)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>{a.nome}</div>
+                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><Shield size={9} /> Alunos</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>
-                        {isConfigured ? a.auth.login : ((a as any).codigo || (a as any).matricula || '-')}
-                      </code>
-                    </td>
-                    <td><span className="badge badge-neutral">{(a as any).turma || '-'}</span></td>
-                    <td style={{ fontSize: 12 }}>{(a as any).email || a.auth?.email || '-'}</td>
-                    <td style={{ fontSize: 12, color: a.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{a.auth?.last_login || 'Nunca acessou'}</td>
-                    <td>{badgeStatus(currentStatus)}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ aluno: a, auth: a.auth, form: { email: (a as any).email || a.auth?.email || '', celular: (a as any).celular || (a as any).telefone || a.auth?.celular || '' } })}><Pencil size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Responsáveis Vinculados" onClick={() => setLinksModal(a)}><Users size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ aluno: a, auth: a.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
-                        <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(a)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      </td>
+                      <td>
+                        <code style={{ fontSize: 11, background: 'hsl(var(--bg-overlay))', padding: '2px 6px', borderRadius: 4 }}>
+                          {isConfigured ? a.auth.login : ((a as any).codigo || (a as any).matricula || '-')}
+                        </code>
+                      </td>
+                      <td><span className="badge badge-neutral">{getTurmaNome((a as any).turma) || '-'}</span></td>
+                      <td style={{ fontSize: 12 }}>{(a as any).email || a.auth?.email || '-'}</td>
+                      <td style={{ fontSize: 12, color: a.auth?.last_login ? 'inherit' : 'hsl(var(--text-muted))' }}>{a.auth?.last_login || 'Nunca acessou'}</td>
+                      <td>{badgeStatus(currentStatus)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Editar Contatos de Acesso" onClick={() => setEditModal({ aluno: a, auth: a.auth, form: { email: (a as any).email || a.auth?.email || '', celular: (a as any).celular || (a as any).telefone || a.auth?.celular || '' } })}><Pencil size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Responsáveis Vinculados" onClick={() => setLinksModal(a)}><Users size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Redefinir Senha" onClick={() => { setResetModal({ aluno: a, auth: a.auth }); setResetParams({ mode: 'auto', password: generateAutoPass(), confirm: '', sendSms: false, sendEmail: false, requireChange: true }); setCopied(false) }}><Key size={13} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title={currentStatus === 'ATIVO' ? 'Inativar Acesso' : 'Ativar Acesso'} onClick={() => toggleStatus(a)}><Power size={13} style={{ color: currentStatus === 'ATIVO' ? '#ef4444' : '#10b981' }} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <AnimatePresence>
 {/* Edit Modal */}
