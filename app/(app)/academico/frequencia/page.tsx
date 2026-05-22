@@ -324,13 +324,6 @@ export default function FrequenciaPage() {
   
   const { getNumeroChamada, ordenarPorChamada, formatarNumero } = useEnsalamento(turmaObj)
 
-  const alunosDaTurma = useMemo(() => {
-    const lista = turmaSel ? alunos.filter((a: any) => String(a.turma) === String(turmaSel)) : []
-    return ordenarPorChamada(lista)
-  }, [alunos, turmaSel, ordenarPorChamada])
-  
-  const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
-
   // Registros da turma via API
   const { data: freqTurma, refetch: refetchFreq, isLoading: loadingFreqTurma, isFetching: fetchingFreqTurma } = useApiQuery<any[]>(
     ['frequencias-turma', turmaId],
@@ -338,6 +331,21 @@ export default function FrequenciaPage() {
     { turma_id: turmaId },
     { enabled: !!turmaId, noCache: true }
   )
+
+  const alunosDaTurma = useMemo(() => {
+    const lista = turmaSel ? alunos.filter((a: any) => String(a.turma) === String(turmaSel)) : []
+    const ordenados = ordenarPorChamada(lista)
+    return ordenados.map((aluno: any) => {
+      const aId = String(aluno.id);
+      const freqRecord = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dataSel));
+      return {
+        ...aluno,
+        horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
+      }
+    })
+  }, [alunos, turmaSel, ordenarPorChamada, freqTurma, dataSel])
+  
+  const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
 
   const [absences, setAbsences] = useState<Record<string, Record<string, Record<string, PresStatus>>>>({})
 
