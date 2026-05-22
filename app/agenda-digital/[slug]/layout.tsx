@@ -604,6 +604,19 @@ export default function AgendaDigitalFamilyLayout({
           .ad-premium-card-header-flex {
             gap: 12px !important;
           }
+          .ad-badge-fin, .ad-badge-ped {
+            display: none !important;
+          }
+          .ad-right-section {
+            min-width: 0 !important;
+            width: 100% !important;
+            margin-top: -4px !important;
+          }
+          .ad-premium-cta-btn, .ad-right-section > div > div {
+            height: 44px !important;
+            font-size: 13px !important;
+            padding: 0 16px !important;
+          }
           .ad-mini-cards-grid {
             flex-wrap: nowrap !important;
             gap: 4px !important;
@@ -1405,10 +1418,10 @@ export default function AgendaDigitalFamilyLayout({
                         </span>
                         <span style={{ fontSize: 8, background: '#3b82f6', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>{userAccessRole.parentesco}</span>
                         {userAccessRole.isFin && (
-                          <span style={{ fontSize: 8, background: '#10b981', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(16,185,129,0.3)' }}>Financeiro</span>
+                          <span className="ad-badge-fin" style={{ fontSize: 8, background: '#10b981', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(16,185,129,0.3)' }}>Financeiro</span>
                         )}
                         {userAccessRole.isPed && (
-                          <span style={{ fontSize: 8, background: '#4f46e5', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(79,70,229,0.3)' }}>Pedagógico</span>
+                          <span className="ad-badge-ped" style={{ fontSize: 8, background: '#4f46e5', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(79,70,229,0.3)' }}>Pedagógico</span>
                         )}
                       </div>
                     </div>
