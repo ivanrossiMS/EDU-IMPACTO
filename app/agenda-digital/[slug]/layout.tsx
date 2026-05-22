@@ -728,11 +728,11 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-mobile-nav-bar {
             display: flex !important;
-            background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #4c1d95 100%) !important;
+            background: linear-gradient(135deg, #2563eb 0%, #4c1d95 50%, #2563eb 100%) !important;
             background-size: 200% 200% !important;
             animation: gradientShiftNav 5s ease infinite !important;
             border-top: none !important;
-            box-shadow: 0 -10px 40px rgba(109, 40, 217, 0.4) !important;
+            box-shadow: 0 -10px 40px rgba(37, 99, 235, 0.3) !important;
           }
           
           .ad-mobile-nav-bar::before {
