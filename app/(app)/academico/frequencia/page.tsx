@@ -1,17 +1,18 @@
 'use client'
 
 import { useData, newId } from '@/lib/dataContext'
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
-  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles
+  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
+import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
 const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; glow: string }> = {
   P: { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', label: 'P', glow: 'rgba(34, 197, 94, 0.2)' },
@@ -290,8 +291,18 @@ export default function FrequenciaPage() {
   const [turmaSel, setTurmaSel] = useState<string|null>(null)
   const [showRegrasModal, setShowRegrasModal] = useState(false)
   const [showRelatorioModal, setShowRelatorioModal] = useState(false)
+  const [showAcessosModal, setShowAcessosModal] = useState(false)
+  const isInitialMount = useRef(true)
   const [buscaRelatorio, setBuscaRelatorio] = useState('')
   const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
+
+  // Auto-open sync modal on main page load
+  useEffect(() => {
+    if (isInitialMount.current && !turmaSel) {
+      isInitialMount.current = false
+      setShowAcessosModal(true)
+    }
+  }, [turmaSel])
   
   // Filtros home
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString())
@@ -407,48 +418,6 @@ export default function FrequenciaPage() {
         }
       }
     })
-  }
-
-  const handleAutoChamada = () => {
-    if (!turmaObj) return;
-    const schedule = getTurmaSchedule(turmaObj);
-    const dia = dataSel;
-    
-    setAbsences(prev => {
-      const newAbsences = { ...prev };
-      
-      alunosDaTurma.forEach(aluno => {
-        const aId = String(aluno.id);
-        const studentData = newAbsences[aId] ? { ...newAbsences[aId] } : {};
-        const dayData = studentData[dia] ? { ...studentData[dia] } : {};
-        
-        const freqRecord = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia));
-        const horaRegistro = freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null;
-        
-        if (horaRegistro) {
-          const parts = horaRegistro.split(':');
-          if (parts.length >= 2) {
-            const arrivalMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-            const firstPresentIndex = getFirstPresentTempoIndex(arrivalMinutes, schedule.segmento, aluno.turno || turmaObj.turno || 'Matutino');
-            
-            schedule.tempos.forEach((t: any, idx: number) => {
-              dayData[t.id] = idx >= firstPresentIndex ? 'P' : 'F';
-            });
-          }
-        } else {
-          schedule.tempos.forEach((t: any) => {
-            dayData[t.id] = 'F';
-          });
-        }
-        
-        studentData[dia] = dayData;
-        newAbsences[aId] = studentData;
-      });
-      
-      return newAbsences;
-    });
-    
-    alert('Chamada automática preenchida com base nos registros da catraca. Por favor, verifique e clique em Salvar Registros para gravar no banco de dados.');
   }
 
   const handleSave = async () => {
@@ -1350,6 +1319,29 @@ export default function FrequenciaPage() {
           
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
+              onClick={() => setShowAcessosModal(true)}
+              style={{
+                height: '42px',
+                padding: '0 16px',
+                background: 'rgba(6, 182, 212, 0.08)',
+                color: '#0891b2',
+                border: '1px dashed #06b6d4',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(6, 182, 212, 0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(6, 182, 212, 0.08)'}
+            >
+              <RefreshCw size={16} />
+              <span>Sincronizar Acessos</span>
+            </button>
+            <button
               onClick={() => setShowRegrasModal(true)}
               style={{
                 height: '42px',
@@ -1787,16 +1779,6 @@ export default function FrequenciaPage() {
           
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
-              onClick={handleAutoChamada}
-              style={{ height: '44px', padding: '0 20px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
-              title="Preenche a presença dos alunos de acordo com o horário de registro/entrada na catraca facial."
-            >
-              <Sparkles size={16} style={{ color: '#2563eb' }} />
-              Chamada Automática
-            </button>
-            <button 
               onClick={handleSave}
               style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -2089,6 +2071,12 @@ export default function FrequenciaPage() {
       </div>
       {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
       {renderRelatorioModal()}
+      <SyncAcessosModal 
+        isOpen={showAcessosModal} 
+        onClose={() => setShowAcessosModal(false)}
+        initialStartDate={today}
+        initialEndDate={today}
+      />
     </div>
   )
 }
