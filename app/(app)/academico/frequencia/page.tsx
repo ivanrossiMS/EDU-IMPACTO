@@ -1335,7 +1335,7 @@ export default function FrequenciaPage() {
               onMouseLeave={e => e.currentTarget.style.background = 'rgba(6, 182, 212, 0.08)'}
             >
               <RefreshCw size={16} />
-              <span>Sincronizar Acessos</span>
+              <span>Sincronizar Frequência</span>
             </button>
             <button
               onClick={() => setShowRegrasModal(true)}
@@ -1687,6 +1687,12 @@ export default function FrequenciaPage() {
         </div>
         {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
         {renderRelatorioModal()}
+        <SyncAcessosModal 
+          isOpen={showAcessosModal} 
+          onClose={() => setShowAcessosModal(false)}
+          initialStartDate={today}
+          initialEndDate={today}
+        />
       </div>
     )
   }
