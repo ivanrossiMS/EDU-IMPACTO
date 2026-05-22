@@ -585,18 +585,19 @@ export default function AgendaDigitalFamilyLayout({
             margin-top: 0 !important;
           }
           .ad-premium-card {
-            padding: 16px 12px;
-            border-radius: 20px;
-            gap: 16px;
+            padding: 16px 12px !important;
+            border-radius: 20px !important;
+            gap: 16px !important;
+            position: relative !important;
           }
           .ad-premium-hero {
             padding: 32px 16px 90px 16px;
             border-radius: 24px;
           }
           .ad-premium-card-avatar {
-            width: 64px !important;
-            height: 64px !important;
-            border-radius: 16px !important;
+            width: 86px !important;
+            height: 86px !important;
+            border-radius: 20px !important;
           }
           .ad-premium-student-name {
             font-size: 16px !important;
