@@ -1,7 +1,7 @@
 'use client'
 
 import { useData, newId } from '@/lib/dataContext'
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { getInitials } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { useEnsalamento } from '@/lib/useEnsalamento'
@@ -292,17 +292,13 @@ export default function FrequenciaPage() {
   const [showRegrasModal, setShowRegrasModal] = useState(false)
   const [showRelatorioModal, setShowRelatorioModal] = useState(false)
   const [showAcessosModal, setShowAcessosModal] = useState(false)
-  const isInitialMount = useRef(true)
   const [buscaRelatorio, setBuscaRelatorio] = useState('')
   const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
 
-  // Auto-open sync modal on main page load
+  // Auto-open sync modal on page load
   useEffect(() => {
-    if (isInitialMount.current && !turmaSel) {
-      isInitialMount.current = false
-      setShowAcessosModal(true)
-    }
-  }, [turmaSel])
+    setShowAcessosModal(true)
+  }, [])
   
   // Filtros home
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString())
