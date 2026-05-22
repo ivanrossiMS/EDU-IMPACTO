@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { POST as webhookPOST } from '../../webhook/route'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -119,12 +120,15 @@ export async function POST(req: NextRequest) {
             device_id: log.device_id
           }
 
-          // Disparar via POST local para o webhook
-          await fetch(webhookUrl, {
+          // Disparar via chamada direta do método POST (ignora falhas de fetch na rede local)
+          const localReq = new NextRequest(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(webhookPayload)
-          }).catch(() => null)
+          })
+          await webhookPOST(localReq).catch((err: any) => {
+             console.error('[Sync Acessos] Falha ao processar webhook interno', err)
+          })
           
           processedCount++
           
