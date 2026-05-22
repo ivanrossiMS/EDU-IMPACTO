@@ -211,9 +211,7 @@ export default function LoginPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    // For students (aluno type), email is optional but recommended
-    const isAluno = faUser?.cargo === 'Aluno' || faUser?.userType === 'aluno'
-    if (!isAluno && !faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return }
+    if (!faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return }
     if (newPass.length < 6) { setCreateError('Mínimo 6 caracteres.'); return }
     if (newPass !== confirmPass) { setCreateError('As senhas não coincidem.'); return }
     setCreateLoading(true); setCreateError('')
@@ -562,10 +560,10 @@ export default function LoginPage() {
           <form onSubmit={handleCreate} style={{ display:'flex', flexDirection:'column', gap:18 }}>
             {/* E-mail de Registro */}
             <div>
-              <Label text={faUser?.cargo === 'Aluno' ? 'E-mail (opcional para recuperação de senha)' : 'E-mail de Cadastro *'} />
+              <Label text="E-mail de Cadastro *" />
               <div style={{ position:'relative' }} suppressHydrationWarning>
                 <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>✉</span>
-                <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder={faUser?.cargo === 'Aluno' ? 'Opcional — para recuperação de senha' : 'Preencha seu e-mail principal'} required={faUser?.cargo !== 'Aluno'} suppressHydrationWarning
+                <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder="Preencha seu e-mail principal" required suppressHydrationWarning
                   style={{ ...baseInputStyle }} onFocus={focusOn} onBlur={focusOff} />
               </div>
               {faUser?.cargo === 'Aluno' && (
@@ -620,10 +618,10 @@ export default function LoginPage() {
               </div>
             </div>
             <ErrorBox msg={createError} />
-            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail)} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail))}
+            <button type="submit" disabled={createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail} style={btnBase(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail)}
               onMouseEnter={e=>{if(!createLoading){e.currentTarget.style.transform='translateY(-2px)'}}}
               onMouseLeave={e=>{e.currentTarget.style.transform=''}}>
-              {!(createLoading||newPass.length<6||newPass!==confirmPass||(faUser?.cargo!=='Aluno'&&!faRegEmail)) && <ShimmerOverlay />}
+              {!(createLoading||newPass.length<6||newPass!==confirmPass||!faRegEmail) && <ShimmerOverlay />}
               <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
                 {createLoading ? <><Spinner /><span>Criando acesso...</span></> : <><span>🚀 Criar Minha Senha</span></>}
               </div>
