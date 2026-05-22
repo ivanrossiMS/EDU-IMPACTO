@@ -78,11 +78,6 @@ export default function ADFinanceiroPageMock() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 160, fontFamily: 'Outfit, Inter, sans-serif' }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        .ad-fin-sticky-footer { bottom: 85px !important; }
-        @media (min-width: 1024px) { .ad-fin-sticky-footer { bottom: 32px !important; } }
-      `}} />
-      
       {/* Smart Dashboard Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}

@@ -132,8 +132,27 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
           }
 
+          .ad-fin-sticky-footer {
+            bottom: 32px !important;
+          }
+
           @media (max-width: 1024px) {
             .ad-sidebar-container { display: none; }
+          }
+          
+          @media (max-width: 768px) {
+            .ad-banner-global {
+              height: auto !important;
+              aspect-ratio: 21 / 9;
+              background: #2D1B69; /* Dark background behind banner to blend edges if needed */
+            }
+            .ad-banner-global img {
+              object-fit: contain !important;
+            }
+            .ad-fin-sticky-footer {
+              bottom: 95px !important; /* well above the 72px mobile nav */
+              z-index: 9998 !important;
+            }
           }
         `}} />
         
