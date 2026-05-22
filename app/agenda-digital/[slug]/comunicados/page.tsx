@@ -66,6 +66,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const [comunicados, setComunicados, { loading }] = useSupabaseArray<any>(endpoint)
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
+  const [searchTerm, setSearchTerm] = useState('')
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
@@ -247,7 +248,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             </div>
             <div>
               <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
-              <p style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
+              <p style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais <span className="ad-text-hide-mobile">do colégio</span></p>
             </div>
           </div>
           
@@ -270,6 +271,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   color: '#0f172a',
                   transition: 'all 0.3s'
                 }} 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <button className="btn btn-secondary ad-com-filter-btn" style={{
@@ -295,9 +298,18 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
         </div>
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
-        {loading || !aluno ? (
-          // Modern Skeletons for progressive loading
-          [1, 2, 3].map((idx) => (
+        {(() => {
+          const filteredComunicados = (comunicados || []).filter((c: any) => {
+            if (!searchTerm) return true;
+            const term = searchTerm.toLowerCase();
+            const titulo = c.titulo?.toLowerCase() || '';
+            const remetente = c.remetente?.toLowerCase() || '';
+            const conteudo = c.conteudo?.toLowerCase() || '';
+            return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
+          });
+          
+          if (loading || !aluno) {
+            return [1, 2, 3].map((idx) => (
             <motion.div 
               key={idx} 
               initial={{ opacity: 0, y: 10 }}
@@ -319,15 +331,20 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 </div>
               </div>
             </motion.div>
-          ))
-        ) : (comunicados || []).length === 0 ? (
+          ));
+          }
+          
+          if (filteredComunicados.length === 0) {
+            return (
           <EmptyStateCard 
             title="Nenhum comunicado"
             description="Você está em dia com as comunicações pedagógicas e avisos gerais."
             icon={<Bell size={48} style={{ opacity: 0.2 }} />}
           />
-        ) : (
-          (comunicados || []).map((c: any, index: number) => {
+            );
+          }
+          
+          return filteredComunicados.map((c: any, index: number) => {
             const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
             let parsedDate = new Date();
             try {
@@ -351,7 +368,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 style={{ display: 'flex', position: 'relative', paddingBottom: index !== (comunicados || []).length - 1 ? 32 : 0 }}
               >
                 {/* Timeline Laser Connector */}
-                {index !== (comunicados || []).length - 1 && (
+                {index !== filteredComunicados.length - 1 && (
                   <div className="ad-com-timeline-line" style={{ 
                     position: 'absolute', 
                     top: 48, 
@@ -561,7 +578,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               </motion.div>
             )
           })
-        )}
+        })()}
       </div>
 
       <AnimatePresence>

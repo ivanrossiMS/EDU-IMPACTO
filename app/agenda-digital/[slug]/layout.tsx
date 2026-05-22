@@ -601,6 +601,10 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-premium-student-name {
             font-size: 16px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            max-width: 100% !important;
           }
           .ad-premium-card-header-flex {
             gap: 12px !important;
@@ -610,7 +614,7 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-right-section {
             position: absolute !important;
-            top: 16px !important;
+            top: 4px !important;
             right: 12px !important;
             min-width: 0 !important;
             width: auto !important;
@@ -624,6 +628,12 @@ export default function AgendaDigitalFamilyLayout({
             border-radius: 12px !important;
           }
           .ad-call-btn-arrow {
+            display: none !important;
+          }
+          .ad-com-actions {
+            display: none !important;
+          }
+          .ad-text-hide-mobile {
             display: none !important;
           }
           .ad-call-btn-label {
