@@ -728,6 +728,31 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-mobile-nav-bar {
             display: flex !important;
+            background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #4c1d95 100%) !important;
+            background-size: 200% 200% !important;
+            animation: gradientShiftNav 5s ease infinite !important;
+            border-top: none !important;
+            box-shadow: 0 -10px 40px rgba(109, 40, 217, 0.4) !important;
+          }
+          
+          .ad-mobile-nav-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #c084fc, #e879f9, #22d3ee, #c084fc);
+            background-size: 200% 100%;
+            animation: neonSlide 3s linear infinite;
+            box-shadow: 0 0 15px rgba(192, 132, 252, 0.8), 0 0 5px rgba(232, 121, 249, 0.8);
+            z-index: 10000;
+          }
+
+          @keyframes gradientShiftNav {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
           }
           .ad-content-page-area {
             padding-bottom: 80px !important;
@@ -1490,20 +1515,15 @@ export default function AgendaDigitalFamilyLayout({
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation (Glassmorphic dark overlay) */}
+      {/* Mobile Bottom Navigation (Ultra Modern Neon) */}
       <div className="ad-mobile-nav-bar hide-scrollbar" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
         height: 72,
-        background: 'linear-gradient(165deg, rgba(15, 17, 41, 0.95) 0%, rgba(6, 8, 20, 0.95) 100%)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
         zIndex: 9999,
         padding: '0 4px',
-        boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.3)',
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
         alignItems: 'center'
