@@ -1388,34 +1388,50 @@ export default function AgendaDigitalFamilyLayout({
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation (Glassmorphic overlay) */}
+      {/* Mobile Bottom Navigation (Glassmorphic dark overlay) */}
       <div className="ad-mobile-nav-bar hide-scrollbar" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
-        height: 68,
-        background: 'rgba(255, 255, 255, 0.85)',
+        height: 72,
+        background: 'linear-gradient(165deg, rgba(15, 17, 41, 0.95) 0%, rgba(6, 8, 20, 0.95) 100%)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
         zIndex: 9999,
         padding: '0 4px',
-        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)',
+        boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.3)',
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
-        display: 'flex',
         alignItems: 'center'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '0 12px', minWidth: 'min-content', margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', minWidth: 'min-content', margin: '0 auto', height: '100%' }}>
           {filteredNavItems.map((item, idx) => {
             const isActive = pathname.startsWith(item.href);
             return (
-              <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#4f46e5' : '#94a3b8', width: 64, flexShrink: 0 }}>
-                <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {React.cloneElement(item.icon, { size: 22, color: isActive ? '#4f46e5' : '#94a3b8' })}
-                </div>
-                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  style={{ 
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, 
+                    width: 72, height: 56, borderRadius: 16, flexShrink: 0,
+                    background: isActive ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                    border: isActive ? '1px solid rgba(0, 210, 255, 0.3)' : '1px solid transparent',
+                    color: isActive ? 'white' : 'rgba(255,255,255,0.4)',
+                    boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.2), 0 0 10px rgba(0, 210, 255, 0.1)' : 'none',
+                    transition: 'all 0.3s'
+                  }}
+                >
+                  <div style={{ 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: isActive ? '#00D2FF' : 'inherit',
+                    filter: isActive ? 'drop-shadow(0 0 8px #00D2FF)' : 'none'
+                  }}>
+                    {React.cloneElement(item.icon, { size: 20, color: 'currentColor' })}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+                </motion.div>
               </Link>
             )
           })}
