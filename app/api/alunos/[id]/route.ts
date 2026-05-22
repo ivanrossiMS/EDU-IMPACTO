@@ -3,9 +3,9 @@ import { supabaseServer as supabase } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params
+    const { id } = await context.params
 
     // The ID could be the aluno's UUID, matricula, or dados.codigo
     // Try to find the student by any of these identifiers

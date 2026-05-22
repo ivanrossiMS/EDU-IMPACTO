@@ -184,7 +184,7 @@ export function AgendaDigitalProvider({ children }: { children: React.ReactNode 
             const agendaData = new Date(c.dataAgendamento);
             if (agendaData <= now) {
               hasChanges = true;
-              return { ...c, status: 'enviado', dataEnvio: c.dataAgendamento };
+              return { ...c, status: 'enviado' as const, dataEnvio: c.dataAgendamento };
             }
           }
           return c;

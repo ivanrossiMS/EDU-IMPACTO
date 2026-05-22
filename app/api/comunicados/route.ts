@@ -96,13 +96,7 @@ export async function DELETE(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '50mb',
-    },
-  },
-}
+// Removed deprecated config export
 
 function buildRow(c: any) {
   const { id, titulo, conteudo, texto, autor, dataEnvio, data, destino, fixado, ...rest } = c
