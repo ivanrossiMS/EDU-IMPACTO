@@ -143,11 +143,13 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           @media (max-width: 768px) {
             .ad-banner-global {
               height: auto !important;
-              aspect-ratio: 21 / 9;
-              background: #2D1B69; /* Dark background behind banner to blend edges if needed */
+              background: transparent;
             }
             .ad-banner-global img {
+              height: auto !important;
+              max-height: 250px;
               object-fit: contain !important;
+              object-position: top center !important;
             }
             .ad-fin-sticky-footer {
               bottom: 95px !important; /* well above the 72px mobile nav */
