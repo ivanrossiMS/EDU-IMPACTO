@@ -169,6 +169,24 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
+        @media (max-width: 768px) {
+          .ad-com-filter-btn { display: none !important; }
+          .ad-com-actions { width: 100% !important; justify-content: flex-end !important; }
+          .ad-com-search { width: 100% !important; justify-content: flex-end !important; }
+          .ad-com-search input { width: 100% !important; max-width: 100% !important; }
+          
+          .ad-com-timeline-node { width: 50px !important; margin-right: 12px !important; }
+          .ad-com-date-box { width: 50px !important; padding-right: 12px !important; }
+          .ad-com-date-box > div:nth-child(1) { font-size: 18px !important; }
+          .ad-com-date-box > div:nth-child(2) { font-size: 8px !important; }
+          .ad-com-date-box > div:nth-child(3) { font-size: 9px !important; }
+          
+          .ad-com-timeline-line { left: 45px !important; }
+          .ad-com-timeline-dot { right: -5px !important; width: 10px !important; height: 10px !important; top: 28px !important; border-width: 2px !important; }
+          
+          .ad-feed-card { padding: 16px 16px !important; gap: 12px !important; }
+          .ad-com-card-title { font-size: 15px !important; }
+        }
       `}} />
 
       {/* Floating Animated Nebula Glows */}
@@ -233,8 +251,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
+            <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
               <input 
                 className="form-input" 
@@ -254,7 +272,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 }} 
               />
             </div>
-            <button className="btn btn-secondary" style={{
+            <button className="btn btn-secondary ad-com-filter-btn" style={{
               height: 44,
               borderRadius: 14,
               border: '1px solid rgba(99, 102, 241, 0.15)',
@@ -334,7 +352,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               >
                 {/* Timeline Laser Connector */}
                 {index !== (comunicados || []).length - 1 && (
-                  <div style={{ 
+                  <div className="ad-com-timeline-line" style={{ 
                     position: 'absolute', 
                     top: 48, 
                     bottom: -24, 
@@ -351,7 +369,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 )}
                 
                 {/* Ultra-Modern Minimalist Date Node */}
-                <div style={{ 
+                <div className="ad-com-timeline-node" style={{ 
                   marginRight: 32, 
                   zIndex: 1,
                   display: 'flex',
@@ -360,14 +378,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   width: 88,
                   position: 'relative'
                 }}>
-                  <div style={{ width: 72, textAlign: 'right', paddingRight: 16 }}>
+                  <div className="ad-com-date-box" style={{ width: 72, textAlign: 'right', paddingRight: 16 }}>
                     <div style={{ fontSize: 24, fontWeight: 900, color: isRead ? 'rgba(15,23,42,0.4)' : '#0f172a', lineHeight: 1, letterSpacing: -1 }}>{day}</div>
                     <div style={{ fontSize: 10, fontWeight: 800, color: isRead ? 'rgba(15,23,42,0.3)' : '#4f46e5', textTransform: 'uppercase', letterSpacing: 1.5, marginTop: 4 }}>{month}</div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(15,23,42,0.4)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{time}</div>
                   </div>
                   
                   {/* Glowing Dot on the Line */}
-                  <div style={{ 
+                  <div className="ad-com-timeline-dot" style={{ 
                     position: 'absolute',
                     right: -7,
                     top: 28,
@@ -445,7 +463,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
-                          <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
+                          <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', lineHeight: 1.2 }}>
                           <span>Enviado por <strong style={{ color: '#334155', fontWeight: 600 }}>{c.autor}</strong></span>

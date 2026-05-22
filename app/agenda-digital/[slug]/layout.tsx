@@ -581,13 +581,66 @@ export default function AgendaDigitalFamilyLayout({
         }
         
         @media (max-width: 640px) {
+          .ad-premium-card-wrapper {
+            margin-top: 0 !important;
+          }
           .ad-premium-card {
-            padding: 24px 16px;
-            border-radius: 24px;
+            padding: 16px 12px;
+            border-radius: 20px;
+            gap: 16px;
           }
           .ad-premium-hero {
             padding: 32px 16px 90px 16px;
             border-radius: 24px;
+          }
+          .ad-premium-card-avatar {
+            width: 64px !important;
+            height: 64px !important;
+            border-radius: 16px !important;
+          }
+          .ad-premium-student-name {
+            font-size: 16px !important;
+          }
+          .ad-premium-card-header-flex {
+            gap: 12px !important;
+          }
+          .ad-mini-cards-grid {
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            margin-top: 4px !important;
+          }
+          .ad-mini-card {
+            padding: 6px !important;
+            gap: 4px !important;
+            border-radius: 8px !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .ad-mini-card > div:first-child {
+            width: 20px !important;
+            height: 20px !important;
+          }
+          .ad-mini-card > div:first-child svg {
+            width: 10px !important;
+            height: 10px !important;
+          }
+          .ad-mini-card-label {
+            font-size: 7px !important;
+            margin-bottom: 0 !important;
+          }
+          .ad-mini-card-value {
+            font-size: 9px !important;
+            flex-direction: column !important;
+            gap: 2px !important;
+          }
+          .ad-mini-card-value span {
+            font-size: 7px !important;
+            padding: 1px 4px !important;
           }
         }
         .ad-student-banner {
@@ -1277,8 +1330,8 @@ export default function AgendaDigitalFamilyLayout({
       <div className="ad-premium-card-wrapper">
         <div className="ad-premium-card">
           {/* AREA 1: PERFIL ALUNO (À esquerda) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-            <div style={{ 
+          <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+            <div className="ad-premium-card-avatar" style={{ 
               width: 96, 
               height: 96, 
               borderRadius: 24, 
@@ -1305,7 +1358,7 @@ export default function AgendaDigitalFamilyLayout({
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
-              <h2 style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+              <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 {aluno.nome}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
               </h2>
@@ -1318,8 +1371,8 @@ export default function AgendaDigitalFamilyLayout({
                     <GraduationCap size={14} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turma</div>
-                    <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
+                    <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turma</div>
+                    <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
                       {cleanTurma}
                     </div>
                   </div>
@@ -1331,8 +1384,8 @@ export default function AgendaDigitalFamilyLayout({
                     <Calendar size={14} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turno</div>
-                    <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
+                    <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Turno</div>
+                    <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800 }}>
                       {cleanTurno}
                     </div>
                   </div>
@@ -1345,8 +1398,8 @@ export default function AgendaDigitalFamilyLayout({
                       <Users size={14} />
                     </div>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Responsável</div>
-                      <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Responsável</div>
+                      <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {currentUser?.nome || (aluno as any).responsavel || 'Responsável'}
                         </span>

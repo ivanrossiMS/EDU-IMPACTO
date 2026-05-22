@@ -146,18 +146,28 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           
           @media (max-width: 768px) {
             .ad-banner-global {
+              position: relative !important;
+              width: 100vw !important;
               height: auto !important;
               background: transparent;
+              margin: 0 !important;
+              padding: 0 !important;
             }
             .ad-banner-global img {
+              display: block !important;
+              width: 100vw !important;
               height: auto !important;
-              max-height: 250px;
+              max-height: 350px !important;
               object-fit: contain !important;
               object-position: top center !important;
+              margin: 0 !important;
             }
             .ad-fin-sticky-footer {
-              bottom: 95px !important; /* well above the 72px mobile nav */
+              bottom: 95px !important;
               z-index: 9998 !important;
+            }
+            .ad-content-inner {
+              padding: 16px !important;
             }
             .ad-content-inner.ad-has-banner {
               margin-top: 0 !important;
