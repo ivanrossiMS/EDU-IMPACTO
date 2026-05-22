@@ -614,12 +614,14 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-right-section {
             position: absolute !important;
-            top: 4px !important;
+            top: 16px !important;
             right: 12px !important;
             min-width: 0 !important;
             width: auto !important;
             margin-top: 0 !important;
             z-index: 10 !important;
+            height: auto !important;
+            justify-content: flex-start !important;
           }
           .ad-premium-cta-btn, .ad-right-section > div > div {
             height: 34px !important;
