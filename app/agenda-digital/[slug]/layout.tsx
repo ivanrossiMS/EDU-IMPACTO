@@ -79,10 +79,10 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
           e.currentTarget.style.boxShadow = '0 12px 28px rgba(99,102,241,0.25)'
         }}
       >
-        <Megaphone size={20} style={{ strokeWidth: 2.2 }} />
-        Chamar Aluno na Portaria
-        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+        <Megaphone size={18} style={{ strokeWidth: 2.2 }} />
+        <span className="ad-call-btn-label">Chamar Aluno na Portaria</span>
+        <span className="ad-call-btn-arrow" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8 }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </span>
       </button>
     )
@@ -98,8 +98,8 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
           color: '#d97706',
           cursor: 'default'
         }}>
-          <Loader2 size={20} className="spin-anim" />
-          Chamando na Portaria...
+          <Loader2 size={18} className="spin-anim" />
+          <span className="ad-call-btn-label">Chamando na Portaria...</span>
         </div>
         <button 
           onClick={() => cancelCall(call.id)}
@@ -132,8 +132,8 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
         color: '#ef4444',
         cursor: 'default'
       }}>
-        <AlertTriangle size={20} />
-        Acesso Bloqueado
+        <AlertTriangle size={18} />
+        <span className="ad-call-btn-label">Acesso Bloqueado</span>
       </div>
     )
   }
@@ -146,8 +146,8 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
       boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
       animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
     }}>
-      <CheckCircle2 size={20} />
-      Saída Confirmada!
+      <CheckCircle2 size={18} />
+      <span className="ad-call-btn-label">Saída Confirmada!</span>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
       `}} />
@@ -608,14 +608,37 @@ export default function AgendaDigitalFamilyLayout({
             display: none !important;
           }
           .ad-right-section {
+            position: absolute !important;
+            top: 16px !important;
+            right: 12px !important;
             min-width: 0 !important;
-            width: 100% !important;
-            margin-top: -4px !important;
+            width: auto !important;
+            margin-top: 0 !important;
+            z-index: 10 !important;
           }
           .ad-premium-cta-btn, .ad-right-section > div > div {
-            height: 44px !important;
-            font-size: 13px !important;
-            padding: 0 16px !important;
+            height: 34px !important;
+            font-size: 11px !important;
+            padding: 0 12px !important;
+            border-radius: 12px !important;
+          }
+          .ad-call-btn-arrow {
+            display: none !important;
+          }
+          .ad-call-btn-label {
+            font-size: 0 !important;
+          }
+          .ad-premium-cta-btn .ad-call-btn-label::after {
+            content: "Portaria";
+            font-size: 11px !important;
+          }
+          .ad-right-section > div > div .ad-call-btn-label::after {
+            content: "Portaria";
+            font-size: 11px !important;
+          }
+          .ad-premium-student-name {
+            padding-right: 90px !important;
+            font-size: 18px !important;
           }
           .ad-mini-cards-grid {
             flex-wrap: nowrap !important;
