@@ -728,7 +728,7 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-mobile-nav-bar {
             display: flex !important;
-            background: linear-gradient(135deg, rgba(63, 43, 86, 0.8) 0%, rgba(112, 69, 156, 0.8) 50%, rgba(58, 90, 140, 0.8) 100%) !important;
+            background: linear-gradient(135deg, rgba(27, 20, 100, 0.85) 0%, rgba(74, 20, 140, 0.85) 50%, rgba(49, 0, 74, 0.85) 100%) !important;
             backdrop-filter: blur(20px) !important;
             -webkit-backdrop-filter: blur(20px) !important;
             background-size: 200% 200% !important;
