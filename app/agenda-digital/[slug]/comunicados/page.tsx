@@ -170,11 +170,24 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
+        .ad-mobile-search-container {
+          display: none !important;
+        }
         @media (max-width: 768px) {
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { width: 100% !important; justify-content: flex-end !important; }
           .ad-com-search { width: 100% !important; justify-content: flex-end !important; }
           .ad-com-search input { width: 100% !important; max-width: 100% !important; }
+          
+          .ad-mobile-search-container {
+            display: block !important;
+          }
+          .ad-mobile-search-container input:focus {
+            outline: none !important;
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15), 0 8px 32px rgba(99, 102, 241, 0.08) !important;
+            background: #ffffff !important;
+          }
           
           .ad-com-timeline-node { width: 50px !important; margin-right: 12px !important; }
           .ad-com-date-box { width: 50px !important; padding-right: 12px !important; }
@@ -296,6 +309,53 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             </button>
           </div>
         </div>
+
+      {/* Mobile-only Search Bar */}
+      <div className="ad-mobile-search-container" style={{ marginBottom: 24, padding: '0 16px' }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+          <Search size={18} style={{ position: 'absolute', left: 16, color: '#6366f1' }} />
+          <input 
+            className="form-input" 
+            placeholder="Buscar comunicados..." 
+            style={{
+              paddingLeft: 44,
+              paddingRight: 40,
+              width: '100%',
+              height: 48,
+              borderRadius: 16,
+              border: '1px solid rgba(99, 102, 241, 0.15)',
+              background: 'rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.06)',
+              fontSize: 14,
+              fontWeight: 500,
+              color: '#0f172a',
+              transition: 'all 0.3s'
+            }} 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              style={{
+                position: 'absolute',
+                right: 16,
+                background: 'none',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 4
+              }}
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
