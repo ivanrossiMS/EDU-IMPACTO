@@ -401,6 +401,48 @@ export default function FrequenciaPage() {
     })
   }
 
+  const handleAutoChamada = () => {
+    if (!turmaObj) return;
+    const schedule = getTurmaSchedule(turmaObj);
+    const dia = dataSel;
+    
+    setAbsences(prev => {
+      const newAbsences = { ...prev };
+      
+      alunosDaTurma.forEach(aluno => {
+        const aId = String(aluno.id);
+        const studentData = newAbsences[aId] ? { ...newAbsences[aId] } : {};
+        const dayData = studentData[dia] ? { ...studentData[dia] } : {};
+        
+        const freqRecord = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia));
+        const horaRegistro = freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null;
+        
+        if (horaRegistro) {
+          const parts = horaRegistro.split(':');
+          if (parts.length >= 2) {
+            const arrivalMinutes = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+            const firstPresentIndex = getFirstPresentTempoIndex(arrivalMinutes, schedule.segmento, aluno.turno || turmaObj.turno || 'Matutino');
+            
+            schedule.tempos.forEach((t: any, idx: number) => {
+              dayData[t.id] = idx >= firstPresentIndex ? 'P' : 'F';
+            });
+          }
+        } else {
+          schedule.tempos.forEach((t: any) => {
+            dayData[t.id] = 'F';
+          });
+        }
+        
+        studentData[dia] = dayData;
+        newAbsences[aId] = studentData;
+      });
+      
+      return newAbsences;
+    });
+    
+    alert('Chamada automática preenchida com base nos registros da catraca. Por favor, verifique e clique em Salvar Registros para gravar no banco de dados.');
+  }
+
   const handleSave = async () => {
     const recordsToSave: any[] = []
     const schedule = getTurmaSchedule(turmaObj)
@@ -1735,15 +1777,27 @@ export default function FrequenciaPage() {
             </p>
           </div>
           
-          <button 
-            onClick={handleSave}
-            style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-            onMouseLeave={e => e.currentTarget.style.transform = 'none'}
-          >
-            {salvo ? <CheckCircle size={18} /> : <Save size={18} />}
-            {salvo ? 'Salvo com Sucesso!' : 'Salvar Registros'}
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              onClick={handleAutoChamada}
+              style={{ height: '44px', padding: '0 20px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+              title="Preenche a presença dos alunos de acordo com o horário de registro/entrada na catraca facial."
+            >
+              <Sparkles size={16} style={{ color: '#2563eb' }} />
+              Chamada Automática
+            </button>
+            <button 
+              onClick={handleSave}
+              style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              {salvo ? <CheckCircle size={18} /> : <Save size={18} />}
+              {salvo ? 'Salvo com Sucesso!' : 'Salvar Registros'}
+            </button>
+          </div>
         </div>
       </div>
 
