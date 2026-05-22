@@ -264,8 +264,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                         Turma: {(() => {
                           const classes = m.targetClasses || [];
                           if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
-                          if (classes.length > 2) return `${classes.length} Turmas`;
-                          return classes.join(', ');
+                          const classNames = classes.map((c: string) => {
+                            const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome) === String(c));
+                            return turmaMatch ? turmaMatch.nome : c;
+                          });
+                          if (classNames.length > 2) return `${classNames.length} Turmas`;
+                          return classNames.join(', ');
                         })()} • {m.time}
                       </div>
                     </div>

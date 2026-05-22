@@ -77,7 +77,11 @@ export default function ADFinanceiroPageMock() {
   } as const
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 100, fontFamily: 'Outfit, Inter, sans-serif' }}>
+    <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 160, fontFamily: 'Outfit, Inter, sans-serif' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .ad-fin-sticky-footer { bottom: 85px !important; }
+        @media (min-width: 1024px) { .ad-fin-sticky-footer { bottom: 32px !important; } }
+      `}} />
       
       {/* Smart Dashboard Header */}
       <motion.div 
@@ -288,7 +292,7 @@ export default function ADFinanceiroPageMock() {
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             style={{ 
-              position: 'fixed', bottom: 32, left: 0, right: 0, margin: '0 auto', maxWidth: 800,
+              position: 'fixed', left: 0, right: 0, margin: '0 auto', maxWidth: 800,
               background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
               borderRadius: 24, padding: '16px 24px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -296,6 +300,7 @@ export default function ADFinanceiroPageMock() {
               border: '1px solid rgba(0,0,0,0.05)',
               zIndex: 100
             }}
+            className="ad-fin-sticky-footer"
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ width: 48, height: 48, borderRadius: 16, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
