@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=1, stale-while-revalidate=5' }
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

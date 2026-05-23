@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createProtectedClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
     const { data, error } = await supabase.from('eventos_agenda').select('*')
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ 
@@ -16,7 +20,7 @@ export async function GET(request: Request) {
       ...(row.dados || {}) 
     }))
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=59' }
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
@@ -26,7 +30,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const supabase = await createProtectedClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })

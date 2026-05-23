@@ -210,9 +210,15 @@ export default function CalendarioPage() {
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
 
-    if (ev.turmas && ev.turmas.length > 0 && ev.turmas[0] !== 'TODOS') {
+    let rawTurmas: any = ev.turmas || []
+    if (typeof rawTurmas === 'string') {
+      try { rawTurmas = JSON.parse(rawTurmas) } catch(e) { rawTurmas = [rawTurmas] }
+    }
+    if (!Array.isArray(rawTurmas)) rawTurmas = []
+
+    if (rawTurmas && rawTurmas.length > 0 && rawTurmas[0] !== 'TODOS') {
       t = 'turmas';
-      turmasSel = ev.turmas;
+      turmasSel = rawTurmas;
     } else if ((ev as any).visibilidadeUsuario) {
       t = 'usuario';
       usuarioStr = (ev as any).visibilidadeUsuario;

@@ -81,6 +81,7 @@ export function useSupabaseCollection<T>(
   options?: {
     fetcher?: () => Promise<T>
     persister?: (value: T) => Promise<void>
+    refreshIntervalMs?: number
   }
 ): [T, (value: T | ((prev: T) => T)) => void, { loading: boolean; error: string | null }] {
   const lsKey = `edu-ls-${endpoint}`
@@ -136,18 +137,21 @@ export function useSupabaseCollection<T>(
 
     const doFetch = options?.fetcher
       ? () => options.fetcher!()
-      : () => fetch(`/api/${endpoint}`)
-          .then(async r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`)
-            const text = await r.text()
-            if (!text) return initialValueRef.current
-            try {
-              return JSON.parse(text) as T
-            } catch (err) {
-              console.warn(`[useSupabaseCollection] JSON parse failed for /${endpoint}:`, err)
-              return initialValueRef.current
-            }
-          })
+      : () => {
+          const sep = endpoint.includes('?') ? '&' : '?';
+          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, cache: 'no-store' })
+            .then(async r => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`)
+              const text = await r.text()
+              if (!text) return initialValueRef.current
+              try {
+                return JSON.parse(text) as T
+              } catch (err) {
+                console.warn(`[useSupabaseCollection] JSON parse failed for /${endpoint}:`, err)
+                return initialValueRef.current
+              }
+            })
+        }
 
     fetchWithDedup<T>(endpoint, doFetch)
       .then(data => {
@@ -177,6 +181,42 @@ export function useSupabaseCollection<T>(
         setError(`Falha ao carregar dados: ${err?.message || 'erro de rede'}`)
         setLoading(false)
       })
+
+    // Setup polling if refreshIntervalMs is provided
+    if (options?.refreshIntervalMs && options.refreshIntervalMs > 0) {
+      const intervalId = setInterval(() => {
+        if (cancelled || !isMounted.current) return
+        fetchWithDedup<T>(endpoint, doFetch)
+          .then(data => {
+            if (cancelled || !isMounted.current) return
+            let normalized: T = data
+            if (data === undefined || data === null) {
+              normalized = initialValueRef.current
+            } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
+              normalized = initialValueRef.current
+            } else if (
+              typeof data === 'object' && !Array.isArray(data) &&
+              initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
+            ) {
+              normalized = { ...initialValueRef.current, ...data }
+            } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
+              const first = data[0]
+              normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
+            }
+            
+            // Only update if data actually changed to avoid unnecessary re-renders
+            if (JSON.stringify(latestState.current) !== JSON.stringify(normalized)) {
+              setState(normalized)
+            }
+          })
+          .catch(() => { /* silent fail on polling */ })
+      }, options.refreshIntervalMs)
+      
+      return () => {
+        cancelled = true
+        clearInterval(intervalId)
+      }
+    }
 
     return () => { cancelled = true }
   }, [endpoint]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -222,6 +262,11 @@ export function useSupabaseCollection<T>(
       ? (valOrFn as (p: T) => T)(safePrev)
       : valOrFn;
     
+    // Check if nothing changed to prevent redundant network writes / database resets
+    if (safePrev === next || JSON.stringify(safePrev) === JSON.stringify(next)) {
+      return;
+    }
+    
     // Update ref immediately for sequential setter calls
     latestState.current = next;
     
@@ -244,12 +289,15 @@ export function useSupabaseCollection<T>(
  */
 export function useSupabaseArray<T>(
   endpoint: string,
-  initialValue: T[] = []
+  initialValue: T[] = [],
+  options?: { refreshIntervalMs?: number }
 ): [T[], (value: T[] | ((prev: T[]) => T[])) => void, { loading: boolean; error: string | null }] {
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {
-    fetcher: () =>
-      fetch(`/api/${endpoint}`)
+    ...options,
+    fetcher: () => {
+      const sep = endpoint.includes('?') ? '&' : '?';
+      return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, cache: 'no-store' })
         .then(async r => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             const text = await r.text();
@@ -270,13 +318,19 @@ export function useSupabaseArray<T>(
         .catch(err => {
             console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
             throw err
-        }),
+        })
+    },
     persister: async (arr) => {
-      await fetch(`/api/${endpoint}`, {
+      const res = await fetch(`/api/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(arr),
       })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        console.error(`[useSupabaseArray] API POST failed:`, res.status, body)
+        throw new Error(body?.error || `Erro ${res.status} ao salvar`)
+      }
     },
   })
 }

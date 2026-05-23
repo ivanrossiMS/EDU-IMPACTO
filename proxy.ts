@@ -19,7 +19,8 @@ import { createServerClient } from '@supabase/ssr'
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth',          // endpoints de login/logout/me
-  '/api/agenda/perfil-acesso', // acesso público da agenda
+  '/api/agenda',        // endpoints da agenda que o aluno acessa sem auth do supabase
+  '/api/test',
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
   '/recibo',            // recibos públicos

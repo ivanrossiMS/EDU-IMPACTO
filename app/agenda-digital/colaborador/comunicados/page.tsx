@@ -51,6 +51,7 @@ export default function ColaboradorComunicadosPage() {
       autor: currentUser?.nome || 'Professor',
       autorCargo: currentUser?.cargo || currentUser?.perfil || 'Colaborador',
       autorId: currentUser?.id || '',
+      autorFoto: currentUser?.foto || null,
       turmas: [destinatario],
       alunosIds: [],
       prioridade: 'normal' as const,
@@ -147,7 +148,7 @@ export default function ColaboradorComunicadosPage() {
             >
               <div className="ad-card-flex-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <UserAvatar userId={c.autorId} name={c.autor} size={48} />
+                  <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={48} />
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                       {c.fixado && <Pin size={12} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
@@ -180,11 +181,13 @@ export default function ColaboradorComunicadosPage() {
               {c.anexos && c.anexos.length > 0 && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                   {c.anexos.map((anexo: string, idx: number) => {
-                    const isForm = anexo.startsWith('Formulário:')
+                    const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
+                    const name = parts[0];
+                    const isForm = name.startsWith('Formulário:')
                     return (
                       <span key={idx} className="badge" style={{ background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', padding: '4px 8px' }}>
                         {isForm ? <FileText size={12} color="#3b82f6" /> : <Paperclip size={12} color="#64748b" />}
-                        {anexo}
+                        {name}
                       </span>
                     )
                   })}
@@ -223,7 +226,7 @@ export default function ColaboradorComunicadosPage() {
           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', padding: 40, borderRadius: 24, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                 <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} size={64} />
+                 <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} fotoUrl={selectedComunicado.autorFoto} size={64} />
                  <div>
                    <div style={{ fontWeight: 700, fontSize: 16 }}>{selectedComunicado.autor}</div>
                    <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>{selectedComunicado.autorCargo}</div>
@@ -247,10 +250,12 @@ export default function ColaboradorComunicadosPage() {
                  <div style={{ marginTop: 32, padding: '20px', background: 'hsl(var(--bg-overlay))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                      {selectedComunicado.anexos.map((anexo: string, idx: number) => {
+                       const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
+                       const name = parts[0];
                        return (
                          <div key={idx} className="ad-attachment-item">
                            <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(anexo)}>
-                              Baixar {anexo}
+                              Baixar {name}
                            </button>
                          </div>
                        )

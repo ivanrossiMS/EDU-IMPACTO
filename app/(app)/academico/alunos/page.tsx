@@ -73,6 +73,9 @@ export default function AlunosPage() {
   const [buscaResponsavel, setBuscaResponsavel] = useState('')
   const [resultadosResponsaveis, setResultadosResponsaveis] = useState<any[]>([])
   const [loadingBuscaResp, setLoadingBuscaResp] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<any[]>([])
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
+  const hasError = (fieldId: string) => validationErrors.some(e => e.field === fieldId)
 
   const handleBuscarResponsavel = async () => {
     if (!buscaResponsavel.trim()) return
@@ -166,6 +169,8 @@ export default function AlunosPage() {
 
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen)
+    setValidationErrors([])
+    setIsValidationModalOpen(false)
     if (!isModalOpen) {
       setActiveTab('aluno') // Reset to first tab when opening
     }
@@ -185,12 +190,68 @@ export default function AlunosPage() {
     setMostrarFormResponsavel(false)
     setIsModalOpen(true)
     setActiveTab('aluno')
+    setValidationErrors([])
+    setIsValidationModalOpen(false)
   }
 
   const totalPaginas = Math.ceil(total / itensPorPagina)
   const alunosPaginados = alunos
 
+  const validateForm = () => {
+    const errors: any[] = []
+
+    // 1. Aluno validation
+    if (!formData.aluno.codigo || !formData.aluno.codigo.trim()) {
+      errors.push({ field: 'codigo', label: 'ID do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
+    }
+    if (!formData.aluno.nome || !formData.aluno.nome.trim()) {
+      errors.push({ field: 'nome', label: 'Nome Completo do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
+    }
+    if (!formData.aluno.dataNasc || !formData.aluno.dataNasc.trim()) {
+      errors.push({ field: 'dataNasc', label: 'Data de Nascimento do Aluno', tab: 'aluno', tabLabel: 'Dados do Aluno' })
+    }
+
+    // 2. Responsáveis validation
+    if (formData.responsaveis.length === 0) {
+      errors.push({ field: 'responsaveis_empty', label: 'Pelo menos um responsável deve ser cadastrado', tab: 'responsavel', tabLabel: 'Responsáveis' })
+    } else {
+      formData.responsaveis.forEach((resp, index) => {
+        const suffix = ` (Responsável #${index + 1})`
+        const respId = resp.codigo || resp.id || ''
+        if (!respId || !respId.trim()) {
+          errors.push({ field: `resp_${index}_id`, label: `ID${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
+        if (!resp.nome || !resp.nome.trim()) {
+          errors.push({ field: `resp_${index}_nome`, label: `Nome Completo${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
+        if (!resp.parentesco || !resp.parentesco.trim()) {
+          errors.push({ field: `resp_${index}_parentesco`, label: `Parentesco${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
+        if (!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro) {
+          errors.push({ field: `resp_${index}_tipo`, label: `Tipo de Responsável (Selecione pelo menos um: Financeiro, Pedagógico ou Outro)${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
+      })
+    }
+
+    // 3. Turma validation
+    if (!segmentoSelecionado) {
+      errors.push({ field: 'segmento', label: 'Segmento', tab: 'turma', tabLabel: 'Vínculo de Turma' })
+    }
+    if (!formData.turma.serieTurma) {
+      errors.push({ field: 'serieTurma', label: 'Série / Turma', tab: 'turma', tabLabel: 'Vínculo de Turma' })
+    }
+
+    return errors
+  }
+
   const handleSave = async () => {
+    const errors = validateForm()
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      setIsValidationModalOpen(true)
+      return
+    }
+
     const newAluno = {
       id: editingAlunoId || `TEMP-${Date.now()}`,
       ...formData.aluno,
@@ -268,6 +329,8 @@ export default function AlunosPage() {
     setMostrarFormResponsavel(!!aluno.responsavel)
     setIsModalOpen(true)
     setActiveTab('aluno')
+    setValidationErrors([])
+    setIsValidationModalOpen(false)
   }
 
   const toggleStatus = async (aluno: any) => {
@@ -1095,11 +1158,33 @@ export default function AlunosPage() {
                     <div style={{ display: 'flex', gap: 16 }}>
                       <div style={{ flex: '1' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID *</label>
-                        <input className="form-input" placeholder="Ex: AL001" value={formData.aluno.codigo || ''} onChange={e => handleInputChange('aluno', 'codigo', e.target.value)} />
+                        <input 
+                          className="form-input" 
+                          style={{ borderColor: hasError('codigo') ? '#ef4444' : undefined, boxShadow: hasError('codigo') ? '0 0 0 1px #ef4444' : undefined }}
+                          placeholder="Ex: AL001" 
+                          value={formData.aluno.codigo || ''} 
+                          onChange={e => {
+                            handleInputChange('aluno', 'codigo', e.target.value);
+                            if (hasError('codigo')) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== 'codigo'));
+                            }
+                          }} 
+                        />
                       </div>
                       <div style={{ flex: '3' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
-                        <input className="form-input" placeholder="Nome do aluno" value={formData.aluno.nome || ''} onChange={e => handleInputChange('aluno', 'nome', e.target.value)} />
+                        <input 
+                          className="form-input" 
+                          style={{ borderColor: hasError('nome') ? '#ef4444' : undefined, boxShadow: hasError('nome') ? '0 0 0 1px #ef4444' : undefined }}
+                          placeholder="Nome do aluno" 
+                          value={formData.aluno.nome || ''} 
+                          onChange={e => {
+                            handleInputChange('aluno', 'nome', e.target.value);
+                            if (hasError('nome')) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== 'nome'));
+                            }
+                          }} 
+                        />
                       </div>
                     </div>
 
@@ -1107,7 +1192,18 @@ export default function AlunosPage() {
                     <div style={{ display: 'flex', gap: 16 }}>
                       <div style={{ flex: '1' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Data de Nascimento *</label>
-                        <input type="date" className="form-input" value={formData.aluno.dataNasc || ''} onChange={e => handleInputChange('aluno', 'dataNasc', e.target.value)} />
+                        <input 
+                          type="date" 
+                          className="form-input" 
+                          style={{ borderColor: hasError('dataNasc') ? '#ef4444' : undefined, boxShadow: hasError('dataNasc') ? '0 0 0 1px #ef4444' : undefined }}
+                          value={formData.aluno.dataNasc || ''} 
+                          onChange={e => {
+                            handleInputChange('aluno', 'dataNasc', e.target.value);
+                            if (hasError('dataNasc')) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== 'dataNasc'));
+                            }
+                          }} 
+                        />
                       </div>
                       <div style={{ flex: '1' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
@@ -1231,9 +1327,9 @@ export default function AlunosPage() {
                       <div style={{ height: '1px', background: '#e2e8f0' }} />
                       
                       {formData.responsaveis.map((resp, index) => (
-                        <div key={index} style={{ border: '1px solid #e2e8f0', padding: 16, borderRadius: 12, marginBottom: 16, background: 'rgba(255,255,255,0.5)' }}>
+                        <div key={index} style={{ border: hasError(`resp_${index}_tipo`) || hasError(`resp_${index}_id`) || hasError(`resp_${index}_nome`) || hasError(`resp_${index}_parentesco`) ? '1px solid #ef4444' : '1px solid #e2e8f0', padding: 16, borderRadius: 12, marginBottom: 16, background: 'rgba(255,255,255,0.5)', transition: 'all 0.2s' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Responsável #{index + 1}</h3>
+                            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Responsável #{index + 1} *</h3>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                               <button
                                 type="button"
@@ -1241,6 +1337,7 @@ export default function AlunosPage() {
                                   const updated = formData.responsaveis.filter((_, i) => i !== index);
                                   setFormData({ ...formData, responsaveis: updated });
                                   if (updated.length === 0) setMostrarFormResponsavel(false);
+                                  setValidationErrors(prev => prev.filter(err => !err.field.startsWith(`resp_${index}_`)));
                                 }}
                                 style={{
                                   padding: '4px',
@@ -1260,14 +1357,20 @@ export default function AlunosPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleInputChange('responsaveis', 'isFinanceiro', !resp.isFinanceiro, index)}
+                                onClick={() => {
+                                  const val = !resp.isFinanceiro;
+                                  handleInputChange('responsaveis', 'isFinanceiro', val, index);
+                                  if (val || resp.isPedagogico || resp.isOutro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                }}
                                 style={{
                                   padding: '4px 12px',
                                   borderRadius: '20px',
                                   fontSize: 11,
                                   fontWeight: 700,
                                   border: '1px solid',
-                                  borderColor: resp.isFinanceiro ? '#10b981' : '#e2e8f0',
+                                  borderColor: resp.isFinanceiro ? '#10b981' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
                                   background: resp.isFinanceiro ? '#10b981' : '#fff',
                                   color: resp.isFinanceiro ? '#fff' : '#64748b',
                                   cursor: 'pointer',
@@ -1278,14 +1381,20 @@ export default function AlunosPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleInputChange('responsaveis', 'isPedagogico', !resp.isPedagogico, index)}
+                                onClick={() => {
+                                  const val = !resp.isPedagogico;
+                                  handleInputChange('responsaveis', 'isPedagogico', val, index);
+                                  if (val || resp.isFinanceiro || resp.isOutro) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                }}
                                 style={{
                                   padding: '4px 12px',
                                   borderRadius: '20px',
                                   fontSize: 11,
                                   fontWeight: 700,
                                   border: '1px solid',
-                                  borderColor: resp.isPedagogico ? '#8b5cf6' : '#e2e8f0',
+                                  borderColor: resp.isPedagogico ? '#8b5cf6' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
                                   background: resp.isPedagogico ? '#8b5cf6' : '#fff',
                                   color: resp.isPedagogico ? '#fff' : '#64748b',
                                   cursor: 'pointer',
@@ -1296,14 +1405,20 @@ export default function AlunosPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleInputChange('responsaveis', 'isOutro', !resp.isOutro, index)}
+                                onClick={() => {
+                                  const val = !resp.isOutro;
+                                  handleInputChange('responsaveis', 'isOutro', val, index);
+                                  if (val || resp.isFinanceiro || resp.isPedagogico) {
+                                    setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_tipo`));
+                                  }
+                                }}
                                 style={{
                                   padding: '4px 12px',
                                   borderRadius: '20px',
                                   fontSize: 11,
                                   fontWeight: 700,
                                   border: '1px solid',
-                                  borderColor: resp.isOutro ? '#f59e0b' : '#e2e8f0',
+                                  borderColor: resp.isOutro ? '#f59e0b' : hasError(`resp_${index}_tipo`) ? '#ef4444' : '#e2e8f0',
                                   background: resp.isOutro ? '#f59e0b' : '#fff',
                                   color: resp.isOutro ? '#fff' : '#64748b',
                                   cursor: 'pointer',
@@ -1314,21 +1429,77 @@ export default function AlunosPage() {
                               </button>
                             </div>
                           </div>
+
+                          {/* Dynamic Badges on Top of Card */}
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                            {resp.isFinanceiro && (
+                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Check size={10} /> Financeiro
+                              </span>
+                            )}
+                            {resp.isPedagogico && (
+                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Check size={10} /> Pedagógico
+                              </span>
+                            )}
+                            {resp.isOutro && (
+                              <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Check size={10} /> Outro
+                              </span>
+                            )}
+                            {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && (
+                              <span className="pulse-warning" style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: '#fee2e2', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <AlertTriangle size={10} /> Tipo Obrigatório *
+                              </span>
+                            )}
+                          </div>
                           
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {/* Linha 1 */}
                     <div style={{ display: 'flex', gap: 16 }}>
                       <div style={{ flex: '1', maxWidth: '100px' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID</label>
-                        <input className="form-input" placeholder="Ex: RESP001" value={resp.codigo || resp.id || ''} onChange={e => handleInputChange('responsaveis', 'id', e.target.value, index)} />
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>ID *</label>
+                        <input 
+                          className="form-input" 
+                          style={{ borderColor: hasError(`resp_${index}_id`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_id`) ? '0 0 0 1px #ef4444' : undefined }}
+                          placeholder="Ex: RESP001" 
+                          value={resp.codigo || resp.id || ''} 
+                          onChange={e => {
+                            handleInputChange('responsaveis', 'id', e.target.value, index);
+                            if (hasError(`resp_${index}_id`)) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
+                            }
+                          }} 
+                        />
                       </div>
                       <div style={{ flex: '3.5' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Nome Completo *</label>
-                        <input className="form-input" placeholder="Nome do responsável" value={resp.nome || ''} onChange={e => handleInputChange('responsaveis', 'nome', e.target.value, index)} />
+                        <input 
+                          className="form-input" 
+                          style={{ borderColor: hasError(`resp_${index}_nome`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_nome`) ? '0 0 0 1px #ef4444' : undefined }}
+                          placeholder="Nome do responsável" 
+                          value={resp.nome || ''} 
+                          onChange={e => {
+                            handleInputChange('responsaveis', 'nome', e.target.value, index);
+                            if (hasError(`resp_${index}_nome`)) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_nome`));
+                            }
+                          }} 
+                        />
                       </div>
                       <div style={{ flex: '1.5' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Parentesco *</label>
-                        <select className="form-input" value={resp.parentesco || ''} onChange={e => handleInputChange('responsaveis', 'parentesco', e.target.value, index)}>
+                        <select 
+                          className="form-input" 
+                          style={{ borderColor: hasError(`resp_${index}_parentesco`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_parentesco`) ? '0 0 0 1px #ef4444' : undefined }}
+                          value={resp.parentesco || ''} 
+                          onChange={e => {
+                            handleInputChange('responsaveis', 'parentesco', e.target.value, index);
+                            if (hasError(`resp_${index}_parentesco`)) {
+                              setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_parentesco`));
+                            }
+                          }}
+                        >
                           <option value="">Selecione…</option>
                           <option value="pai">Pai</option>
                           <option value="mae">Mãe</option>
@@ -1344,11 +1515,11 @@ export default function AlunosPage() {
                         <input type="date" className="form-input" value={resp.dataNasc || ''} onChange={e => handleInputChange('responsaveis', 'dataNasc', e.target.value, index)} />
                       </div>
                       <div style={{ flex: '2.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail *</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail</label>
                         <input type="email" className="form-input" placeholder="email@exemplo.com" value={resp.email || ''} onChange={e => handleInputChange('responsaveis', 'email', e.target.value, index)} />
                       </div>
                       <div style={{ flex: '1.5' }}>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone *</label>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
                         <input className="form-input" placeholder="(00) 00000-0000" value={resp.telefone || ''} onChange={e => handleInputChange('responsaveis', 'telefone', e.target.value, index)} />
                       </div>
                     </div>
@@ -1480,10 +1651,14 @@ export default function AlunosPage() {
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento *</label>
                     <select 
                       className="form-input" 
+                      style={{ borderColor: hasError('segmento') ? '#ef4444' : undefined, boxShadow: hasError('segmento') ? '0 0 0 1px #ef4444' : undefined }}
                       value={segmentoSelecionado} 
                       onChange={e => {
                         setSegmentoSelecionado(e.target.value)
                         handleInputChange('turma', 'serieTurma', '') // Reset turma
+                        if (hasError('segmento')) {
+                          setValidationErrors(prev => prev.filter(err => err.field !== 'segmento'));
+                        }
                       }}
                     >
                       <option value="">Selecione o segmento…</option>
@@ -1497,8 +1672,14 @@ export default function AlunosPage() {
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série / Turma *</label>
                     <select 
                       className="form-input" 
+                      style={{ borderColor: hasError('serieTurma') ? '#ef4444' : undefined, boxShadow: hasError('serieTurma') ? '0 0 0 1px #ef4444' : undefined }}
                       value={formData.turma.serieTurma} 
-                      onChange={e => handleInputChange('turma', 'serieTurma', e.target.value)}
+                      onChange={e => {
+                        handleInputChange('turma', 'serieTurma', e.target.value);
+                        if (hasError('serieTurma')) {
+                          setValidationErrors(prev => prev.filter(err => err.field !== 'serieTurma'));
+                        }
+                      }}
                       disabled={!segmentoSelecionado}
                     >
                       <option value="">Selecione a turma…</option>
@@ -1569,6 +1750,77 @@ export default function AlunosPage() {
             queryClient.invalidateQueries({ queryKey: ['alunos'] });
           }} 
         />
+      )}
+
+      {isValidationModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div 
+            className="glass-card ultra-modal modal-enter-active shake-element" 
+            style={{ width: '100%', maxWidth: 500, padding: 32, textAlign: 'center', position: 'relative', boxShadow: '0 30px 60px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <button 
+              onClick={() => setIsValidationModalOpen(false)} 
+              style={{ position: 'absolute', top: 20, right: 20, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = '#0f172a' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = '#64748b' }}
+            >
+              <X size={16} />
+            </button>
+
+            <div className="pulse-warning" style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(239, 68, 68, 0.1)', border: '1.5px dashed rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <AlertTriangle size={28} color="#ef4444" />
+            </div>
+
+            <h3 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', fontFamily: 'Outfit, sans-serif' }}>Campos Obrigatórios Pendentes</h3>
+            <p style={{ fontSize: 13, color: '#64748b', lineHeight: '1.6', margin: '0 0 24px' }}>
+              Por favor, preencha todos os dados obrigatórios listados abaixo para concluir o cadastro.
+            </p>
+
+            <div style={{ textAlign: 'left', maxHeight: 240, overflowY: 'auto', background: 'rgba(248, 250, 252, 0.8)', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+              {/* Group errors by category */}
+              {['aluno', 'responsavel', 'turma'].map(catTab => {
+                const catErrors = validationErrors.filter(e => e.tab === catTab);
+                if (catErrors.length === 0) return null;
+                const tabLabel = catErrors[0].tabLabel;
+                return (
+                  <div key={catTab} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e2e8f0', paddingBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {catTab === 'aluno' && <Users size={12} />}
+                      {catTab === 'responsavel' && <Shield size={12} />}
+                      {catTab === 'turma' && <Tag size={12} />}
+                      {tabLabel}
+                    </div>
+                    {catErrors.map((err, i) => (
+                      <div 
+                        key={i} 
+                        onClick={() => {
+                          setActiveTab(err.tab);
+                          if (err.tab === 'responsavel') setMostrarFormResponsavel(true);
+                          setIsValidationModalOpen(false);
+                        }}
+                        style={{ fontSize: 13, color: '#475569', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '4px 6px', borderRadius: 6, transition: 'background 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <span style={{ color: '#ef4444', fontWeight: 900 }}>•</span>
+                        <span>{err.label}</span>
+                        <span style={{ fontSize: 10, color: '#3b82f6', marginLeft: 'auto', fontWeight: 600 }}>Corrigir →</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setIsValidationModalOpen(false)}
+              className="neo-btn neo-btn-primary"
+              style={{ width: '100%', padding: '12px 0', fontSize: 14, borderRadius: 12, border: 'none', cursor: 'pointer' }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
       )}
 
       {deleteModal.open && (

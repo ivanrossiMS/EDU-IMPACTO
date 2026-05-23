@@ -105,6 +105,7 @@ export function AuthResponsaveisTab() {
         } else {
           const ex = gMap.get(key)
           // avoid duplicating the same student for a guardian
+          if (!ex.alunos) ex.alunos = []
           if (!ex.alunos.find((a: any) => a.id === aluno.id)) {
             ex.alunos.push(aluno)
           }

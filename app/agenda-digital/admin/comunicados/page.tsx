@@ -2,6 +2,7 @@
 // Last Update: 2026-05-16T16:08:00Z - Forced Rebuild
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { AdminComunicadoChatManager } from '@/components/AdminComunicadoChatManager'
 
 
 import { useState, useRef, useEffect } from 'react'
@@ -14,7 +15,7 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, MessageSquare, Layout, FileCheck
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu
 } from 'lucide-react'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
@@ -101,7 +102,16 @@ export default function ADAdminComunicados() {
   const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
   const [viewingReportPayload, setViewingReportPayload] = useState<any>(null)
   const [activePreviewStudent, setActivePreviewStudent] = useState<any>(null)
+  const [viewingDestCom, setViewingDestCom] = useState<ADComunicado | null>(null)
   
+  const [authorFilter, setAuthorFilter] = useState<string>('todos');
+  const [attachmentFilter, setAttachmentFilter] = useState<string>('todos');
+  const [showMonthlyReport, setShowMonthlyReport] = useState(false);
+
+  // Extração Dinâmica de Autores e Cargos
+  const availableRoles = Array.from(new Set(comunicados.map(c => c.autorCargo || (c as any).dados?.autorCargo).filter(Boolean))) as string[];
+  const availableAuthors = Array.from(new Set(comunicados.map(c => c.autor || (c as any).dados?.autor).filter(Boolean))) as string[];
+
   const comunicadoRichEditorRef = useRef<HTMLDivElement>(null)
 
   // Sync editor content only on showComposer or edit changes to avoid cursor jumps
@@ -125,11 +135,13 @@ export default function ADAdminComunicados() {
         autor: currentUser?.nome || 'Usuário ERP',
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Administração',
         autorId: currentUser?.id || '',
+        autorFoto: currentUser?.foto || null,
         anexos: anexos,
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, ''))
+        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       } : c))
     } else {
       const newCom: ADComunicado = {
@@ -140,12 +152,14 @@ export default function ADAdminComunicados() {
         autor: currentUser?.nome || 'Usuário ERP',
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Administração',
         autorId: currentUser?.id || '',
+        autorFoto: currentUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        destino: selectedDest.length === 0 ? 'todos' : 'selecionados',
         prioridade: 'normal',
         fixado: false,
         exigeCiencia: false,
-        permiteResposta: false,
+        permiteResposta: true,
         dataEnvio: new Date().toISOString(),
         dataAgendamento: dataAgendamento || null,
         anexos: anexos,
@@ -243,6 +257,20 @@ export default function ADAdminComunicados() {
     if (tab === 'agendados' && c.status !== 'agendado') return false
     if (tab === 'rascunhos' && c.status !== 'rascunho') return false
     
+    if (authorFilter !== 'todos') {
+      const cAutor = c.autor || (c as any).dados?.autor;
+      const cCargo = c.autorCargo || (c as any).dados?.autorCargo;
+      if (authorFilter === 'meus') {
+        if (c.autorId !== currentUser?.id && cAutor !== currentUser?.nome) return false;
+      } else if (authorFilter.startsWith('cargo:')) {
+        const roleTarget = authorFilter.split(':')[1];
+        if (cCargo !== roleTarget) return false;
+      } else if (authorFilter.startsWith('autor:')) {
+        const autorTarget = authorFilter.split(':')[1];
+        if (cAutor !== autorTarget) return false;
+      }
+    }
+
     if (search) {
       const searchLower = search.toLowerCase()
       const titleMatch = (c.titulo || '').toLowerCase().includes(searchLower)
@@ -265,7 +293,25 @@ export default function ADAdminComunicados() {
           <p style={{ color: 'hsl(var(--text-muted))' }}>Gerencie o envio, relatórios de leitura e arquivos anexos.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'relative' }}>
+            <Filter size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+            <select 
+              className="form-input" 
+              value={authorFilter}
+              onChange={e => setAuthorFilter(e.target.value)}
+              style={{ paddingLeft: 36, width: 200, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
+            >
+              <option value="todos">Todos os Autores</option>
+              <option value="meus">Meus Comunicados</option>
+              {availableRoles.length > 0 && <optgroup label="Filtrar por Cargo">
+                {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
+              </optgroup>}
+              {availableAuthors.length > 0 && <optgroup label="Filtrar por Usuário">
+                {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
+              </optgroup>}
+            </select>
+          </div>
           <div style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))' }} />
             <input 
@@ -273,9 +319,12 @@ export default function ADAdminComunicados() {
               placeholder="Buscar..." 
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 36, width: 240 }} 
+              style={{ paddingLeft: 36, width: 180 }} 
             />
           </div>
+          <button className="btn btn-secondary" onClick={() => setShowMonthlyReport(true)} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Calendar size={16} /> Relatório Mensal
+          </button>
           <button className="btn btn-primary" onClick={handleNovo}>
             <Plus size={16} /> Novo Comunicado
           </button>
@@ -337,31 +386,65 @@ export default function ADAdminComunicados() {
                   e.currentTarget.style.transform = 'translateX(0)'
                 }}
               >
-                {/* Column 1: Date & Time */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 70, padding: '0 12px', borderRight: '1px solid rgba(0,0,0,0.05)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                    {dateObj ? dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '') : '--'}
-                  </span>
-                  <span style={{ fontSize: 18, fontWeight: 900, color: '#1e293b', marginTop: -2 }}>
-                    {dateObj ? dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                  </span>
-                </div>
-
-                {/* Column 2: Content */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                {/* Content Column */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {c.titulo}
                     </h3>
                     {c.fixado && <Pin size={12} fill="#f59e0b" color="#f59e0b" />}
                   </div>
+                  
                   <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
                   </p>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'hsl(var(--primary)/0.05)', border: '1px solid hsl(var(--primary)/0.1)', padding: '4px 10px', borderRadius: 12 }}>
+                      <User size={12} color="hsl(var(--primary))" />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--primary))' }}>
+                        {c.autor || 'Sistema'}
+                        {(c.autorCargo || (c as any).dados?.autorCargo) && <span style={{ fontWeight: 500, opacity: 0.8 }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>}
+                      </span>
+                    </div>
+                    {c.destino === 'todos' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, color: '#10b981' }}>
+                        <Users size={12} /> Toda a Escola
+                      </div>
+                    ) : (
+                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0)) && (
+                        <button 
+                          onClick={e => { e.stopPropagation(); setViewingDestCom(c); }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: '#4f46e5',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            transition: 'color 0.2s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.color = '#3730a3'}
+                          onMouseLeave={e => e.currentTarget.style.color = '#4f46e5'}
+                        >
+                          <Menu size={14} style={{ flexShrink: 0 }} />
+                          Ver Destinatários ({c.turmas?.length || 0})
+                        </button>
+                      )
+                    )}
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
+                      {dateObj ? `${dateObj.toLocaleDateString('pt-BR')} às ${dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '--'}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Column 3: Stats */}
-                <div style={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Column: Stats */}
+                <div style={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 12, borderLeft: '1px solid rgba(0,0,0,0.05)', paddingLeft: 20 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Leitura</span>
@@ -380,19 +463,8 @@ export default function ADAdminComunicados() {
                   </div>
                 </div>
 
-                {/* Column 4: Author */}
-                <div style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 10, borderLeft: '1px solid rgba(0,0,0,0.05)', paddingLeft: 20 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 30, background: 'rgba(79, 70, 229, 0.05)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
-                    {c.autor?.charAt(0) || 'U'}
-                  </div>
-                  <div style={{ overflow: 'hidden' }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.autor || 'Sistema'}</div>
-                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{c.autorCargo || 'Admin'}</div>
-                  </div>
-                </div>
-
-                {/* Column 5: Actions */}
-                <div style={{ display: 'flex', gap: 4 }}>
+                {/* Column: Actions */}
+                <div style={{ display: 'flex', gap: 4, paddingLeft: 12 }}>
                    <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={14} /></button>
                    <button className="btn btn-primary btn-sm" style={{ padding: '6px 12px', borderRadius: 10, fontSize: 11, fontWeight: 700 }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
                       Relatório
@@ -448,12 +520,14 @@ export default function ADAdminComunicados() {
               {selectedCom.anexos && selectedCom.anexos.length > 0 && (
                 <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {selectedCom.anexos.map((anexo: string, idx: number) => {
-                    const isForm = anexo.startsWith('Formulário:')
-                    const isRel = anexo.startsWith('Relatório:')
+                    const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
+                    const name = parts[0];
+                    const isForm = name.startsWith('Formulário:')
+                    const isRel = name.startsWith('Relatório:')
                     return (
                       <span key={idx} className="badge" style={{ background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', padding: '4px 8px' }}>
                         {isForm ? <FileText size={12} color="#3b82f6" /> : isRel ? <FileBarChart size={12} color="#8b5cf6" /> : <Paperclip size={12} color="#64748b" />}
-                        {anexo}
+                        {name}
                       </span>
                     )
                   })}
@@ -505,7 +579,7 @@ export default function ADAdminComunicados() {
               <button className="btn btn-ghost btn-sm" onClick={() => { setShowComposer(false); setAnexos([]); }}><X size={18} /></button>
             </div>
             
-            <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Para:</div>
@@ -540,7 +614,8 @@ export default function ADAdminComunicados() {
                 borderRadius: 16, 
                 overflow: 'hidden',
                 background: 'white',
-                boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)'
+                boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)',
+                flexShrink: 0
               }}>
                 <div style={{ 
                   padding: '10px 16px', 
@@ -1115,6 +1190,14 @@ export default function ADAdminComunicados() {
                     </div>
                   </div>
                 )}
+
+                {/* Respostas/Chat Section */}
+                <div style={{ marginTop: 32, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
+                  <AdminComunicadoChatManager 
+                    comunicadoId={viewingCom.id} 
+                    comunicadoTitulo={viewingCom.titulo} 
+                  />
+                </div>
               </div>
 
               {/* Footer Actions */}
@@ -1126,10 +1209,15 @@ export default function ADAdminComunicados() {
                   <SendIcon size={18} /> Encaminhar
                 </button>
                 <button className="btn" style={{ flex: 1, gap: 8, height: 48, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
-                  adConfirm('Excluir este comunicado permanentemente?', 'Apagar', () => {
+                  adConfirm('Excluir este comunicado permanentemente?', 'Apagar', async () => {
+                    try {
+                      await fetch(`/api/comunicados?id=${viewingCom.id}`, { method: 'DELETE' });
+                    } catch (err) {
+                      console.error("Erro ao deletar comunicado:", err);
+                    }
                     setComunicados(prev => prev.filter(x => x.id !== viewingCom.id));
                     setViewingCom(null);
-                  })
+                  });
                 }}>
                   <XCircle size={18} /> Apagar
                 </button>
@@ -1355,6 +1443,272 @@ export default function ADAdminComunicados() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Drawer para ver destinatários */}
+      <AnimatePresence>
+        {viewingDestCom && (
+          <div 
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
+              zIndex: 10005, display: 'flex', justifyContent: 'flex-end'
+            }} 
+            onClick={() => setViewingDestCom(null)}
+          >
+            <motion.div 
+              initial={{ x: '100%', opacity: 0.5 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '100%', opacity: 0.5 }}
+              transition={{ type: "spring", stiffness: 380, damping: 35 }}
+              style={{ 
+                width: 450, 
+                maxWidth: '100%', 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                background: '#fff', 
+                boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
+                borderLeft: '1px solid hsl(var(--border-subtle))' 
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>👥 Destinatários</h3>
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Lista de turmas e alunos vinculados.</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setViewingDestCom(null)} style={{ width: 32, height: 32, borderRadius: '50%', padding: 0 }}><X size={18} /></button>
+              </div>
+              <div style={{ padding: 32, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24, flex: 1 }}>
+                <div>
+                  <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Assunto</strong>
+                  <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6, color: '#1e293b' }}>{viewingDestCom.titulo}</div>
+                </div>
+                <div>
+                  <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Turmas ({viewingDestCom.turmas?.length || 0})</strong>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                    {viewingDestCom.turmas && viewingDestCom.turmas.length > 0 ? (
+                      viewingDestCom.turmas.map((t, idx) => (
+                        <span key={idx} className="badge" style={{ background: 'rgba(99,102,241,0.06)', color: '#4f46e5', border: '1px solid rgba(99,102,241,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
+                          {t}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Nenhuma turma selecionada.</span>
+                    )}
+                  </div>
+                </div>
+                {viewingDestCom.alunosIds && viewingDestCom.alunosIds.length > 0 && (
+                  <div>
+                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Alunos Específicos ({viewingDestCom.alunosIds.length})</strong>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                      {viewingDestCom.alunosIds.map((aId, idx) => {
+                        const alunoObj = (alunos || []).find(al => String(al.id) === String(aId) || String(al.id).replace(/^_+/, '') === String(aId).replace(/^_+/, ''));
+                        return (
+                          <span key={idx} className="badge" style={{ background: 'rgba(16,185,129,0.06)', color: '#10b981', border: '1px solid rgba(16,185,129,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
+                            {alunoObj ? alunoObj.nome : `ID: ${aId}`}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Drawer do Relatório Mensal */}
+      <AnimatePresence>
+        {showMonthlyReport && (
+          <div 
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
+              zIndex: 10005, display: 'flex', justifyContent: 'center', alignItems: 'center'
+            }} 
+            onClick={() => setShowMonthlyReport(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              style={{ 
+                width: 700, 
+                maxWidth: '90%', 
+                background: '#fff', 
+                borderRadius: 24,
+                boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: '#fff' }}>
+                <div>
+                  <h3 style={{ fontSize: 20, fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Calendar size={20} /> Relatório de Frequência Mensal
+                  </h3>
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>Visão geral de envios no mês atual.</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ position: 'relative' }}>
+                    <Paperclip size={14} style={{ position: 'absolute', left: 10, top: 8, color: 'hsl(var(--primary))', pointerEvents: 'none' }} />
+                    <select 
+                      className="form-input" 
+                      value={attachmentFilter}
+                      onChange={e => setAttachmentFilter(e.target.value)}
+                      style={{ paddingLeft: 30, width: 150, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--primary))', background: '#fff', border: 'none', fontSize: 12, height: 32, borderRadius: 16 }}
+                    >
+                      <option value="todos">Todos Anexos</option>
+                      <option value="qualquer">Com Anexo</option>
+                      <option value="nenhum">Sem Anexo</option>
+                      <option value="imagem">Imagens</option>
+                      <option value="video">Vídeos</option>
+                      <option value="formulario">Formulários</option>
+                      <option value="relatorio">Relatórios</option>
+                    </select>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowMonthlyReport(false)} style={{ color: '#fff', padding: 0 }}><X size={20} /></button>
+                </div>
+              </div>
+              
+              <div style={{ padding: 32 }}>
+                {(() => {
+                  const today = new Date();
+                  const year = today.getFullYear();
+                  const month = today.getMonth();
+                  const daysInMonth = new Date(year, month + 1, 0).getDate();
+                  const startDayOfWeek = new Date(year, month, 1).getDay();
+                  
+                  const enviosPorDia: Record<number, number> = {};
+                  comunicados.forEach(c => {
+                    let valid = true;
+                    if (attachmentFilter !== 'todos') {
+                      const anexosList = c.anexos || [];
+                      const hasAny = anexosList.length > 0;
+                      if (attachmentFilter === 'nenhum' && hasAny) valid = false;
+                      if (attachmentFilter === 'qualquer' && !hasAny) valid = false;
+                      if (['relatorio', 'formulario', 'imagem', 'video'].includes(attachmentFilter)) {
+                        const matchesType = anexosList.some((a: string) => {
+                          const parts = typeof a === 'string' ? a.split('|') : [String(a)];
+                          const name = parts[0] || '';
+                          const url = parts[1] || '';
+                          const mimeType = parts[2] || '';
+                          if (attachmentFilter === 'relatorio' && name.startsWith('Relatório:')) return true;
+                          if (attachmentFilter === 'formulario' && name.startsWith('Formulário:')) return true;
+                          const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
+                          if (attachmentFilter === 'imagem' && isImg) return true;
+                          const isVid = mimeType.startsWith('video/') || (url && url.startsWith('data:video')) || /\.(mp4|webm|ogg|mov)$/i.test(name);
+                          if (attachmentFilter === 'video' && isVid) return true;
+                          return false;
+                        });
+                        if (!matchesType) valid = false;
+                      }
+                    }
+
+                    if (valid) {
+                      const dateObj = (c.dataEnvio || (c as any).data || (c as any).created_at) ? new Date(c.dataEnvio || (c as any).data || (c as any).created_at) : null;
+                      if (dateObj && dateObj.getMonth() === month && dateObj.getFullYear() === year) {
+                        const day = dateObj.getDate();
+                        enviosPorDia[day] = (enviosPorDia[day] || 0) + 1;
+                      }
+                    }
+                  });
+
+                  let totalEnviados = 0;
+                  Object.values(enviosPorDia).forEach(v => totalEnviados += v);
+
+                  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+                  return (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
+                        <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase' }}>Mês Vigente</div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>{monthNames[month]} {year}</div>
+                        </div>
+                        <div style={{ background: 'rgba(79, 70, 229, 0.05)', padding: 16, borderRadius: 16, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase' }}>Total de Comunicados</div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: '#4f46e5' }}>{totalEnviados}</div>
+                        </div>
+                        <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: 16, borderRadius: 16, border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase' }}>Dias com Envios</div>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981' }}>{Object.keys(enviosPorDia).length} <span style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>/ {daysInMonth}</span></div>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, color: '#334155' }}>Calendário de Envios</div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 8 }}>
+                        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                          <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', paddingBottom: 8 }}>{d}</div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+                        {Array.from({ length: startDayOfWeek }).map((_, i) => <div key={`empty-${i}`} />)}
+                        {Array.from({ length: daysInMonth }).map((_, i) => {
+                          const day = i + 1;
+                          const qtd = enviosPorDia[day] || 0;
+                          const isToday = day === today.getDate();
+                          
+                          let bg = '#f1f5f9';
+                          let color = '#94a3b8';
+                          let border = '1px solid #e2e8f0';
+                          
+                          if (qtd > 0) {
+                            bg = 'rgba(16, 185, 129, 0.1)';
+                            color = '#10b981';
+                            border = '1px solid rgba(16, 185, 129, 0.3)';
+                            if (qtd > 2) {
+                              bg = 'rgba(16, 185, 129, 0.2)';
+                              border = '1px solid rgba(16, 185, 129, 0.5)';
+                            }
+                            if (qtd > 5) {
+                              bg = 'rgba(16, 185, 129, 0.4)';
+                              color = '#047857';
+                            }
+                          }
+
+                          return (
+                            <div 
+                              key={day} 
+                              style={{ 
+                                background: bg, 
+                                border: border,
+                                borderRadius: 12, 
+                                padding: '12px 8px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center',
+                                gap: 4,
+                                position: 'relative'
+                              }}
+                            >
+                              {isToday && <div style={{ position: 'absolute', top: -4, right: -4, width: 10, height: 10, background: '#3b82f6', borderRadius: '50%', border: '2px solid #fff' }} />}
+                              <span style={{ fontSize: 14, fontWeight: 800, color: qtd > 0 ? color : '#cbd5e1' }}>{day}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: color }}>{qtd > 0 ? `${qtd} envios` : '-'}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16, marginTop: 24, fontSize: 12, fontWeight: 500, color: 'hsl(var(--text-muted))' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: '#f1f5f9', border: '1px solid #e2e8f0' }}/> 0 envios</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)' }}/> 1-2 envios</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.5)' }}/> 3-5 envios</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(16, 185, 129, 0.4)', border: '1px solid rgba(16, 185, 129, 0.5)' }}/> +6 envios</div>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

@@ -9,13 +9,7 @@ import { AgendaDigitalProvider } from '@/lib/agendaDigitalContext'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { WebVitalsReporter } from '@/lib/webVitals'
-import dynamic from 'next/dynamic'
-
-// Lazy load do FloatingChat — 36KB que só carrega após o shell principal já estar ativo
-const FloatingChat = dynamic(
-  () => import('@/components/FloatingChat').then(m => ({ default: m.FloatingChat })),
-  { ssr: false, loading: () => null }
-)
+import FloatingChat from '@/components/FloatingChat'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, setCurrentUser, currentUser } = useApp()

@@ -1,1 +1,17 @@
 [2026-05-22T10:41:03.959Z] POST Aluno Individual: TESTE ALUNO
+
+[2026-05-23T03:03:09.360Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T08:01:31.274Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:09:58.094Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:23:43.582Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:23:49.193Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:23:55.374Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:23:58.697Z] Error Alunos GET (Students): canceling statement due to statement timeout
+
+[2026-05-23T13:23:58.876Z] Error Alunos GET (Students): canceling statement due to statement timeout

@@ -2,7 +2,9 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData, EventoAgenda } from '@/lib/dataContext'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, use } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin } from 'lucide-react'
 
@@ -28,16 +30,46 @@ function todayStr() {
 }
 
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { eventosAgenda = [] } = useData()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos', [])
+  const [eventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [turmas] = useSupabaseArray<any>('turmas')
   const resolvedParams = use(params as Promise<{ slug: string }>)
-  
   const { currentUser } = useApp()
-  const aluno = (alunos || []).find(a => a.id === resolvedParams.slug)
-  const rawTurma = (aluno as any)?.turma || 'Sem Turma'
-  const { turmas = [] } = useData()
-  const turmaObj = turmas.find(t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
-  const turmaDoAluno = turmaObj?.nome || rawTurma
+  const { aluno } = useSelectedStudent()
+  const rawTurma = aluno?.turma || 'Sem Turma'
+  
+  const turmaDoAluno = (() => {
+    if (!aluno) return 'Sem Turma'
+    if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
+      return String(aluno.turma_nome).split('-')[0].trim()
+    }
+    const turmaObj = turmas.find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
+    return String(nomeTurma).split('-')[0].trim()
+  })()
+
+  const { chatGroups = [] } = useAgendaDigital()
+  
+  const studentGroupNames = useMemo(() => {
+    if (!aluno) return []
+    const studentId = String(aluno.id)
+    const studentTurmaObj = turmas.find(t => 
+      String(t.id) === String(aluno.turma) || 
+      String(t.codigo) === String(aluno.turma) || 
+      String(t.nome) === String(aluno.turma)
+    )
+
+    return chatGroups.filter(g => {
+      // 1. Explicitly contains student ID
+      if (g.alunosIds?.some(id => String(id) === studentId)) return true
+      // 2. Synced with student's class/turma
+      if (studentTurmaObj && (
+        String(g.id) === `sync-${studentTurmaObj.id}` || 
+        String(g.id) === String(studentTurmaObj.id) ||
+        g.nome === studentTurmaObj.nome
+      )) return true
+      return false
+    }).map(g => String(g.nome || '').toLowerCase())
+  }, [chatGroups, aluno, turmas])
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
@@ -59,17 +91,25 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
       // 2. Visibilidade check
-      const targets = e.turmas || []
+      let targets: any = e.turmas || []
+      if (typeof targets === 'string') {
+        try { targets = JSON.parse(targets) } catch(err) { targets = [targets] }
+      }
+      if (!Array.isArray(targets)) targets = []
+      
       // Toda a instituição
       if (targets.length === 0 || targets.includes('TODOS') || targets.includes('Todos')) {
         return true
       }
-      // Turma do aluno
-      if (turmaDoAluno && targets.some(t => 
-        t.toLowerCase() === turmaDoAluno.toLowerCase() ||
-        turmaDoAluno.toLowerCase().includes(t.toLowerCase()) ||
-        t.toLowerCase().includes(turmaDoAluno.toLowerCase())
-      )) {
+      // Turma do aluno or Groups
+      if (targets.some((t: any) => {
+        if (!t) return false
+        const tLower = String(t).toLowerCase()
+        return (
+          (turmaDoAluno && (tLower === turmaDoAluno.toLowerCase() || turmaDoAluno.toLowerCase().includes(tLower) || tLower.includes(turmaDoAluno.toLowerCase()))) ||
+          studentGroupNames.includes(tLower)
+        )
+      })) {
         return true
       }
       // Direcionado ao usuário atual
@@ -78,7 +118,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
       }
       return false
     })
-  }, [eventosAgenda, filtroTipo, turmaDoAluno, currentUser])
+  }, [eventosAgenda, filtroTipo, turmaDoAluno, currentUser, studentGroupNames])
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []

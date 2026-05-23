@@ -157,6 +157,7 @@ export default function LoginPage() {
         email: email, 
         cargo: cargoReal, 
         perfil: perfilReal,
+        foto: meta.foto || undefined,
         aluno_id: meta.aluno_id || '',
         responsavel_id: meta.responsavel_id || ''
       })

@@ -64,6 +64,11 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       nomeTurmaDoAluno.toLowerCase().includes(tc.toLowerCase()) ||
       tc.toLowerCase().includes(nomeTurmaDoAluno.toLowerCase())
     )
+  }).sort((a, b) => {
+    // Ordem do mais novo para o mais antigo
+    const dateA = new Date((a as any).date || 0).getTime()
+    const dateB = new Date((b as any).date || 0).getTime()
+    return dateB - dateA
   })
 
   return (
@@ -120,6 +125,23 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           box-shadow: 0 40px 80px rgba(99, 102, 241, 0.2), 0 6px 20px rgba(0,0,0,0.05) !important;
           border-color: rgba(99, 102, 241, 0.3) !important;
         }
+
+        @media (max-width: 768px) {
+          .ad-momentos-header {
+            margin: -48px 16px 16px 16px !important;
+            padding: 12px 16px !important;
+            gap: 12px !important;
+          }
+          .ad-momentos-title {
+            font-size: 13px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+          }
+          .ad-momentos-desc {
+            display: none !important;
+          }
+        }
       `}} />
 
       {/* Decorative Blur Blobs */}
@@ -163,7 +185,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
       <div style={{ position: 'relative', zIndex: 10 }}>
         {/* ULTRA MODERN HEADER */}
-        <div style={{ 
+        <div className="ad-momentos-header" style={{ 
           margin: '24px 16px 32px 16px',
           padding: '24px 32px',
           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.85))',
@@ -198,8 +220,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
             <span style={{ fontSize: 32, filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}>📸</span>
           </div>
 
-          <div style={{ flex: 1, zIndex: 1 }}>
-            <h2 style={{ 
+          <div style={{ flex: 1, zIndex: 1, minWidth: 0 }}>
+            <h2 className="ad-momentos-title" style={{ 
               fontSize: 'clamp(24px, 4vw, 32px)', 
               fontWeight: 900, 
               fontFamily: 'Outfit, sans-serif', 
@@ -208,11 +230,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               background: 'linear-gradient(135deg, #1e293b 0%, #4f46e5 100%)', 
               WebkitBackgroundClip: 'text', 
               WebkitTextFillColor: 'transparent',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.04))'
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.04))',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
             }}>
               Fotos/Vídeos da Turma
             </h2>
-            <p style={{ 
+            <p className="ad-momentos-desc" style={{ 
               fontSize: 15, 
               color: '#475569', 
               marginTop: 6, 

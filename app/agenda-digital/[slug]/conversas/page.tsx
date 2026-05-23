@@ -40,8 +40,32 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
 
   // Filter chats that belong to this student
   useEffect(() => {
-    const studentChats = chatsList.filter(c => String(c.id).startsWith(studentId))
-    setChats(studentChats)
+    const studentChats = chatsList.filter(c => String(c.id).startsWith(studentId + '-'))
+    
+    // Deduplicate by ID to prevent React "same key" errors from corrupted state
+    const uniqueChats = []
+    const seenIds = new Set()
+    for (const chat of studentChats) {
+      if (!seenIds.has(chat.id)) {
+        seenIds.add(chat.id)
+        uniqueChats.push(chat)
+      }
+    }
+    
+    // Ordena do mais novo para o mais antigo
+    uniqueChats.sort((a, b) => {
+      const parseDate = (d: string | undefined, t: string | undefined) => {
+        if (!d || !t) return 0;
+        const parts = d.split('/');
+        if (parts.length !== 3) return 0;
+        const [day, month, year] = parts;
+        const [hour, min] = t.split(':');
+        return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min)).getTime();
+      }
+      return parseDate(b.date, b.time) - parseDate(a.date, a.time);
+    })
+    
+    setChats(uniqueChats)
     
     // Auto-select first chat if activeChat gets deleted or is not set yet (optional, let's keep it null for clean look)
     if (activeChat && !studentChats.some(c => c.id === activeChat.id)) {
@@ -75,12 +99,22 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
       }
     })
     
-    setChatsList(prev => prev.map(c => String(c.id) === String(activeChat.id) ? { 
-      ...c, 
-      preview: inputText, 
-      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      date: new Date().toLocaleDateString('pt-BR')
-    } : c))
+    setChatsList(prev => {
+      const chatIndex = prev.findIndex(c => String(c.id) === String(activeChat.id))
+      if (chatIndex === -1) return prev
+      
+      const updatedChat = { 
+        ...prev[chatIndex], 
+        preview: inputText, 
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('pt-BR'),
+        unread: (prev[chatIndex].unread || 0) + 1
+      }
+      
+      const newList = [...prev]
+      newList.splice(chatIndex, 1)
+      return [updatedChat, ...newList]
+    })
     
     setInputText('')
 
@@ -109,12 +143,22 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
             }
           })
           
-          setChatsList(prev => prev.map(c => String(c.id) === String(chatId) ? { 
-            ...c, 
-            preview: `⚠️ [Ausência Automática]`, 
-            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            date: new Date().toLocaleDateString('pt-BR')
-          } : c))
+          setChatsList(prev => {
+            const chatIndex = prev.findIndex(c => String(c.id) === String(chatId))
+            if (chatIndex === -1) return prev
+            
+            const updatedChat = { 
+              ...prev[chatIndex], 
+              preview: `⚠️ [Ausência Automática]`, 
+              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              date: new Date().toLocaleDateString('pt-BR'),
+              unread: (prev[chatIndex].unread || 0) + 1
+            }
+            
+            const newList = [...prev]
+            newList.splice(chatIndex, 1)
+            return [updatedChat, ...newList]
+          })
         }, 1200)
       }
     } catch(err) {
@@ -152,66 +196,41 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
   const startNewConversa = () => {
     if (!selectedColaborador || !selectedGroup || !composeSubject.trim() || !composeBody.trim()) return
 
-    const newChatId = `${studentId}-${selectedGroup.id}-${selectedColaborador.id}`
-    const existing = chatsList.find(c => c.id === newChatId)
+    // Generate a strictly unique ID for each new conversation to ensure isolation
+    const newChatId = `${studentId}-${selectedGroup.id}-${selectedColaborador.id}-${Date.now()}`
 
-    if (existing) {
-      // If conversation already exists, just add the new message to it
-      setMessages(prev => {
-        const current = prev[newChatId] || []
-        return {
-          ...prev,
-          [newChatId]: [...current, {
-            id: Date.now(),
-            text: composeBody,
-            sender: 'them',
-            time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            date: new Date().toLocaleDateString('pt-BR'),
-            author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
-            authorRole: currentUser?.cargo || 'Responsável'
-          }]
-        }
-      })
+    // Create new chat
+    const novoChat = {
+      id: newChatId,
+      name: `${selectedColaborador.nome} (${selectedGroup.nome})`,
+      status: 'online',
+      preview: composeBody.substring(0, 30) + (composeBody.length > 30 ? '...' : ''),
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('pt-BR'),
+      startDate: new Date().toLocaleDateString('pt-BR'),
+      startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      unread: 1,
+      tag: composeSubject,
+      colaboradorId: selectedColaborador.id,
+      grupoId: selectedGroup.id
+    }
 
-      setChatsList(prev => prev.map(c => c.id === newChatId ? {
-        ...c,
-        preview: composeBody.substring(0, 30) + '...',
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        date: new Date().toLocaleDateString('pt-BR')
-      } : c))
-
-      setActiveChat(existing)
-    } else {
-      // Create new chat
-      const novoChat = {
-        id: newChatId,
-        name: `${selectedColaborador.nome} (${selectedGroup.nome})`,
-        status: 'online',
-        preview: composeBody.substring(0, 30) + '...',
+    setMessages(prev => ({
+      ...prev,
+      [newChatId]: [{
+        id: Date.now(),
+        text: composeBody,
+        sender: 'them',
         time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         date: new Date().toLocaleDateString('pt-BR'),
-        startDate: new Date().toLocaleDateString('pt-BR'),
-        startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        unread: 0,
-        tag: composeSubject
-      }
+        author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
+        authorRole: currentUser?.cargo || 'Responsável'
+      }]
+    }))
 
-      setMessages(prev => ({
-        ...prev,
-        [newChatId]: [{
-          id: Date.now(),
-          text: composeBody,
-          sender: 'them',
-          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          date: new Date().toLocaleDateString('pt-BR'),
-          author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
-          authorRole: currentUser?.cargo || 'Responsável'
-        }]
-      }))
-
-      setChatsList(prev => [novoChat, ...prev])
-      setActiveChat(novoChat)
-    }
+    // Add to top of the list
+    setChatsList(prev => [novoChat, ...prev])
+    setActiveChat(novoChat)
 
     // Reset flow states
     setShowNovaConversa(false)
@@ -319,7 +338,7 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
             return (
               <div 
                 key={chat.id} 
-                onClick={() => { setActiveChat(chat); setShowNovaConversa(false) }}
+                onClick={() => { setActiveChat(chat); setShowNovaConversa(false); if (chat.unread > 0) { setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c)) } }}
                 style={{ 
                   padding: '16px 14px', 
                   marginBottom: 8,
@@ -387,11 +406,23 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
                         {chat.preview}
                       </div>
                     </div>
-                    {chat.unread > 0 && (
-                      <div style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
-                        {chat.unread}
-                      </div>
-                    )}
+                    {(() => {
+                      const msgs = messages[chat.id] || []
+                      if (msgs.length === 0) return chat.unread > 0 ? (
+                        <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                          {chat.unread}
+                        </div>
+                      ) : null
+                      const lastMsg = msgs[msgs.length - 1]
+                      if (lastMsg.sender === 'us' && chat.unread > 0) {
+                        return (
+                          <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                            {chat.unread}
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
                   </div>
                   {(() => {
                     const tagStyles = getTagStyles(chat.tag || 'geral')

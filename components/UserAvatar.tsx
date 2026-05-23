@@ -1,4 +1,86 @@
 import React, { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+// In-memory cache to share across instances and avoid duplicate requests
+const photoCache: Record<string, string | null | undefined> = {};
+const pendingPromises: Record<string, Promise<string | null> | undefined> = {};
+
+function isValidUuid(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+async function fetchUserPhoto(userId?: string, name?: string): Promise<string | null> {
+  const cacheKey = userId || `name:${name}`;
+  if (photoCache[cacheKey] !== undefined) {
+    return photoCache[cacheKey]!;
+  }
+  const pending = pendingPromises[cacheKey];
+  if (pending) {
+    return pending;
+  }
+
+  const promise = (async () => {
+    try {
+      let query = supabase.from('system_users').select('dados');
+      
+      if (userId) {
+        if (isValidUuid(userId)) {
+          query = query.or(`id.eq."${userId}",auth_id.eq."${userId}"`);
+        } else {
+          query = query.eq('id', userId);
+        }
+      } else if (name) {
+        query = query.eq('nome', name);
+      } else {
+        return null;
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      let foto = null;
+
+      if (data && data.dados && typeof data.dados === 'object') {
+        foto = (data.dados as any).foto || (data.dados as any).fotoUrl;
+      }
+
+      // API Fallback for users not in system_users (e.g. Master Admin)
+      if (!foto && userId && isValidUuid(userId)) {
+        try {
+          const res = await fetch(`/api/user-photo?id=${userId}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json.foto) foto = json.foto;
+          }
+        } catch (e) {}
+      }
+
+      if (foto) {
+        photoCache[cacheKey] = foto;
+        if (userId) {
+          photoCache[userId] = foto;
+          try {
+            localStorage.setItem(`edu-profile-extra-${userId}`, JSON.stringify({ foto }));
+          } catch (e) {}
+        }
+        if (name) {
+          photoCache[`name:${name}`] = foto;
+          try {
+            localStorage.setItem(`edu-profile-extra-name-${name}`, JSON.stringify({ foto }));
+          } catch (e) {}
+        }
+        return foto;
+      }
+    } catch (err) {
+      console.error('Error fetching user photo:', err);
+    }
+    photoCache[cacheKey] = null;
+    return null;
+  })();
+
+  pendingPromises[cacheKey] = promise;
+  return promise;
+}
 
 export function UserAvatar({ 
   userId, 
@@ -19,24 +101,41 @@ export function UserAvatar({
 
   useEffect(() => {
     // Se recebeu uma fotoUrl explicitamente, usa ela
-    if (fotoUrl) {
+    if (fotoUrl && fotoUrl !== 'undefined') {
       setFoto(fotoUrl);
       return;
     }
     
-    // Fallback: carregar do localStorage extra
-    if (!userId) return;
+    // Check local caches
+    let foundLocal = false;
+    const cacheKey = userId || `name:${name}`;
+    
+    if (photoCache[cacheKey]) {
+      setFoto(photoCache[cacheKey]!);
+      foundLocal = true;
+    } else {
+      try {
+        const storageKey = userId ? `edu-profile-extra-${userId}` : `edu-profile-extra-name-${name}`;
+        const data = JSON.parse(localStorage.getItem(storageKey) || 'null');
+        if (data && data.foto) {
+          setFoto(data.foto);
+          photoCache[cacheKey] = data.foto;
+          if (userId) photoCache[userId] = data.foto;
+          if (name) photoCache[`name:${name}`] = data.foto;
+          foundLocal = true;
+        }
+      } catch (e) {}
+    }
 
-    try {
-      const storageKey = `edu-profile-extra-${userId}`;
-      const data = JSON.parse(localStorage.getItem(storageKey) || 'null');
-      if (data && data.foto) {
-        setFoto(data.foto);
+    // Call fallback db fetch
+    fetchUserPhoto(userId, name).then((resolvedFoto) => {
+      if (resolvedFoto) {
+        setFoto(resolvedFoto);
       }
-    } catch (e) {}
-  }, [userId, fotoUrl]);
+    });
+  }, [userId, name, fotoUrl]);
 
-  if (foto) {
+  if (foto && foto !== 'undefined') {
     return (
       <img 
         src={foto} 
@@ -98,3 +197,4 @@ export function UserAvatar({
     </div>
   );
 }
+

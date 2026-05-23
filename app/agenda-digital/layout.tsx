@@ -11,11 +11,7 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
-import dynamic from 'next/dynamic'
-const FloatingChat = dynamic(
-  () => import('@/components/FloatingChat').then(m => ({ default: m.FloatingChat })),
-  { ssr: false, loading: () => null }
-)
+import FloatingChat from '@/components/FloatingChat'
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()

@@ -102,7 +102,7 @@ export async function GET(request: Request) {
       vinculo: vinculo,
       meusAlunos: meusAlunos
     }, {
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
 
   } catch (e: any) {

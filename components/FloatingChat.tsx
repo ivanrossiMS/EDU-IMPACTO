@@ -10,7 +10,7 @@ import { getInitials } from '@/lib/utils'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useData } from '@/lib/dataContext'
 
-export function FloatingChat() {
+export default function FloatingChat() {
   const pathname = usePathname()
   const { currentUser, currentUserPerfil } = useApp()
   const { chatsList, setChatsList, messages, setMessages, chatGroups, adConfig } = useAgendaDigital()
@@ -19,6 +19,7 @@ export function FloatingChat() {
   const { turmas = [] } = useData()
 
   const [isOpen, setIsOpen] = useState(false)
+  
   const [activeChat, setActiveChat] = useState<ADChat | null>(null)
   const [showNewChat, setShowNewChat] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -54,7 +55,9 @@ export function FloatingChat() {
     currentUserPerfil === 'Aluno' ||
     currentUserPerfil?.includes('Responsável') ||
     !currentUserPerfil
-  const myId = currentUser?.id || 'unknown'
+    
+  // Resolve o ID correto do usuário (responsável, aluno ou ID do sistema)
+  const myId = slug || currentUser?.responsavel_id || currentUser?.aluno_id || currentUser?.id || 'unknown'
 
   // Find active student object
   const activeStudentId = slug || (currentUser?.cargo === 'Aluno' ? currentUser.id : null)
@@ -94,14 +97,35 @@ export function FloatingChat() {
   // Filtragem dos chats
   const myChats = chatsList?.filter(c => {
     if (isAlunoOrResponsavel) {
-      return slug ? String(c.id).startsWith(slug) : String(c.id).includes(myId)
+      if (slug) return String(c.id).startsWith(slug)
+      
+      const myChildrenIds = alunos?.filter((a: any) => 
+        (a.responsaveis && Array.isArray(a.responsaveis) && a.responsaveis.some((r: any) => String(r.id) === String(myId))) || 
+        String(a.responsavel_id) === String(myId) ||
+        String(a.responsavel_1_id) === String(myId) ||
+        String(a.responsavel_2_id) === String(myId) ||
+        String(a.responsavel_3_id) === String(myId) ||
+        String(a.responsavel_4_id) === String(myId) ||
+        String(a.responsavel_5_id) === String(myId)
+      ).map((a: any) => String(a.id)) || []
+      
+      return String(c.id).includes(myId) || myChildrenIds.some(childId => String(c.id).startsWith(childId))
     }
     // Equipe escolar vê todos os chats ou os que estão atribuídos a eles
     const isStaffLevel = ['Admin', 'Diretor Geral', 'Diretor', 'Coordenador', 'Secretaria', 'Administrativo', 'TI'].some(role => currentUserPerfil?.includes(role))
     return isStaffLevel ? true : String(c.id).includes(myId)
   }) || []
 
-  const unreadCount = myChats.reduce((acc, c) => acc + (c.unread || 0), 0)
+  const unreadCount = myChats.reduce((acc, c) => {
+    const chatMsgs = messages[c.id] || []
+    if (chatMsgs.length === 0) return acc + (c.unread || 0)
+    const lastMsg = chatMsgs[chatMsgs.length - 1]
+    const otherSender = isAlunoOrResponsavel ? 'us' : 'them'
+    if (lastMsg.sender === otherSender && (c.unread || 0) > 0) {
+      return acc + c.unread
+    }
+    return acc
+  }, 0)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -134,7 +158,8 @@ export function FloatingChat() {
       ...c, 
       preview: inputText, 
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      date: new Date().toLocaleDateString('pt-BR')
+      date: new Date().toLocaleDateString('pt-BR'),
+      unread: (c.unread || 0) + 1
     } : c))
     setInputText('')
 
@@ -167,7 +192,8 @@ export function FloatingChat() {
             ...c, 
             preview: `⚠️ [Ausência Automática]`, 
             time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            date: new Date().toLocaleDateString('pt-BR')
+            date: new Date().toLocaleDateString('pt-BR'),
+            unread: (c.unread || 0) + 1
           } : c))
         }, 1200)
       }
@@ -186,7 +212,10 @@ export function FloatingChat() {
     if (!composeSubject.trim() || !composeBody.trim() || !selectedContact) return
 
     const activeSlug = slug || myId
-    const newChatId = `${activeSlug}-${selectedContact.groupId}-${selectedContact.id}`
+    const newChatId = isAlunoOrResponsavel 
+      ? `${activeSlug}-${selectedContact.groupId}-${selectedContact.id}-${Date.now()}`
+      : `${selectedContact.id}-TKT-${Date.now()}`
+      
     const novo: ADChat = { 
       id: newChatId, 
       name: isAlunoOrResponsavel ? `${selectedContact.nome} (${selectedContact.tag})` : `${selectedContact.nome} (Aluno)`, 
@@ -196,7 +225,7 @@ export function FloatingChat() {
       date: new Date().toLocaleDateString('pt-BR'),
       startDate: new Date().toLocaleDateString('pt-BR'),
       startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      unread: 0, 
+      unread: 1, 
       tag: composeSubject // Subject is the topic tag
     }
     
@@ -220,7 +249,16 @@ export function FloatingChat() {
   }
 
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+    <>
+      <style dangerouslySetInnerHTML={{__html: 
+        ".ad-floating-btn-v2 { bottom: 24px; right: 24px; transition: bottom 0.3s, right 0.3s; }\n" +
+        "@keyframes ultra-pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239,68,68, 0.7); } 70% { transform: scale(1.1); box-shadow: 0 0 0 14px rgba(239,68,68, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239,68,68, 0); } }\n" +
+        ".badge-pulse-modern { animation: ultra-pulse 1.5s infinite; }\n" +
+        "@media (max-width: 768px) {\n" +
+        "  .ad-floating-btn-v2 { bottom: 96px !important; right: 16px !important; }\n" +
+        "}"
+      }} />
+      <div className="ad-floating-btn-v2" style={{ position: 'fixed', zIndex: 99999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
       
       <AnimatePresence>
         {isOpen && (
@@ -285,8 +323,26 @@ export function FloatingChat() {
                     </div>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-                    {myChats.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(chat => (
-                      <div key={chat.id} onClick={() => setActiveChat(chat)} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 16, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    {myChats
+                      .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .sort((a, b) => {
+                        const getTimestamp = (c: any) => {
+                          const msgs = messages[c.id] || []
+                          if (msgs.length > 0) return parseInt(String(msgs[msgs.length - 1].id).split('-')[0]) || 0
+                          const parts = String(c.id).split('-')
+                          const lastPart = parseInt(parts[parts.length - 1])
+                          if (!isNaN(lastPart) && lastPart > 1000000000000) return lastPart
+                          return 0
+                        }
+                        return getTimestamp(b) - getTimestamp(a)
+                      })
+                      .map(chat => (
+                      <div key={chat.id} onClick={() => {
+                        setActiveChat(chat)
+                        if (chat.unread > 0) {
+                          setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c))
+                        }
+                      }} style={{ display: 'flex', gap: 12, padding: 12, borderRadius: 16, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                         <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--gradient-primary)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16 }}>
                           {getInitials(chat.name)}
                         </div>
@@ -297,7 +353,16 @@ export function FloatingChat() {
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ fontSize: 13, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.preview}</span>
-                            {chat.unread > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 10 }}>{chat.unread}</span>}
+                            {(() => {
+                              const msgs = messages[chat.id] || []
+                              if (msgs.length === 0) return chat.unread > 0 ? <span className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 10 }}>{chat.unread}</span> : null
+                              const lastMsg = msgs[msgs.length - 1]
+                              const otherSender = isAlunoOrResponsavel ? 'us' : 'them'
+                              if (lastMsg.sender === otherSender && chat.unread > 0) {
+                                return <span className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 10 }}>{chat.unread}</span>
+                              }
+                              return null
+                            })()}
                           </div>
                           <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                             <span style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', padding: '2px 8px', borderRadius: 8, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.name}</span>
@@ -561,11 +626,23 @@ export function FloatingChat() {
       >
         <Mail size={28} />
         {!isOpen && unreadCount > 0 && (
-          <div style={{ position: 'absolute', top: -4, right: -4, background: '#ef4444', color: 'white', fontSize: 12, fontWeight: 800, width: 24, height: 24, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
+          <div 
+            className="badge-pulse-modern"
+            style={{ 
+              position: 'absolute', top: -6, right: -6, 
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)', 
+              color: 'white', fontSize: 13, fontWeight: 900, 
+              width: 26, height: 26, borderRadius: '50%', 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+              border: '3px solid #4338ca', 
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.6)' 
+            }}
+          >
             {unreadCount}
-          </div>
+          </div >
         )}
       </motion.button>
     </div>
+    </>
   )
 }

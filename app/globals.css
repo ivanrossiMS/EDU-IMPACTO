@@ -1015,3 +1015,25 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   box-shadow: 0 0 30px rgba(16, 185, 129, 0.65), 0 0 55px rgba(59, 130, 246, 0.4), inset 0 0 20px rgba(16, 185, 129, 0.1) !important;
   border-color: rgba(16, 185, 129, 0.8) !important;
 }
+
+/* Floating Chat Adjustments */
+.ad-floating-chat-container {
+  bottom: 24px;
+  right: 24px;
+}
+@media (max-width: 768px) {
+  .ad-floating-chat-container {
+    bottom: 120px;
+    right: 16px;
+  }
+}
+
+/* Ultra Modern Notification Pulse */
+@keyframes ultra-pulse { 
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239,68,68, 0.7); } 
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(239,68,68, 0); } 
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239,68,68, 0); } 
+}
+.badge-pulse-modern { 
+  animation: ultra-pulse 1.5s infinite !important; 
+}

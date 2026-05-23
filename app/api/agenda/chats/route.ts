@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=1, stale-while-revalidate=5' }
+      headers: {
+        'Cache-Control': 'no-store, max-age=0'
+      }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
@@ -34,17 +36,18 @@ export async function POST(request: Request) {
       const incomingIds = rows.map(r => r.id).filter(Boolean)
       
       if (incomingIds.length > 0) {
+        const formattedIds = incomingIds.map(id => `"${id}"`).join(',')
         const { error: delError } = await supabase
           .from('agenda_chats')
           .delete()
-          .not('id', 'in', `(${incomingIds.join(',')})`)
+          .not('id', 'in', `(${formattedIds})`)
           
         if (delError) console.error('Error deleting stale records:', delError)
       } else {
         const { error: delError } = await supabase
           .from('agenda_chats')
           .delete()
-          .not('id', 'is', null)
+          .neq('id', '00000000-0000-0000-0000-000000000000') // Trick to delete all if not null
           
         if (delError) console.error('Error deleting all records:', delError)
       }

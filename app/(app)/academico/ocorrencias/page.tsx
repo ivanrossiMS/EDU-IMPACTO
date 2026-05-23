@@ -39,14 +39,20 @@ const SEG_COLORS: Record<string,string> = { EI:'#10b981', EF1:'#3b82f6', EF2:'#8
 // ── Search dropdown de aluno ──────────────────────────────────────────────────
 
 
-function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos }: {
+function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos, hasError, onClearError }: {
   value: string; onChange: (id: string, nome: string, turma: string) => void
   alunosDaTurma: { id: string; nome: string; turma: string }[]
   todosAlunos: { id: string; nome: string; turma: string }[]
+  hasError?: boolean
+  onClearError?: () => void
 }) {
   const [q, setQ] = useState(value)
   const [modalOpen, setModalOpen] = useState(false)
   
+  useEffect(() => {
+    setQ(value)
+  }, [value])
+
   const handleSearch = () => {
     if (!q.trim()) return
     setModalOpen(true)
@@ -66,11 +72,26 @@ function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos }: {
         <div style={{ position: 'relative', flex: 1 }}>
           <Search size={16} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'#94a3b8', pointerEvents:'none' }} />
           <input 
+            id="alunoId"
+            name="alunoId"
             className="form-input" 
-            style={{ paddingLeft:40, height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }} 
+            style={{ 
+              paddingLeft:40, 
+              height: '48px', 
+              borderRadius: '12px', 
+              background: '#f8fafc', 
+              border: hasError ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
+              fontSize: '14px',
+              boxShadow: hasError ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+              transition: 'all 0.2s',
+              outline: 'none'
+            }} 
             placeholder="Digite o nome do aluno..."
             value={q}
-            onChange={e => setQ(e.target.value)}
+            onChange={e => {
+              setQ(e.target.value)
+              if (onClearError) onClearError()
+            }}
             onKeyDown={e => { if (e.key === 'Enter') handleSearch() }}
           />
         </div>
@@ -149,8 +170,7 @@ function AlunoSearch({ value, onChange, alunosDaTurma, todosAlunos }: {
   )
 }
 
-// ── Modal de edição/criação ──────────────────────────────────────────────────
-function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas }: {
+function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosAlunos, tiposOcorrencia, turmas, validationErrors, setValidationErrors }: {
   form: Omit<Ocorrencia,'id'|'createdAt'>
   setForm: React.Dispatch<React.SetStateAction<Omit<Ocorrencia,'id'|'createdAt'>>>
   onSave: () => void; onClose: () => void
@@ -158,18 +178,23 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
   todosAlunos: { id: string; nome: string; turma: string }[]
   tiposOcorrencia: { label: string; gravidade: 'leve' | 'media' | 'grave' }[]
   turmas: any[]
+  validationErrors: { field: string; label: string }[]
+  setValidationErrors: React.Dispatch<React.SetStateAction<{ field: string; label: string }[]>>
 }) {
   const [isUploading, setIsUploading] = useState(false)
   const s = (k: keyof typeof form, v: any) => setForm(p => ({ ...p, [k]: v }))
+  const hasError = (fieldId: string) => validationErrors.some(e => e.field === fieldId)
+  const clearError = (fieldId: string) => setValidationErrors(prev => prev.filter(err => err.field !== fieldId))
+
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background: '#fff', width:'100%', maxWidth:600, maxHeight:'95vh', display:'flex', flexDirection:'column', borderRadius: '20px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.45)', backdropFilter: 'blur(10px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background: '#fff', width:'100%', maxWidth:520, maxHeight:'90vh', display:'flex', flexDirection:'column', borderRadius: '24px', boxShadow:'0 30px 60px rgba(0,0,0,0.15)', border: '1px solid rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         
         {/* Cabeçalho Gradiente */}
         <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '24px 32px', color: '#fff', position: 'relative', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
+              <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 22, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
                 {form.alunoId ? 'Editar Ocorrência' : 'Nova Ocorrência'}
               </h2>
               <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', margin: '4px 0 0 0' }}>Preencha os dados da ocorrência disciplinar.</p>
@@ -186,12 +211,19 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
         <div style={{ padding: '20px 24px 24px 24px', background: '#fff', overflowY: 'auto', flex: 1 }}>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
             <div style={{ gridColumn:'1/-1' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno *</label>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Aluno <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <AlunoSearch
                 value={form.alunoNome}
-                onChange={(id, nome, turma) => setForm(p => ({ ...p, alunoId:id, alunoNome:nome, turma: turma||p.turma }))}
+                onChange={(id, nome, turma) => {
+                  setForm(p => ({ ...p, alunoId:id, alunoNome:nome, turma: turma||p.turma }))
+                  clearError('alunoId')
+                }}
                 alunosDaTurma={alunosDaTurma}
                 todosAlunos={todosAlunos}
+                hasError={hasError('alunoId')}
+                onClearError={() => clearError('alunoId')}
               />
             </div>
 
@@ -206,8 +238,29 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
             </div>
             
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tipo</label>
-              <select className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} value={form.tipo} onChange={e => s('tipo', e.target.value)}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Tipo <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <select 
+                id="tipo"
+                name="tipo"
+                className="form-input" 
+                style={{ 
+                  height: '36px', 
+                  borderRadius: '10px', 
+                  background: '#f8fafc', 
+                  border: hasError('tipo') ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
+                  fontSize: '13px',
+                  boxShadow: hasError('tipo') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }} 
+                value={form.tipo} 
+                onChange={e => {
+                  s('tipo', e.target.value)
+                  clearError('tipo')
+                }}
+              >
                 {tiposOcorrencia.length > 0 ? (
                   tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)
                 ) : (
@@ -217,10 +270,23 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
             </div>
             
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gravidade</label>
-              <div style={{ display:'flex', gap:6 }}>
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Gravidade <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div 
+                id="gravidade"
+                style={{ 
+                  display:'flex', 
+                  gap:6,
+                  border: hasError('gravidade') ? '1.5px solid #ef4444' : 'none',
+                  borderRadius: '10px',
+                  padding: hasError('gravidade') ? '2px' : '0',
+                  boxShadow: hasError('gravidade') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
                 {(['leve','media','grave'] as GravOcorrencia[]).map(g => (
-                  <button key={g} type="button" onClick={() => s('gravidade', g)}
+                  <button key={g} type="button" onClick={() => { s('gravidade', g); clearError('gravidade') }}
                     style={{ flex:1, height: '36px', borderRadius:10, fontSize:12, fontWeight:700, cursor:'pointer', border:`1px solid ${form.gravidade===g ? GRAV_CONFIG[g].color : '#e2e8f0'}`, background: form.gravidade===g ? GRAV_CONFIG[g].bg : '#f8fafc', color: form.gravidade===g ? GRAV_CONFIG[g].color : '#64748b', transition: 'all 0.2s' }}>
                     {GRAV_CONFIG[g].label}
                   </button>
@@ -229,18 +295,85 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
             </div>
             
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Data</label>
-              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} type="date" value={form.data} onChange={e => s('data', e.target.value)} />
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Data <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input 
+                id="data"
+                name="data"
+                className="form-input" 
+                style={{ 
+                  height: '36px', 
+                  borderRadius: '10px', 
+                  background: '#f8fafc', 
+                  border: hasError('data') ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
+                  fontSize: '13px',
+                  boxShadow: hasError('data') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }} 
+                type="date" 
+                value={form.data} 
+                onChange={e => {
+                  s('data', e.target.value)
+                  clearError('data')
+                }} 
+              />
             </div>
             
             <div>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Responsável</label>
-              <input className="form-input" style={{ height: '36px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }} value={form.responsavel} onChange={e => s('responsavel', e.target.value)} placeholder="Prof. ou Coord." />
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Responsável <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <input 
+                id="responsavel"
+                name="responsavel"
+                className="form-input" 
+                style={{ 
+                  height: '36px', 
+                  borderRadius: '10px', 
+                  background: '#f8fafc', 
+                  border: hasError('responsavel') ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
+                  fontSize: '13px',
+                  boxShadow: hasError('responsavel') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }} 
+                value={form.responsavel} 
+                onChange={e => {
+                  s('responsavel', e.target.value)
+                  clearError('responsavel')
+                }} 
+                placeholder="Prof. ou Coord." 
+              />
             </div>
             
             <div style={{ gridColumn:'1/-1' }}>
-              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Descrição *</label>
-              <textarea className="form-input" style={{ borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px', fontSize: '13px' }} rows={3} value={form.descricao} onChange={e => s('descricao', e.target.value)} placeholder="Descreva detalhadamente o ocorrido..." />
+              <label style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '6px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Descrição <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <textarea 
+                id="descricao"
+                name="descricao"
+                className="form-input" 
+                style={{ 
+                  borderRadius: '10px', 
+                  background: '#f8fafc', 
+                  border: hasError('descricao') ? '1.5px solid #ef4444' : '1px solid #e2e8f0', 
+                  padding: '10px 12px', 
+                  fontSize: '13px',
+                  boxShadow: hasError('descricao') ? '0 0 0 3px rgba(239, 68, 68, 0.1)' : 'none',
+                  outline: 'none',
+                  transition: 'all 0.2s'
+                }} 
+                rows={3} 
+                value={form.descricao} 
+                onChange={e => {
+                  s('descricao', e.target.value)
+                  clearError('descricao')
+                }} 
+                placeholder="Descreva detalhadamente o ocorrido..." 
+              />
             </div>
 
             <div style={{ gridColumn: '1/-1' }}>
@@ -261,19 +394,16 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
                   </button>
                 </div>
               ) : (
-                <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px', border: '2px dashed #cbd5e1', borderRadius: '10px', background: '#f8fafc', cursor: isUploading ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isUploading ? 0.7 : 1 }}>
+                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px 14px', border: '1.5px dashed #cbd5e1', borderRadius: '10px', background: '#f8fafc', cursor: isUploading ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isUploading ? 0.7 : 1 }}>
                   {isUploading ? (
                     <>
-                      <Loader2 size={24} style={{ color: '#2563eb', marginBottom: '8px', animation: 'spin 1s linear infinite' }} />
+                      <Loader2 size={16} style={{ color: '#2563eb', animation: 'spin 1s linear infinite' }} />
                       <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Enviando arquivo...</div>
                     </>
                   ) : (
                     <>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', marginBottom: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                        <Paperclip size={16} />
-                      </div>
-                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#0f172a', marginBottom: '2px' }}>Clique para anexar documento ou foto</div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>Máx: 10MB</div>
+                      <Paperclip size={14} style={{ color: '#64748b' }} />
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>Clique para anexar documento ou foto (Máx: 10MB)</span>
                     </>
                   )}
                   <input type="file" style={{ display: 'none' }} disabled={isUploading} onChange={async (e) => {
@@ -326,7 +456,7 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
             <button style={{ height: '40px', padding: '0 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }} onClick={onClose}>
               Cancelar
             </button>
-            <button style={{ height: '40px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'all 0.2s' }} onClick={onSave} disabled={!form.alunoNome.trim() || !form.descricao.trim()}>
+            <button style={{ height: '40px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'all 0.2s' }} onClick={onSave}>
               <CheckCircle size={16} />
               <span>Salvar Ocorrência</span>
             </button>
@@ -398,6 +528,9 @@ export default function OcorrenciasPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
 
+  const [validationErrors, setValidationErrors] = useState<{ field: string; label: string }[]>([])
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
+
   useEffect(() => {
     setCurrentPage(1)
   }, [turmaSel, filtroGrav, busca])
@@ -432,6 +565,8 @@ export default function OcorrenciasPage() {
     setMetaConfirmacao('')
     const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0]
     setForm({ ...BLANK, turma: turmaSel ?? '', tipo: primeiroTipo })
+    setValidationErrors([])
+    setIsValidationModalOpen(false)
     setModalOpen(true)
   }
 
@@ -471,11 +606,43 @@ export default function OcorrenciasPage() {
       anexoTipo: oc.anexoTipo || '',
       anexoTamanho: oc.anexoTamanho || 0
     })
+    setValidationErrors([])
+    setIsValidationModalOpen(false)
     setModalOpen(true)
   }
 
+  const validateForm = () => {
+    const errors: { field: string; label: string }[] = []
+
+    if (!form.alunoId || !form.alunoNome.trim()) {
+      errors.push({ field: 'alunoId', label: 'Aluno' })
+    }
+    if (!form.tipo || !form.tipo.trim()) {
+      errors.push({ field: 'tipo', label: 'Tipo' })
+    }
+    if (!form.gravidade || !form.gravidade.trim()) {
+      errors.push({ field: 'gravidade', label: 'Gravidade' })
+    }
+    if (!form.data || !form.data.trim()) {
+      errors.push({ field: 'data', label: 'Data' })
+    }
+    if (!form.responsavel || !form.responsavel.trim()) {
+      errors.push({ field: 'responsavel', label: 'Responsável' })
+    }
+    if (!form.descricao || !form.descricao.trim()) {
+      errors.push({ field: 'descricao', label: 'Descrição' })
+    }
+
+    return errors
+  }
+
   const handleSave = async () => {
-    if (!form.alunoNome.trim() || !form.descricao.trim()) return
+    const errors = validateForm()
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      setIsValidationModalOpen(true)
+      return
+    }
     
     const now = new Date()
     const dataHora = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -1138,6 +1305,8 @@ export default function OcorrenciasPage() {
                                 setEditingId(null);
                                 const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0];
                                 setForm({ ...BLANK, turma: turma.nome, tipo: primeiroTipo });
+                                setValidationErrors([]);
+                                setIsValidationModalOpen(false);
                                 setModalOpen(true);
                               }}
                               style={{ height: '32px', padding: '0 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', transition: 'all 0.2s' }}
@@ -1157,7 +1326,86 @@ export default function OcorrenciasPage() {
           </div>
         </div>
         {modalOpen && (
-          <OcorrenciaModal form={form} setForm={setForm} onSave={handleSave} onClose={() => setModalOpen(false)} alunosDaTurma={alunosDaTurmaAtual} todosAlunos={todosAlunosMapped} tiposOcorrencia={tiposAtivos} turmas={turmas} />
+          <OcorrenciaModal 
+            form={form} 
+            setForm={setForm} 
+            onSave={handleSave} 
+            onClose={() => setModalOpen(false)} 
+            alunosDaTurma={alunosDaTurmaAtual} 
+            todosAlunos={todosAlunosMapped} 
+            tiposOcorrencia={tiposAtivos} 
+            turmas={turmas} 
+            validationErrors={validationErrors}
+            setValidationErrors={setValidationErrors}
+          />
+        )}
+
+        {/* Modal Erros de Validação da Ocorrência */}
+        {isValidationModalOpen && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div 
+              className="glass-card ultra-modal modal-enter-active shake-element" 
+              style={{ 
+                width: '100%', 
+                maxWidth: 500, 
+                padding: 32, 
+                textAlign: 'center', 
+                position: 'relative', 
+                boxShadow: '0 30px 60px rgba(0,0,0,0.25)', 
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: '#ffffff',
+                borderRadius: '24px'
+              }}
+            >
+              <button 
+                onClick={() => setIsValidationModalOpen(false)} 
+                style={{ position: 'absolute', top: 20, right: 20, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = '#0f172a' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = '#64748b' }}
+              >
+                <X size={16} />
+              </button>
+
+              <div className="pulse-warning" style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(239, 68, 68, 0.1)', border: '1.5px dashed rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                <AlertTriangle size={28} color="#ef4444" />
+              </div>
+
+              <h3 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', fontFamily: 'Outfit, sans-serif' }}>Campos Obrigatórios Pendentes</h3>
+              <p style={{ fontSize: 13, color: '#64748b', lineHeight: '1.6', margin: '0 0 24px' }}>
+                Por favor, preencha todos os dados da ocorrência para prosseguir com o salvamento.
+              </p>
+
+              <div style={{ textAlign: 'left', maxHeight: 240, overflowY: 'auto', background: 'rgba(248, 250, 252, 0.8)', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+                {validationErrors.map((err, i) => (
+                  <div 
+                    key={i} 
+                    onClick={() => {
+                      setIsValidationModalOpen(false)
+                      const el = document.getElementsByName(err.field)[0] || document.getElementById(err.field)
+                      if (el) {
+                        (el as HTMLElement).focus()
+                      }
+                    }}
+                    style={{ fontSize: 13, color: '#475569', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 8px', borderRadius: 8, transition: 'background 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <span style={{ color: '#ef4444', fontWeight: 900 }}>•</span>
+                    <span>{err.label}</span>
+                    <span style={{ fontSize: 10, color: '#3b82f6', marginLeft: 'auto', fontWeight: 600 }}>Focar Campo →</span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setIsValidationModalOpen(false)}
+                className="neo-btn neo-btn-primary"
+                style={{ width: '100%', padding: '12px 0', fontSize: 14, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff' }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
         )}
       </div>
     )
@@ -1196,7 +1444,7 @@ export default function OcorrenciasPage() {
         </div>
         <div style={{ display:'flex', gap:12 }}>
           <button style={{ height: '42px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={printRelatorioTurma}><Printer size={16} />Relatório da Turma</button>
-          <button style={{ height: '42px', padding: '0: 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }} onClick={openNew}><Plus size={16} />Nova Ocorrência</button>
+          <button style={{ height: '42px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }} onClick={openNew}><Plus size={16} />Nova Ocorrência</button>
         </div>
       </div>
 
@@ -1378,7 +1626,86 @@ export default function OcorrenciasPage() {
       )}
 
       {modalOpen && (
-        <OcorrenciaModal form={form} setForm={setForm} onSave={handleSave} onClose={() => setModalOpen(false)} alunosDaTurma={alunosDaTurmaAtual} todosAlunos={todosAlunosMapped} tiposOcorrencia={tiposAtivos} turmas={turmas} />
+        <OcorrenciaModal 
+          form={form} 
+          setForm={setForm} 
+          onSave={handleSave} 
+          onClose={() => setModalOpen(false)} 
+          alunosDaTurma={alunosDaTurmaAtual} 
+          todosAlunos={todosAlunosMapped} 
+          tiposOcorrencia={tiposAtivos} 
+          turmas={turmas} 
+          validationErrors={validationErrors}
+          setValidationErrors={setValidationErrors}
+        />
+      )}
+
+      {/* Modal Erros de Validação da Ocorrência */}
+      {isValidationModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div 
+            className="glass-card ultra-modal modal-enter-active shake-element" 
+            style={{ 
+              width: '100%', 
+              maxWidth: 500, 
+              padding: 32, 
+              textAlign: 'center', 
+              position: 'relative', 
+              boxShadow: '0 30px 60px rgba(0,0,0,0.25)', 
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: '#ffffff',
+              borderRadius: '24px'
+            }}
+          >
+            <button 
+              onClick={() => setIsValidationModalOpen(false)} 
+              style={{ position: 'absolute', top: 20, right: 20, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = '#0f172a' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = '#64748b' }}
+            >
+              <X size={16} />
+            </button>
+
+            <div className="pulse-warning" style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(239, 68, 68, 0.1)', border: '1.5px dashed rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <AlertTriangle size={28} color="#ef4444" />
+            </div>
+
+            <h3 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', fontFamily: 'Outfit, sans-serif' }}>Campos Obrigatórios Pendentes</h3>
+            <p style={{ fontSize: 13, color: '#64748b', lineHeight: '1.6', margin: '0 0 24px' }}>
+              Por favor, preencha todos os dados da ocorrência para prosseguir com o salvamento.
+            </p>
+
+            <div style={{ textAlign: 'left', maxHeight: 240, overflowY: 'auto', background: 'rgba(248, 250, 252, 0.8)', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+              {validationErrors.map((err, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => {
+                    setIsValidationModalOpen(false)
+                    const el = document.getElementsByName(err.field)[0] || document.getElementById(err.field)
+                    if (el) {
+                      (el as HTMLElement).focus()
+                    }
+                  }}
+                  style={{ fontSize: 13, color: '#475569', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 8px', borderRadius: 8, transition: 'background 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <span style={{ color: '#ef4444', fontWeight: 900 }}>•</span>
+                  <span>{err.label}</span>
+                  <span style={{ fontSize: 10, color: '#3b82f6', marginLeft: 'auto', fontWeight: 600 }}>Focar Campo →</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setIsValidationModalOpen(false)}
+              className="neo-btn neo-btn-primary"
+              style={{ width: '100%', padding: '12px 0', fontSize: 14, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff' }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

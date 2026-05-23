@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { supabaseServer } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,26 +22,54 @@ function normalizeRow(row: any) {
   if (!merged.dataEnvio && merged.data) merged.dataEnvio = merged.data
   return merged
 }
-
 export async function GET(request: Request) {
-  const supabase = await createProtectedClient();
+  const authClient = await createProtectedClient();
+  const supabase = supabaseServer;
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get('limit');
   const offsetParam = searchParams.get('offset');
   const turmaId = searchParams.get('turma_id');
   const alunoId = searchParams.get('aluno_id');
+  const idParam = searchParams.get('id');
+  const sinceParam = searchParams.get('since');
   
+  let resolvedTurma = turmaId;
+  if (turmaId) {
+    const { data: tData } = await supabase.from('turmas').select('nome').eq('id', turmaId).single();
+    if (tData && tData.nome) {
+      resolvedTurma = tData.nome;
+    } else {
+      const { data: cData } = await supabase.from('turmas').select('nome').eq('codigo', turmaId).single();
+      if (cData && cData.nome) {
+        resolvedTurma = cData.nome;
+      }
+    }
+  }
+
   let query = supabase.from('comunicados').select('*');
   
   if (turmaId || alunoId) {
-    const conditions = [`destino.eq."todos"`];
+    const conditions = [`destino.eq.todos`];
     if (turmaId) {
-      conditions.push(`dados->turmas.cs.["${turmaId}"]`);
+      conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
+      if (resolvedTurma !== turmaId) {
+        conditions.push(`dados->turmas.cs.["${turmaId}"]`);
+      }
     }
     if (alunoId) {
       conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
     }
     query = query.or(conditions.join(','));
+  }
+  
+  if (idParam) {
+    query = query.eq('id', idParam);
+  }
+  
+  if (sinceParam) {
+    query = query.gt('created_at', sinceParam);
   }
   
   query = query.order('data', { ascending: false });
@@ -57,37 +86,42 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createProtectedClient();
+  const authClient = await createProtectedClient();
+  const supabase = supabaseServer;
+  console.log("==> POST /api/comunicados CALLED!");
   try {
     const body = await request.json()
+    console.log("==> POST body length:", Array.isArray(body) ? body.length : 'not array');
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        // If empty array, delete all
-        await supabase.from('comunicados').delete().neq('id', 'internal-root')
         return NextResponse.json({ ok: true, count: 0 })
       }
       
       const rows = body.map(c => buildRow(c))
-      const ids = rows.map(r => r.id)
-      
-      // Full sync: Delete items not in the provided array
-      await supabase.from('comunicados').delete().not('id', 'in', `(${ids.map(i => `"${i}"`).join(',')})`)
-      
-      const { error } = await supabase.from('comunicados').upsert(rows)
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      const { error: upsertError } = await supabase.from('comunicados').upsert(rows)
+      if (upsertError) {
+        console.error("==> UPSERT ERROR:", upsertError);
+        return NextResponse.json({ error: upsertError.message }, { status: 400 })
+      }
+      console.log("==> UPSERT SUCCESS");
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
     const { data, error } = await supabase.from('comunicados').upsert(row).select().single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error) {
+      console.error("UPSERT SINGLE ERROR:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {
+    console.error("POST CATCH ERROR:", e);
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
 
 export async function DELETE(request: Request) {
-  const supabase = await createProtectedClient();
+  const authClient = await createProtectedClient();
+  const supabase = supabaseServer;
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -99,7 +133,9 @@ export async function DELETE(request: Request) {
 // Removed deprecated config export
 
 function buildRow(c: any) {
-  const { id, titulo, conteudo, texto, autor, dataEnvio, data, destino, fixado, ...rest } = c
+  const source = { ...c, ...(c.dados || {}) }
+  delete source.dados
+  const { id, titulo, conteudo, texto, autor, dataEnvio, data, destino, fixado, ...rest } = source
   // Ensure safe defaults for JSONB fields stored in dados
   const dados = {
     ...rest,
@@ -113,15 +149,21 @@ function buildRow(c: any) {
     exigeCiencia: Boolean(rest.exigeCiencia),
     permiteResposta: Boolean(rest.permiteResposta),
   }
-  return {
+  const merged = {
     id: id || `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
     titulo: titulo || '', 
     texto: conteudo || texto || '', 
     autor: autor || '',
     data: dataEnvio || data || new Date().toISOString(),
-    destino: destino || 'todos', 
+    destino: destino || ((dados.turmas.length > 0 || dados.alunosIds.length > 0) ? 'selecionados' : 'todos'), 
     fixado: Boolean(fixado),
-    dados,
+    dados: {
+      ...dados,
+      conteudo: conteudo || texto || '',
+      dataEnvio: dataEnvio || data || new Date().toISOString()
+    },
     updated_at: new Date().toISOString(),
   }
+  
+  return merged
 }

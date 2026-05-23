@@ -20,10 +20,14 @@ export async function POST(request: Request) {
   const supabase = await createProtectedClient();
   try {
     const body = await request.json()
-    const { id, titulo, texto, autor, data, destino, fixado, ...rest } = body
+    const source = { ...body, ...(body.dados || {}) }
+    delete source.dados
+    const { id, titulo, texto, autor, data, destino, fixado, ...rest } = source
     const row = {
       id: id || `COM${Date.now()}`,
-      titulo, texto: texto || '', autor: autor || '',
+      titulo: titulo || '',
+      texto: texto || '',
+      autor: autor || '',
       data: data || new Date().toISOString().slice(0, 10),
       destino: destino || 'Todos',
       fixado: fixado || false,

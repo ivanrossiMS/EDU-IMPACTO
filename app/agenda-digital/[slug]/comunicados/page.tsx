@@ -2,14 +2,16 @@
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
-import { use, useState } from 'react'
+import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { use, useState, useEffect, useRef } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
+import { supabase } from '@/lib/supabase'
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoStr: string) => {
@@ -28,26 +30,24 @@ const getAnexoType = (anexoStr: string) => {
   const { name, url, mime } = parsed;
   
   if (name.startsWith('Formulário:')) {
-    return { label: 'Formulário', icon: <FileText size={13} color="#3b82f6" />, color: 'rgba(59,130,246,0.08)', textColor: '#3b82f6' };
+    return { label: 'Formulário', icon: <FileText size={16} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
   if (name.startsWith('Relatório:')) {
-    return { label: 'Relatório', icon: <FileBarChart size={13} color="#8b5cf6" />, color: 'rgba(139,92,246,0.08)', textColor: '#8b5cf6' };
+    return { label: 'Relatório', icon: <FileBarChart size={16} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
   }
-  if (name.toLowerCase().includes('cobrança') || name.toLowerCase().includes('boleto')) {
-    return { label: 'Cobrança', icon: <DollarSign size={13} color="#ef4444" />, color: 'rgba(239,68,68,0.08)', textColor: '#ef4444' };
+  if (name.toLowerCase().endsWith('.pdf')) {
+    return { label: 'PDF', icon: <FileText size={16} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
   }
-  
   const isImg = url.startsWith('data:image/') || mime.startsWith('image/') || name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg') || name.toLowerCase().endsWith('.webp') || name.toLowerCase().endsWith('.gif');
   if (isImg) {
-    return { label: 'Foto', icon: <ImageIcon size={13} color="#10b981" />, color: 'rgba(16,185,129,0.08)', textColor: '#10b981' };
+    return { label: 'Imagem', icon: <ImageIcon size={16} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
   }
-  
   const isVid = mime.startsWith('video/') || url.includes('.mov') || url.includes('.mp4') || name.toLowerCase().endsWith('.mov') || name.toLowerCase().endsWith('.mp4');
   if (isVid) {
-    return { label: 'Vídeo', icon: <Video size={13} color="#f59e0b" />, color: 'rgba(245,158,11,0.08)', textColor: '#f59e0b' };
+    return { label: 'Vídeo', icon: <Video size={16} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#f59e0b' };
   }
   
-  return { label: 'Anexo', icon: <Paperclip size={13} color="#64748b" />, color: 'rgba(100,116,139,0.08)', textColor: '#64748b' };
+  return { label: 'Anexo', icon: <Paperclip size={16} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
 };
 
 export default function ADComunicadosPage({ params }: { params: Promise<{ slug: string }>}) {
@@ -61,15 +61,86 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const turmaObj = turmas.find((t: any) => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
   const turmaNome = turmaObj?.nome || rawTurma
 
-  // Generate the precise endpoint to fetch only this student's and class's announcements
   const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : 'comunicados?limit=0'
   const [comunicados, setComunicados, { loading }] = useSupabaseArray<any>(endpoint)
+  
+  const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
+  const comunicadosRef = useRef(comunicados)
+  const isPollingRef = useRef(false)
+  
+  useEffect(() => {
+    comunicadosRef.current = comunicados
+  }, [comunicados])
+
+  // --- REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+    if (!aluno?.id) return;
+    const channel = supabase.channel('comunicados-channel')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, async (payload) => {
+        const newId = payload.new.id;
+        try {
+          const res = await fetch(`/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&id=${newId}`);
+          if (!res.ok) return;
+          const json = await res.json();
+          if (json && json.length > 0) {
+            const newCom = json[0];
+            setNewComunicadosBuffer(prev => {
+              if (prev.some(c => c.id === newCom.id)) return prev;
+              if (comunicadosRef.current.some((c: any) => c.id === newCom.id)) return prev;
+              return [newCom, ...prev];
+            })
+          }
+        } catch (e) {
+          console.error("Realtime validation error:", e);
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [aluno?.id, turmaNome])
+
+  // --- POLLING FALLBACK ---
+  useEffect(() => {
+    if (!aluno?.id) return;
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== 'visible' || isPollingRef.current) return;
+      isPollingRef.current = true;
+      try {
+        const lastDate = comunicadosRef.current[0]?.created_at || comunicadosRef.current[0]?.data;
+        const url = `/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&limit=10${lastDate ? '&since=' + encodeURIComponent(lastDate) : ''}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.length > 0) {
+            setNewComunicadosBuffer(prev => {
+              let updated = [...prev];
+              let hasChanges = false;
+              for (const item of json) {
+                if (!updated.some(c => c.id === item.id) && !comunicadosRef.current.some((c: any) => c.id === item.id)) {
+                  updated.push(item);
+                  hasChanges = true;
+                }
+              }
+              return hasChanges ? updated.sort((a, b) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime()) : prev;
+            })
+          }
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
+      } finally {
+        isPollingRef.current = false;
+      }
+    }, 45000); // 45 seconds
+    
+    return () => clearInterval(interval);
+  }, [aluno?.id, turmaNome])
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
+  const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
   const openedFormObj: FormTemplate | undefined = forms.find(x => x.name === openedFormStr?.replace('Formulário: ', ''))
 
@@ -147,15 +218,55 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   }
 
   return (
-    <div style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
+    <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(0, 210, 255, 0.4); }
-          50% { box-shadow: 0 0 0 10px rgba(0, 210, 255, 0); }
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.15), 0 0 10px rgba(0, 210, 255, 0.5), 0 0 5px rgba(255, 0, 128, 0.4);
+          }
+          50% {
+            transform: scale(1.1);
+            box-shadow: 0 0 0 6px rgba(0, 210, 255, 0.3), 0 0 20px rgba(0, 210, 255, 0.8), 0 0 12px rgba(255, 0, 128, 0.7);
+          }
         }
-        @keyframes flowLine {
-          0% { background-position: 0% 0%; }
-          100% { background-position: 0% 200%; }
+        @keyframes pulseGlowRead {
+          0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1), 0 0 6px rgba(99, 102, 241, 0.2);
+          }
+          50% {
+            transform: scale(1.05);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2), 0 0 10px rgba(99, 102, 241, 0.4);
+          }
+        }
+        @keyframes neonLaserFlow {
+          0% {
+            background-position: 0% 0%;
+            box-shadow: 0 0 6px rgba(0, 210, 255, 0.5), 0 0 12px rgba(255, 0, 128, 0.3);
+          }
+          50% {
+            background-position: 0% 100%;
+            box-shadow: 0 0 14px rgba(0, 210, 255, 0.8), 0 0 24px rgba(255, 0, 128, 0.6);
+          }
+          100% {
+            background-position: 0% 0%;
+            box-shadow: 0 0 6px rgba(0, 210, 255, 0.5), 0 0 12px rgba(255, 0, 128, 0.3);
+          }
+        }
+        @keyframes neonLaserFlowRead {
+          0% {
+            background-position: 0% 0%;
+            box-shadow: 0 0 4px rgba(99, 102, 241, 0.2);
+          }
+          50% {
+            background-position: 0% 100%;
+            box-shadow: 0 0 8px rgba(99, 102, 241, 0.4), 0 0 12px rgba(168, 85, 247, 0.2);
+          }
+          100% {
+            background-position: 0% 0%;
+            box-shadow: 0 0 4px rgba(99, 102, 241, 0.2);
+          }
         }
         @keyframes floatBg {
           0% { transform: translateY(0px) rotate(0deg) scale(1); }
@@ -170,23 +281,56 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
-        .ad-mobile-search-container {
-          display: none !important;
-        }
         @media (max-width: 768px) {
-          .ad-com-filter-btn { display: none !important; }
-          .ad-com-actions { width: 100% !important; justify-content: flex-end !important; }
-          .ad-com-search { width: 100% !important; justify-content: flex-end !important; }
-          .ad-com-search input { width: 100% !important; max-width: 100% !important; }
-          
-          .ad-mobile-search-container {
-            display: block !important;
+          .ad-comunicados-wrapper .ad-page-header { 
+            margin-top: -12px !important; 
+            margin-bottom: 16px !important; 
+            align-items: center !important; 
+            flex-direction: row !important; 
+            justify-content: space-between !important; 
+            width: 100% !important;
+            gap: 8px !important;
+            padding: 0 4px !important;
           }
-          .ad-mobile-search-container input:focus {
-            outline: none !important;
-            border-color: #6366f1 !important;
-            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15), 0 8px 32px rgba(99, 102, 241, 0.08) !important;
+          .ad-com-filter-btn { display: none !important; }
+          .ad-com-actions { width: auto !important; justify-content: flex-end !important; margin-top: 0 !important; align-self: center !important; }
+          .ad-com-search { width: auto !important; justify-content: flex-end !important; }
+          .ad-com-search input { 
+            width: 140px !important; 
+            max-width: 100% !important; 
+            height: 36px !important; 
+            padding-left: 32px !important; 
+            font-size: 13px !important; 
+            border-radius: 9999px !important; 
             background: #ffffff !important;
+            border: 1px solid #e2e8f0 !important;
+            box-shadow: none !important;
+            color: #0f172a !important;
+          }
+          .ad-com-search input:focus {
+            width: 150px !important;
+            border-color: #cbd5e1 !important;
+            background: #ffffff !important;
+          }
+          .ad-com-search svg {
+            width: 14px !important;
+            height: 14px !important;
+            left: 12px !important;
+            color: #94a3b8 !important;
+          }
+          .ad-com-header-icon-box {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 12px !important;
+            flex-shrink: 0 !important;
+          }
+          .ad-com-header-icon-box svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+          .ad-com-header-title {
+            font-size: 20px !important;
+            font-weight: 800 !important;
           }
           
           .ad-com-timeline-node { width: 50px !important; margin-right: 12px !important; }
@@ -229,24 +373,55 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
         zIndex: 0
       }} />
 
-      {/* Floating Animated Icons with Neon glow drop-shadow */}
-      <div style={{ position: 'absolute', top: '12%', left: '5%', opacity: 0.5, animation: 'floatBg 7s ease-in-out infinite', pointerEvents: 'none', zIndex: 0 }}>
-        <Bell size={48} color="#00D2FF" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,210,255,0.4))' }} />
-      </div>
-      <div style={{ position: 'absolute', top: '40%', right: '4%', opacity: 0.45, animation: 'floatBg 9s ease-in-out infinite 1s', pointerEvents: 'none', zIndex: 0 }}>
-        <FileText size={52} color="#FF0080" style={{ filter: 'drop-shadow(0 4px 12px rgba(255,0,128,0.4))' }} />
-      </div>
-      <div style={{ position: 'absolute', bottom: '20%', left: '7%', opacity: 0.5, animation: 'floatBg 8s ease-in-out infinite 0.5s', pointerEvents: 'none', zIndex: 0 }}>
-        <CheckCircle2 size={44} color="#10b981" style={{ filter: 'drop-shadow(0 4px 12px rgba(16,185,129,0.4))' }} />
-      </div>
-      <div style={{ position: 'absolute', top: '78%', right: '8%', opacity: 0.45, animation: 'floatBg 10s ease-in-out infinite 2s', pointerEvents: 'none', zIndex: 0 }}>
-        <Pin size={38} color="#f59e0b" style={{ transform: 'rotate(45deg)', filter: 'drop-shadow(0 4px 12px rgba(245,158,11,0.4))' }} />
-      </div>
+
 
       <div style={{ position: 'relative', zIndex: 1 }}>
+        <AnimatePresence>
+          {newComunicadosBuffer.length > 0 && !selectedComunicado && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              style={{
+                marginBottom: 24,
+                padding: '16px 24px',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                borderRadius: 20,
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.4)',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                setComunicados(prev => {
+                  const toAdd = newComunicadosBuffer.filter(n => !prev.some((p: any) => p.id === n.id));
+                  return [...toAdd, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+                });
+                setNewComunicadosBuffer([]);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ background: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 12, display: 'flex' }}>
+                  <Bell size={20} color="#fff" style={{ animation: 'pulseGlowAmbient 2s infinite' }} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>{newComunicadosBuffer.length === 1 ? 'Novo comunicado disponível' : `${newComunicadosBuffer.length} novos comunicados`}</div>
+                  <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500 }}>Clique para atualizar a lista</div>
+                </div>
+              </div>
+              <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800 }}>
+                Ver agora
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
+            <div className="ad-com-header-icon-box" style={{
               width: 48,
               height: 48,
               borderRadius: 16,
@@ -260,8 +435,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               <Bell size={22} color="#00D2FF" style={{ animation: 'floatBg 4s ease-in-out infinite' }} />
             </div>
             <div>
-              <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
-              <p style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais <span className="ad-text-hide-mobile">do colégio</span></p>
+              <h2 className="ad-com-header-title" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
+              <p className="ad-text-hide-mobile" style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
             </div>
           </div>
           
@@ -270,7 +445,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
               <input 
                 className="form-input" 
-                placeholder="Buscar comunicados..." 
+                placeholder="Buscar..." 
                 style={{
                   paddingLeft: 40,
                   width: 260,
@@ -310,52 +485,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
 
-      {/* Mobile-only Search Bar */}
-      <div className="ad-mobile-search-container" style={{ marginBottom: 24, padding: '0 16px' }}>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
-          <Search size={18} style={{ position: 'absolute', left: 16, color: '#6366f1' }} />
-          <input 
-            className="form-input" 
-            placeholder="Buscar comunicados..." 
-            style={{
-              paddingLeft: 44,
-              paddingRight: 40,
-              width: '100%',
-              height: 48,
-              borderRadius: 16,
-              border: '1px solid rgba(99, 102, 241, 0.15)',
-              background: 'rgba(255, 255, 255, 0.8)',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.06)',
-              fontSize: 14,
-              fontWeight: 500,
-              color: '#0f172a',
-              transition: 'all 0.3s'
-            }} 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button 
-              onClick={() => setSearchTerm('')}
-              style={{
-                position: 'absolute',
-                right: 16,
-                background: 'none',
-                border: 'none',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 4
-              }}
-            >
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </div>
+
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
@@ -366,6 +496,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             const remetente = c.remetente?.toLowerCase() || '';
             const conteudo = c.conteudo?.toLowerCase() || '';
             return titulo.includes(term) || remetente.includes(term) || conteudo.includes(term);
+          }).sort((a: any, b: any) => {
+            const dateA = new Date(a.dataEnvio || a.data || a.created_at || 0).getTime();
+            const dateB = new Date(b.dataEnvio || b.data || b.created_at || 0).getTime();
+            return dateB - dateA;
           });
           
           if (loading || !aluno) {
@@ -375,7 +509,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
-              style={{ display: 'flex', position: 'relative', paddingBottom: 32 }}
+              style={{ display: 'flex', position: 'relative', paddingBottom: 12 }}
             >
               <div style={{ marginRight: 32, paddingTop: 24, width: 88 }}>
                 <div style={{ width: 72, textAlign: 'right', paddingRight: 16 }}>
@@ -425,21 +559,21 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                style={{ display: 'flex', position: 'relative', paddingBottom: index !== (comunicados || []).length - 1 ? 32 : 0 }}
+                style={{ display: 'flex', position: 'relative', paddingBottom: index !== filteredComunicados.length - 1 ? 8 : 0 }}
               >
                 {/* Timeline Laser Connector */}
                 {index !== filteredComunicados.length - 1 && (
                   <div className="ad-com-timeline-line" style={{ 
                     position: 'absolute', 
                     top: 48, 
-                    bottom: -24, 
+                    bottom: -4, 
                     left: 88, 
                     width: 2, 
-                    background: isRead 
-                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.08) 50%, rgba(99,102,241,0.02) 100%)' 
-                      : 'linear-gradient(180deg, transparent, #00d2ff, #ff0080, transparent)',
+                    backgroundImage: isRead 
+                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.05), rgba(99,102,241,0.3), rgba(168, 85, 247, 0.3), rgba(99, 102, 241, 0.05))' 
+                      : 'linear-gradient(to bottom, rgba(0, 210, 255, 0.1), #00d2ff, #ff0080, rgba(255, 0, 128, 0.1))',
                     backgroundSize: '100% 200%',
-                    animation: isRead ? 'none' : 'flowLine 2.5s linear infinite',
+                    animation: isRead ? 'neonLaserFlowRead 4s ease-in-out infinite' : 'neonLaserFlow 3s ease-in-out infinite',
                     zIndex: 0,
                     borderRadius: 2
                   }} />
@@ -447,7 +581,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 
                 {/* Ultra-Modern Minimalist Date Node */}
                 <div className="ad-com-timeline-node" style={{ 
-                  marginRight: 32, 
+                  marginRight: 16, 
                   zIndex: 1,
                   display: 'flex',
                   alignItems: 'flex-start',
@@ -469,12 +603,9 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                     width: 14, 
                     height: 14, 
                     borderRadius: '50%', 
-                    background: isRead ? 'rgba(99,102,241,0.2)' : 'linear-gradient(135deg, #00d2ff, #ff0080)', 
+                    background: isRead ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4))' : 'linear-gradient(135deg, #00d2ff, #ff0080)', 
                     border: '3px solid #f8fafc',
-                    boxShadow: isRead 
-                      ? '0 0 0 1px rgba(0,0,0,0.05)' 
-                      : '0 0 0 4px rgba(0,210,255,0.15), 0 0 16px rgba(0,210,255,0.6)',
-                    animation: isRead ? 'none' : 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    animation: isRead ? 'pulseGlowRead 3s ease-in-out infinite' : 'pulseGlow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     zIndex: 2 
                   }} />
                 </div>
@@ -536,7 +667,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
                     <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                      <UserAvatar userId={c.autorId} name={c.autor} size={62} />
+                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={62} />
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
@@ -548,16 +679,43 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                       {/* Priority badges */}
-                       {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
-                       {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
-                       
-                       {/* Status Badge */}
-                       {!isRead ? (
-                         <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
-                       ) : (
-                         <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>Lido</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                         {/* Priority badges */}
+                         {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
+                         {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
+                         
+                         {/* Status Badge */}
+                         {!isRead ? (
+                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                         ) : (
+                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>Lido</span>
+                         )}
+                       </div>
+
+                       {/* Attachments Section */}
+                       {c.anexos && c.anexos.length > 0 && (
+                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                           {c.anexos.map((anexo: string, idx: number) => {
+                             const typeInfo = getAnexoType(anexo);
+                             if (!typeInfo) return null;
+                             return (
+                               <div key={idx} title={typeInfo.label} style={{ 
+                                  background: typeInfo.color, 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: '10px',
+                                  border: `1px solid ${typeInfo.textColor}3a`,
+                                  boxShadow: `0 2px 8px ${typeInfo.color}`,
+                               }}>
+                                 {typeInfo.icon}
+                               </div>
+                             );
+                           })}
+                         </div>
                        )}
                     </div>
                   </div>
@@ -574,34 +732,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   </div>
                   
                   {/* Text sneak peek removed by user request */}
-
-                  {/* Attachments Section */}
-                  {c.anexos && c.anexos.length > 0 && (
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                      {c.anexos.map((anexo: string, idx: number) => {
-                        const typeInfo = getAnexoType(anexo);
-                        if (!typeInfo) return null;
-                        return (
-                          <span key={idx} className="badge" style={{ 
-                             background: typeInfo.color, 
-                             color: typeInfo.textColor, 
-                             fontSize: '12px', 
-                             fontWeight: 600, 
-                             display: 'inline-flex', 
-                             gap: 6, 
-                             alignItems: 'center', 
-                             padding: '6px 12px', 
-                             borderRadius: '8px', 
-                             border: `1px solid ${typeInfo.textColor}2a`,
-                             transition: 'background 0.2s'
-                          }}>
-                            {typeInfo.icon}
-                            {typeInfo.label}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
 
                   {/* Exige Ciência Box */}
                   {c.exigeCiencia && (
@@ -644,52 +774,89 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       <AnimatePresence>
 {/* Modal do Comunicado Expandido */}
       {selectedComunicado && (
-        <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }} onClick={() => setSelectedComunicado(null)}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: '#ffffff', borderRadius: 28, width: '100%', maxWidth: 740, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)' }} onClick={e => e.stopPropagation()}>
+        <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={() => setSelectedComunicado(null)}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container no-scrollbar" style={{ background: '#f8fafc', borderRadius: 28, width: '100%', maxWidth: 740, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)', position: 'relative' }} onClick={e => e.stopPropagation()}>
             
-            {/* Header Section */}
-            <div style={{ background: 'linear-gradient(to bottom, #f8fafc, #ffffff)', padding: '32px 40px 24px 40px', borderBottom: '1px solid rgba(0,0,0,0.04)', position: 'relative' }}>
-              <button className="btn btn-secondary btn-sm" style={{ position: 'absolute', top: 24, right: 24, width: 36, height: 36, padding: 0, borderRadius: '50%', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSelectedComunicado(null)}>
-                <X size={18} color="#64748b" />
-              </button>
+            <div style={{ flexShrink: 0, background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', padding: '32px 24px 24px 24px', position: 'relative', overflow: 'hidden', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, boxShadow: '0 4px 16px rgba(99,102,241,0.1)' }}>
               
-              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-                {selectedComunicado.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Prioridade Alta</span>}
-                {selectedComunicado.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
-                <span className="badge" style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0' }}>Comunicado Oficial</span>
-              </div>
+              <button onClick={() => setSelectedComunicado(null)} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}>
+                <X size={18} color="#ffffff" />
+              </button>
 
-              <h2 style={{ fontSize: 28, fontWeight: 900, marginBottom: 24, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.5 }}>
-                {selectedComunicado.titulo}
-              </h2>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                  <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} size={56} />
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: '#1e293b' }}>{selectedComunicado.autor}</div>
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>{selectedComunicado.autorCargo} • {new Date(selectedComunicado.dataEnvio || (selectedComunicado as any).created_at || new Date()).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' })}</div>
+              <div style={{ position: 'relative', zIndex: 2 }}>
+                {(selectedComunicado.prioridade === 'alta' || selectedComunicado.prioridade === 'urgente') && (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                    {selectedComunicado.prioridade === 'alta' && <span style={{ background: 'rgba(239,68,68,0.2)', color: '#fee2e2', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid rgba(239,68,68,0.3)' }}>Prioridade Alta</span>}
+                    {selectedComunicado.prioridade === 'urgente' && <span style={{ background: 'rgba(249,115,22,0.2)', color: '#ffedd5', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid rgba(249,115,22,0.3)' }}>Urgente</span>}
                   </div>
+                )}
+
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', marginBottom: 28, lineHeight: 1.3, paddingRight: 60, textShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                  {selectedComunicado.titulo}
+                </h2>
+
+                <style dangerouslySetInnerHTML={{__html: `
+                    @media (max-width: 768px) {
+                      .ad-modal-megaphone { display: none !important; }
+                      .ad-modal-author-row { padding-right: 0 !important; }
+                      .ad-modal-avatar-wrapper > div, .ad-modal-avatar-wrapper > span { width: 36px !important; height: 36px !important; font-size: 14px !important; }
+                      .ad-modal-avatar-wrapper img { width: 36px !important; height: 36px !important; }
+                      .ad-modal-author-name { font-size: 14px !important; text-shadow: none !important; }
+                      .ad-modal-author-role { display: none !important; }
+                      .ad-modal-author-date { font-size: 11px !important; }
+                      .ad-modal-calendar-icon { width: 12px !important; height: 12px !important; }
+                      .ad-modal-time-only { display: none !important; }
+                      .ad-modal-content-wrapper { padding-left: 0 !important; padding-right: 0 !important; }
+                      .ad-body-text-card { border-radius: 0 !important; border-left: none !important; border-right: none !important; }
+                    }
+                `}} />
+                
+                <div className="ad-modal-author-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 3, width: '100%', paddingRight: 70 }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div className="ad-modal-avatar-wrapper">
+                        <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} fotoUrl={selectedComunicado.autorFoto} size={44} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div className="ad-modal-author-name" style={{ fontWeight: 800, fontSize: 16, color: '#ffffff', letterSpacing: -0.3, textShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>{selectedComunicado.autor}</div>
+                        <div className="ad-modal-author-role" style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600 }}>{selectedComunicado.autorCargo}</div>
+                      </div>
+                    </div>
+                    
+                    <div className="ad-modal-author-date" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#e0e7ff', fontSize: 13, fontWeight: 500, textAlign: 'right' }}>
+                      <Calendar className="ad-modal-calendar-icon" size={14} color="#c7d2fe" />
+                      <span>
+                         <span className="ad-modal-date-only">{new Date(selectedComunicado.dataEnvio || (selectedComunicado as any).created_at || new Date()).toLocaleString('pt-BR', { dateStyle: 'short' })}</span>
+                         <span className="ad-modal-time-only"> às {new Date(selectedComunicado.dataEnvio || (selectedComunicado as any).created_at || new Date()).toLocaleString('pt-BR', { timeStyle: 'short' })}</span>
+                      </span>
+                    </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn btn-secondary btn-sm" onClick={() => window.print()} title="Imprimir" style={{ padding: '8px 12px', background: '#ffffff', borderColor: '#e2e8f0', color: '#475569' }}>
-                    <FileText size={16} /> Imprimir
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            {/* Content Section */}
-            <div style={{ padding: '32px 40px', overflowY: 'auto', flex: 1, background: '#ffffff' }}>
-              <div className="ad-body-text" style={{ fontSize: 16, lineHeight: 1.8, color: '#334155', whiteSpace: 'pre-wrap' }}>
-                {renderConteudo(selectedComunicado.conteudo)}
+                  
+                <div className="ad-modal-megaphone" style={{ fontSize: 72, position: 'absolute', right: -10, bottom: 0, opacity: 0.95, filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.3))' }}>📣</div>
               </div>
 
+              {/* Decorative shapes */}
+              <div style={{ position: 'absolute', top: -30, right: -20, width: 200, height: 200, background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%)', borderRadius: '50%', zIndex: 1 }} />
+              <div style={{ position: 'absolute', bottom: -50, left: -50, width: 150, height: 150, background: 'radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 60%)', borderRadius: '50%', zIndex: 1 }} />
+            </div>
+
+            <div className="ad-modal-content-wrapper" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                
+              {/* Message Content */}
+              <div className="ad-body-text-card" style={{ border: '1px solid #f1f5f9', borderRadius: 20, padding: '24px', background: '#ffffff', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+                <div className="ad-body-text" style={{ fontSize: 16, lineHeight: 1.6, color: '#0f172a', whiteSpace: 'pre-wrap', fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: selectedComunicado.conteudo.replace(/\n/g, '<br/>') }}>
+                </div>
+              </div>
+
+              {/* Attachments Section */}
               {selectedComunicado.anexos && selectedComunicado.anexos.length > 0 && (
-                <div style={{ marginTop: 40 }}>
-                  <h4 style={{ fontSize: 12, fontWeight: 800, margin: '0 0 16px 0', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
-                    Anexos e Documentos Disponíveis
-                  </h4>
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <Paperclip size={20} color="#6d28d9" />
+                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Anexos e Documentos Disponíveis
+                    </h4>
+                  </div>
+                  
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {selectedComunicado.anexos.map((anexo: string, idx: number) => {
                       const parsed = parseAnexo(anexo)
@@ -700,64 +867,62 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                       const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif')
                       const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4')
                       
+                      const fileExt = parsed.name.split('.').pop()?.toUpperCase() || 'FILE'
+                      
                       return (
-                        <div key={idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', transition: 'all 0.2s', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <Paperclip size={18} color="#6366f1" />
-                              <span style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
-                                {parsed.name.replace(/^(Formulário:|Relatório:)\s*/, '')}
-                              </span>
-                            </div>
-                            {!isImg && !isVid && (
-                              <button className="btn btn-secondary btn-sm" style={{ padding: '6px 14px', fontSize: '12px', borderRadius: 8 }} onClick={() => {
+                        <div key={idx} style={{ 
+                          padding: (isImg || isVid) ? 0 : '16px', 
+                          background: (isImg || isVid) ? 'transparent' : '#f8fafc', 
+                          borderRadius: 20, 
+                          border: (isImg || isVid) ? 'none' : '1px solid #f1f5f9', 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          gap: 16, 
+                          cursor: 'pointer', 
+                          flexWrap: 'wrap', 
+                          overflow: 'hidden' 
+                        }} onClick={() => {
                                 if (isForm || isRel) setOpenedFormStr(anexo)
+                                else if (isImg) setMaximizedImageStr(parsed.url)
+                                else if (isVid) setMaximizedVideoStr(parsed.url)
                                 else handleDownload(anexo)
                               }}>
-                                {isForm ? 'Abrir Formulário' : isRel ? 'Visualizar Relatório' : 'Baixar'}
-                              </button>
-                            )}
-                          </div>
                           
-                          {/* If Image, show it completely OPENED */}
-                          {isImg && (
-                            <div 
-                              style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f1f5f9', display: 'flex', justifyContent: 'center', cursor: 'zoom-in', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative' }} 
-                              onClick={() => setMaximizedImageStr(parsed.url)}
-                              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)'; e.currentTarget.style.borderColor = '#cbd5e1' }}
-                              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = '#e2e8f0' }}
-                            >
-                              <img src={parsed.url} alt={parsed.name} style={{ maxWidth: '100%', maxHeight: '400px', objectFit: 'contain' }} />
-                              <div style={{ position: 'absolute', top: 12, right: 12, background: 'rgba(0,0,0,0.6)', color: 'white', padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-                                Maximizar
+                          {!(isImg || isVid) && (
+                            <div className="ad-attachment-info" style={{ display: 'flex', gap: 16, alignItems: 'center', flex: 1, minWidth: 200 }}>
+                              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#6366f1', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
+                                 <FileText size={20} style={{ marginBottom: 2 }} />
+                                 <span style={{ fontSize: 9, fontWeight: 800 }}>{fileExt.substring(0, 3)}</span>
                               </div>
-                            </div>
-                          )}
-                          
-                          {/* If Video, show it completely OPENED and playable */}
-                          {isVid && (
-                            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', background: 'black', marginTop: 12 }}>
-                              <video src={parsed.url} controls style={{ width: '100%', display: 'block', maxHeight: '400px' }} />
+                              <div>
+                                 <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', marginBottom: 4, wordBreak: 'break-all' }}>{parsed.name.replace(/^(Formulário:|Relatório:)\s*/, '')}</div>
+                                 <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : 'Documento'} • Clique para abrir</div>
+                              </div>
                             </div>
                           )}
 
-                          {/* If Form or Report, show a modern button/action cards */}
-                          {(isForm || isRel) && (
-                            <div style={{ background: '#ffffff', padding: '16px', borderRadius: 12, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
-                              <div>
-                                <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: 4, color: '#0f172a' }}>
-                                  {isForm ? '📝 Responder Formulário Eletrônico' : '📊 Visualizar Relatório de Desempenho'}
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#64748b' }}>
-                                  {isForm ? 'Clique ao lado para preencher a resposta e enviar para a secretaria da escola.' : 'Clique ao lado para carregar e revisar o relatório pedagógico.'}
-                                </div>
+                          {(isImg || isVid) && (
+                              <div style={{ width: '100%', borderRadius: 20, overflow: 'hidden', background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 600, border: '1px solid #e2e8f0', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.15)' }}>
+                                {isImg ? (
+                                   <img src={parsed.url} alt={parsed.name} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
+                                ) : (
+                                   <video src={parsed.url} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} preload="metadata" />
+                                )}
+                                {(isImg || isVid) && (
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}>
+                                    {isVid && (
+                                      <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style={{ marginLeft: 4 }}>
+                                          <path d="M8 5V19L19 12L8 5Z" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                              <button className="btn btn-primary btn-sm" style={{ padding: '8px 16px', flexShrink: 0, background: '#6366f1', color: '#fff', border: 'none', borderRadius: 8 }} onClick={() => setOpenedFormStr(anexo)}>
-                                {isForm ? 'Responder' : 'Visualizar'}
-                              </button>
-                            </div>
                           )}
+
                         </div>
                       )
                     })}
@@ -766,15 +931,17 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               )}
 
               {selectedComunicado.exigeCiencia && (
-                <div style={{ marginTop: 40, borderTop: '1px solid #f1f5f9', paddingTop: 32 }}>
+                <div style={{ marginTop: 24 }}>
                   <div style={{ 
                     background: !!(selectedComunicado.ciencias || {})[resolvedParams.slug] ? 'linear-gradient(to right, rgba(34,197,94,0.05), rgba(34,197,94,0.02))' : 'linear-gradient(to right, rgba(99,102,241,0.05), rgba(99,102,241,0.02))', 
                     padding: '20px 24px', 
-                    borderRadius: 16,
+                    borderRadius: 20,
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     border: !!(selectedComunicado.ciencias || {})[resolvedParams.slug] ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(99,102,241,0.2)',
+                    flexWrap: 'wrap',
+                    gap: 16
                   }}>
                     <div style={{ fontSize: 14, color: !!(selectedComunicado.ciencias || {})[resolvedParams.slug] ? '#15803d' : '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12 }}>
                       {!!(selectedComunicado.ciencias || {})[resolvedParams.slug] ? <CheckCircle2 size={24} color="#22c55e" /> : <ShieldAlert size={24} color="#6366f1" />}
@@ -787,7 +954,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                       <button 
                           onClick={(e) => { e.stopPropagation(); handleCiencia(selectedComunicado.id) }} 
                           className="btn" 
-                          style={{ background: '#6366f1', color: '#fff', padding: '10px 20px', fontSize: 14, fontWeight: 700, border: 'none', borderRadius: 12, boxShadow: '0 8px 16px -4px rgba(99,102,241,0.4)' }}
+                          style={{ background: '#6366f1', color: '#fff', padding: '10px 20px', fontSize: 14, fontWeight: 700, border: 'none', borderRadius: 12, boxShadow: '0 8px 16px -4px rgba(99,102,241,0.4)', flexShrink: 0 }}
                           onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
                           onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
                       >
@@ -797,6 +964,16 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   </div>
                 </div>
               )}
+
+              {/* Chat Section */}
+              <div style={{ marginTop: 24 }}>
+                <ComunicadoChat 
+                  comunicadoId={selectedComunicado.id} 
+                  remetenteId={resolvedParams.slug} 
+                  remetenteNome={aluno?.nome || 'Familiar / Aluno'} 
+                  remetenteAvatar={aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
+                />
+              </div>
             </div>
           </motion.div>
         </motion.div>
@@ -941,7 +1118,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
         {/* Modal de Imagem Maximizada */}
         {maximizedImageStr && (
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(16px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }} onClick={() => setMaximizedImageStr(null)}>
-            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)' }} onClick={(e) => { e.stopPropagation(); setMaximizedImageStr(null); }}>
+            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedImageStr(null); }}>
               <X size={24} />
             </button>
             <motion.img 
@@ -953,6 +1130,29 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {/* Modal de Vídeo */}
+        {maximizedVideoStr && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(16px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMaximizedVideoStr(null)}>
+            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedVideoStr(null); }}>
+              <X size={24} />
+            </button>
+            <motion.video 
+              src={maximizedVideoStr} 
+              initial={{scale:0.8, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.8, opacity:0}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              style={{ maxWidth: '95vw', maxHeight: '95vh', borderRadius: 16, boxShadow: '0 32px 128px rgba(0,0,0,0.6)', background: '#000' }} 
+              controls autoPlay
+              onClick={e => e.stopPropagation()} 
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <style jsx global>{`
+        @media (max-width: 640px) {
+          .mobile-content-wrapper { padding-left: 0 !important; padding-right: 0 !important; }
+        }
+      `}</style>
       </div>
     </div>
   )

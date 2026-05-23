@@ -17,6 +17,7 @@ export default function ADAdminConversas() {
   const { chatsList, setChatsList, messages, setMessages, adAlert, adConfirm, chatGroups } = useAgendaDigital()
   const { currentUser, currentUserPerfil } = useApp()
   const isDiretorGeral = currentUserPerfil === 'Diretor Geral'
+  const { turmas = [] } = useData()
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [activeChat, setActiveChat] = useState<number | string | null>(null)
   const [inputMsg, setInputMsg] = useState('')
@@ -78,7 +79,7 @@ export default function ADAdminConversas() {
       ...c, 
       preview: inputMsg, 
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      date: new Date().toLocaleDateString('pt-BR'),
+      unread: (c.unread || 0) + 1,
       startDate: c.startDate || new Date().toLocaleDateString('pt-BR'),
       startTime: c.startTime || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     } : c))
@@ -94,7 +95,7 @@ export default function ADAdminConversas() {
   const finalSendAdminTicket = () => {
     if (!composeSubject.trim() || !composeBody.trim() || !selectedRecipient) return
 
-    const newChatId = `TKT-${Date.now()}`
+    const newChatId = `${selectedRecipient.id}-TKT-${Date.now()}`
     const novo: ADChat = { 
       id: newChatId, 
       name: selectedRecipient.nome, 
@@ -102,7 +103,7 @@ export default function ADAdminConversas() {
       preview: composeBody.substring(0, 30) + '...', 
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       date: new Date().toLocaleDateString('pt-BR'),
-      unread: 0, 
+      unread: 1, 
       tag: composeSubject,
       startDate: new Date().toLocaleDateString('pt-BR'),
       startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
@@ -384,11 +385,16 @@ export default function ADAdminConversas() {
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {chatsList.filter(c => filterMode === 'abertos' ? c.status !== 'resolved' : c.status === 'resolved')
-              .filter(c => c.name.toLowerCase().includes(newChatSearch.toLowerCase()) || (c.tag && c.tag.toLowerCase().includes(newChatSearch.toLowerCase())))
+              .filter(c => (c.name?.toLowerCase() || '').includes(newChatSearch.toLowerCase()) || (c.tag && c.tag.toLowerCase().includes(newChatSearch.toLowerCase())))
               .map(chat => (
               <div 
                 key={chat.id}
-                onClick={() => setActiveChat(chat.id)}
+                onClick={() => {
+                  setActiveChat(chat.id)
+                  if (chat.unread > 0) {
+                    setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c))
+                  }
+                }}
                 className="ad-chat-list-item"
                 style={{ 
                   padding: '16px', display: 'flex', gap: 12, borderBottom: '1px solid hsl(var(--border-subtle))',
@@ -396,19 +402,38 @@ export default function ADAdminConversas() {
                 }}
               >
                 <div className="avatar ad-chat-avatar" style={{ width: 48, height: 48, background: '#e2e8f0', color: '#64748b', fontSize: 16 }}>
-                  {chat.name.charAt(0)}
+                  {(chat.name || '?').charAt(0)}
                 </div>
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: activeChat === chat.id || chat.unread ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.name}</h4>
-                    <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{chat.date || ''} {chat.time}</span>
+                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: activeChat === chat.id || chat.unread ? 800 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'hsl(var(--text-main))' }}>
+                      {chat.tag || 'Conversa sem assunto'}
+                    </h4>
+                    {(() => {
+                      const msgs = messages[chat.id] || []
+                      if (msgs.length === 0) return chat.unread > 0 ? <span className="ad-chat-badge badge-pulse-modern" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span> : null
+                      const lastMsg = msgs[msgs.length - 1]
+                      if (lastMsg.sender === 'them' && chat.unread > 0) {
+                        return <span className="ad-chat-badge badge-pulse-modern" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span>
+                      }
+                      return null
+                    })()}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                    <p style={{ margin: 0, fontSize: 12, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '85%' }}>{chat.preview}</p>
-                    {chat.unread > 0 && <span className="ad-chat-badge" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span>}
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                      {chat.preview}
+                    </p>
                   </div>
-                  <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 6, display: 'flex', justifyContent: 'space-between', opacity: 0.8 }}>
-                     <span>Início: {chat.startDate || chat.date || (messages[String(chat.id)]?.[0]?.date) || '--/--'} às {chat.startTime || chat.startTime || (messages[String(chat.id)]?.[0]?.time) || '--:--'}</span>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                    <span style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#4f46e5', padding: '2px 8px', borderRadius: 8, fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>
+                      {chat.name || 'Desconhecido'}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', opacity: 0.9, fontWeight: 600 }}>
+                     <span>{chat.date || ''} às {chat.time}</span>
                   </div>
                 </div>
               </div>
@@ -429,7 +454,7 @@ export default function ADAdminConversas() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
                 </button>
                 <div className="avatar" style={{ width: 40, height: 40, background: 'var(--gradient-purple)', color: 'white', fontSize: 15, marginRight: 12 }}>
-                  {chatsList.find(c => c.id === activeChat)?.name.charAt(0)}
+                  {(chatsList.find(c => c.id === activeChat)?.name || '?').charAt(0)}
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{chatsList.find(c => c.id === activeChat)?.name}</h3>
@@ -662,7 +687,7 @@ export default function ADAdminConversas() {
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, color: '#1e293b' }}>{a.nome}</div>
-                                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Turma: {a.turma} • MAT: {a.id.substring(0,8)}</div>
+                                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Turma: {turmas.find((t: any) => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))?.nome || a.turma} • MAT: {a.id.substring(0,8)}</div>
                               </div>
                             </div>
                             <button className="btn btn-primary btn-sm" style={{ borderRadius: 20 }}>Selecionar</button>

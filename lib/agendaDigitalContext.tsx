@@ -15,6 +15,7 @@ export interface ADComunicado {
   autorId?: string
   turmas: string[]
   alunosIds: string[]
+  destino?: string
   prioridade: 'normal' | 'alta' | 'urgente'
   fixado: boolean
   exigeCiencia: boolean
@@ -25,6 +26,7 @@ export interface ADComunicado {
   leituras: Record<string, string>
   ciencias: Record<string, string>
   status: 'rascunho' | 'agendado' | 'enviado'
+  autorFoto?: string | null
 }
 
 export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
@@ -116,9 +118,9 @@ const MOCK_MOMENTOS: ADMomento[] = []
 
 export function AgendaDigitalProvider({ children }: { children: React.ReactNode }) {
   const [comunicados, setComunicadosState] = useSupabaseArray<ADComunicado>('comunicados')
-  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats')
+  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats', [], { refreshIntervalMs: 5000 })
   const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos')
-  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens')
+  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], { refreshIntervalMs: 5000 })
   const [momentosFeed, setMomentosFeed] = useSupabaseArray<ADMomento>('agenda/momentos')
 
   const messages = React.useMemo(() => {

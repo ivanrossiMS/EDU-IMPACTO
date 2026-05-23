@@ -52,7 +52,7 @@ export function ADSidebar() {
   const router = useRouter()
   const { currentUser, theme, setTheme } = useApp()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { comunicados = [], chatsList = [], momentosFeed = [] } = useAgendaDigital()
+  const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
@@ -67,8 +67,13 @@ export function ADSidebar() {
       return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
     }
     if (id === 'mensagens') {
-      // Para admin: conversas não lidas
-      return (chatsList || []).filter((c: any) => (c.unread || 0) > 0).length || undefined
+      return (chatsList || []).filter((c: any) => {
+        const msgs = messages[c.id] || []
+        if (msgs.length === 0) return (c.unread || 0) > 0
+        const lastMsg = msgs[msgs.length - 1]
+        // Admin views 'them' as the other sender (Student)
+        return lastMsg.sender === 'them' && (c.unread || 0) > 0
+      }).length || undefined
     }
     if (id === 'momentos') {
       // Para admin: momentos pendentes de aprovação
@@ -179,16 +184,19 @@ export function ADSidebar() {
                         <item.icon size={18} strokeWidth={2} />
                         {/* Dot badge when collapsed */}
                         {getBadgeValue(item.id) && isCollapsed && (
-                          <div style={{
+                          <motion.div 
+                            animate={item.id === 'mensagens' ? { scale: [1, 1.3, 1] } : {}}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            style={{
                             position: 'absolute',
                             top: -4,
                             right: -4,
                             width: 10,
                             height: 10,
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #FF0080, #7928ca)',
+                            background: item.id === 'mensagens' ? '#ef4444' : 'linear-gradient(135deg, #FF0080, #7928ca)',
                             border: '1.5px solid #0f1129',
-                            boxShadow: '0 0 6px rgba(255,0,128,0.7)'
+                            boxShadow: item.id === 'mensagens' ? '0 0 8px rgba(239, 68, 68, 0.9)' : '0 0 6px rgba(255,0,128,0.7)'
                           }} />
                         )}
                       </div>
@@ -205,18 +213,22 @@ export function ADSidebar() {
                       )}
 
                       {getBadgeValue(item.id) && !isCollapsed && (
-                        <div style={{ 
+                        <motion.div 
+                          initial={{ scale: 1 }}
+                          animate={item.id === 'mensagens' ? { scale: [1, 1.1, 1] } : {}}
+                          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                          style={{ 
                           marginLeft: 'auto', 
-                          background: 'linear-gradient(135deg, #7928ca, #FF0080)', 
+                          background: item.id === 'mensagens' ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #7928ca, #FF0080)', 
                           color: 'white', 
                           padding: '2px 10px', 
                           borderRadius: 12, 
                           fontSize: 12, 
                           fontWeight: 800,
-                          boxShadow: '0 0 12px rgba(255, 0, 128, 0.5)'
+                          boxShadow: item.id === 'mensagens' ? '0 0 12px rgba(239, 68, 68, 0.8)' : '0 0 12px rgba(255, 0, 128, 0.5)'
                         }}>
                           {getBadgeValue(item.id)}
-                        </div>
+                        </motion.div>
                       )}
 
                       {isActive && !isCollapsed && (
@@ -259,7 +271,13 @@ export function ADSidebar() {
                       label: 'Mensagens', 
                       href: `/agenda-digital/${alunoId}/conversas`, 
                       icon: MessageSquare,
-                      badge: (chatsList || []).filter((c: any) => (c.unread || 0) > 0).length || undefined
+                      badge: (chatsList || []).filter((c: any) => {
+                        const msgs = messages[c.id] || []
+                        if (msgs.length === 0) return (c.unread || 0) > 0
+                        const lastMsg = msgs[msgs.length - 1]
+                        // Student views 'us' as the other sender (Admin)
+                        return lastMsg.sender === 'us' && (c.unread || 0) > 0
+                      }).length || undefined
                     },
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
@@ -310,15 +328,17 @@ export function ADSidebar() {
                           )}
 
                           {item.badge && !isCollapsed && (
-                            <div style={{ 
+                            <div 
+                              className={item.label === 'Mensagens' ? "badge-pulse-modern" : ""}
+                              style={{ 
                               marginLeft: 'auto', 
-                              background: 'linear-gradient(135deg, #7928ca, #00D2FF)', 
+                              background: item.label === 'Mensagens' ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #7928ca, #00D2FF)', 
                               color: 'white', 
                               padding: '2px 10px', 
                               borderRadius: 12, 
                               fontSize: 12, 
                               fontWeight: 800,
-                              boxShadow: '0 0 12px rgba(0, 210, 255, 0.5)'
+                              boxShadow: item.label === 'Mensagens' ? '0 0 12px rgba(239, 68, 68, 0.8)' : '0 0 12px rgba(0, 210, 255, 0.5)'
                             }}>
                               {item.badge}
                             </div>
