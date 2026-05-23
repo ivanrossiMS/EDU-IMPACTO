@@ -12,6 +12,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { supabase } from '@/lib/supabase'
+import Portal from '@/components/Portal'
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoStr: string) => {
@@ -774,6 +775,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       <AnimatePresence>
 {/* Modal do Comunicado Expandido */}
       {selectedComunicado && (
+        <Portal>
         <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }} onClick={() => setSelectedComunicado(null)}>
           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: '#f8fafc', borderRadius: 28, width: '100%', maxWidth: 740, minHeight: 'fit-content', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)', position: 'relative', marginBottom: '5vh' }} onClick={e => e.stopPropagation()}>
             
@@ -977,12 +979,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             </div>
           </motion.div>
         </motion.div>
+        </Portal>
       )}
       </AnimatePresence>
 
       <AnimatePresence>
 {/* Formulário/Relatório Simulado */}
       {openedFormStr && (
+        <Portal>
 <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setOpenedFormStr(null)}>
            <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ padding: 40, width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 16 }}>
@@ -1110,13 +1114,15 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                  )}
               </div>
            </motion.div>
-        
-</motion.div>
-)}      </AnimatePresence>
+        </motion.div>
+        </Portal>
+      )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {/* Modal de Imagem Maximizada */}
         {maximizedImageStr && (
+          <Portal>
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(16px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }} onClick={() => setMaximizedImageStr(null)}>
             <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedImageStr(null); }}>
               <X size={24} />
@@ -1128,12 +1134,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               onClick={e => e.stopPropagation()} 
             />
           </motion.div>
+          </Portal>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {/* Modal de Vídeo */}
         {maximizedVideoStr && (
+          <Portal>
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(16px)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMaximizedVideoStr(null)}>
             <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', zIndex: 100001 }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.8)'; e.currentTarget.style.borderColor = '#fff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.8)'; }} onClick={(e) => { e.stopPropagation(); setMaximizedVideoStr(null); }}>
               <X size={24} />
@@ -1146,6 +1154,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               onClick={e => e.stopPropagation()} 
             />
           </motion.div>
+          </Portal>
         )}
       </AnimatePresence>
       <style jsx global>{`
