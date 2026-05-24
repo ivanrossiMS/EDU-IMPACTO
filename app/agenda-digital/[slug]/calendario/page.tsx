@@ -174,7 +174,8 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }
     fetchNivers()
-  }, [month, turmaDoAluno, turmas])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month, turmaDoAluno])
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 40 }}>
@@ -183,6 +184,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
            .ad-calendar-mobile-container .page-header { align-items: center !important; text-align: center !important; flex-direction: column !important; gap: 12px !important; }
            .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
            .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
+           .ad-calendar-bottom-panels { grid-template-columns: 1fr !important; }
         }
       `}} />
 
@@ -328,7 +330,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
           </motion.div>
 
           {/* Birthdays and Upcoming Side-by-Side Panels */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="ad-calendar-bottom-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             
             {/* 🎉 Birthdays Panel */}
             <motion.div 
