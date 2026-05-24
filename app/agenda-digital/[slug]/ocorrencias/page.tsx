@@ -1,10 +1,9 @@
 'use client'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import React, { useMemo, use, useState } from 'react'
-import { AlertTriangle, AlertCircle, CheckCircle, CheckCircle2, Shield, Heart, School, Calendar, User, Clock, FileText, ImageIcon } from 'lucide-react'
+import { useApiQuery } from '@/hooks/useApi'
+import React, { useMemo, useState } from 'react'
+import { AlertTriangle, AlertCircle, CheckCircle, Shield, Heart, School, Calendar, User, Clock, FileText, ImageIcon, Check, Loader2 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
-import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -16,30 +15,32 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
 
   const { aluno } = useSelectedStudent()
   
-  const endpoint = aluno?.id ? `ocorrencias?aluno_id=${aluno.id}` : 'ocorrencias?limit=0'
-  const [ocorrencias, setOcorrencias, { loading }] = useSupabaseArray<any>(endpoint)
+  // Consumindo dados via API usando React Query (mesma da página Admin para garantir os dados mapeados 'dados')
+  const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : null
+  const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint)
+  const ocorrencias = rawOcorrencias || []
 
+  // Impede visualização se a coordenação/admin bloqueou no config
   if (adConfig?.permissoes?.visualizarOcorrencias === false) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
         <EmptyStateCard 
           title="Acesso Restrito"
-          description="A visualização de histórico comportamental e ocorrências está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica. Para mais informações, entre em contato com a secretaria."
+          description="A visualização de histórico comportamental e ocorrências está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica."
           icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
         />
       </div>
     )
   }
 
-  // Filter occurrences for this student, ordered by date descending
+  // Ordena por data (mais recente no topo) e garante match
   const ocorrenciasDoAluno = useMemo(() => {
-    return (ocorrencias || [])
-      // Backend already filters by aluno_id, but just to be safe:
+    return ocorrencias
       .filter(o => o.aluno_id === aluno?.id || o.alunoId === aluno?.id)
       .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
   }, [ocorrencias, aluno?.id])
 
-  // Group occurrences by Academic Year (Ano Letivo) and Class (Turma)
+  // Agrupa os itens por Ano Letivo e Turma
   const groupedOcorrencias = useMemo(() => {
     const groups: Record<string, { key: string; turma: string; ano: string; items: typeof ocorrenciasDoAluno }> = {}
 
@@ -59,12 +60,24 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
       groups[key].items.push(o)
     })
 
-    // Sort groups by year descending, then class name ascending
+    // Ano em ordem decrescente, e Turma em alfabética
     return Object.values(groups).sort((a, b) => {
       if (b.ano !== a.ano) return b.ano.localeCompare(a.ano)
       return a.turma.localeCompare(b.turma)
     })
   }, [ocorrenciasDoAluno, aluno?.turma])
+
+  // Estatísticas para o cabeçalho
+  const stats = useMemo(() => {
+    const totais = ocorrenciasDoAluno.length
+    const pendentes = ocorrenciasDoAluno.filter(o => {
+      const lowerTipo = (o.tipo || '').toLowerCase()
+      const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
+      return !o.ciencia_responsavel && !isElogio
+    }).length
+    const graves = ocorrenciasDoAluno.filter(o => o.gravidade === 'grave').length
+    return { pendentes, totais, graves }
+  }, [ocorrenciasDoAluno])
 
   const handleAssinar = async (id: string) => {
     const oc = ocorrencias.find(o => o.id === id)
@@ -91,9 +104,7 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
       })
       
       if (response.ok) {
-        if (setOcorrencias) {
-          setOcorrencias(prev => prev.map(o => o.id === id ? payload : o))
-        }
+        refetch() // Atualiza cache Query
       } else {
         const err = await response.json().catch(() => ({}))
         alert('Erro ao registrar ciência: ' + (err.error || response.statusText))
@@ -106,211 +117,317 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   }
 
   return (
-    <div>
-      <div className="ad-ocorrencias-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Histórico Comportamental</h2>
-      </div>
-
-      {loading || !aluno ? (
-        // Modern Skeleton for Occurrences
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {[1, 2, 3].map(idx => (
-             <div key={idx} className="card ad-oco-card" style={{ padding: 20, display: 'flex', gap: 18, background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: '1px solid rgba(0,0,0,0.05)' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 22, background: '#e2e8f0', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                   <div style={{ width: '40%', height: 20, background: '#e2e8f0', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s infinite' }} />
-                   <div style={{ width: '80%', height: 14, background: '#e2e8f0', borderRadius: 6, marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
-                   <div style={{ width: '60%', height: 14, background: '#e2e8f0', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
+    <div style={{ paddingBottom: 60, minHeight: '100vh', background: '#f8fafc' }}>
+      
+      {/* Dynamic Header Premium */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        style={{ 
+          padding: '32px 24px', 
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', 
+          borderRadius: '0 0 32px 32px', 
+          marginBottom: 24, 
+          boxShadow: '0 10px 30px rgba(15, 23, 42, 0.15)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Abstract Background Design */}
+        <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 70%)' }} />
+        
+        <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 10 }}>
+          <Shield size={26} style={{ color: '#38bdf8' }} />
+          Histórico Disciplinar
+        </h2>
+        
+        {!isLoading && aluno && ocorrenciasDoAluno.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, position: 'relative', zIndex: 10 }}>
+            <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
+              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Total</div>
+              <div style={{ fontSize: 22, color: '#fff', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{stats.totais}</div>
+            </div>
+            {stats.pendentes > 0 ? (
+              <div style={{ flex: 1, background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(245, 158, 11, 0.3)', backdropFilter: 'blur(10px)' }}>
+                <div style={{ fontSize: 13, color: '#fcd34d', fontWeight: 600, marginBottom: 4 }}>Pendentes</div>
+                <div style={{ fontSize: 22, color: '#fbbf24', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {stats.pendentes}
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', boxShadow: '0 0 12px #fbbf24', animation: 'pulse 2s infinite' }} />
                 </div>
-             </div>
-          ))}
-        </div>
-      ) : groupedOcorrencias.length === 0 ? (
-        <EmptyStateCard 
-          title="Sem Ocorrências"
-          description="O aluno ainda não possui nenhum registro disciplinar ou pedagógico."
-          icon={<Shield size={48} style={{ opacity: 0.2 }} />}
-        />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-          {groupedOcorrencias.map(group => (
-            <div key={group.key} className="ad-oco-group" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Group Header (Turma and Ano) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderBottom: '2px solid #e2e8f0', paddingBottom: 8, marginTop: 8 }}>
-                <span style={{ background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 12, letterSpacing: 0.5 }}>
-                  {group.ano}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 800, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
-                  <School size={16} style={{ color: '#64748b' }} />
-                  {group.turma}
-                </div>
-                <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginLeft: 'auto' }}>
-                  {group.items.length} registro(s)
-                </span>
               </div>
+            ) : (
+              <div style={{ flex: 1, background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(16, 185, 129, 0.3)', backdropFilter: 'blur(10px)' }}>
+                <div style={{ fontSize: 13, color: '#6ee7b7', fontWeight: 600, marginBottom: 4 }}>Tudo certo</div>
+                <div style={{ fontSize: 22, color: '#34d399', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Check size={20} strokeWidth={3} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </motion.div>
 
-              {/* Grouped Occurrences List */}
-              <div className="ad-oco-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {group.items.map(o => {
-                  const lowerTipo = (o.tipo || '').toLowerCase()
-                  const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
-                  const isAdvertencia = lowerTipo.includes('advertencia') || lowerTipo.includes('advertência') || o.gravidade === 'grave'
-                  
-                  const IconBase = isElogio ? Heart : (isAdvertencia ? AlertTriangle : AlertCircle)
-                  const colorHex = isElogio ? '#10b981' : (isAdvertencia ? '#ef4444' : '#f59e0b')
-                  const gravText = o.gravidade ? (o.gravidade === 'media' ? 'Média' : o.gravidade === 'grave' ? 'Grave' : 'Leve') : ''
+      <div style={{ padding: '0 20px' }}>
+        {isLoading || !aluno ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {[1, 2, 3].map(idx => (
+               <div key={idx} style={{ padding: 24, display: 'flex', gap: 18, background: '#fff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 24, background: '#f1f5f9', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                     <div style={{ width: '40%', height: 20, background: '#f1f5f9', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
+                     <div style={{ width: '80%', height: 14, background: '#f1f5f9', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s infinite' }} />
+                     <div style={{ width: '60%', height: 14, background: '#f1f5f9', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
+                  </div>
+               </div>
+            ))}
+          </div>
+        ) : groupedOcorrencias.length === 0 ? (
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+            <div style={{ background: '#fff', padding: 40, borderRadius: 32, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.03)' }}>
+               <div style={{ width: 80, height: 80, borderRadius: 40, background: '#f0fdf4', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                  <Heart size={40} />
+               </div>
+               <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Sem Ocorrências!</h3>
+               <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+                 Que excelente notícia! O aluno não possui nenhum registro disciplinar ou comportamental.
+               </p>
+            </div>
+          </motion.div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            <AnimatePresence>
+              {groupedOcorrencias.map((group, groupIdx) => (
+                <motion.div 
+                  key={group.key} 
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ duration: 0.5, delay: groupIdx * 0.1 }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+                >
+                  {/* Group Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8 }}>
+                    <span style={{ background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 12, letterSpacing: 0.5 }}>
+                      {group.ano}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 800, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
+                      <School size={16} style={{ color: '#64748b' }} />
+                      {group.turma}
+                    </div>
+                  </div>
 
-                  // Clean description from logs/metadata
-                  const lines = (o.descricao || '').split('\n')
-                  let lancado = ''
-                  let editado = ''
-                  let confirmado = ''
-                  const descLines: string[] = []
-
-                  lines.forEach((line: string) => {
-                    if (line.startsWith('[Lançado por:')) {
-                      lancado = line.replace('[Lançado por: ', '').replace(']', '')
-                    } else if (line.startsWith('[Editado por:')) {
-                      editado = line.replace('[Editado por: ', '').replace(']', '')
-                    } else if (line.startsWith('[Confirmado por:')) {
-                      confirmado = line.replace('[Confirmado por: ', '').replace(']', '')
-                    } else {
-                      descLines.push(line)
-                    }
-                  })
-                  const cleanedDesc = descLines.join('\n').trim()
-
-                  return (
-                    <div key={o.id} className="card ad-oco-card" style={{ padding: 20, display: 'flex', gap: 18, borderLeft: `4px solid ${colorHex}`, background: '#fff', borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.02)', borderTop: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                      <div className="ad-oco-icon" style={{ 
-                        width: 44, height: 44, borderRadius: 22, 
-                        background: `${colorHex}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
-                      }}>
-                        <IconBase size={22} color={colorHex} />
-                      </div>
+                  {/* Lista de Cards */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {group.items.map((o, idx) => {
+                      const lowerTipo = (o.tipo || '').toLowerCase()
+                      const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
+                      const isAdvertencia = lowerTipo.includes('advertencia') || lowerTipo.includes('advertência') || o.gravidade === 'grave'
                       
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="ad-oco-title-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <h3 className="ad-oco-title" style={{ fontSize: 16, fontWeight: 700, margin: 0, textTransform: 'capitalize', color: '#1e293b' }}>
-                              {o.tipo}
-                            </h3>
-                            {o.gravidade && (
-                              <span style={{ fontSize: 10, background: `${colorHex}15`, color: colorHex, padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>
-                                {gravText}
-                              </span>
-                            )}
-                          </div>
-                          <span className="ad-oco-date" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={13} />
-                            {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}
-                          </span>
-                        </div>
-                        
-                        <p className="ad-oco-desc" style={{ fontSize: 14, color: '#334155', marginBottom: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                          {cleanedDesc || o.descricao}
-                        </p>
-                        
-                        {o.anexoUrl && (
-                          <div style={{ marginTop: 12, marginBottom: 16 }}>
-                            <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(59, 130, 246, 0.05)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: 12, textDecoration: 'none', transition: 'all 0.2s', width: '100%', maxWidth: '400px' }}>
-                              <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                {o.anexoTipo?.includes('image') ? <ImageIcon size={18} /> : <FileText size={18} />}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {o.anexoNome || 'Documento Anexado'}
-                                </div>
-                                <div style={{ fontSize: 11, color: '#64748b' }}>
-                                  {o.anexoTamanho ? (o.anexoTamanho / 1024).toFixed(1) + ' KB' : 'Clique para visualizar'}
-                                </div>
-                              </div>
-                            </a>
-                          </div>
-                        )}
-                        
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 10, marginTop: 10 }}>
-                          <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <User size={12} />
-                            <span>Registrado por: <strong>{lancado || o.responsavel || 'Coordenação'}</strong></span>
-                          </div>
-                          {editado && (
-                            <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                              <Clock size={12} />
-                              <span>Última edição: <strong>{editado}</strong></span>
-                            </div>
-                          )}
-                        </div>
+                      const IconBase = isElogio ? Heart : (isAdvertencia ? AlertTriangle : AlertCircle)
+                      const colorHex = isElogio ? '#10b981' : (isAdvertencia ? '#ef4444' : '#f59e0b')
+                      const gravText = o.gravidade ? (o.gravidade === 'media' ? 'Média' : o.gravidade === 'grave' ? 'Grave' : 'Leve') : 'Comportamental'
 
-                        {/* Confirmation Box */}
-                        {!isElogio && (
-                          <div style={{ marginTop: 16 }}>
-                            {!o.ciencia_responsavel ? (
-                              <div className="ad-oco-assinatura-box" style={{ 
-                                 background: 'rgba(245,158,11,0.04)', 
-                                 padding: '12px 16px', 
-                                 borderRadius: 8,
-                                 display: 'flex',
-                                 justifyContent: 'space-between',
-                                 alignItems: 'center',
-                                 border: '1px solid rgba(245,158,11,0.15)',
-                                 flexWrap: 'wrap',
-                                 gap: 12
-                               }}>
-                                <div className="ad-oco-assinatura-text" style={{ fontSize: 13, color: '#d97706', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <AlertCircle size={14} />
-                                  Este registro requer sua assinatura digital de ciência.
-                                </div>
-                                <button 
-                                  onClick={() => handleAssinar(o.id)} 
-                                  disabled={!!signingIds[o.id]}
-                                  className="btn btn-primary btn-sm ad-oco-assinatura-btn"
-                                  style={{ background: '#f59e0b', borderColor: '#f59e0b', color: '#fff', fontWeight: 700, padding: '6px 16px', borderRadius: 6, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6 }}
-                                >
-                                  {signingIds[o.id] ? (
-                                    <>
-                                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" style={{ width: 12, height: 12, borderWidth: '2px', display: 'inline-block', borderRadius: '50%', borderStyle: 'solid', borderColor: '#fff transparent #fff transparent', animation: 'spin 1s linear infinite' }}></span>
-                                      Processando...
-                                    </>
-                                  ) : (
-                                    'Estou Ciente'
-                                  )}
-                                </button>
+                      // Extrair e limpar a assinatura do log no backend
+                      const lines = (o.descricao || '').split('\n')
+                      let lancado = ''
+                      let editado = ''
+                      let confirmado = ''
+                      const descLines: string[] = []
+
+                      lines.forEach((line: string) => {
+                        if (line.startsWith('[Lançado por:')) {
+                          lancado = line.replace('[Lançado por: ', '').replace(']', '')
+                        } else if (line.startsWith('[Editado por:')) {
+                          editado = line.replace('[Editado por: ', '').replace(']', '')
+                        } else if (line.startsWith('[Confirmado por:')) {
+                          confirmado = line.replace('[Confirmado por: ', '').replace(']', '')
+                        } else {
+                          descLines.push(line)
+                        }
+                      })
+                      const cleanedDesc = descLines.join('\n').trim()
+
+                      return (
+                        <motion.div 
+                          key={o.id} 
+                          initial={{ opacity: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.4, delay: (groupIdx * 0.1) + (idx * 0.05) }}
+                          style={{ 
+                            background: '#fff', 
+                            borderRadius: 24, 
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.03)', 
+                            border: '1px solid #f1f5f9', 
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}
+                        >
+                          {/* Faixa Colorida Lateral */}
+                          <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, background: colorHex }} />
+                          
+                          <div style={{ padding: '24px 20px 24px 24px' }}>
+                            {/* Header do Card */}
+                            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                              <div style={{ 
+                                width: 48, height: 48, borderRadius: 16, 
+                                background: `${colorHex}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
+                              }}>
+                                <IconBase size={24} color={colorHex} />
                               </div>
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'flex-start', flexDirection: 'column', gap: 4, background: 'rgba(16,185,129,0.04)', padding: '12px 16px', borderRadius: 8, border: '1px solid rgba(16,185,129,0.15)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#10b981', fontWeight: 700 }}>
-                                  <CheckCircle size={15} />
-                                  <span>Ciência confirmada</span>
+                              
+                              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                                  <div>
+                                    <h3 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 6px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                                      {o.tipo}
+                                    </h3>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                      {!isElogio && o.gravidade && (
+                                        <span style={{ fontSize: 11, background: `${colorHex}15`, color: colorHex, padding: '4px 10px', borderRadius: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                          {gravText}
+                                        </span>
+                                      )}
+                                      <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <Calendar size={14} />
+                                        {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
-                                {confirmado && (
-                                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 21 }}>
-                                    <Clock size={11} />
-                                    <span>{confirmado}</span>
+                              </div>
+                            </div>
+
+                            {/* Descrição */}
+                            <div style={{ marginTop: 20, padding: '16px', background: '#f8fafc', borderRadius: 16, border: '1px solid #f1f5f9' }}>
+                              <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                                {cleanedDesc || o.descricao}
+                              </p>
+                            </div>
+                            
+                            {/* Anexo se existir */}
+                            {o.anexoUrl && (
+                              <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, textDecoration: 'none', transition: 'all 0.2s', marginTop: 16, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+                                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {o.anexoTipo?.includes('image') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {o.anexoNome || 'Documento Anexado'}
+                                  </div>
+                                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                                    {o.anexoTamanho ? (o.anexoTamanho / 1024).toFixed(1) + ' KB' : 'Clique para visualizar ou baixar'}
+                                  </div>
+                                </div>
+                              </a>
+                            )}
+                            
+                            {/* Rodapé / Meta Info */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 16 }}>
+                              <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <User size={14} />
+                                <span>Por <strong>{lancado || o.responsavel || 'Coordenação'}</strong></span>
+                              </div>
+                              {editado && (
+                                <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Clock size={14} />
+                                  <span>Modificado: <strong>{editado.split(' ')[0]}</strong></span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Área de Confirmação de Ciência (Digital Sign) */}
+                            {!isElogio && (
+                              <div style={{ marginTop: 20 }}>
+                                {!o.ciencia_responsavel ? (
+                                  <div style={{ 
+                                    background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
+                                    padding: '16px', 
+                                    borderRadius: 16,
+                                    border: '1px solid rgba(245,158,11,0.2)',
+                                  }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                      <div style={{ fontSize: 13, color: '#b45309', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.5 }}>
+                                        <Info size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+                                        <span>Este registro disciplinar requer que o responsável ateste ciência para a coordenação.</span>
+                                      </div>
+                                      
+                                      <button 
+                                        onClick={() => handleAssinar(o.id)} 
+                                        disabled={!!signingIds[o.id]}
+                                        style={{ 
+                                          background: '#f59e0b', 
+                                          border: 'none',
+                                          color: '#fff', 
+                                          fontWeight: 700, 
+                                          fontSize: 14,
+                                          padding: '12px 20px', 
+                                          borderRadius: 12, 
+                                          cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', 
+                                          transition: 'all 0.2s', 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'center',
+                                          gap: 8,
+                                          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                                          width: '100%',
+                                          opacity: signingIds[o.id] ? 0.8 : 1
+                                        }}
+                                      >
+                                        {signingIds[o.id] ? (
+                                          <>
+                                            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                            Processando...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <CheckCircle size={18} />
+                                            Assinar Ciência
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(16,185,129,0.08)', padding: '16px', borderRadius: 16, border: '1px solid rgba(16,185,129,0.2)' }}>
+                                    <div style={{ width: 36, height: 36, borderRadius: 18, background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(16,185,129,0.3)' }}>
+                                      <Check size={20} strokeWidth={3} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: 14, color: '#047857', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
+                                        Ciência Assinada
+                                      </div>
+                                      {confirmado && (
+                                        <div style={{ fontSize: 12, color: '#059669', fontWeight: 500, marginTop: 2 }}>
+                                          {confirmado}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
                               </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                        </motion.div>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
       
-      {/* Dynamic Spin Animation Style */}
       <style jsx global>{`
         @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(0.95); }
         }
       `}</style>
     </div>
   )
 }
-
