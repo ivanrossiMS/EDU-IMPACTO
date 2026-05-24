@@ -153,8 +153,11 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
           if (m !== mesView) return false
           
           if (p.tipo === 'Aluno') {
-            const pTurma = p.turma || ''
-            return pTurma.toLowerCase() === turmaDoAluno.toLowerCase()
+            const pTurmaRaw = p.turma || ''
+            const pTurmaObj = turmas.find((t: any) => String(t.id) === String(pTurmaRaw) || String(t.codigo) === String(pTurmaRaw) || String(t.nome) === String(pTurmaRaw))
+            const pNomeTurma = pTurmaObj?.nome || p.turma_nome || pTurmaRaw
+            const pNomeTurmaLimpo = String(pNomeTurma).split('-')[0].trim()
+            return pNomeTurmaLimpo.toLowerCase() === turmaDoAluno.toLowerCase()
           }
           return true // Keep teachers visible
         }).map(p => {
@@ -171,7 +174,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }
     fetchNivers()
-  }, [month, turmaDoAluno])
+  }, [month, turmaDoAluno, turmas])
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 40 }}>
