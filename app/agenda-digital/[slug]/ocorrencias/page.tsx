@@ -255,154 +255,78 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                           transition={{ duration: 0.4, delay: (groupIdx * 0.1) + (idx * 0.05) }}
                           style={{ 
                             background: '#fff', 
-                            borderRadius: 24, 
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.03)', 
+                            borderRadius: 16, 
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)', 
                             border: '1px solid #f1f5f9', 
                             overflow: 'hidden',
                             position: 'relative'
                           }}
                         >
-                          {/* Faixa Colorida Lateral */}
-                          <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, background: colorHex }} />
+                          <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: colorHex }} />
                           
-                          <div style={{ padding: '16px' }}>
-                            {/* Header do Card */}
+                          <div style={{ padding: '12px 12px 12px 16px' }}>
                             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                              <div style={{ 
-                                width: 38, height: 38, borderRadius: 10, 
-                                background: `${colorHex}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
-                              }}>
+                              {/* Ícone */}
+                              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${colorHex}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
                                 <IconBase size={18} color={colorHex} />
                               </div>
                               
-                              <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
-                                  <div>
-                                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
-                                      {o.tipo}
-                                    </h3>
-                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                      {!isElogio && o.gravidade && (
-                                        <span style={{ fontSize: 10, background: `${colorHex}15`, color: colorHex, padding: '2px 8px', borderRadius: 6, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                          {gravText}
-                                        </span>
-                                      )}
-                                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <Calendar size={12} />
-                                        {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}
-                                      </span>
-                                    </div>
+                              {/* Conteúdo Principal */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                  <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: '#0f172a', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {o.tipo}
+                                  </h3>
+                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
+                                    {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}
+                                  </span>
+                                </div>
+                                
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                                  {!isElogio && o.gravidade && (
+                                    <span style={{ fontSize: 9, background: `${colorHex}15`, color: colorHex, padding: '2px 6px', borderRadius: 4, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
+                                      {gravText}
+                                    </span>
+                                  )}
+                                  <div style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    <User size={10} />
+                                    {lancado || o.responsavel || 'Coordenação'}
                                   </div>
                                 </div>
+
+                                <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                  {cleanedDesc || o.descricao}
+                                </p>
                               </div>
                             </div>
 
-                            {/* Descrição */}
-                            <div style={{ marginTop: 12, padding: '12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                              <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                                {cleanedDesc || o.descricao}
-                              </p>
-                            </div>
-                            
-                            {/* Anexo se existir */}
-                            {o.anexoUrl && (
-                              <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, textDecoration: 'none', transition: 'all 0.2s', marginTop: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-                                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {o.anexoTipo?.includes('image') ? <ImageIcon size={16} /> : <FileText size={16} />}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {o.anexoNome || 'Documento Anexado'}
-                                  </div>
-                                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                                    {o.anexoTamanho ? (o.anexoTamanho / 1024).toFixed(1) + ' KB' : 'Clique para visualizar'}
-                                  </div>
-                                </div>
-                              </a>
-                            )}
-                            
-                            {/* Rodapé / Meta Info */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 10, marginTop: 10 }}>
-                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <User size={12} />
-                                <span>Por <strong>{lancado || o.responsavel || 'Coordenação'}</strong></span>
-                              </div>
-                              {editado && (
-                                <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                  <Clock size={12} />
-                                  <span>Editado: <strong>{editado.split(' ')[0]}</strong></span>
-                                </div>
-                              )}
-                            </div>
+                            {/* Rodapé Dinâmico (Anexo & Ciência) */}
+                            {(!isElogio || o.anexoUrl) && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                                
+                                {o.anexoUrl ? (
+                                  <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#2563eb', textDecoration: 'none', fontWeight: 700, background: '#eff6ff', padding: '6px 10px', borderRadius: 6 }}>
+                                    <FileText size={12} /> Ver Anexo
+                                  </a>
+                                ) : <div />}
 
-                            {/* Área de Confirmação de Ciência (Digital Sign) */}
-                            {!isElogio && (
-                              <div style={{ marginTop: 12 }}>
-                                {!o.ciencia_responsavel ? (
-                                  <div style={{ 
-                                    background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
-                                    padding: '12px', 
-                                    borderRadius: 12,
-                                    border: '1px solid rgba(245,158,11,0.2)',
-                                  }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                      <div style={{ fontSize: 12, color: '#b45309', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.4 }}>
-                                        <Info size={14} style={{ marginTop: 1, flexShrink: 0 }} />
-                                        <span>Requer sua ciência à coordenação.</span>
-                                      </div>
-                                      
-                                      <button 
-                                        onClick={() => handleAssinar(o.id)} 
-                                        disabled={!!signingIds[o.id]}
-                                        style={{ 
-                                          background: '#f59e0b', 
-                                          border: 'none',
-                                          color: '#fff', 
-                                          fontWeight: 700, 
-                                          fontSize: 13,
-                                          padding: '10px 16px', 
-                                          borderRadius: 10, 
-                                          cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', 
-                                          transition: 'all 0.2s', 
-                                          display: 'flex', 
-                                          alignItems: 'center', 
-                                          justifyContent: 'center',
-                                          gap: 6,
-                                          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
-                                          width: '100%',
-                                          opacity: signingIds[o.id] ? 0.8 : 1
-                                        }}
-                                      >
-                                        {signingIds[o.id] ? (
-                                          <>
-                                            <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                                            Processando...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <CheckCircle size={16} />
-                                            Assinar Ciência
-                                          </>
-                                        )}
-                                      </button>
+                                {!isElogio && (
+                                  !o.ciencia_responsavel ? (
+                                    <button 
+                                      onClick={() => handleAssinar(o.id)} 
+                                      disabled={!!signingIds[o.id]}
+                                      style={{ 
+                                        background: '#f59e0b', border: 'none', color: '#fff', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, display: 'flex', gap: 6, alignItems: 'center', cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', opacity: signingIds[o.id] ? 0.8 : 1, boxShadow: '0 2px 8px rgba(245, 158, 11, 0.2)'
+                                      }}
+                                    >
+                                      {signingIds[o.id] ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Info size={12} />}
+                                      Assinar Ciência
+                                    </button>
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700, background: '#ecfdf5', padding: '6px 10px', borderRadius: 6, border: '1px solid #a7f3d0' }}>
+                                      <Check size={12} strokeWidth={3} /> Ciência Assinada
                                     </div>
-                                  </div>
-                                ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(16,185,129,0.08)', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.2)' }}>
-                                    <div style={{ width: 28, height: 28, borderRadius: 14, background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(16,185,129,0.3)' }}>
-                                      <Check size={16} strokeWidth={3} />
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                      <div style={{ fontSize: 13, color: '#047857', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
-                                        Ciência Assinada
-                                      </div>
-                                      {confirmado && (
-                                        <div style={{ fontSize: 11, color: '#059669', fontWeight: 500, marginTop: 2 }}>
-                                          {confirmado}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                                  )
                                 )}
                               </div>
                             )}
