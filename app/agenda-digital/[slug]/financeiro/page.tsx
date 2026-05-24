@@ -78,10 +78,53 @@ export default function ADFinanceiroPageMock() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 160, fontFamily: 'Outfit, Inter, sans-serif' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-fin-header-card {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            padding: 20px 16px !important;
+            gap: 16px !important;
+          }
+          .ad-fin-header-title { font-size: 20px !important; }
+          .ad-fin-header-subtitle { display: none !important; }
+          .ad-fin-header-right { 
+            width: 100% !important; 
+            justify-content: flex-start !important; 
+            gap: 12px !important;
+            flex-wrap: wrap !important;
+          }
+          
+          /* Table Responsive */
+          .ad-fin-table-min-width { min-width: 100% !important; }
+          .ad-fin-table-grid {
+            grid-template-columns: 30px 75px 1fr 80px 70px 24px !important;
+            gap: 8px !important;
+            padding: 12px 10px !important;
+          }
+          .ad-fin-col-hide-mobile { display: none !important; }
+          .ad-fin-col-vencimento { font-size: 11px !important; }
+          .ad-fin-col-fatura-title { font-size: 12px !important; }
+          .ad-fin-col-valor { font-size: 12px !important; }
+          .ad-fin-status-badge { padding: 4px 6px !important; font-size: 9px !important; }
+          
+          /* Footer */
+          .ad-fin-sticky-footer {
+            flex-direction: column !important;
+            gap: 12px !important;
+            padding: 12px !important;
+            text-align: center !important;
+            bottom: 70px !important; /* Above bottom nav */
+          }
+          .ad-fin-footer-btn { width: 100% !important; justify-content: center !important; padding: 12px 20px !important; }
+          .ad-fin-footer-total { font-size: 22px !important; }
+        }
+      `}} />
       {/* Smart Dashboard Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="ad-fin-header-card"
         style={{ 
           background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
           borderRadius: 24, padding: '28px 32px', color: 'white', marginBottom: 24,
@@ -93,18 +136,18 @@ export default function ADFinanceiroPageMock() {
         <div style={{ position: 'absolute', right: '-10%', top: '-50%', width: 300, height: 300, background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%)', filter: 'blur(30px)' }} />
         
         <div>
-          <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h2 className="ad-fin-header-title" style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                <DollarSign size={20} color="#818cf8" />
             </div>
             Central Financeira
           </h2>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 6, fontWeight: 500 }}>
+          <div className="ad-fin-header-subtitle" style={{ fontSize: 13, color: '#94a3b8', marginTop: 6, fontWeight: 500 }}>
             Acompanhe a saúde financeira, gere boletos e copie o Pix para pagamento.
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 24, textAlign: 'right' }}>
+        <div className="ad-fin-header-right" style={{ display: 'flex', gap: 24, textAlign: 'right' }}>
           {totalAtrasado > 0 && (
             <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px 20px', borderRadius: 16, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
               <div style={{ fontSize: 11, color: '#fca5a5', textTransform: 'uppercase', fontWeight: 800, letterSpacing: 1, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
@@ -149,9 +192,9 @@ export default function ADFinanceiroPageMock() {
 
         {/* Compact & Ultra Modern Table */}
         <div style={{ overflowX: 'auto' }}>
-          <motion.div variants={containerVariants} initial="hidden" animate="visible" style={{ minWidth: 800 }}>
+          <motion.div variants={containerVariants} initial="hidden" animate="visible" className="ad-fin-table-min-width" style={{ minWidth: 800 }}>
             {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '12px 20px', fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+            <div className="ad-fin-table-grid" style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '12px 20px', fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
               <div onClick={handleSelectAll} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 18, height: 18, borderRadius: 6, border: `2px solid ${selectedIds.length > 0 ? '#4f46e5' : '#cbd5e1'}`, background: selectedIds.length > 0 ? '#4f46e5' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
                   {selectedIds.length > 0 && <Check size={12} color="white" strokeWidth={3} />}
@@ -159,8 +202,8 @@ export default function ADFinanceiroPageMock() {
               </div>
               <div>Vencimento</div>
               <div>Fatura</div>
-              <div>Competência</div>
-              <div>Aluno / Produto</div>
+              <div className="ad-fin-col-hide-mobile">Competência</div>
+              <div className="ad-fin-col-hide-mobile">Aluno / Produto</div>
               <div style={{ textAlign: 'right' }}>Valor</div>
               <div style={{ textAlign: 'center' }}>Status</div>
               <div></div>
@@ -186,7 +229,7 @@ export default function ADFinanceiroPageMock() {
                   }}
                   whileHover={{ background: isSelected ? 'rgba(99, 102, 241, 0.06)' : '#f8fafc' }}
                 >
-                  <div style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '14px 20px', alignItems: 'center' }}>
+                  <div className="ad-fin-table-grid" style={{ display: 'grid', gridTemplateColumns: '40px 100px 120px 110px 1fr 120px 100px 40px', gap: 12, padding: '14px 20px', alignItems: 'center' }}>
                     
                     {/* Checkbox */}
                     <div onClick={(e) => handleSelectRow(item.id, isSelectable, e)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -200,33 +243,33 @@ export default function ADFinanceiroPageMock() {
                     </div>
 
                     {/* Vencimento */}
-                    <div style={{ fontSize: 13, fontWeight: 700, color: isAtrasado ? '#ef4444' : 'hsl(var(--text-main))' }}>
+                    <div className="ad-fin-col-vencimento" style={{ fontSize: 13, fontWeight: 700, color: isAtrasado ? '#ef4444' : 'hsl(var(--text-main))' }}>
                       {item.vencimento}
                     </div>
 
                     {/* Fatura */}
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-main))' }}>{item.fatura}</div>
+                      <div className="ad-fin-col-fatura-title" style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-main))' }}>{item.fatura}</div>
                       <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Parc. {item.parcela}</div>
                     </div>
 
                     {/* Competencia */}
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{item.competencia}</div>
+                    <div className="ad-fin-col-hide-mobile" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{item.competencia}</div>
 
                     {/* Aluno/Produto */}
-                    <div>
+                    <div className="ad-fin-col-hide-mobile">
                       <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.aluno}</div>
                       <div style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.produto}</div>
                     </div>
 
                     {/* Valor */}
-                    <div style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-main))', textAlign: 'right' }}>
+                    <div className="ad-fin-col-valor" style={{ fontSize: 14, fontWeight: 800, color: 'hsl(var(--text-main))', textAlign: 'right' }}>
                       {formatCurrency(item.valor)}
                     </div>
 
                     {/* Status */}
                     <div style={{ textAlign: 'center' }}>
-                      <span style={{ 
+                      <span className="ad-fin-status-badge" style={{ 
                         padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase',
                         background: isPago ? '#dcfce7' : isAtrasado ? '#fee2e2' : '#e0f2fe',
                         color: isPago ? '#166534' : isAtrasado ? '#991b1b' : '#0369a1',
@@ -262,8 +305,8 @@ export default function ADFinanceiroPageMock() {
                               </button>
                             </>
                           )}
-                          <button onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', color: '#334155', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                            <Download size={14} /> {isPago ? 'Baixar Recibo' : 'Baixar Boleto'}
+                          <button onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'white', color: '#334155', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 12, fontSize: 12, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.02)', whiteSpace: 'nowrap' }}>
+                            <Download size={14} /> {isPago ? 'Recibo' : 'Boleto'}
                           </button>
                         </div>
                       </motion.div>
@@ -303,7 +346,7 @@ export default function ADFinanceiroPageMock() {
               </div>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Faturas Selecionadas ({selectedIds.length})</div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>{formatCurrency(totalToPay)}</div>
+                <div className="ad-fin-footer-total" style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>{formatCurrency(totalToPay)}</div>
               </div>
             </div>
 
@@ -311,6 +354,7 @@ export default function ADFinanceiroPageMock() {
               whileTap={{ scale: 0.95 }}
               onMouseEnter={() => setPayHover(true)}
               onMouseLeave={() => setPayHover(false)}
+              className="ad-fin-footer-btn"
               style={{ 
                 display: 'flex', alignItems: 'center', gap: 12,
                 background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
@@ -322,7 +366,7 @@ export default function ADFinanceiroPageMock() {
               }}
             >
               <CreditCard size={20} />
-              Pagar Faturas
+              Pagar
             </motion.button>
           </motion.div>
         )}
