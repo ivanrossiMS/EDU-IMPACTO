@@ -2,10 +2,12 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2 } from 'lucide-react'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, parseISO, isFuture } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital()
@@ -25,14 +27,14 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
   const { aluno } = useSelectedStudent()
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
+  // State for interactive calendar
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
-  // Estados de paginação
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 8
-
-  // Resetar página quando o aluno mudar
+  // Reset states on student change
   React.useEffect(() => {
-    setCurrentPage(1)
+    setCurrentMonth(new Date())
+    setSelectedDate(null)
   }, [resolvedParams.slug])
 
   // Fetch real student attendance logs from database based on turma and alunoId
@@ -43,7 +45,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     { enabled: !!resolvedParams.slug && !!aluno?.turma }
   )
 
-  // O eventosPortaria ainda é útil como fallback, caso a sincronização da frequência atrase.
+  // Fallback para eventos de portaria
   const { data: eventosPortaria = [] } = useApiQuery<any[]>(
     ['portaria-eventos-aluno', resolvedParams.slug],
     '/api/portaria/eventos',
@@ -71,7 +73,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
   }, [eventosPortaria])
 
   const historicoReal = useMemo(() => {
-    const list: Array<{ data: string; status: 'P' | 'F' | 'J' | 'A'; horaRegistro?: string; registradoPor?: string }> = []
+    const list: Array<{ data: string; dateObj: Date; status: 'P' | 'F' | 'J' | 'A'; horaRegistro?: string; registradoPor?: string }> = []
     
     ;(frequenciasDb || []).forEach(f => {
       let status: 'P' | 'F' | 'J' | 'A' = 'P'
@@ -82,8 +84,12 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         status = 'F'
       }
 
+      // Add UTC time hack so dates don't shift timezone locally
+      const d = new Date(f.data + 'T12:00:00Z')
+
       list.push({
         data: f.data,
+        dateObj: d,
         status,
         horaRegistro: f.horaRegistro || f.dados?.horaRegistro,
         registradoPor: f.registradoPor || f.dados?.registradoPor
@@ -103,44 +109,20 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     ? Math.round((totalPresencas / totalAulas) * 100) 
     : (aluno?.frequencia || 100)
 
-  // Compute dynamic monthly presence rate
-  const distribuicaoMensal = useMemo(() => {
-    const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-    const grupos: Record<string, { presencas: number; total: number; label: string }> = {}
-    
-    historicoReal.forEach(h => {
-      const parts = h.data.split('-')
-      if (parts.length < 2) return
-      const anoMes = `${parts[0]}-${parts[1]}`
-      const mesIndex = parseInt(parts[1]) - 1
-      const label = mesesNomes[mesIndex]
-      
-      if (!grupos[anoMes]) {
-        grupos[anoMes] = { presencas: 0, total: 0, label }
-      }
-      grupos[anoMes].total += 1
-      if (h.status === 'P') {
-        grupos[anoMes].presencas += 1
-      }
-    })
-    
-    const sortedKeys = Object.keys(grupos).sort().slice(-5)
-    return sortedKeys.map(k => {
-      const g = grupos[k]
-      return {
-        m: g.label,
-        p: Math.round((g.presencas / g.total) * 100)
-      }
-    })
-  }, [historicoReal])
+  // Date handlers
+  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
+  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+  const onDateClick = (day: Date) => setSelectedDate(day)
 
-
-  // Configurações de paginação
-  const totalPages = Math.ceil(historicoReal.length / itemsPerPage) || 1
-  const paginatedHistory = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage
-    return historicoReal.slice(start, start + itemsPerPage)
-  }, [historicoReal, currentPage, itemsPerPage])
+  // Generate calendar grid
+  const monthStart = startOfMonth(currentMonth)
+  const monthEnd = endOfMonth(monthStart)
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 0 })
+  const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 })
+  const dateFormat = "d"
+  const calendarDays = eachDayOfInterval({ start: startDate, end: endDate })
+  
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -151,6 +133,13 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
   }
+
+  // Find records for selected date
+  const selectedRecords = useMemo(() => {
+    if (!selectedDate) return []
+    const selectedDateStr = format(selectedDate, 'yyyy-MM-dd')
+    return historicoReal.filter(h => h.data === selectedDateStr)
+  }, [selectedDate, historicoReal])
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 100, fontFamily: 'Outfit, Inter, sans-serif' }}>
@@ -165,13 +154,11 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
           .ad-freq-summary-grid {
             grid-template-columns: 1fr !important;
           }
-          .ad-freq-hist-item {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
+          .ad-freq-cal-grid {
+            gap: 4px !important;
           }
-          .ad-freq-hist-badge {
-            align-self: flex-start !important;
+          .ad-freq-cal-cell {
+            min-height: 50px !important;
           }
         }
       `}} />
@@ -185,15 +172,14 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         <div>
           <h2 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-main))', margin: 0, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', width: 44, height: 44, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.25)' }}>
-              <Activity size={22} />
+              <CalendarIcon size={22} />
             </div>
             Frequência
           </h2>
           <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, marginTop: 4, fontWeight: 500 }}>
-            Acompanhe o histórico de presenças e horários de entrada via iDFace.
+            Acompanhe o histórico completo de presenças no calendário escolar.
           </p>
         </div>
-
       </motion.div>
 
       {/* Summary Cards */}
@@ -230,160 +216,213 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         </motion.div>
       </motion.div>
 
-      {/* Dynamic Monthly Chart & History Row */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+      {/* Calendário Dinâmico Interativo */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 15px 35px rgba(0,0,0,0.02)', overflow: 'hidden', padding: '24px 28px', marginBottom: 32 }}>
         
-        {distribuicaoMensal.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ padding: 28, background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 15px 35px rgba(0,0,0,0.02)' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 28, color: '#1e293b' }}>Distribuição Mensal</h3>
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 160, paddingBottom: 16, borderBottom: '2px solid #f8fafc' }}>
-              {distribuicaoMensal.map((item, i) => (
-                 <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, height: '100%' }}>
-                   <div style={{ width: '100%', maxWidth: 40, background: '#f1f5f9', height: '100%', borderRadius: 12, position: 'relative', overflow: 'hidden' }}>
-                     <motion.div 
-                       initial={{ height: 0 }} animate={{ height: `${item.p}%` }} transition={{ duration: 1, type: "spring", stiffness: 50 }}
-                       style={{ 
-                         position: 'absolute', bottom: 0, left: 0, right: 0,
-                         background: item.p >= 95 ? 'linear-gradient(0deg, #3b82f6 0%, #60a5fa 100%)' : 'linear-gradient(0deg, #f59e0b 0%, #fbbf24 100%)',
-                         borderRadius: 12
-                       }} 
-                     />
-                   </div>
-                   <div style={{ fontSize: 13, fontWeight: 800, color: '#64748b' }}>{item.m}</div>
-                 </div>
-              ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <h3 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: '#1e293b', textTransform: 'capitalize' }}>
+            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+          </h3>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={prevMonth} style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#334155', transition: 'all 0.2s' }}>
+              <ChevronLeft size={18} />
+            </button>
+            <button onClick={nextMonth} style={{ width: 36, height: 36, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#334155', transition: 'all 0.2s' }}>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Calendar Header (Days of week) */}
+        <div className="ad-freq-cal-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 12 }}>
+          {weekDays.map(day => (
+            <div key={day} style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: '#94a3b8', paddingBottom: 8, textTransform: 'uppercase' }}>
+              {day}
+            </div>
+          ))}
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="ad-freq-cal-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+          {calendarDays.map((day, idx) => {
+            const isCurrMonth = isSameMonth(day, monthStart)
+            const isTodayDate = isToday(day)
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const dayRecords = historicoReal.filter(h => h.data === dateStr)
+            
+            // Determine primary status if there are records
+            const hasPresenca = dayRecords.some(r => r.status === 'P')
+            const hasJustificada = dayRecords.some(r => r.status === 'J')
+            const hasFalta = dayRecords.some(r => r.status === 'F' || r.status === 'A')
+            
+            // Define colors
+            let bgLight = '#fff'
+            let bgDot = 'transparent'
+            let textColor = isCurrMonth ? '#334155' : '#cbd5e1'
+            let border = '1px solid #f1f5f9'
+            let dotGlow = 'none'
+
+            if (isCurrMonth && dayRecords.length > 0) {
+              if (hasPresenca) {
+                bgLight = '#f0fdf4'
+                bgDot = '#22c55e'
+                textColor = '#166534'
+                border = '1px solid #bbf7d0'
+                dotGlow = '0 0 10px rgba(34,197,94,0.4)'
+              } else if (hasJustificada) {
+                bgLight = '#eff6ff'
+                bgDot = '#3b82f6'
+                textColor = '#1e40af'
+                border = '1px solid #bfdbfe'
+                dotGlow = '0 0 10px rgba(59,130,246,0.4)'
+              } else if (hasFalta) {
+                bgLight = '#fef2f2'
+                bgDot = '#ef4444'
+                textColor = '#991b1b'
+                border = '1px solid #fecaca'
+                dotGlow = '0 0 10px rgba(239,68,68,0.4)'
+              }
+            }
+
+            const isSelected = selectedDate && isSameDay(day, selectedDate)
+
+            if (isSelected) {
+              border = '2px solid #0ea5e9'
+              bgLight = bgLight === '#fff' ? '#f8fafc' : bgLight
+            }
+
+            return (
+              <motion.div 
+                key={day.toString()}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => onDateClick(day)}
+                className="ad-freq-cal-cell"
+                style={{
+                  minHeight: 64, borderRadius: 16, border, background: bgLight, cursor: 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  opacity: isCurrMonth ? 1 : 0.4, position: 'relative', transition: 'all 0.2s',
+                  boxShadow: isSelected ? '0 10px 25px -5px rgba(14,165,233,0.3)' : 'none'
+                }}
+              >
+                {isTodayDate && (
+                  <div style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', background: '#0ea5e9' }} />
+                )}
+                
+                <span style={{ fontSize: 16, fontWeight: 800, color: textColor }}>
+                  {format(day, dateFormat)}
+                </span>
+                
+                {bgDot !== 'transparent' && (
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: bgDot, marginTop: 4, boxShadow: dotGlow }} />
+                )}
+              </motion.div>
+            )
+          })}
+        </div>
+      </motion.div>
+
+      {/* Painel de Detalhes do Dia */}
+      <AnimatePresence mode="wait">
+        {selectedDate && (
+          <motion.div 
+            key={selectedDate.toString()}
+            initial={{ opacity: 0, height: 0, y: -20 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 26 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.05)', overflow: 'hidden', marginBottom: 32 }}>
+              <div style={{ padding: '24px 28px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#1e293b' }}>
+                  Lançamento: {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+                </h3>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {selectedRecords.length === 0 ? (
+                  <div style={{ padding: '40px 24px', textAlign: 'center' }}>
+                    <Activity size={40} color="#e2e8f0" style={{ margin: '0 auto 12px' }} />
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b' }}>Nenhum lançamento neste dia</div>
+                    <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>
+                      {isFuture(selectedDate) ? 'Data futura ou feriado.' : 'Não há registros de presença ou falta cadastrados.'}
+                    </div>
+                  </div>
+                ) : (
+                  selectedRecords.map((h, i) => {
+                    const isPresenca = h.status === 'P'
+                    const isFaltaJustificada = h.status === 'J'
+                    
+                    const entradaTime = h.horaRegistro || entradaCatracaMap[h.data]
+                    const isIdFace = (h.registradoPor && h.registradoPor.toLowerCase().includes('idface')) || entradaTime
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        className="ad-freq-hist-item" 
+                        style={{ 
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                          padding: '24px 28px', borderBottom: i < selectedRecords.length - 1 ? '1px solid #f1f5f9' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                           <div style={{ 
+                             background: isPresenca ? '#f0fdf4' : isFaltaJustificada ? '#eff6ff' : '#fef2f2', 
+                             color: isPresenca ? '#16a34a' : isFaltaJustificada ? '#3b82f6' : '#ef4444', 
+                             padding: 16, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center'
+                           }}>
+                             {isPresenca ? <CheckCircle2 size={32} /> : isFaltaJustificada ? <FileText size={32} /> : <AlertTriangle size={32} />}
+                           </div>
+                           <div>
+                             <div style={{ fontWeight: 900, fontSize: 18, color: '#1e293b' }}>
+                               {isPresenca ? 'Presença Confirmada' : isFaltaJustificada ? 'Ausência Justificada' : 'Falta Registrada'}
+                             </div>
+                             <div style={{ fontSize: 14, color: '#64748b', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 8, fontWeight: 500 }}>                               
+                               {isIdFace ? (
+                                 <span style={{ 
+                                   display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                   fontSize: 12, fontWeight: 800, color: '#0ea5e9', 
+                                   background: '#e0f2fe', padding: '6px 12px', borderRadius: 10, border: '1px solid #bae6fd'
+                                 }}>
+                                   <ShieldCheck size={16} /> iDFace: {entradaTime?.slice(0,5)}h
+                                 </span>
+                               ) : isPresenca ? (
+                                 <span style={{ 
+                                   display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                   fontSize: 12, fontWeight: 800, color: '#64748b', 
+                                   background: '#f1f5f9', padding: '6px 12px', borderRadius: 10 
+                                 }}>
+                                   Lançamento Manual (Professor)
+                                 </span>
+                               ) : (
+                                 <span style={{ 
+                                   display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                   fontSize: 12, fontWeight: 800, color: '#991b1b', 
+                                   background: '#fef2f2', padding: '6px 12px', borderRadius: 10 
+                                 }}>
+                                   Registro Curricular
+                                 </span>
+                               )}
+                             </div>
+                           </div>
+                        </div>
+                        <div className="ad-freq-hist-badge" style={{
+                          padding: '8px 16px', borderRadius: 14, fontSize: 14, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1,
+                          background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#dbeafe' : '#fee2e2',
+                          color: isPresenca ? '#166534' : isFaltaJustificada ? '#1e40af' : '#991b1b'
+                        }}>
+                          {isPresenca ? 'Presente' : isFaltaJustificada ? 'Justificada' : 'Injustificada'}
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           </motion.div>
         )}
-
-        {/* Recent History */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 15px 35px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
-          <div style={{ padding: '24px 28px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#1e293b' }}>Histórico Recente</h3>
-            {isLoadingFrequencias && <Loader2 size={18} className="spin" color="#94a3b8" />}
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {paginatedHistory.length === 0 ? (
-              <div style={{ padding: '60px 24px', textAlign: 'center' }}>
-                <Activity size={48} color="#e2e8f0" style={{ margin: '0 auto 16px' }} />
-                <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b' }}>Nenhum registro encontrado</div>
-                <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>Os dados de frequência e catraca aparecerão aqui.</div>
-              </div>
-            ) : (
-              paginatedHistory.map((h, i) => {
-                const dataObj = new Date(h.data + 'T00:00:00')
-                const dataFormatada = dataObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })
-                const dataCapitalizada = dataFormatada.charAt(0).toUpperCase() + dataFormatada.slice(1)
-                
-                const isPresenca = h.status === 'P'
-                const isFaltaJustificada = h.status === 'J'
-                
-                // Prioritize 'horaRegistro' from 'frequenciasDb' directly. Fallback to 'entradaCatracaMap'.
-                const entradaTime = h.horaRegistro || entradaCatracaMap[h.data]
-                
-                // Check if it was registered by IDFace explicitly or if it has an entry time.
-                const isIdFace = (h.registradoPor && h.registradoPor.toLowerCase().includes('idface')) || entradaTime
-                
-                return (
-                  <motion.div 
-                    key={i} 
-                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                    className="ad-freq-hist-item" 
-                    style={{ 
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-                      padding: '20px 28px', borderBottom: i < paginatedHistory.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      transition: 'background 0.2s'
-                    }}
-                    whileHover={{ background: '#f8fafc' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                       <div style={{ 
-                         background: isPresenca ? '#f0fdf4' : isFaltaJustificada ? '#eff6ff' : '#fef2f2', 
-                         color: isPresenca ? '#16a34a' : isFaltaJustificada ? '#3b82f6' : '#ef4444', 
-                         padding: 12, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                       }}>
-                         {isPresenca ? <CheckCircle2 size={24} /> : isFaltaJustificada ? <FileText size={24} /> : <AlertTriangle size={24} />}
-                       </div>
-                       <div>
-                         <div style={{ fontWeight: 800, fontSize: 15, color: '#1e293b' }}>
-                           {isPresenca ? 'Presença Confirmada' : isFaltaJustificada ? 'Ausência Justificada' : 'Falta Registrada'}
-                         </div>
-                         <div style={{ fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 4, fontWeight: 500 }}>
-                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Clock size={14} /> {dataCapitalizada}</span>
-                           
-                           {isIdFace ? (
-                             <span style={{ 
-                               display: 'inline-flex', alignItems: 'center', gap: 4, 
-                               fontSize: 11, fontWeight: 800, color: '#0ea5e9', 
-                               background: '#e0f2fe', padding: '4px 10px', borderRadius: 8, border: '1px solid #bae6fd'
-                             }}>
-                               <ShieldCheck size={14} /> iDFace: {entradaTime?.slice(0,5)}h
-                             </span>
-                           ) : isPresenca ? (
-                             <span style={{ 
-                               display: 'inline-flex', alignItems: 'center', gap: 4, 
-                               fontSize: 11, fontWeight: 800, color: '#64748b', 
-                               background: '#f1f5f9', padding: '4px 10px', borderRadius: 8 
-                             }}>
-                               Lançamento Manual (Professor)
-                             </span>
-                           ) : null}
-                         </div>
-                       </div>
-                    </div>
-                    <div className="ad-freq-hist-badge" style={{
-                      padding: '6px 14px', borderRadius: 12, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1,
-                      background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#dbeafe' : '#fee2e2',
-                      color: isPresenca ? '#166534' : isFaltaJustificada ? '#1e40af' : '#991b1b'
-                    }}>
-                      {isPresenca ? 'Presente' : isFaltaJustificada ? 'Justificada' : 'Injustificada'}
-                    </div>
-                  </motion.div>
-                )
-              })
-            )}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 28px', borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
-              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
-                Página <strong style={{ color: '#1e293b' }}>{currentPage}</strong> de <strong style={{ color: '#1e293b' }}>{totalPages}</strong> <span style={{ opacity: 0.6 }}>({historicoReal.length} registros)</span>
-              </span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button 
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                  disabled={currentPage === 1}
-                  style={{ 
-                    height: 36, padding: '0 16px', fontSize: 13, fontWeight: 700, borderRadius: 12, 
-                    background: '#fff', border: '1px solid #e2e8f0', color: '#334155',
-                    display: 'flex', alignItems: 'center', gap: 6, 
-                    opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                  }}
-                >
-                  <ChevronLeft size={16} /> Anterior
-                </button>
-                <button 
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                  disabled={currentPage === totalPages}
-                  style={{ 
-                    height: 36, padding: '0 16px', fontSize: 13, fontWeight: 700, borderRadius: 12, 
-                    background: '#fff', border: '1px solid #e2e8f0', color: '#334155',
-                    display: 'flex', alignItems: 'center', gap: 6, 
-                    opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
-                  }}
-                >
-                  Próxima <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </div>
-
+      </AnimatePresence>
 
     </div>
   )
