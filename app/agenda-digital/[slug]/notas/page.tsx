@@ -59,10 +59,19 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
 
   const disciplinas = useMemo(() => {
     if (!boletimAtual || !boletimAtual.dados.disciplinas) return []
-    return boletimAtual.dados.disciplinas.map((d: any) => ({
-      ...d,
-      mediaFNum: parseFloat(String(d.mediaF).replace(',', '.')) || 0
-    }))
+    return boletimAtual.dados.disciplinas.map((d: any) => {
+      let num = 0
+      const val = String(d.mediaF).trim()
+      if (val.toLowerCase() === 'dez') {
+        num = 10
+      } else {
+        num = parseFloat(val.replace(',', '.')) || 0
+      }
+      return {
+        ...d,
+        mediaFNum: num
+      }
+    })
   }, [boletimAtual])
 
   const mediaGlobal = useMemo(() => {
