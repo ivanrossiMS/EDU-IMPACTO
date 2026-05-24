@@ -125,7 +125,7 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
       </div>
 
       {/* Seletor de Bimestre Ultra Moderno */}
-      {bimestresDisponiveis.length > 1 && (
+      {bimestresDisponiveis.length > 0 && (
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 16, marginBottom: 8, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {bimestresDisponiveis.map((b: any) => (
             <button
