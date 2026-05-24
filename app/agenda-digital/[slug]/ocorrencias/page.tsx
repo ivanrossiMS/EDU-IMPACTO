@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApiQuery } from '@/hooks/useApi'
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, AlertCircle, CheckCircle, Shield, Heart, School, Calendar, User, Clock, FileText, ImageIcon, Check, Loader2 } from 'lucide-react'
+import { AlertTriangle, AlertCircle, CheckCircle, Shield, Heart, School, Calendar, User, Clock, FileText, ImageIcon, Check, Loader2, Info } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
