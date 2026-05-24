@@ -93,7 +93,7 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
         }}
       >
         <Megaphone size={18} style={{ strokeWidth: 2.2 }} />
-        <span className="ad-call-btn-label">Chamar Aluno na Portaria</span>
+        <span className="ad-call-btn-label">Chamar Aluno</span>
         <span className="ad-call-btn-arrow" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </span>
@@ -696,15 +696,8 @@ export default function AgendaDigitalFamilyLayout({
             display: none !important;
           }
           .ad-call-btn-label {
-            font-size: 0 !important;
-          }
-          .ad-premium-cta-btn .ad-call-btn-label::after {
-            content: "Chamar Aluno";
             font-size: 10px !important;
-          }
-          .ad-right-section > div > div .ad-call-btn-label::after {
-            content: "Chamar Aluno";
-            font-size: 10px !important;
+            white-space: nowrap !important;
           }
           .ad-premium-student-name {
             padding-right: 0px !important;
