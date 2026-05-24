@@ -106,13 +106,16 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
         <div style={{
           ...baseBtnStyle,
-          background: 'rgba(245, 158, 11, 0.08)',
-          border: '2px dashed rgba(245, 158, 11, 0.4)',
-          color: '#d97706',
-          cursor: 'default'
+          background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
+          backgroundSize: '200% 200%',
+          border: 'none',
+          color: 'white',
+          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
+          cursor: 'default',
+          animation: 'shimmerYellow 2s linear infinite'
         }}>
           <Loader2 size={18} className="spin-anim" />
-          <span className="ad-call-btn-label">Chamando na Portaria...</span>
+          <span className="ad-call-btn-label">Chamando Aluno</span>
         </div>
         <button 
           onClick={() => cancelCall(call.id)}
@@ -131,6 +134,11 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes spin-anim { 100% { transform: rotate(360deg); } }
           .spin-anim { animation: spin-anim 1s linear infinite; }
+          @keyframes shimmerYellow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
         `}} />
       </div>
     )
