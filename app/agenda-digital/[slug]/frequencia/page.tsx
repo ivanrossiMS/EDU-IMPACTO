@@ -262,7 +262,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, height: '100%' }}>
                    <div style={{ width: '100%', maxWidth: 40, background: '#f1f5f9', height: '100%', borderRadius: 12, position: 'relative', overflow: 'hidden' }}>
                      <motion.div 
-                       initial={{ height: 0 }} animate={{ height: \`\${item.p}%\` }} transition={{ duration: 1, type: "spring", stiffness: 50 }}
+                       initial={{ height: 0 }} animate={{ height: `${item.p}%` }} transition={{ duration: 1, type: "spring", stiffness: 50 }}
                        style={{ 
                          position: 'absolute', bottom: 0, left: 0, right: 0,
                          background: item.p >= 95 ? 'linear-gradient(0deg, #3b82f6 0%, #60a5fa 100%)' : 'linear-gradient(0deg, #f59e0b 0%, #fbbf24 100%)',
