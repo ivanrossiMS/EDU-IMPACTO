@@ -49,7 +49,7 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
 
 
       {/* Modern Tabs Navigation */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 32, overflowX: 'auto', paddingBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 32, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {[
           { id: 'geral', label: 'Dados Gerais', icon: <Contact size={16} /> },
           { id: 'responsaveis', label: 'Responsáveis & Autorizações', icon: <ShieldCheck size={16} /> },
@@ -61,6 +61,7 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
             style={{
               padding: '12px 24px', borderRadius: 100, border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700,
+              whiteSpace: 'nowrap', flexShrink: 0,
               background: activeTab === tab.id ? '#4f46e5' : 'hsl(var(--bg-surface))',
               color: activeTab === tab.id ? 'white' : 'hsl(var(--text-muted))',
               boxShadow: activeTab === tab.id ? '0 8px 16px rgba(79, 70, 229, 0.25)' : '0 2px 8px rgba(0,0,0,0.02)',
