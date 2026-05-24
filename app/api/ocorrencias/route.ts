@@ -9,7 +9,9 @@ export async function GET(request: Request) {
   const alunoId = searchParams.get('aluno_id')
 
   let query = supabase.from('ocorrencias').select('*').order('created_at', { ascending: false })
-  if (alunoId) query = query.eq('aluno_id', alunoId)
+  if (alunoId) {
+    query = query.or(`aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
+  }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
