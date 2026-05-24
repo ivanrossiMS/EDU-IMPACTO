@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
-import { Upload, CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft } from 'lucide-react'
+import { Upload, CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
