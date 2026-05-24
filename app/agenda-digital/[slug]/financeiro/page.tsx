@@ -372,8 +372,6 @@ export default function ADFinanceiroPageMock() {
         )}
       </AnimatePresence>
 
-      {/* Background Decor */}
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '40vh', background: 'linear-gradient(180deg, rgba(248,250,252,1) 0%, rgba(248,250,252,0) 100%)', zIndex: -2 }} />
 
     </div>
   )
