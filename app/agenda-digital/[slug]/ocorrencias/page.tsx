@@ -265,30 +265,30 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                           {/* Faixa Colorida Lateral */}
                           <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 4, background: colorHex }} />
                           
-                          <div style={{ padding: '24px 20px 24px 24px' }}>
+                          <div style={{ padding: '16px' }}>
                             {/* Header do Card */}
-                            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                               <div style={{ 
-                                width: 48, height: 48, borderRadius: 16, 
+                                width: 38, height: 38, borderRadius: 10, 
                                 background: `${colorHex}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 
                               }}>
-                                <IconBase size={24} color={colorHex} />
+                                <IconBase size={18} color={colorHex} />
                               </div>
                               
-                              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                              <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 6 }}>
                                   <div>
-                                    <h3 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 6px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                                    <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
                                       {o.tipo}
                                     </h3>
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                       {!isElogio && o.gravidade && (
-                                        <span style={{ fontSize: 11, background: `${colorHex}15`, color: colorHex, padding: '4px 10px', borderRadius: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                        <span style={{ fontSize: 10, background: `${colorHex}15`, color: colorHex, padding: '2px 8px', borderRadius: 6, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                                           {gravText}
                                         </span>
                                       )}
-                                      <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <Calendar size={14} />
+                                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        <Calendar size={12} />
                                         {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}
                                       </span>
                                     </div>
@@ -298,57 +298,57 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                             </div>
 
                             {/* Descrição */}
-                            <div style={{ marginTop: 20, padding: '16px', background: '#f8fafc', borderRadius: 16, border: '1px solid #f1f5f9' }}>
-                              <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                            <div style={{ marginTop: 12, padding: '12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #f1f5f9' }}>
+                              <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                                 {cleanedDesc || o.descricao}
                               </p>
                             </div>
                             
                             {/* Anexo se existir */}
                             {o.anexoUrl && (
-                              <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, textDecoration: 'none', transition: 'all 0.2s', marginTop: 16, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-                                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {o.anexoTipo?.includes('image') ? <ImageIcon size={20} /> : <FileText size={20} />}
+                              <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, textDecoration: 'none', transition: 'all 0.2s', marginTop: 10, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+                                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {o.anexoTipo?.includes('image') ? <ImageIcon size={16} /> : <FileText size={16} />}
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                     {o.anexoNome || 'Documento Anexado'}
                                   </div>
-                                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                                    {o.anexoTamanho ? (o.anexoTamanho / 1024).toFixed(1) + ' KB' : 'Clique para visualizar ou baixar'}
+                                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                                    {o.anexoTamanho ? (o.anexoTamanho / 1024).toFixed(1) + ' KB' : 'Clique para visualizar'}
                                   </div>
                                 </div>
                               </a>
                             )}
                             
                             {/* Rodapé / Meta Info */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 16, marginTop: 16 }}>
-                              <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <User size={14} />
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: 10, marginTop: 10 }}>
+                              <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <User size={12} />
                                 <span>Por <strong>{lancado || o.responsavel || 'Coordenação'}</strong></span>
                               </div>
                               {editado && (
-                                <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <Clock size={14} />
-                                  <span>Modificado: <strong>{editado.split(' ')[0]}</strong></span>
+                                <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <Clock size={12} />
+                                  <span>Editado: <strong>{editado.split(' ')[0]}</strong></span>
                                 </div>
                               )}
                             </div>
 
                             {/* Área de Confirmação de Ciência (Digital Sign) */}
                             {!isElogio && (
-                              <div style={{ marginTop: 20 }}>
+                              <div style={{ marginTop: 12 }}>
                                 {!o.ciencia_responsavel ? (
                                   <div style={{ 
                                     background: 'linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.05) 100%)', 
-                                    padding: '16px', 
-                                    borderRadius: 16,
+                                    padding: '12px', 
+                                    borderRadius: 12,
                                     border: '1px solid rgba(245,158,11,0.2)',
                                   }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                      <div style={{ fontSize: 13, color: '#b45309', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: 8, lineHeight: 1.5 }}>
-                                        <Info size={16} style={{ marginTop: 2, flexShrink: 0 }} />
-                                        <span>Este registro disciplinar requer que o responsável ateste ciência para a coordenação.</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                      <div style={{ fontSize: 12, color: '#b45309', fontWeight: 600, display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.4 }}>
+                                        <Info size={14} style={{ marginTop: 1, flexShrink: 0 }} />
+                                        <span>Requer sua ciência à coordenação.</span>
                                       </div>
                                       
                                       <button 
@@ -359,15 +359,15 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                                           border: 'none',
                                           color: '#fff', 
                                           fontWeight: 700, 
-                                          fontSize: 14,
-                                          padding: '12px 20px', 
-                                          borderRadius: 12, 
+                                          fontSize: 13,
+                                          padding: '10px 16px', 
+                                          borderRadius: 10, 
                                           cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', 
                                           transition: 'all 0.2s', 
                                           display: 'flex', 
                                           alignItems: 'center', 
                                           justifyContent: 'center',
-                                          gap: 8,
+                                          gap: 6,
                                           boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
                                           width: '100%',
                                           opacity: signingIds[o.id] ? 0.8 : 1
@@ -375,12 +375,12 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                                       >
                                         {signingIds[o.id] ? (
                                           <>
-                                            <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                                            <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
                                             Processando...
                                           </>
                                         ) : (
                                           <>
-                                            <CheckCircle size={18} />
+                                            <CheckCircle size={16} />
                                             Assinar Ciência
                                           </>
                                         )}
@@ -388,16 +388,16 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                                     </div>
                                   </div>
                                 ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(16,185,129,0.08)', padding: '16px', borderRadius: 16, border: '1px solid rgba(16,185,129,0.2)' }}>
-                                    <div style={{ width: 36, height: 36, borderRadius: 18, background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(16,185,129,0.3)' }}>
-                                      <Check size={20} strokeWidth={3} />
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(16,185,129,0.08)', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.2)' }}>
+                                    <div style={{ width: 28, height: 28, borderRadius: 14, background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 10px rgba(16,185,129,0.3)' }}>
+                                      <Check size={16} strokeWidth={3} />
                                     </div>
                                     <div style={{ flex: 1 }}>
-                                      <div style={{ fontSize: 14, color: '#047857', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
+                                      <div style={{ fontSize: 13, color: '#047857', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
                                         Ciência Assinada
                                       </div>
                                       {confirmado && (
-                                        <div style={{ fontSize: 12, color: '#059669', fontWeight: 500, marginTop: 2 }}>
+                                        <div style={{ fontSize: 11, color: '#059669', fontWeight: 500, marginTop: 2 }}>
                                           {confirmado}
                                         </div>
                                       )}
