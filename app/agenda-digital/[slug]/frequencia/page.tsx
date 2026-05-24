@@ -25,8 +25,6 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
   const { aluno } = useSelectedStudent()
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
-  const [atestadoModal, setAtestadoModal] = useState(false)
-  const [atestadoSent, setAtestadoSent] = useState(false)
 
   // Estados de paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -136,14 +134,6 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     })
   }, [historicoReal])
 
-  const handleUpload = (e: React.FormEvent) => {
-    e.preventDefault()
-    setAtestadoSent(true)
-    setTimeout(() => {
-      setAtestadoModal(false)
-      setAtestadoSent(false)
-    }, 2000)
-  }
 
   // Configurações de paginação
   const totalPages = Math.ceil(historicoReal.length / itemsPerPage) || 1
@@ -203,18 +193,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
             Acompanhe o histórico de presenças e horários de entrada via iDFace.
           </p>
         </div>
-        <motion.button 
-          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-          onClick={() => setAtestadoModal(true)} 
-          style={{ 
-            display: 'flex', alignItems: 'center', gap: 8, 
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white',
-            padding: '12px 24px', borderRadius: 16, border: 'none', fontWeight: 800, fontSize: 14,
-            cursor: 'pointer', boxShadow: '0 8px 20px rgba(16, 185, 129, 0.25)'
-          }}
-        >
-          <Upload size={18} /> Enviar Atestado
-        </motion.button>
+
       </motion.div>
 
       {/* Summary Cards */}
@@ -405,59 +384,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         </motion.div>
       </div>
 
-      {/* Upload Atestado Modal */}
-      <AnimatePresence>
-        {atestadoModal && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-            style={{ 
-              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
-              background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-              zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
-            }} 
-            onClick={() => setAtestadoModal(false)}
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-              transition={{ type: "spring", stiffness: 300, damping: 25 }} 
-              style={{ background: '#fff', padding: 32, borderRadius: 28, width: '100%', maxWidth: 420, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }} 
-              onClick={e => e.stopPropagation()}
-            >
-              <h3 style={{ fontSize: 22, fontWeight: 900, marginBottom: 8, color: '#0f172a', letterSpacing: '-0.02em' }}>Enviar Atestado</h3>
-              <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, marginBottom: 24 }}>Justifique ausências anexando um documento válido.</p>
-              
-              {!atestadoSent ? (
-                <form onSubmit={handleUpload}>
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Data da Ausência</label>
-                    <input type="date" required style={{ width: '100%', borderRadius: 12, border: '1px solid #e2e8f0', padding: '12px 16px', fontSize: 15, fontWeight: 500, color: '#1e293b', outline: 'none', background: '#f8fafc' }} />
-                  </div>
-                  <div style={{ marginBottom: 24 }}>
-                    <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Anexar Arquivo</label>
-                    <div style={{ border: '2px dashed #cbd5e1', padding: '32px 20px', borderRadius: 16, textAlign: 'center', cursor: 'pointer', background: '#f8fafc', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#3b82f6'} onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}>
-                      <FileText size={32} style={{ margin: '0 auto 12px', color: '#94a3b8' }} />
-                      <div style={{ fontSize: 15, fontWeight: 800, color: '#334155' }}>Clique para procurar</div>
-                      <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Formatos aceitos: JPG, PNG, PDF</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <button type="button" onClick={() => setAtestadoModal(false)} style={{ flex: 1, padding: '14px', borderRadius: 16, border: '1px solid #e2e8f0', background: '#fff', color: '#334155', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>Cancelar</button>
-                    <button type="submit" style={{ flex: 2, padding: '14px', borderRadius: 16, border: 'none', background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: '#fff', fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 16px rgba(59, 130, 246, 0.25)' }}>Enviar Atestado</button>
-                  </div>
-                </form>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '32px 0 16px' }}>
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }}>
-                    <CheckCircle2 size={72} color="#10b981" style={{ margin: '0 auto 20px' }} />
-                  </motion.div>
-                  <h4 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em' }}>Enviado com Sucesso!</h4>
-                  <p style={{ fontSize: 15, color: '#64748b', marginTop: 8, fontWeight: 500 }}>O atestado será analisado pela secretaria.</p>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
     </div>
   )
 }
