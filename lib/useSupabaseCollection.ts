@@ -328,8 +328,12 @@ export function useSupabaseArray<T>(
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        console.error(`[useSupabaseArray] API POST failed:`, res.status, body)
-        throw new Error(body?.error || `Erro ${res.status} ao salvar`)
+        if (res.status === 404) {
+           console.warn(`[useSupabaseArray] API POST 404 (Not Found) para o endpoint: /api/${endpoint}. Ignorando salvamento (pode ser coleção somente-leitura).`)
+           return
+        }
+        console.error(`[useSupabaseArray] API POST failed for /api/${endpoint}:`, res.status, body)
+        throw new Error(body?.error || `Erro ${res.status} ao salvar em ${endpoint}`)
       }
     },
   })
