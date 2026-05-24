@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   let query = supabase.from('ocorrencias').select('*').order('created_at', { ascending: false })
   if (alunoId) {
-    query = query.or(`aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
+    query = query.or(`aluno_id.eq.${alunoId},dados->>aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
   }
 
   const { data, error } = await query

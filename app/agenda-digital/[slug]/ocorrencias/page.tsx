@@ -36,7 +36,7 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   // Ordena por data (mais recente no topo) e garante match
   const ocorrenciasDoAluno = useMemo(() => {
     return ocorrencias
-      .filter(o => o.aluno_id === aluno?.id || o.alunoId === aluno?.id)
+      .filter(o => String(o.aluno_id) === String(aluno?.id) || String(o.alunoId) === String(aluno?.id))
       .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
   }, [ocorrencias, aluno?.id])
 
