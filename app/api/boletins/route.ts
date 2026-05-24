@@ -7,6 +7,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const turma_id = searchParams.get('turma_id')
+    const aluno_id = searchParams.get('aluno_id')
     
     let query = supabase.from('boletins').select('*')
     
@@ -14,6 +15,16 @@ export async function GET(request: Request) {
       query = query.eq('turma_id', turma_id)
     }
     
+    if (aluno_id) {
+      const alunoStr = String(aluno_id)
+      const alunoSemZero = alunoStr.replace(/^0+/, '')
+      if (alunoStr !== alunoSemZero) {
+        query = query.or(`aluno_id.eq.${alunoStr},aluno_id.eq.${alunoSemZero}`)
+      } else {
+        query = query.eq('aluno_id', aluno_id)
+      }
+    }
+
     const { data, error } = await query
     
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
