@@ -182,39 +182,6 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         </div>
       </motion.div>
 
-      {/* Summary Cards */}
-      <motion.div variants={containerVariants} initial="hidden" animate="visible" className="ad-freq-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        
-        {/* Card Presença */}
-        <motion.div variants={cardVariants} style={{ padding: 24, background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)', borderRadius: 24, border: '1px solid rgba(59, 130, 246, 0.1)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.03)' }}>
-          <div style={{ position: 'absolute', right: -20, top: -20, width: 140, height: 140, background: 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
-          <div style={{ fontSize: 12, color: '#3b82f6', fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <CheckCircle2 size={14} /> Presença Atual
-          </div>
-          <div style={{ fontSize: 48, fontWeight: 900, color: '#1e293b', letterSpacing: '-0.03em', lineHeight: 1 }}>{presencaPorcentagem}%</div>
-          <div style={{ fontSize: 13, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
-            {totalAulas > 0 ? `Baseado em ${totalAulas} registros de chamada` : 'Frequência curricular geral'}
-          </div>
-        </motion.div>
-
-        {/* Card Faltas */}
-        <motion.div variants={cardVariants} style={{ padding: 24, background: '#ffffff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-          <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertTriangle size={14} /> Faltas (Injustificadas)
-          </div>
-          <div style={{ fontSize: 40, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>{totalFaltasInjustificadas}</div>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>Ausências sem justificativa</div>
-        </motion.div>
-
-        {/* Card Justificadas */}
-        <motion.div variants={cardVariants} style={{ padding: 24, background: '#ffffff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
-          <div style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 800, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FileText size={14} /> Ausências Justificadas
-          </div>
-          <div style={{ fontSize: 40, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', lineHeight: 1 }}>{totalAusenciasJustificadas}</div>
-          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 8, fontWeight: 500 }}>Com atestado validado</div>
-        </motion.div>
-      </motion.div>
 
       {/* Calendário Dinâmico Interativo */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 15px 35px rgba(0,0,0,0.02)', overflow: 'hidden', padding: '24px 28px', marginBottom: 32 }}>
