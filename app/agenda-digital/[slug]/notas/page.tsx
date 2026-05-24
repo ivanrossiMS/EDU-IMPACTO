@@ -37,10 +37,19 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
   // Extract periods (bimestres) available
   const bimestresDisponiveis = useMemo(() => {
     if (!boletins.length) return []
-    return boletins.map((b: any) => {
+    
+    // Primeiro ordenamos do mais novo para o mais antigo para manter sempre o boletim mais recente em caso de duplicidade
+    const sorted = [...boletins].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+    
+    const unicos = new Map()
+    for (const b of sorted) {
       const dados = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados
-      return { id: b.id, nome: dados.bimestre, dados }
-    }).sort((a: any, b: any) => a.nome.localeCompare(b.nome))
+      if (!unicos.has(dados.bimestre)) {
+        unicos.set(dados.bimestre, { id: b.id, nome: dados.bimestre, dados })
+      }
+    }
+
+    return Array.from(unicos.values()).sort((a: any, b: any) => a.nome.localeCompare(b.nome))
   }, [boletins])
 
   const [selectedBimestreId, setSelectedBimestreId] = useState<string | null>(null)
