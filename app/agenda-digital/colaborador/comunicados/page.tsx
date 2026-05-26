@@ -1,12 +1,13 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
-import { use, useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
@@ -16,7 +17,7 @@ import Portal from '@/components/Portal'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useLocalStorage } from '@/lib/useLocalStorage'
-import { getSignedUploadUrlAction } from '../../admin/comunicados/actions'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 
 // Helper parsers for attachments formatted as "name|url|mime"
@@ -665,7 +666,7 @@ export default function ColaboradorComunicadosPage() {
                     left: 88, 
                     width: 2, 
                     backgroundImage: isRead 
-                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.05), rgba(99,102,241,0.3), rgba(168, 85, 247, 0.3), rgba(99, 102, 241, 0.05))' 
+                      ? 'linear-gradient(to bottom, rgba(99,102,241,0.05), rgba(99,102,241,0.3), rgba(168, 85, 247, 0.3), rgba(99,102,241,0.05))' 
                       : 'linear-gradient(to bottom, rgba(0, 210, 255, 0.1), #00d2ff, #ff0080, rgba(255, 0, 128, 0.1))',
                     backgroundSize: '100% 200%',
                     animation: isRead ? 'neonLaserFlowRead 4s ease-in-out infinite' : 'neonLaserFlow 3s ease-in-out infinite',
@@ -1001,7 +1002,7 @@ export default function ColaboradorComunicadosPage() {
                           {(isImg || isVid) && (
                               <div style={{ width: '100%', borderRadius: 20, overflow: 'hidden', background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 600, border: '1px solid #e2e8f0', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.15)' }}>
                                 {isImg ? (
-                                   <img src={parsed.url} alt={parsed.name} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
+                                   <Image src={parsed.url} alt={parsed.name} width={800} height={600} style={{ width: '100%', height: 'auto', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
                                 ) : (
                                    <video src={parsed.url} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} preload="metadata" />
                                 )}
@@ -1375,7 +1376,7 @@ export default function ColaboradorComunicadosPage() {
                         <div key={i} style={{ position: 'relative', width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                            <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', position: 'relative' }}>
                               {isImg ? (
-                                <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <Image src={url} alt="Capa" width={80} height={80} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : isVid ? (
                                 <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                    <div style={{ width: 24, height: 24, borderRadius: 12, border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1454,40 +1455,23 @@ export default function ColaboradorComunicadosPage() {
 
                         setUploadProgress(60);
 
-                        // 1. Obter URL assinada
-                        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, 'comunicados-midia');
-
-                        if (signedRes.error || !signedRes.signedUrl) {
-                          console.error('[upload-midia]', signedRes.error);
-                          adAlert(signedRes.error || 'Erro ao preparar upload.', 'Erro');
-                          setIsUploading(false);
-                          setUploadProgress(0);
-                          return;
-                        }
-
-                        setUploadProgress(75);
-
-                        // 2. Upload direto para o Supabase via PUT (usando a URL assinada)
-                        // Isso é muito mais rápido e estável que passar pelo servidor Next.js
-                        const uploadRes = await fetch(signedRes.signedUrl, {
-                          method: 'PUT',
-                          body: fileToUpload,
-                          headers: {
-                            'Content-Type': fileToUpload.type || 'application/octet-stream'
-                          }
+                        // Upload centralizado com Cache-Control
+                        const uploadRes = await uploadFileToSupabase({
+                          bucket: 'comunicados-midia',
+                          file: fileToUpload,
+                          usageType: 'common'
                         });
 
-                        if (!uploadRes.ok) {
-                          const errText = await uploadRes.text();
-                          console.error('[upload-midia] Direct upload failed:', errText);
-                          adAlert('Falha no envio direto do arquivo.', 'Erro de Conexão');
+                        if (!uploadRes.ok || !uploadRes.url) {
+                          console.error('[upload-midia]', uploadRes.error);
+                          adAlert(uploadRes.error || 'Erro no envio direto do arquivo.', 'Erro de Conexão');
                           setIsUploading(false);
                           setUploadProgress(0);
                           return;
                         }
 
                         setUploadProgress(100);
-                        setAnexos(prev => [...prev, `${fileToUpload.name}|${signedRes.publicUrl}|${fileToUpload.type}`]);
+                        setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}`]);
                         setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
                       } catch (err: any) {
                         adAlert('Erro inesperado: ' + (err?.message || ''), 'Erro');

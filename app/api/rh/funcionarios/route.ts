@@ -158,20 +158,83 @@ export async function POST(request: Request) {
     }
 
     // Legacy Single Object Mode
-    const { id, nome, cargo, departamento, salario, status, email, admissao, unidade, ...rest } = body
+    const { 
+      id, nome, cargo, departamento, salario, status, email, admissao, unidade, dados, created_at,
+      ...rest 
+    } = body
+    
+    // Extrai campos conhecidos que agora são colunas
+    const {
+      codigo, cpf, rg, dataNascimento, telefone, celular,
+      tipoContrato, escolaridade, cargaHoraria, bonus,
+      pis, banco, agencia, conta, observacoes, perfilSistema, horario,
+      ...outrosExtras
+    } = rest as any
+
     const row = {
       id: id || `F${Date.now()}`,
-      nome, cargo: cargo || '', departamento: departamento || '',
+      nome: nome || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
       salario: salario || 0, status: status || 'ativo',
       email: email || '', admissao: admissao || '',
-      unidade: unidade || '', dados: rest,
+      unidade: unidade || '',
+      codigo: codigo || '',
+      cpf: cpf || '',
+      rg: rg || '',
+      data_nascimento: dataNascimento || null,
+      telefone: telefone || '',
+      celular: celular || '',
+      tipo_contrato: tipoContrato || '',
+      escolaridade: escolaridade || '',
+      carga_horaria: cargaHoraria || 0,
+      bonus: bonus || 0,
+      pis: pis || '',
+      banco: banco || '',
+      agencia: agencia || '',
+      conta: conta || '',
+      observacoes: observacoes || '',
+      perfil_sistema: perfilSistema || '',
+      horario: horario || null,
+      dados: dados || outrosExtras,
     }
     const { data, error } = await supabase.from('funcionarios').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     if (row.email) {
       const supabaseAdmin = require('@supabase/supabase-js').createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-      await supabaseAdmin.from('system_users').update({ status: row.status }).eq('email', row.email);
+      
+      const { data: existing } = await supabaseAdmin.from('system_users').select('id').eq('email', row.email).maybeSingle();
+      
+      if (row.perfil_sistema) {
+        if (existing) {
+          await supabaseAdmin.from('system_users').update({ 
+            status: row.status, 
+            perfil: row.perfil_sistema,
+            nome: row.nome,
+            cargo: row.cargo 
+          }).eq('email', row.email);
+        } else {
+          // Provision new access
+          const tempPass = `Impacto@${Math.random().toString(36).slice(-8)}`;
+          const { data: authData } = await supabaseAdmin.auth.admin.createUser({
+            email: row.email,
+            password: tempPass,
+            email_confirm: true
+          });
+          if (authData?.user) {
+            await supabaseAdmin.from('system_users').insert({
+              id: authData.user.id,
+              auth_id: authData.user.id,
+              email: row.email,
+              nome: row.nome,
+              cargo: row.cargo,
+              perfil: row.perfil_sistema,
+              status: row.status
+            });
+          }
+        }
+      } else if (existing) {
+        await supabaseAdmin.from('system_users').update({ status: row.status }).eq('email', row.email);
+      }
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -187,12 +250,42 @@ export async function PUT(request: Request) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   try {
     const body = await request.json()
-    const { nome, cargo, departamento, salario, status, email, admissao, unidade, ...rest } = body
+    const { 
+      nome, cargo, departamento, salario, status, email, admissao, unidade, dados, created_at,
+      ...rest 
+    } = body
+    
+    // Extrai campos conhecidos que agora são colunas
+    const {
+      codigo, cpf, rg, dataNascimento, telefone, celular,
+      tipoContrato, escolaridade, cargaHoraria, bonus,
+      pis, banco, agencia, conta, observacoes, perfilSistema, horario,
+      ...outrosExtras
+    } = rest as any
+
     const { data, error } = await supabase.from('funcionarios').update({
       nome, cargo: cargo || '', departamento: departamento || '',
       salario: salario || 0, status: status || 'ativo',
       email: email || '', admissao: admissao || '',
-      unidade: unidade || '', dados: rest,
+      unidade: unidade || '',
+      codigo: codigo || '',
+      cpf: cpf || '',
+      rg: rg || '',
+      data_nascimento: dataNascimento || null,
+      telefone: telefone || '',
+      celular: celular || '',
+      tipo_contrato: tipoContrato || '',
+      escolaridade: escolaridade || '',
+      carga_horaria: cargaHoraria || 0,
+      bonus: bonus || 0,
+      pis: pis || '',
+      banco: banco || '',
+      agencia: agencia || '',
+      conta: conta || '',
+      observacoes: observacoes || '',
+      perfil_sistema: perfilSistema || '',
+      horario: horario || null,
+      dados: dados || outrosExtras,
       updated_at: new Date().toISOString(),
     }).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Paperclip, Send, Loader2, X, FileText } from 'lucide-react'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
 interface ChatMessage {
   id: string
@@ -110,17 +111,25 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
     setIsUploading(true)
-    const formData = new FormData()
-    Array.from(e.target.files).forEach(f => formData.append('files', f))
-    
     try {
-      const res = await fetch('/api/upload-midia', {
-        method: 'POST',
-        body: formData
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setPendingAnexos(prev => [...prev, ...data.urls])
+      const urls: string[] = []
+      
+      for (const file of Array.from(e.target.files)) {
+        const uploadRes = await uploadFileToSupabase({
+          bucket: 'comunicados-midia',
+          file: file,
+          usageType: 'common'
+        })
+        
+        if (uploadRes.ok && uploadRes.url) {
+          urls.push(uploadRes.url)
+        } else {
+          console.error('Failed to upload file:', file.name, uploadRes.error)
+        }
+      }
+      
+      if (urls.length > 0) {
+        setPendingAnexos(prev => [...prev, ...urls])
       }
     } catch (err) {
       console.error('Upload failed', err)

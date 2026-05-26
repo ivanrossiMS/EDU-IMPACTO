@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       .upload(filePath, arrayBuffer, {
         contentType: file.type || 'application/octet-stream',
         upsert: false,
+        cacheControl: '31536000',
       })
 
     if (error) {

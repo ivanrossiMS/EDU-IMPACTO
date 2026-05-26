@@ -6,6 +6,7 @@ import { AdminComunicadoChatManager } from '@/components/AdminComunicadoChatMana
 
 
 import { useState, useRef, useEffect } from 'react'
+import Image from 'next/image'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useFormularios } from '@/lib/formulariosContext'
@@ -22,8 +23,8 @@ import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { UserAvatar } from '@/components/UserAvatar'
-import { getSignedUploadUrlAction } from './actions'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
@@ -690,7 +691,7 @@ export default function ADAdminComunicados() {
                         <div key={i} style={{ position: 'relative', width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                            <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', position: 'relative' }}>
                               {isImg ? (
-                                <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <Image src={url} alt="Capa" width={80} height={80} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : isVid ? (
                                 <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                    <div style={{ width: 24, height: 24, borderRadius: 12, border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -769,40 +770,23 @@ export default function ADAdminComunicados() {
 
                         setUploadProgress(60);
 
-                        // 1. Obter URL assinada
-                        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, 'comunicados-midia');
-
-                        if (signedRes.error || !signedRes.signedUrl) {
-                          console.error('[upload-midia]', signedRes.error);
-                          adAlert(signedRes.error || 'Erro ao preparar upload.', 'Erro');
-                          setIsUploading(false);
-                          setUploadProgress(0);
-                          return;
-                        }
-
-                        setUploadProgress(75);
-
-                        // 2. Upload direto para o Supabase via PUT (usando a URL assinada)
-                        // Isso é muito mais rápido e estável que passar pelo servidor Next.js
-                        const uploadRes = await fetch(signedRes.signedUrl, {
-                          method: 'PUT',
-                          body: fileToUpload,
-                          headers: {
-                            'Content-Type': fileToUpload.type || 'application/octet-stream'
-                          }
+                        // Upload centralizado com Cache-Control
+                        const uploadRes = await uploadFileToSupabase({
+                          bucket: 'comunicados-midia',
+                          file: fileToUpload,
+                          usageType: 'common' 
                         });
 
-                        if (!uploadRes.ok) {
-                          const errText = await uploadRes.text();
-                          console.error('[upload-midia] Direct upload failed:', errText);
-                          adAlert('Falha no envio direto do arquivo.', 'Erro de Conexão');
+                        if (!uploadRes.ok || !uploadRes.url) {
+                          console.error('[upload-midia]', uploadRes.error);
+                          adAlert(uploadRes.error || 'Erro no envio direto do arquivo.', 'Erro de Conexão');
                           setIsUploading(false);
                           setUploadProgress(0);
                           return;
                         }
 
                         setUploadProgress(100);
-                        setAnexos(prev => [...prev, `${fileToUpload.name}|${signedRes.publicUrl}|${fileToUpload.type}`]);
+                        setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}`]);
                         setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
                       } catch (err: any) {
                         adAlert('Erro inesperado: ' + (err?.message || ''), 'Erro');
@@ -1159,7 +1143,7 @@ export default function ADAdminComunicados() {
 
                         if (isImg && url) return (
                           <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                            <img src={url} alt={name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
+                            <Image src={url} alt={name} width={800} height={600} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
                             <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>{name}</div>
                           </div>
                         );

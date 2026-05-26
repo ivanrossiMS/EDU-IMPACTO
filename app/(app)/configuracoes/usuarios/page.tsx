@@ -348,10 +348,10 @@ export default function UsuariosPage() {
             <table>
               <thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th>Último Acesso</th><th>2FA</th><th>Status</th><th>Ações</th></tr></thead>
               <tbody>
-                {users.filter(u => !u.id.startsWith('virtual-')).length === 0 ? (
+                {users.filter(u => u.perfil !== 'Família').length === 0 ? (
                   <tr><td colSpan={7} style={{ textAlign: 'center', padding: '30px' }}>Nenhum colaborador real cadastrado.</td></tr>
                 ) : (
-                  users.filter(u => !u.id.startsWith('virtual-')).map(u => {
+                  users.filter(u => u.perfil !== 'Família').map(u => {
                     const p = perfilByName(u.perfil)
                   return (
                     <tr key={u.id}>

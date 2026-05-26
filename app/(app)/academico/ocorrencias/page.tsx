@@ -5,7 +5,7 @@ import { getInitials } from '@/lib/utils'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
-import { getSignedUploadUrlAction } from '@/app/agenda-digital/admin/comunicados/actions'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { Skeleton } from '@/components/skeletons/Skeleton'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
@@ -420,27 +420,20 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
                           fileToUpload = await compressVideo(file, (percent) => {}) as File;
                         }
 
-                        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, 'comunicados-midia');
-
-                        if (signedRes.error || !signedRes.signedUrl) {
-                          alert(signedRes.error || 'Erro ao preparar upload.');
-                          return;
-                        }
-
-                        const uploadRes = await fetch(signedRes.signedUrl, {
-                          method: 'PUT',
-                          body: fileToUpload,
-                          headers: {
-                            'Content-Type': fileToUpload.type || 'application/octet-stream'
-                          }
+                        // Upload centralizado (Cache-Control: 30 dias)
+                        const uploadRes = await uploadFileToSupabase({
+                          bucket: 'comunicados-midia',
+                          folder: 'ocorrencias',
+                          file: fileToUpload,
+                          usageType: 'common' // Ocorrências podem ter anexos comuns
                         });
 
-                        if (!uploadRes.ok) {
-                          alert('Falha no envio direto do arquivo.');
+                        if (!uploadRes.ok || !uploadRes.url) {
+                          alert(uploadRes.error || 'Falha no envio do anexo.');
                           return;
                         }
 
-                        s('anexoUrl', signedRes.publicUrl)
+                        s('anexoUrl', uploadRes.url)
                         s('anexoNome', fileToUpload.name)
                         s('anexoTipo', fileToUpload.type)
                         s('anexoTamanho', fileToUpload.size)

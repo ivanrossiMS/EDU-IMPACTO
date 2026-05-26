@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,10 +15,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Usuário e nova senha são obrigatórios' }, { status: 400 })
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
 
     // ── Detect user type from prefixed ID ───────────────────────────
     const isAluno       = userIdLegacy.startsWith('aluno-')
@@ -45,13 +42,25 @@ export async function POST(request: Request) {
       // Virtual email used as Supabase Auth identifier for students
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
 
-      // Check if auth user already exists
-      const { data: listData }  = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      const existingByVirtual   = listData?.users?.find((u: any) => u.email?.toLowerCase() === virtualEmail)
-      const existingByRealEmail = alunoRealEmail 
-        ? listData?.users?.find((u: any) => u.email?.toLowerCase() === alunoRealEmail) 
-        : null
+      // Busca usuário por email virtual — mais eficiente que listUsers
+      const findByEmail = async (em: string) => {
+        const { data: found } = await supabaseAdmin
+          .from('system_users')
+          .select('id')
+          .eq('email', em)
+          .maybeSingle()
+        if (found?.id) {
+          // Tenta buscar direto pelo ID no Auth
+          const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(found.id).catch(() => ({ data: { user: null } }))
+          if (user) return user
+        }
+        // Fallback: busca por email com página pequena
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+        return list?.users?.find((u: any) => u.email?.toLowerCase() === em.toLowerCase()) || null
+      }
 
+      const existingByVirtual   = await findByEmail(virtualEmail)
+      const existingByRealEmail = alunoRealEmail ? await findByEmail(alunoRealEmail) : null
       const targetUser = existingByVirtual || existingByRealEmail
 
       const targetEmail = (registeredEmail || alunoRealEmail || '').trim().toLowerCase()
@@ -119,8 +128,22 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'E-mail válido é obrigatório para criar acesso do responsável.' }, { status: 400 })
       }
 
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      const existing = listData?.users?.find((u: any) => u.email?.toLowerCase() === targetEmail)
+      // Busca usuário por email diretamente (sem carregar 1000 usuários)
+      const { data: sysUserByEmail } = await supabaseAdmin
+        .from('system_users')
+        .select('id')
+        .eq('email', targetEmail)
+        .maybeSingle()
+      let existing: any = null
+      if (sysUserByEmail?.id) {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sysUserByEmail.id).catch(() => ({ data: { user: null } }))
+        existing = user
+      }
+      if (!existing) {
+        // Fallback pequeno caso o ID do system_user não bata com o auth.id
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+        existing = list?.users?.find((u: any) => u.email?.toLowerCase() === targetEmail) || null
+      }
 
       if (existing) {
         if (existing.last_sign_in_at) {
@@ -172,8 +195,17 @@ export async function POST(request: Request) {
       }, { status: 409 })
     }
 
-    const { data: listData2 } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-    const existingAuthUser = listData2?.users?.find((u: any) => u.email?.toLowerCase() === email)
+      // Busca por email direto no Auth (sem carregar 1000 usuários)
+      let existingAuthUser: any = null
+      // Primeiro tenta via ID do banco (rápido)
+      const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(userIdLegacy).catch(() => ({ data: { user: null } }))
+      if (byId) {
+        existingAuthUser = byId
+      } else {
+        // Fallback por email com página pequena
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+        existingAuthUser = list?.users?.find((u: any) => u.email?.toLowerCase() === email) || null
+      }
 
     if (existingAuthUser) {
       const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: newPass })

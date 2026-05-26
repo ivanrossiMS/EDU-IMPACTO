@@ -5,7 +5,7 @@ import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
-import { getSignedUploadUrlAction } from '../comunicados/actions'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
@@ -68,32 +68,21 @@ export default function ADAdminMomentos() {
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))
 
-        // Gerar URL assinada para bypassar RLS e limites de tamanho
-        const signedRes = await getSignedUploadUrlAction(fileToUpload.name, bucket)
-        if (!signedRes.ok || !signedRes.signedUrl) {
-          throw new Error(signedRes.error || 'Erro ao gerar URL assinada')
-        }
-
-        setUploadProgress(prev => ({ ...prev, [file.name]: 75 }))
-
-        // Upload direto via PUT para a URL assinada
-        const response = await fetch(signedRes.signedUrl, {
-          method: 'PUT',
-          body: fileToUpload,
-          headers: {
-            'Content-Type': fileToUpload.type
-          }
+        // Upload centralizado (Cache-Control: 30 dias para momentos)
+        const uploadRes = await uploadFileToSupabase({
+          bucket,
+          file: fileToUpload,
+          usageType: 'common' // Momentos são parecidos com comunicados, cache curto
         })
 
-        if (!response.ok) {
-          const errText = await response.text()
-          throw new Error(`Upload falhou: ${errText}`)
+        if (!uploadRes.ok || !uploadRes.url) {
+          throw new Error(uploadRes.error || 'Upload falhou')
         }
         
         // Sucesso
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        return { type: file.type.includes('video') ? 'video' : 'image', url: signedRes.publicUrl }
+        return { type: file.type.includes('video') ? 'video' : 'image', url: uploadRes.url }
       }))
 
       const post: ADMomento = {

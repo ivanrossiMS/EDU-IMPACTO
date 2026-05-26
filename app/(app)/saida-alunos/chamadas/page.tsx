@@ -1,5 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { supabase } from '@/lib/supabase';
 
@@ -372,7 +373,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
           border: (student.foto || student.imagem1) ? '1px solid hsl(var(--border-subtle))' : 'none',
         }}>
           {(student.foto || student.imagem1) ? (
-            <img src={student.foto || student.imagem1} alt={student.nome} decoding="async" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <Image src={student.foto || student.imagem1} alt={student.nome} width={52} height={52} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             initials
           )}
@@ -842,7 +843,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         fontSize: 10, fontWeight: 900, color: '#f59e0b',
                       }}>
                         {a.foto || a.imagem1 ? (
-                          <img src={a.foto || a.imagem1} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                          <Image src={a.foto || a.imagem1} alt={a.nome} width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                         ) : (
                           a.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
                         )}
@@ -871,7 +872,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 fontSize: 10, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
               }}>
                 {selectedStudent.foto || selectedStudent.imagem1 ? (
-                  <img src={selectedStudent.foto || selectedStudent.imagem1} alt={selectedStudent.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  <Image src={selectedStudent.foto || selectedStudent.imagem1} alt={selectedStudent.nome} width={24} height={24} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                 ) : (
                   selectedStudent.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
                 )}
@@ -981,7 +982,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 fontSize: 9, fontWeight: 900, color: l.confirmedOut ? '#10b981' : '#f59e0b', flexShrink: 0,
               }}>
                 {l.studentPhoto ? (
-                  <img src={l.studentPhoto} alt={l.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  <Image src={l.studentPhoto} alt={l.studentName} width={22} height={22} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
                 ) : (
                   l.studentName.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
                 )}

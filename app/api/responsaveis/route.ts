@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -195,9 +196,7 @@ export async function PUT(request: Request) {
 
     if (!id) return NextResponse.json({ error: 'ID é obrigatório para atualização' }, { status: 400 })
 
-    console.error(`\n[${new Date().toISOString()}] API Responsaveis PUT Body: ${JSON.stringify(body, null, 2)}\n`)
     const { aluno_responsavel, alunosVinculados, alunos_vinculados, dataNasc, isFinanceiro, isPedagogico, isOutro, diasAcesso, parentesco, cpf, rg, id: bodyId, ...dataToSave } = body
-    console.error(`\n[${new Date().toISOString()}] API Responsaveis PUT dataToSave: ${JSON.stringify(dataToSave, null, 2)}\n`)
     
     if (dataNasc) {
       dataToSave.data_nasc = dataNasc
@@ -262,14 +261,15 @@ export async function PUT(request: Request) {
         
         if (!hasActiveLink) {
           const emailClean = data.email.trim().toLowerCase()
-          const supabaseAdmin = require('@supabase/supabase-js').createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-          )
-          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
-          const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === emailClean)
-          if (authUser) {
-            await supabaseAdmin.auth.admin.deleteUser(authUser.id).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
+          const supabaseAdmin = getAdminClient()
+          // Busca por email diretamente via system_users (evita listUsers)
+          const { data: sysUser } = await supabaseAdmin
+            .from('system_users')
+            .select('id')
+            .eq('email', emailClean)
+            .maybeSingle()
+          if (sysUser?.id) {
+            await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao revogar acesso de responsável desvinculado:', e))
           }
         }
       }
@@ -304,14 +304,15 @@ export async function DELETE(request: Request) {
     // Se o responsável possuir email, localiza e remove sua credencial no Supabase Auth
     if (email) {
       const emailClean = email.trim().toLowerCase()
-      const supabaseAdmin = require('@supabase/supabase-js').createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
-      const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === emailClean)
-      if (authUser) {
-        await supabaseAdmin.auth.admin.deleteUser(authUser.id).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
+      const supabaseAdmin = getAdminClient()
+      // Busca via system_users como índice (evita listUsers de 1000 usuários)
+      const { data: sysUser } = await supabaseAdmin
+        .from('system_users')
+        .select('id')
+        .eq('email', emailClean)
+        .maybeSingle()
+      if (sysUser?.id) {
+        await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch((e: any) => console.error('Erro ao remover usuário de autenticação:', e))
       }
     }
 

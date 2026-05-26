@@ -456,7 +456,7 @@ export default function AlunosPage() {
 
   const handleConfirmDeleteAllPassword = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
-    if (deleteModal.passwordValue !== '2757') {
+    if (deleteModal.passwordValue !== 'CONFIRMAR') {
       setDeleteModal(prev => ({ ...prev, wrongPasswordError: true }))
       setTimeout(() => {
         setDeleteModal(prev => ({ ...prev, wrongPasswordError: false }))
@@ -1931,14 +1931,15 @@ export default function AlunosPage() {
                 <h3 style={{ fontSize: 22, fontWeight: 900, color: '#f8fafc', margin: '0 0 8px', fontFamily: 'Outfit, sans-serif' }}>Excluir Todos os Alunos</h3>
                 <p style={{ fontSize: 13, color: '#94a3b8', lineHeight: '1.6', margin: '0 0 24px' }}>
                   Esta ação é irreversível e excluirá permanentemente todos os alunos cadastrados, seus históricos, frequências e vínculos do banco de dados.
+                  Para confirmar, digite <b>CONFIRMAR</b> abaixo:
                 </p>
 
                 <form onSubmit={handleConfirmDeleteAllPassword}>
                   <div style={{ position: 'relative' }}>
                     <Lock size={16} color="#64748b" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
                     <input
-                      type="password"
-                      placeholder="Digite a Senha de Segurança"
+                      type="text"
+                      placeholder="Digite CONFIRMAR"
                       value={deleteModal.passwordValue}
                       onChange={(e) => setDeleteModal(prev => ({ ...prev, passwordValue: e.target.value }))}
                       style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: 12, border: deleteModal.wrongPasswordError ? '1.5px solid #ef4444' : '1px solid rgba(255,255,255,0.1)', background: 'rgba(15, 23, 42, 0.2)', color: '#fff', fontSize: 14, outline: 'none', transition: 'all 0.2s' }}
@@ -1946,7 +1947,7 @@ export default function AlunosPage() {
                     />
                   </div>
                   {deleteModal.wrongPasswordError && (
-                    <p style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, margin: '8px 0 0', textAlign: 'left' }}>Senha incorreta! Acesso negado.</p>
+                    <p style={{ fontSize: 12, color: '#ef4444', fontWeight: 600, margin: '8px 0 0', textAlign: 'left' }}>Palavra incorreta! Digite CONFIRMAR em maiúsculo.</p>
                   )}
                   
                   <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>

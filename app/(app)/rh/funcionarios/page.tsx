@@ -167,49 +167,50 @@ export default function FuncionariosPage() {
         logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
         return next
       })
-
-      // --- Auto-create system user if perfilSistema is selected ---
-      const pSistema = (payload as any).perfilSistema
-      if (pSistema && form.email.trim()) {
-        try {
-          const sysUserPayload = {
-            id: newId('U'),
-            nome: form.nome.trim(),
-            email: form.email.trim(),
-            cargo: form.cargo,
-            perfil: pSistema,
-            status: 'ativo',
-            twofa: false,
-            ultimoAcesso: 'Nunca'
-          }
-          const res = await fetch('/api/configuracoes/usuarios', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sysUserPayload)
-          })
-          if (res.ok) {
-            setUserCreateResult({ ok: true, msg: `✅ Usuário de acesso criado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
-            logSystemAction('RH (Funcionários)', 'Cadastro', `Acesso ao sistema criado para ${payload.nome}`, { registroId: sysUserPayload.id, nomeRelacionado: payload.nome, detalhesDepois: sysUserPayload })
-          } else {
-            const err = await res.json().catch(() => ({}))
-            if (res.status === 409 || err?.error?.toLowerCase?.().includes('duplicate') || err?.error?.toLowerCase?.().includes('already')) {
-              setUserCreateResult({ ok: false, msg: `⚠️ Já existe usuário com o e-mail ${form.email.trim()}. Acesso não duplicado.` })
-            } else {
-              setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro ao criar acesso: ${err?.error || res.status}` })
-            }
-          }
-        } catch (e: any) {
-          setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro de rede ao criar acesso.` })
-        }
-        setIsSaving(false)
-        // Don't close modal immediately — show result to user
-        return
-      }
     } else if (editingId) {
       const funcAntigo = funcionarios.find(f => f.id === editingId)
       setFuncionarios(prev => prev.map(f => f.id === editingId ? { ...f, ...payload } as any : f))
       logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
     }
+
+    // --- Auto-create / update system user if perfilSistema is selected ---
+    const pSistema = (payload as any).perfilSistema
+    if (pSistema && form.email.trim()) {
+      try {
+        const sysUserPayload = {
+          id: newId('U'),
+          nome: form.nome.trim(),
+          email: form.email.trim(),
+          cargo: form.cargo,
+          perfil: pSistema,
+          status: form.status || 'ativo',
+          twofa: false,
+          ultimoAcesso: 'Nunca'
+        }
+        const res = await fetch('/api/configuracoes/usuarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sysUserPayload)
+        })
+        if (res.ok) {
+          setUserCreateResult({ ok: true, msg: `✅ Acesso ao sistema configurado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
+          logSystemAction('RH (Funcionários)', modal === 'add' ? 'Cadastro' : 'Edição', `Acesso ao sistema atualizado para ${payload.nome}`, { registroId: sysUserPayload.id, nomeRelacionado: payload.nome, detalhesDepois: sysUserPayload })
+        } else {
+          const err = await res.json().catch(() => ({}))
+          if (res.status === 409 || err?.error?.toLowerCase?.().includes('duplicate') || err?.error?.toLowerCase?.().includes('already')) {
+            setUserCreateResult({ ok: true, msg: `✅ Acesso atualizado. E-mail ${form.email.trim()} já existente vinculado.` })
+          } else {
+            setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro ao configurar acesso: ${err?.error || res.status}` })
+          }
+        }
+      } catch (e: any) {
+        setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro de rede ao configurar acesso.` })
+      }
+      setIsSaving(false)
+      // Don't close modal immediately — show result to user
+      return
+    }
+
     setIsSaving(false)
     closeModal()
   }

@@ -4,6 +4,7 @@ import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import Image from 'next/image'
 import { Tv, Clock, User, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -68,9 +69,9 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
       {call.studentPhoto ? (
         <>
           {/* Blurred Background Backdrop for premium ambient fill */}
-          <img src={call.studentPhoto} alt="" className="tv-card-photo-blur-backdrop" />
+          <Image src={call.studentPhoto} alt="" width={300} height={300} className="tv-card-photo-blur-backdrop" />
           {/* Crisp, uncropped centered foreground photo */}
-          <img src={call.studentPhoto} alt={call.studentName} className="tv-card-photo-bg" />
+          <Image src={call.studentPhoto} alt={call.studentName} width={400} height={400} className="tv-card-photo-bg" />
         </>
       ) : (
         <div className="tv-card-photo-bg-initials" style={{ background: `linear-gradient(135deg, ${accentColor} 0%, #171717 100%)` }}>
@@ -157,7 +158,7 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
       {/* Mini Photo/Initials */}
       <div className="tv-secondary-card-avatar">
         {call.studentPhoto ? (
-          <img src={call.studentPhoto} alt={call.studentName} className="tv-secondary-card-photo" />
+          <Image src={call.studentPhoto} alt={call.studentName} width={100} height={100} className="tv-secondary-card-photo" />
         ) : (
           <div className="tv-secondary-card-initials" style={{ background: `linear-gradient(135deg, ${accentColor}, #4f46e5)` }}>
             {initials}

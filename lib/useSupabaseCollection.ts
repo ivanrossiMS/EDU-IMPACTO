@@ -83,7 +83,7 @@ export function useSupabaseCollection<T>(
     persister?: (value: T) => Promise<void>
     refreshIntervalMs?: number
   }
-): [T, (value: T | ((prev: T) => T)) => void, { loading: boolean; error: string | null }] {
+): [T, (value: T | ((prev: T) => T)) => Promise<void>, { loading: boolean; error: string | null }] {
   const lsKey = `edu-ls-${endpoint}`
   // Make sure initialValue is never undefined
   const safeInitialValue = initialValue !== undefined ? initialValue : ([] as any);
@@ -139,8 +139,17 @@ export function useSupabaseCollection<T>(
       ? () => options.fetcher!()
       : () => {
           const sep = endpoint.includes('?') ? '&' : '?';
-          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, cache: 'no-store' })
+          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
+            cache: 'no-store',
+            credentials: 'include'
+          })
             .then(async r => {
+              const contentType = r.headers.get('content-type')
+              if (r.ok && contentType && contentType.includes('text/html')) {
+                console.error(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
+                throw new Error(`Auth Redirect`)
+              }
               if (!r.ok) throw new Error(`HTTP ${r.status}`)
               const text = await r.text()
               if (!text) return initialValueRef.current
@@ -182,10 +191,14 @@ export function useSupabaseCollection<T>(
         setLoading(false)
       })
 
-    // Setup polling if refreshIntervalMs is provided
+    // Setup polling with Visibility API — pauses when tab is hidden to save egress
     if (options?.refreshIntervalMs && options.refreshIntervalMs > 0) {
-      const intervalId = setInterval(() => {
+      let intervalId: ReturnType<typeof setInterval> | null = null
+
+      const doPoll = () => {
         if (cancelled || !isMounted.current) return
+        // Skip fetch entirely if the page is hidden (user switched tabs / minimized window)
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
         fetchWithDedup<T>(endpoint, doFetch)
           .then(data => {
             if (cancelled || !isMounted.current) return
@@ -203,18 +216,33 @@ export function useSupabaseCollection<T>(
               const first = data[0]
               normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
             }
-            
             // Only update if data actually changed to avoid unnecessary re-renders
             if (JSON.stringify(latestState.current) !== JSON.stringify(normalized)) {
               setState(normalized)
             }
           })
           .catch(() => { /* silent fail on polling */ })
-      }, options.refreshIntervalMs)
-      
+      }
+
+      // When the user returns to the tab, fetch immediately so data feels fresh
+      const handleVisibilityChange = () => {
+        if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+          doPoll()
+        }
+      }
+
+      if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+      }
+
+      intervalId = setInterval(doPoll, options.refreshIntervalMs)
+
       return () => {
         cancelled = true
-        clearInterval(intervalId)
+        if (intervalId) clearInterval(intervalId)
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', handleVisibilityChange)
+        }
       }
     }
 
@@ -236,18 +264,28 @@ export function useSupabaseCollection<T>(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(next),
+          credentials: 'include',
         })
+        const contentType = res.headers.get('content-type')
+        if (contentType && contentType.includes('text/html')) {
+          const errMsg = `Erro de autenticação ao salvar`
+          console.error(`[useSupabaseCollection] API sync failed for ${endpoint}: Returned HTML (likely redirect to login)`)
+          if (isMounted.current) setError(errMsg)
+          throw new Error(errMsg)
+        }
         if (!res.ok) {
           const body = await res.json().catch(() => ({}))
+          const errMsg = body?.error || res.statusText || 'Erro ao salvar'
           console.error(`[useSupabaseCollection] API sync failed for ${endpoint}:`, res.status, body)
-          if (isMounted.current) setError(`Erro ao salvar: ${body?.error || res.status}`)
-          return
+          if (isMounted.current) setError(`Erro ao salvar: ${errMsg}`)
+          throw new Error(errMsg)
         }
       }
       if (isMounted.current) setError(null)
     } catch (e: any) {
       console.warn(`[useSupabaseCollection] API sync failed for ${endpoint}:`, e?.message)
-      if (isMounted.current) setError(`Erro de rede ao salvar`)
+      if (isMounted.current) setError(e.message || `Erro de rede ao salvar`)
+      throw e
     }
   }, [endpoint, lsKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -256,7 +294,7 @@ export function useSupabaseCollection<T>(
   useEffect(() => { latestState.current = state; }, [state]);
 
   // ── Setter — optimistic update then persist ────────────────────────────────
-  const set = useCallback((valOrFn: T | ((prev: T) => T)) => {
+  const set = useCallback(async (valOrFn: T | ((prev: T) => T)) => {
     const safePrev: T = latestState.current !== undefined ? latestState.current : initialValueRef.current;
     const next = typeof valOrFn === 'function'
       ? (valOrFn as (p: T) => T)(safePrev)
@@ -275,7 +313,7 @@ export function useSupabaseCollection<T>(
     
     // Side effects (Run exactly once outside setState)
     setCacheEntry(endpoint, next);
-    persist(next);
+    await persist(next);
   }, [persist, endpoint]);
 
   const returnedState = state !== undefined && state !== null ? state : initialValueRef.current;
@@ -291,15 +329,24 @@ export function useSupabaseArray<T>(
   endpoint: string,
   initialValue: T[] = [],
   options?: { refreshIntervalMs?: number }
-): [T[], (value: T[] | ((prev: T[]) => T[])) => void, { loading: boolean; error: string | null }] {
+): [T[], (value: T[] | ((prev: T[]) => T[])) => Promise<void>, { loading: boolean; error: string | null }] {
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {
     ...options,
     fetcher: () => {
       const sep = endpoint.includes('?') ? '&' : '?';
-      return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, cache: 'no-store' })
-        .then(async r => {
-            if (!r.ok) {
+          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
+            cache: 'no-store',
+            credentials: 'include'
+          })
+            .then(async r => {
+              const contentType = r.headers.get('content-type')
+              if (r.ok && contentType && contentType.includes('text/html')) {
+                console.error(`[useSupabaseArray] Endpoint /${endpoint} returned HTML (likely auth redirect).`)
+                throw new Error(`Auth Redirect`)
+              }
+              if (!r.ok) {
               if (r.status === 404 || r.status === 500) {
                 console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
                 return [];

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,11 +50,11 @@ export async function GET(req: Request) {
     }, [])
 
     // Fetch active Auth users to check their actual existence and map orphaned records
-    const supabaseAdmin = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
+    const supabaseAdmin = getAdminClient()
+    // Em vez de puxar 1000 usuários na memória, assumimos ativo se ele estiver no system_users
+    // (a verificação do último acesso pode ser relaxada aqui para listagens grandes, ou buscada individualmente)
+    // Se precisarmos muito do auth, buscamos as páginas que interessam
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 }).catch(() => ({ data: { users: [] } }))
     const authUsersList = authData?.users || []
 
     // Buscar responsáveis e seus vínculos no banco
@@ -78,7 +79,7 @@ export async function GET(req: Request) {
         const authUser = authUsersList.find((au: any) => au.email?.toLowerCase() === email)
 
         mappedResps.push({
-          id: authUser ? authUser.id : `virtual-resp-${resp.id}`,
+          id: `resp-${resp.id}`,
           nome: resp.nome,
           email: email,
           cargo: 'Responsáveis',
@@ -113,10 +114,7 @@ export async function POST(req: Request) {
     }
 
     // Always use service-role admin for Auth provisioning
-    const supabaseAdmin = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabaseAdmin = getAdminClient()
     
     const singleBody = Array.isArray(body) ? body[0] : body;
     const isMasterSetup = singleBody?.email?.toLowerCase().trim() === 'direcao@colegioimpacto.net';
@@ -152,8 +150,23 @@ export async function POST(req: Request) {
       const email = singleBody.email.trim().toLowerCase()
       
       // Check if Auth user already exists for this email
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      const existingAuthUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email)
+      // Usa system_users e getUserById em vez de listUsers
+      let existingAuthUser: any = null
+      const { data: sysMatch } = await supabaseAdmin
+        .from('system_users')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
+      
+      if (sysMatch?.id) {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sysMatch.id).catch(() => ({ data: { user: null } }))
+        existingAuthUser = user
+      }
+      if (!existingAuthUser) {
+         // Fallback para caso não esteja sincronizado
+         const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+         existingAuthUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === email)
+      }
       
       if (existingAuthUser) {
         // Already in Auth — just link the ID

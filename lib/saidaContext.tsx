@@ -121,6 +121,7 @@ interface SaidaCtx {
   activeCalls: PickupCall[]
   logs: SaidaLog[]
   config: SaidaConfig
+  isConfigLoading: boolean
   realtimeStatus: 'online' | 'connecting' | 'offline'
   isLoadingCalls: boolean
   // actions
@@ -140,7 +141,7 @@ interface SaidaCtx {
   unlinkStudentGuardian: (id: string) => void
   getGuardiansForStudent: (studentId: string) => (Guardian & { canPickup: boolean })[]
   getStudentsForGuardian: (guardianId: string) => string[]
-  updateConfig: (patch: Partial<SaidaConfig>) => void
+  updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
   clearCalls: () => void
   refreshCalls: () => Promise<void>
@@ -161,7 +162,7 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
   const [activeCalls, setActiveCalls, { loading: isLoadingCalls }] = useSupabaseArray<PickupCall>('saida/calls', [])
   const [logs, setLogs] = useSupabaseArray<SaidaLog>('saida/logs', [])
-  const [config, setConfig] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
+  const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
 
   const { emit, on } = useBroadcastRealtime()
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
@@ -478,7 +479,7 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Config ───────────────────────────────────────────────────────────────
   const updateConfig = useCallback((patch: Partial<SaidaConfig>) => {
-    setConfig(prev => ({ ...prev, ...patch }))
+    return setConfig(prev => ({ ...prev, ...patch }))
   }, [])
 
   const clearLog = useCallback(() => setLogs([]), [])
@@ -523,7 +524,10 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      guardians, rfidMap, studentGuardians, activeCalls, logs, config, realtimeStatus, isLoadingCalls,
+      guardians, rfidMap, studentGuardians, activeCalls, logs,
+      config,
+      isConfigLoading,
+      realtimeStatus, isLoadingCalls,
       readRFID, callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall,
       addGuardian, updateGuardian, removeGuardian,
       addRFID, removeRFID,

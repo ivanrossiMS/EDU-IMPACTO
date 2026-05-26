@@ -5,6 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -360,7 +361,7 @@ export default function SelecionarAluno() {
                     <div className="premium-card">
                       <div className="premium-card-avatar avatar-glow" style={{ position: 'relative', width: 72, height: 72, borderRadius: 20, fontSize: 26, fontWeight: 800, background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', overflow: 'hidden', boxShadow: '0 8px 24px rgba(139,92,246,0.15)' }}>
                         {a.foto ? (
-                          <img src={a.foto} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <Image src={a.foto} alt={a.nome} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (
                           getInitials(a.nome)
                         )}

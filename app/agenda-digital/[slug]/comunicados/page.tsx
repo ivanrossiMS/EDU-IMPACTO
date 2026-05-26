@@ -1,5 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
@@ -907,7 +908,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                           {(isImg || isVid) && (
                               <div style={{ width: '100%', borderRadius: 20, overflow: 'hidden', background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 600, border: '1px solid #e2e8f0', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.15)' }}>
                                 {isImg ? (
-                                   <img src={parsed.url} alt={parsed.name} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
+                                   <Image src={parsed.url} alt={parsed.name} width={800} height={600} style={{ width: '100%', height: 'auto', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
                                 ) : (
                                    <video src={parsed.url} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} preload="metadata" />
                                 )}

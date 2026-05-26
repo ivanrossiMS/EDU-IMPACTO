@@ -19,7 +19,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 function TabConfiguracoes() {
   const isMobile = useIsMobile()
-  const { config, updateConfig, clearLog } = useSaida()
+  const { config, updateConfig, clearLog, isConfigLoading } = useSaida()
   const voice = useVoice()
 
   // ── States for On-Demand Saving & Draft ──
@@ -29,13 +29,12 @@ function TabConfiguracoes() {
 
   // Sync draft state with global config when config is loaded for the first time
   useEffect(() => {
-    if (config) {
-      setLocalConfig((prev: any) => {
-        if (!prev) return { ...config }
-        return prev
-      })
+    // Only set localConfig after the global config finishes its initial fetch
+    // This prevents the UI from locking onto the hardcoded DEFAULT_CONFIG.
+    if (!isConfigLoading && config) {
+      setLocalConfig({ ...config })
     }
-  }, [config])
+  }, [config, isConfigLoading])
 
   // Helper to dynamically update fields in local draft without implicit 'any' warnings
   const updateLocalField = (field: string, value: any) => {
@@ -49,12 +48,30 @@ function TabConfiguracoes() {
     }
   }
 
-  // Persist draft changes in Supabase and trigger success modal
   const handleSave = async () => {
     if (!localConfig) return
     setSaving(true)
     try {
-      await updateConfig(localConfig)
+      // 1. Force the API call directly to bypass any potential issues in useSupabaseCollection cache
+      const res = await fetch('/api/saida/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localConfig),
+      })
+      if (!res.ok) {
+        throw new Error('Falha ao salvar no banco de dados')
+      }
+
+      // 2. Also update the React state
+      try {
+        await updateConfig(localConfig)
+      } catch (e) {
+        console.warn('React state sync warning:', e)
+      }
+      
+      // 3. Force sync localConfig to ensure strict equality and eliminate the floating bar
+      setLocalConfig({ ...localConfig })
+      
       setShowSuccessModal(true)
       // Auto-close success modal after 3.5 seconds
       setTimeout(() => {
@@ -62,13 +79,23 @@ function TabConfiguracoes() {
       }, 3500)
     } catch (err) {
       console.error('Error saving configurations:', err)
+      alert('Erro ao salvar as configurações. Verifique sua conexão e tente novamente.')
     } finally {
       setSaving(false)
     }
   }
 
-  // Detect unsaved changes by deep comparison of JSON string representations
-  const hasChanges = localConfig && config && JSON.stringify(localConfig) !== JSON.stringify(config)
+  // Detect unsaved changes by robust comparison ignoring key order
+  const hasChanges = useMemo(() => {
+    if (!localConfig || !config) return false;
+    const cKeys = Object.keys(config).sort();
+    const lKeys = Object.keys(localConfig).sort();
+    if (cKeys.length !== lKeys.length) return true;
+    for (const k of cKeys) {
+      if ((config as Record<string, any>)[k] !== (localConfig as Record<string, any>)[k]) return true;
+    }
+    return false;
+  }, [localConfig, config]);
 
   const testVoice = () => {
     let t = '3º Ano A - 2026'

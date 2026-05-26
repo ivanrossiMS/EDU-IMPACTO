@@ -6,7 +6,8 @@ import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
   Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock, Loader2
 } from 'lucide-react'
-import { getProfileUploadUrlAction, updateProfilePhotoAction } from './actions'
+import { updateProfilePhotoAction } from './actions'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage } from '@/lib/mediaCompressor'
 
 interface UserProfile {
@@ -241,22 +242,23 @@ export default function MeuPerfilPage() {
                         format: 'image/webp'
                       });
 
-                      // 2. Obter URL assinada
-                      const res = await getProfileUploadUrlAction(currentUser.id, fileToUpload.name)
-                      if (res.error || !res.signedUrl) throw new Error(res.error || 'Erro ao preparar upload')
-
-                      // 3. Upload direto
-                      const upload = await fetch(res.signedUrl, {
-                        method: 'PUT',
-                        body: fileToUpload,
-                        headers: { 'Content-Type': fileToUpload.type }
+                      // 2. Upload centralizado (Cache-Control: 1 ano para avatares)
+                      const uploadRes = await uploadFileToSupabase({
+                        bucket: 'comunicados-midia',
+                        folder: 'avatars',
+                        file: fileToUpload,
+                        usageType: 'fixed' // Avatares raramente mudam
                       })
-                      if (!upload.ok) throw new Error('Falha no envio do arquivo')
 
-                      const fotoUrl = res.publicUrl
+                      if (!uploadRes.ok || !uploadRes.url) {
+                        throw new Error(uploadRes.error || 'Falha no envio da foto.')
+                      }
+
+                      const fotoUrl = uploadRes.url
                       
                       // 3. Salvar no banco e Auth
-                      await updateProfilePhotoAction(currentUser.id, fotoUrl)
+                      const updateRes = await updateProfilePhotoAction(currentUser.id, fotoUrl)
+                      if (updateRes.error) throw new Error(updateRes.error)
 
                       // 4. Atualizar UI e isolar foto no localStorage
                       localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)

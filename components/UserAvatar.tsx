@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
+import { getOptimizedUrl } from '@/lib/utils/image';
 
 // In-memory cache to share across instances and avoid duplicate requests
 const photoCache: Record<string, string | null | undefined> = {};
@@ -137,9 +139,12 @@ export function UserAvatar({
 
   if (foto && foto !== 'undefined') {
     return (
-      <img 
+      <Image 
         src={foto} 
         alt={name} 
+        width={size}
+        height={size}
+        loading="lazy"
         className={className}
         style={{ 
           width: size, 

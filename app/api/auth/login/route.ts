@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,10 +19,7 @@ export async function POST(request: NextRequest) {
 
     const loginInput = rawLogin.trim().toLowerCase()
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
 
     // ── Resolve the actual email for Supabase Auth ──────────────────
     // If it's NOT an email format, it might be a matrícula or CPF
@@ -33,20 +31,27 @@ export async function POST(request: NextRequest) {
     const isEmailFormat = loginInput.includes('@') && !loginInput.endsWith('@impactoedu.local')
 
     if (!isEmailFormat) {
-      // Try student by matricula or CPF
-      const { data: alunosRows } = await supabaseAdmin
-        .from('alunos')
-        .select('id, nome, email, matricula, dados')
-
+      // ── Busca filtrada no banco (sem full table scan) ─────────────────────
       const loginDigits = loginInput.replace(/\D/g, '')
-      alunoRecord = (alunosRows || []).find((a: any) => {
-        const matricA  = (a.matricula || a.dados?.codigo || '').trim().toLowerCase()
-        const cpfA     = (a.cpf || a.dados?.cpf || '').replace(/\D/g, '')
-        return (
-          (matricA && matricA === loginInput) ||
-          (cpfA && loginDigits.length >= 11 && cpfA === loginDigits)
-        )
-      })
+
+      // 1. Tentar aluno por matrícula
+      const { data: alunoByMatricula } = await supabaseAdmin
+        .from('alunos')
+        .select('id, nome, email, matricula, dados, status')
+        .eq('matricula', loginInput)
+        .maybeSingle()
+
+      if (alunoByMatricula) {
+        alunoRecord = alunoByMatricula
+      } else if (loginDigits.length >= 11) {
+        // 2. Tentar aluno por CPF (armazenado em dados JSONB)
+        const { data: alunosByCpf } = await supabaseAdmin
+          .from('alunos')
+          .select('id, nome, email, matricula, dados, status')
+          .eq('dados->>cpf', loginDigits)
+          .limit(1)
+        alunoRecord = alunosByCpf?.[0] || null
+      }
 
       if (alunoRecord) {
         const matricula   = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
@@ -57,21 +62,35 @@ export async function POST(request: NextRequest) {
           : `aluno.${matricula}@impactoedu.local`
         userType = 'aluno'
       } else {
-        // Try responsavel by CPF or celular
-        const { data: respRows } = await supabaseAdmin
+        // 3. Tentar responsável por código
+        const { data: respByCodigo } = await supabaseAdmin
           .from('responsaveis')
           .select('id, nome, email, celular, codigo, telefone, dados')
-        
-        responsavelRecord = (respRows || []).find((r: any) => {
-          const cpfR    = (r.cpf || r.dados?.cpf || '').replace(/\D/g, '')
-          const celR    = (r.celular || r.telefone || '').replace(/\D/g, '')
-          const codigoR = (r.codigo || '').trim().toLowerCase()
-          return (
-            (cpfR && loginDigits.length >= 11 && cpfR === loginDigits) ||
-            (celR && loginDigits.length >= 10 && celR === loginDigits) ||
-            (codigoR && codigoR === loginInput)
-          )
-        })
+          .eq('codigo', loginInput)
+          .maybeSingle()
+
+        if (respByCodigo) {
+          responsavelRecord = respByCodigo
+        } else if (loginDigits.length >= 10) {
+          // 4. Tentar responsável por CPF
+          if (loginDigits.length >= 11) {
+            const { data: respByCpf } = await supabaseAdmin
+              .from('responsaveis')
+              .select('id, nome, email, celular, codigo, telefone, dados')
+              .eq('dados->>cpf', loginDigits)
+              .limit(1)
+            responsavelRecord = respByCpf?.[0] || null
+          }
+          // 5. Tentar responsável por celular (só se ainda não achou)
+          if (!responsavelRecord) {
+            const { data: respByCelular } = await supabaseAdmin
+              .from('responsaveis')
+              .select('id, nome, email, celular, codigo, telefone, dados')
+              .or(`celular.eq.${loginDigits},telefone.eq.${loginDigits}`)
+              .limit(1)
+            responsavelRecord = respByCelular?.[0] || null
+          }
+        }
 
         if (responsavelRecord) {
           resolvedEmail   = (responsavelRecord.email || '').trim().toLowerCase()

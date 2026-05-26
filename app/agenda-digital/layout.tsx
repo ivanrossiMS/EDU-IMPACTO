@@ -2,6 +2,7 @@
 // Layout da Agenda Digital com Sidebar Moderna
 
 import React, { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { SaidaProvider } from '@/lib/saidaContext'
 import { AgendaDigitalProvider, useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { DataProvider } from '@/lib/dataContext'
@@ -180,7 +181,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="ad-main-scroll no-scrollbar">
           {bannerUrl && (
             <div className="ad-banner-global">
-              <img src={bannerUrl} alt="Cover Banner" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
+              <Image src={bannerUrl} alt="Cover Banner" fill style={{ objectFit: 'cover', objectPosition: 'center' }} />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
             </div>
           )}

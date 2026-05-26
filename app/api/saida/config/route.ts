@@ -3,15 +3,29 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createProtectedClient()
-    const { data, error } = await supabase.from('saida_config').select('*')
-    if (error) throw new Error(error.message)
+    const adminSupabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        global: {
+          fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
+        }
+      }
+    )
+    const { data, error } = await adminSupabase.from('saida_config').select('*')
+    if (error) {
+      console.error('[saida_config GET] Fetch error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
     
     // Extract everything from jsonb 'dados' to keep interface flat
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    console.log('[saida_config GET] returning:', JSON.stringify(result))
     
     return NextResponse.json(result, {
       headers: { 
@@ -19,8 +33,9 @@ export async function GET(request: Request) {
         'Pragma': 'no-cache'
       }
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
+  } catch (err) {
+    console.error('[saida_config GET] Unhandled error:', err)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
 
@@ -48,11 +63,17 @@ export async function POST(request: Request) {
     }
 
     const row = buildRow(body)
+    console.log('[saida_config POST] Upserting row:', JSON.stringify(row))
     const { data, error } = await adminSupabase.from('saida_config').upsert(row).select().single()
-    if (error) throw new Error(error.message)
+    if (error) {
+      console.error('[saida_config POST] Upsert Error:', error)
+      throw new Error(error.message)
+    }
 
+    console.log('[saida_config POST] Success data:', JSON.stringify(data))
     return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {
+    console.error('[saida_config POST] Catch Error:', err)
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }

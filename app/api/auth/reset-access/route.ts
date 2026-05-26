@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,19 +11,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tipo e ID são obrigatórios' }, { status: 400 })
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // List all users from Supabase Auth to find the matching one
-    const { data: listData, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-    if (listErr) {
-      throw listErr
-    }
+    const supabaseAdmin = getAdminClient()
 
     let targetAuthUserId: string | null = null
     let emailFound: string | null = null
+
+    // Helper: busca auth user por email sem listUsers(1000)
+    const findAuthByEmail = async (email: string): Promise<string | null> => {
+      // 1. Tenta via system_users (índice rápido)
+      const { data: sys } = await supabaseAdmin
+        .from('system_users')
+        .select('id')
+        .eq('email', email.toLowerCase())
+        .maybeSingle()
+      if (sys?.id) {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sys.id).catch(() => ({ data: { user: null } }))
+        if (user) return user.id
+      }
+      // 2. Fallback: listUsers pequeno
+      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
+      const found = list?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
+      return found?.id || null
+    }
 
     if (type === 'responsavel') {
       // Find the responsible record
@@ -40,10 +49,7 @@ export async function POST(request: Request) {
 
       if (resp.email) {
         emailFound = resp.email.trim().toLowerCase()
-        const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === emailFound)
-        if (authUser) {
-          targetAuthUserId = authUser.id
-        }
+        targetAuthUserId = await findAuthByEmail(emailFound)
       }
     } else if (type === 'aluno') {
       // Find the student record
@@ -62,12 +68,14 @@ export async function POST(request: Request) {
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       const realEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
 
-      const authUser = listData?.users?.find(
-        (u: any) => u.email?.toLowerCase() === virtualEmail || (realEmail && u.email?.toLowerCase() === realEmail)
-      )
-      if (authUser) {
-        targetAuthUserId = authUser.id
-        emailFound = authUser.email || null
+      // Tenta primeiro pelo email virtual, depois pelo email real
+      targetAuthUserId = await findAuthByEmail(virtualEmail)
+      if (!targetAuthUserId && realEmail) {
+        targetAuthUserId = await findAuthByEmail(realEmail)
+      }
+      if (targetAuthUserId) {
+        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(targetAuthUserId).catch(() => ({ data: { user: null } }))
+        emailFound = user?.email || null
       }
     } else if (type === 'system_user') {
       // Find system user
@@ -82,12 +90,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Usuário do sistema não encontrado' }, { status: 404 })
       }
 
-      if (sysUser.email) {
+      // Para system_users, o ID do banco pode ser igual ao ID do Auth
+      const { data: { user: byId } } = await supabaseAdmin.auth.admin.getUserById(id).catch(() => ({ data: { user: null } }))
+      if (byId) {
+        targetAuthUserId = byId.id
+        emailFound = byId.email || null
+      } else if (sysUser.email) {
         emailFound = sysUser.email.trim().toLowerCase()
-        const authUser = listData?.users?.find((u: any) => u.email?.toLowerCase() === emailFound)
-        if (authUser) {
-          targetAuthUserId = authUser.id
-        }
+        targetAuthUserId = await findAuthByEmail(emailFound)
       }
 
       // Also reset password flag in DB

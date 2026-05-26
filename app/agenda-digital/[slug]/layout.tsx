@@ -8,6 +8,7 @@ import { useSaida } from '@/lib/saidaContext'
 import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams } from 'next/navigation'
 import React, { use, useState, useEffect } from 'react'
@@ -1532,7 +1533,7 @@ export default function AgendaDigitalFamilyLayout({
               overflow: 'hidden'
             }}>
               {aluno?.foto ? (
-                 <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                 <Image src={aluno.foto} alt={aluno.nome} width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                  getInitials(aluno.nome)
               )}

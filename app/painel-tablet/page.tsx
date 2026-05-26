@@ -2,6 +2,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { supabase } from '@/lib/supabase';
+import Image from 'next/image';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
@@ -178,7 +179,7 @@ function StudentCard({
         flexShrink: 0,
       }}>
         {foto ? (
-          <img src={foto} alt={aluno.nome} style={{
+          <Image src={foto} alt={aluno.nome} width={400} height={400} style={{
             width: '100%', height: '100%', objectFit: 'cover',
             filter: (blocked && !alreadyCalled) ? 'grayscale(70%) brightness(0.6)' : 'none',
             transition: 'filter 0.3s',
@@ -1163,7 +1164,7 @@ function PainelTabletContent() {
                       <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
                         {/* Photo or initials */}
                         {a.foto ? (
-                          <img src={a.foto} alt={a.nome} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
+                          <Image src={a.foto} alt={a.nome} width={52} height={52} style={{ width: 52, height: 52, borderRadius: 12, objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(6,182,212,0.25)' }}/>
                         ) : (
                           <div style={{
                             width: 52, height: 52, borderRadius: 12, flexShrink: 0,

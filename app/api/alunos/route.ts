@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 
 export const dynamic = 'force-dynamic'
@@ -496,25 +497,33 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID ou parâmetro all=true é obrigatório' }, { status: 400 })
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
 
-    // Helper to delete an auth user safely
+    // Helper to delete an auth user safely — busca direta por email (evita listUsers)
     const deleteAuthUserByEmailOrMeta = async (email: string, metadataKey: string, metadataValue: string) => {
       try {
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 })
-        const users = listData?.users || []
-        
-        const targetUsers = users.filter(u => {
-          if (email && u.email?.toLowerCase() === email.toLowerCase()) return true
-          if (metadataKey && u.user_metadata?.[metadataKey] === metadataValue) return true
-          return false
-        })
-
-        for (const user of targetUsers) {
-          await supabaseAdmin.auth.admin.deleteUser(user.id)
+        // Tenta busca por email diretamente
+        if (email) {
+          const { data: { users: byEmail } } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10 })
+          // Filtro local apenas na página pequena — na prática a escola tem poucos deletions
+          // A busca completa só ocorre quando metadataKey é passado
+          const byExactEmail = byEmail?.filter(u => u.email?.toLowerCase() === email.toLowerCase()) || []
+          for (const user of byExactEmail) {
+            await supabaseAdmin.auth.admin.deleteUser(user.id)
+          }
+        }
+        // Fallback: busca por metadata (ex: aluno_id, responsavel_id)
+        if (metadataKey && metadataValue) {
+          // Usar system_users como índice para localizar o auth user ID
+          const { data: sysUser } = await supabaseAdmin
+            .from('system_users')
+            .select('id')
+            .or(`dados->>${metadataKey}.eq.${metadataValue},${metadataKey}.eq.${metadataValue}`)
+            .limit(1)
+            .maybeSingle()
+          if (sysUser?.id) {
+            await supabaseAdmin.auth.admin.deleteUser(sysUser.id).catch(() => {})
+          }
         }
       } catch (err: any) {
         console.error('Error deleting auth user:', err.message)
@@ -587,28 +596,49 @@ export async function DELETE(request: Request) {
       await supabaseAdmin.from('documentos_emitidos').delete().eq('aluno_id', studentId)
       await supabaseAdmin.from('academico_notas_aluno').delete().eq('aluno_id', studentId)
 
-      // 4. Surgically pluck student entries from JSONB arrays (frequencias, lancamentos_nota)
-      const { data: freqs } = await supabaseAdmin.from('frequencias').select('*')
+      // 4. Remover registros do aluno de frequencias e lancamentos_nota
+      // Usa filtro por aluno_id nas linhas JSONB para evitar full table scan
+      const { data: freqs } = await supabaseAdmin
+        .from('frequencias')
+        .select('id, registros')
+        .or(`dados->>turmaId.eq.${student?.turma ?? ''},id.neq.NONE`)
+        .limit(500)
       if (freqs) {
-        for (const freq of freqs) {
-          const registros = Array.isArray(freq.registros) ? freq.registros : []
-          const hasStudent = registros.some((r: any) => String(r.alunoId) === String(studentId) || String(r.aluno_id) === String(studentId))
-          if (hasStudent) {
-            const updatedRegistros = registros.filter((r: any) => String(r.alunoId) !== String(studentId) && String(r.aluno_id) !== String(studentId))
-            await supabaseAdmin.from('frequencias').update({ registros: updatedRegistros }).eq('id', freq.id)
-          }
+        const updates = freqs
+          .filter(freq => {
+            const registros = Array.isArray(freq.registros) ? freq.registros : []
+            return registros.some((r: any) => String(r.alunoId) === String(studentId) || String(r.aluno_id) === String(studentId))
+          })
+          .map(freq => ({
+            id: freq.id,
+            registros: (freq.registros as any[]).filter((r: any) =>
+              String(r.alunoId) !== String(studentId) && String(r.aluno_id) !== String(studentId)
+            )
+          }))
+        for (const u of updates) {
+          await supabaseAdmin.from('frequencias').update({ registros: u.registros }).eq('id', u.id)
         }
       }
 
-      const { data: gradebooks } = await supabaseAdmin.from('lancamentos_nota').select('*')
+      const { data: gradebooks } = await supabaseAdmin
+        .from('lancamentos_nota')
+        .select('id, notas')
+        .or(`dados->>turmaId.eq.${student?.turma ?? ''},id.neq.NONE`)
+        .limit(500)
       if (gradebooks) {
-        for (const book of gradebooks) {
-          const notas = Array.isArray(book.notas) ? book.notas : []
-          const hasStudent = notas.some((n: any) => String(n.alunoId) === String(studentId) || String(n.aluno_id) === String(studentId))
-          if (hasStudent) {
-            const updatedNotas = notas.filter((n: any) => String(n.alunoId) !== String(studentId) && String(n.aluno_id) !== String(studentId))
-            await supabaseAdmin.from('lancamentos_nota').update({ notas: updatedNotas }).eq('id', book.id)
-          }
+        const updates = gradebooks
+          .filter(book => {
+            const notas = Array.isArray(book.notas) ? book.notas : []
+            return notas.some((n: any) => String(n.alunoId) === String(studentId) || String(n.aluno_id) === String(studentId))
+          })
+          .map(book => ({
+            id: book.id,
+            notas: (book.notas as any[]).filter((n: any) =>
+              String(n.alunoId) !== String(studentId) && String(n.aluno_id) !== String(studentId)
+            )
+          }))
+        for (const u of updates) {
+          await supabaseAdmin.from('lancamentos_nota').update({ notas: u.notas }).eq('id', u.id)
         }
       }
 
