@@ -101,8 +101,8 @@ export default function SelecionarAluno() {
       return false
     })
   } else if (!currentUser || (currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável')) {
-    // Para administradores (apenas para simulação do protótipo) mostra no máximo 3 alunos
-    meusAlunos = meusAlunos.slice(0, 3)
+    // Se não for Família/Responsável, não mostra alunos simulados
+    meusAlunos = []
   }
 
   // Effect responsavel pelo redirecionamento automatico
@@ -324,88 +324,92 @@ export default function SelecionarAluno() {
         </div>
       )}
 
-      {(meusAlunos.length > 0 || (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família'))) && (
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 16, opacity: 0, animation: 'fadeUp 0.6s ease-out 0.2s forwards' }}>Acesso Familiar</h2>
-      )}
+      {(!currentUser || currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família') && (
+        <>
+          {(meusAlunos.length > 0 || (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família'))) && (
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 16, opacity: 0, animation: 'fadeUp 0.6s ease-out 0.2s forwards' }}>Acesso Familiar</h2>
+          )}
 
-      {isStillLoading && meusAlunos.length === 0 ? (
-        <div style={{ padding: 60, textAlign: 'center', animation: 'fadeUp 0.6s ease-out forwards' }}>
-          <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: 'hsl(var(--primary))', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
-          <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Procurando vínculos do responsável...</p>
-          <style dangerouslySetInnerHTML={{__html: `
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          `}} />
-        </div>
-      ) : meusAlunos.length === 0 ? (
-        <div style={{ padding: 60, textAlign: 'center', background: 'linear-gradient(145deg, hsl(var(--bg-surface)), transparent)', borderRadius: 32, border: '1px dashed hsl(var(--border-subtle))' }}>
-          <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-            <AlertTriangle size={40} color="hsl(var(--text-muted))" opacity={0.5} />
-          </div>
-          <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 12 }}>Nenhum aluno encontrado</h2>
-          <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, maxWidth: 360, margin: '0 auto' }}>
-            Verifique se sua conta foi corretamente vinculada aos seus filhos na Secretaria. <br /><br />
-            Responsável autenticado:<br /> <strong style={{ color: 'hsl(var(--text-main))' }}>{currentUser?.nome}</strong>
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {meusAlunos.map((a, index) => {
-            const titulosAluno = titulos.filter(t => t.aluno === a.nome || (t as any).alunoId === a.id)
-            const pendentes = titulosAluno.filter(t => t.status === 'atrasado')
+          {isStillLoading && meusAlunos.length === 0 ? (
+            <div style={{ padding: 60, textAlign: 'center', animation: 'fadeUp 0.6s ease-out forwards' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: 'hsl(var(--primary))', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
+              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Procurando vínculos do responsável...</p>
+              <style dangerouslySetInnerHTML={{__html: `
+                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+              `}} />
+            </div>
+          ) : meusAlunos.length === 0 ? (
+            <div style={{ padding: 60, textAlign: 'center', background: 'linear-gradient(145deg, hsl(var(--bg-surface)), transparent)', borderRadius: 32, border: '1px dashed hsl(var(--border-subtle))' }}>
+              <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                <AlertTriangle size={40} color="hsl(var(--text-muted))" opacity={0.5} />
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 12 }}>Nenhum aluno encontrado</h2>
+              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, maxWidth: 360, margin: '0 auto' }}>
+                Verifique se sua conta foi corretamente vinculada aos seus filhos na Secretaria. <br /><br />
+                Responsável autenticado:<br /> <strong style={{ color: 'hsl(var(--text-main))' }}>{currentUser?.nome}</strong>
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {meusAlunos.map((a, index) => {
+                const titulosAluno = titulos.filter(t => t.aluno === a.nome || (t as any).alunoId === a.id)
+                const pendentes = titulosAluno.filter(t => t.status === 'atrasado')
 
-            return (
-              <Link key={a.id} href={`/agenda-digital/${a.id}/comunicados`} style={{ textDecoration: 'none', animation: 'fadeUp 0.6s ease-out ' + (0.1 + index * 0.15) + 's forwards', opacity: 0 }}>
-                <div className="premium-card">
-                  <div className="premium-card-avatar avatar-glow" style={{ position: 'relative', width: 72, height: 72, borderRadius: 20, fontSize: 26, fontWeight: 800, background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', overflow: 'hidden', boxShadow: '0 8px 24px rgba(139,92,246,0.15)' }}>
-                    {a.foto ? (
-                      <img src={a.foto} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      getInitials(a.nome)
-                    )}
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: 20, boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
-                  </div>
-                  
-                  <div className="premium-card-content" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                    <div className="premium-card-name" style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 6, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {a.nome}
-                    </div>
-                    <div className="premium-card-meta" style={{ fontSize: 14, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
-                      {(() => {
-                        const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
-                        const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
-                        const unidadeAluno = turmaObj?.unidade || (a as any).unidade
-                        return (
-                          <>
-                            <span style={{ color: 'hsl(var(--primary))' }}>Turma {nomeTurma}</span> {(a as any).serie ? `• ${(a as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
-                          </>
-                        )
-                      })()}
-                    </div>
-                  </div>
-
-                  <div className="premium-card-icons" style={{ display: 'flex', gap: 14, alignItems: 'center', flexShrink: 0 }}>
-                    <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(99,102,241,0.08)', color: 'hsl(var(--primary))', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', border: '1px solid rgba(99,102,241,0.1)' }}>
-                      <Bell size={20} />
-                      <span className="badge-counter" style={{ position: 'absolute', top: -6, right: -6, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontSize: 11, fontWeight: 900, width: 22, height: 22, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid hsl(var(--bg-surface))', boxShadow: '0 4px 12px rgba(225,29,72,0.4)', animation: 'pulseGlow 2s infinite' }}>
-                        2
-                      </span>
-                    </div>
-                    
-                    {pendentes.length > 0 && (
-                      <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(239,68,68,0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.15)' }}>
-                        <AlertTriangle size={20} />
+                return (
+                  <Link key={a.id} href={`/agenda-digital/${a.id}/comunicados`} style={{ textDecoration: 'none', animation: 'fadeUp 0.6s ease-out ' + (0.1 + index * 0.15) + 's forwards', opacity: 0 }}>
+                    <div className="premium-card">
+                      <div className="premium-card-avatar avatar-glow" style={{ position: 'relative', width: 72, height: 72, borderRadius: 20, fontSize: 26, fontWeight: 800, background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', overflow: 'hidden', boxShadow: '0 8px 24px rgba(139,92,246,0.15)' }}>
+                        {a.foto ? (
+                          <img src={a.foto} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          getInitials(a.nome)
+                        )}
+                        <div style={{ position: 'absolute', inset: 0, borderRadius: 20, boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
                       </div>
-                    )}
+                      
+                      <div className="premium-card-content" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                        <div className="premium-card-name" style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 6, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {a.nome}
+                        </div>
+                        <div className="premium-card-meta" style={{ fontSize: 14, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
+                          {(() => {
+                            const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
+                            const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
+                            const unidadeAluno = turmaObj?.unidade || (a as any).unidade
+                            return (
+                              <>
+                                <span style={{ color: 'hsl(var(--primary))' }}>Turma {nomeTurma}</span> {(a as any).serie ? `• ${(a as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      </div>
 
-                    <div className="premium-card-icon-btn chevron-icon" style={{ width: 48, height: 48, borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
-                      <ChevronRight size={22} strokeWidth={2.5} />
+                      <div className="premium-card-icons" style={{ display: 'flex', gap: 14, alignItems: 'center', flexShrink: 0 }}>
+                        <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(99,102,241,0.08)', color: 'hsl(var(--primary))', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', border: '1px solid rgba(99,102,241,0.1)' }}>
+                          <Bell size={20} />
+                          <span className="badge-counter" style={{ position: 'absolute', top: -6, right: -6, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontSize: 11, fontWeight: 900, width: 22, height: 22, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid hsl(var(--bg-surface))', boxShadow: '0 4px 12px rgba(225,29,72,0.4)', animation: 'pulseGlow 2s infinite' }}>
+                            2
+                          </span>
+                        </div>
+                        
+                        {pendentes.length > 0 && (
+                          <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(239,68,68,0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.15)' }}>
+                            <AlertTriangle size={20} />
+                          </div>
+                        )}
+
+                        <div className="premium-card-icon-btn chevron-icon" style={{ width: 48, height: 48, borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
+                          <ChevronRight size={22} strokeWidth={2.5} />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
