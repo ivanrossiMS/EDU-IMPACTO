@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     if (linksError) {
       const fs = require('fs')
       const path = require('path')
-      fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Responsáveis GET (Links): ${linksError.message}\n`)
+      console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Responsáveis GET (Links): ${linksError.message}\n`)
     }
     const links = linksError ? [] : (linksData || [])
 
@@ -76,7 +76,7 @@ export async function GET(request: Request) {
       if (studentError) {
         const fs = require('fs')
         const path = require('path')
-        fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Responsáveis GET (Alunos): ${studentError.message}\n`)
+        console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Responsáveis GET (Alunos): ${studentError.message}\n`)
       } else {
         students = studentData || []
       }
@@ -198,9 +198,9 @@ export async function PUT(request: Request) {
     if (!id) return NextResponse.json({ error: 'ID é obrigatório para atualização' }, { status: 400 })
 
     const fs = require('fs')
-    fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] API Responsaveis PUT Body: ${JSON.stringify(body, null, 2)}\n`)
+    console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] API Responsaveis PUT Body: ${JSON.stringify(body, null, 2)}\n`)
     const { aluno_responsavel, alunosVinculados, alunos_vinculados, dataNasc, isFinanceiro, isPedagogico, isOutro, diasAcesso, parentesco, cpf, rg, id: bodyId, ...dataToSave } = body
-    fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] API Responsaveis PUT dataToSave: ${JSON.stringify(dataToSave, null, 2)}\n`)
+    console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] API Responsaveis PUT dataToSave: ${JSON.stringify(dataToSave, null, 2)}\n`)
     
     if (dataNasc) {
       dataToSave.data_nasc = dataNasc

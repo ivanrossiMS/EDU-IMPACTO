@@ -613,3 +613,6 @@
 [2026-05-25T23:34:01.429Z] PUT Aluno: Valentina Malfatti de Souza (ID: 4602)
 [2026-05-25T23:34:45.488Z] PUT Aluno: Valentina Oliveira Araujo (ID: 5313)
 [2026-05-25T23:36:05.547Z] PUT Aluno: Vicente da Silva Gomes (ID: 4259)
+
+[2026-05-26T04:16:29.456Z] Error Alunos GET (Students): canceling statement due to statement timeout
+[2026-05-26T12:11:50.535Z] POST Aluno Individual: ALUNO TESTE

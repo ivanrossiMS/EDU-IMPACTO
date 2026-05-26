@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
     if (studentsError) {
       const fs = require('fs')
-      fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Students): ${studentsError.message}\n`)
+      console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Students): ${studentsError.message}\n`)
       return NextResponse.json({ error: studentsError.message }, { status: 400 })
     }
 
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
 
     if (linksError) {
       const fs = require('fs')
-      fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
+      console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
     }
 
     // 2.5 Busca os dados dos responsáveis manualmente para evitar erro de ambiguidade no join
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
         
       if (respError) {
         const fs = require('fs')
-        fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
+        console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
       } else {
         responsaveis = respData || []
       }
@@ -122,7 +122,7 @@ export async function GET(request: Request) {
 
       if (student.nome === 'ivan25') {
         const fs = require('fs')
-        fs.appendFileSync('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] ivan25 linkedResponsaveis: ${JSON.stringify(linkedResponsaveis, null, 2)}\n`)
+        console.log('/Users/ivanrossi/Desktop/Documentos-Backup/Área de Trabalho/EDU-IMPACTO/impacto-edu-app/api_error_log.txt', `\n[${new Date().toISOString()}] ivan25 linkedResponsaveis: ${JSON.stringify(linkedResponsaveis, null, 2)}\n`)
       }
 
       const fallbackResponsaveis = student.dados?.responsaveis || []
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
     const item = body
     const row = buildRow(item)
     
-    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
+    console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
 
     // 1. Salvar o aluno (Insert para criação)
     const { data: studentData, error: studentError } = await supabase
@@ -294,7 +294,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(savedStudent, { status: 201 })
   } catch (e: any) {
-    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos POST: ${e.message}\n`)
+    console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos POST: ${e.message}\n`)
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
@@ -311,7 +311,7 @@ export async function PUT(request: Request) {
     const row = buildRow(body)
     delete row.id // Não atualiza o ID!
 
-    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
+    console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
 
     // 1. Atualizar o aluno
     const { data: studentData, error: studentError } = await supabase
@@ -485,7 +485,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(savedStudent)
   } catch (e: any) {
-    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
+    console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }
@@ -759,7 +759,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ error: 'Nenhuma ação executada' }, { status: 400 })
   } catch (e: any) {
-    fs.appendFileSync(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos DELETE: ${e.message}\n`)
+    console.log(path.join(process.cwd(), 'api_error_log.txt'), `[${new Date().toISOString()}] Error Alunos DELETE: ${e.message}\n`)
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
 }

@@ -4,19 +4,23 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-  const supabase = await createProtectedClient();
-  const { searchParams } = new URL(request.url)
-  const status = searchParams.get('status')
-  const q = searchParams.get('q')?.toLowerCase()
+  try {
+    const supabase = await createProtectedClient();
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const q = searchParams.get('q')?.toLowerCase()
 
-  let query = supabase.from('leads').select('*').order('data', { ascending: false })
-  if (status && status !== 'todos') query = query.eq('status', status)
-  if (q) query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%`)
+    let query = supabase.from('leads').select('*').order('data', { ascending: false })
+    if (status && status !== 'todos') query = query.eq('status', status)
+    if (q) query = query.or(`nome.ilike.%${q}%,email.ilike.%${q}%`)
 
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
-  return NextResponse.json(result)
+    const { data, error } = await query
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    return NextResponse.json(result)
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
 }
 
 export async function POST(request: Request) {
