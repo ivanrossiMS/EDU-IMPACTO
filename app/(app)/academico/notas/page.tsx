@@ -137,6 +137,269 @@ export default function NotasPage() {
     setImportData([])
   }
 
+  const renderModals = () => (
+    <>
+      {/* ── MODAL DE IMPORTAÇÃO (ULTRA PREMIUM) ────────────────── */}
+        {modalOpen && (
+          <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+            <div style={{ background: '#fff', width:'100%', maxWidth:currentStep === 'preview' ? 1000 : 600, borderRadius: '24px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', transition: 'all 0.3s ease' }}>
+              
+              {/* Header */}
+              <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '20px 32px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 20, color: '#fff', margin: 0 }}>Importar Notas</h2>
+                  <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)', margin: '2px 0 0 0' }}>Processamento inteligente de boletins.</p>
+                </div>
+                <button style={{ border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setModalOpen(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Conteúdo */}
+              <div style={{ padding: '32px' }}>
+                
+                {/* Passo 1: Upload */}
+                {currentStep === 'upload' && (
+                  <div style={{ textAlign: 'left' }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Importar Notas</h3>
+                    <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Copie o texto do PDF e cole no campo abaixo para processar.</p>
+                    
+                    <textarea 
+                      id="paste-text"
+                      style={{ width: '100%', height: '200px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', resize: 'vertical' }}
+                      placeholder="Cole o texto do boletim aqui..."
+                    />
+                    
+                    <button 
+                      type="button" 
+                      style={{ marginTop: 12, height: '38px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                      onClick={() => {
+                        const text = (document.getElementById('paste-text') as HTMLTextAreaElement)?.value
+                        if (text) handleTextUpload(text)
+                      }}
+                    >
+                      Processar Texto
+                    </button>
+
+                    {uploading && (
+                      <div style={{ marginTop: 24 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#0f172a', fontWeight: 600, marginBottom: 8 }}>
+                          <span>Lendo arquivo...</span>
+                          <span>{progress}%</span>
+                        </div>
+                        <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${progress}%`, height: '100%', background: '#2563eb', transition: 'width 0.2s' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Passo 2: Validação */}
+                {currentStep === 'validation' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, padding: '12px', background: '#f0fdf4', borderRadius: '10px', color: '#15803d' }}>
+                      <CheckCircle size={16} />
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{importData.length} alunos detectados com sucesso!</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '40vh', overflowY: 'auto', paddingRight: '8px' }}>
+                      {importData.map((data, index) => (
+                        <div key={index} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{data.nomeERP}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>ID Detectado: {data.codigo}</div>
+                            </div>
+                            <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#e2e8f0', fontSize: 11, fontWeight: 700, color: '#475569' }}>{data.bimestre}</span>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b' }}>
+                            Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF})`).join(', ')}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                      <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('upload')}>Voltar</button>
+                      <button style={{ height: '40px', padding: '0: 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('preview')}>Ver Preview</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Passo 3: Preview (Estilo Boletim ERP) */}
+                {currentStep === 'preview' && (
+                  <div>
+                    <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '10px' }}>
+                      {importData.map((data, index) => (
+                        <div key={index} style={{ border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                          {/* Layout do Boletim (Simplificado para o preview) */}
+                          <div style={{ background: 'linear-gradient(110deg, #1d4ed8 0%, #1e3a8a 100%)', padding: '16px 24px', color: '#fff' }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.8 }}>BOLETIM DE AVALIAÇÃO ESCOLAR</div>
+                            <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Outfit,sans-serif' }}>{data.nomeERP}</div>
+                            <div style={{ fontSize: 11, opacity: 0.8 }}>Matrícula: {data.codigo} | Ano Letivo: {data.ano}</div>
+                          </div>
+                          
+                          <div style={{ padding: '20px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                              <thead>
+                                <tr style={{ background: '#1e3a8a', color: '#fff' }}>
+                                  <th style={{ padding: '10px', textAlign: 'left' }}>Componente Curricular</th>
+                                  <th style={{ padding: '10px', textAlign: 'center' }}>AVM</th>
+                                  <th style={{ padding: '10px', textAlign: 'center' }}>AVB</th>
+                                  <th style={{ padding: '10px', textAlign: 'center' }}>MediaF</th>
+                                  <th style={{ padding: '10px', textAlign: 'center' }}>MediaG</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {data.disciplinas.map((d:any, di:number) => (
+                                  <tr key={di} style={{ background: di % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                    <td style={{ padding: '10px', fontWeight: 600 }}>{d.nome}</td>
+                                    <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avm}</td>
+                                    <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avb}</td>
+                                    <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaF}</td>
+                                    <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaG}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
+                      <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('validation')}>Voltar</button>
+                      <button style={{ height: '40px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleConfirmImport}>
+                        <CheckCircle size={14} />
+                        Confirmar e Salvar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Modal de Visualização Ultra Moderno */}
+        {boletimParaVisualizar && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
+            <div style={{ background: '#fff', borderRadius: '24px', width: '700px', maxHeight: '85vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              
+              {/* Cabeçalho com Gradiente */}
+              <div style={{ background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', padding: '24px 32px', color: '#fff', position: 'relative' }}>
+                <button 
+                  onClick={() => setBoletimParaVisualizar(null)} 
+                  style={{ position: 'absolute', top: 20, right: 20, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  <X size={18} />
+                </button>
+                
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', opacity: 0.8, marginBottom: 4 }}>BOLETIM DE AVALIAÇÃO</div>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, fontFamily: 'Outfit,sans-serif' }}>{boletimParaVisualizar.aluno?.nome}</h2>
+                
+                <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, opacity: 0.9 }}>
+                  <div><strong>Turma:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.nome || boletimParaVisualizar.aluno?.turma || '—'}</div>
+                  <div><strong>Turno:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.turno || boletimParaVisualizar.aluno?.turno || '—'}</div>
+                  <div><strong>Ano Letivo:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.ano || '—'}</div>
+                  <div><strong>Período:</strong> {boletimParaVisualizar.conteudo?.bimestre}</div>
+                </div>
+              </div>
+              
+              {/* Corpo do Modal */}
+              <div style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(85vh - 140px)' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'left' }}>Componente Curricular</th>
+                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVM</th>
+                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVB</th>
+                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>Média Final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(boletimParaVisualizar.conteudo?.disciplinas || []).map((d: any, di: number) => (
+                      <tr key={di} style={{ background: '#f8fafc', borderRadius: '12px', transition: 'transform 0.2s, box-shadow 0.2s' }}>
+                        <td style={{ padding: '16px 12px', fontWeight: 600, color: '#0f172a', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}>{d.nome}</td>
+                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avm}</td>
+                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avb}</td>
+                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#2563eb', fontWeight: 700, fontSize: 14, borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>{d.mediaF}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Exclusão Moderno */}
+        {boletimParaExcluir && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
+            <div style={{ background: '#fff', borderRadius: '20px', width: '400px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                <AlertTriangle size={28} />
+              </div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Excluir Boletim?</h3>
+              <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#64748b', lineHeight: '1.5' }}>
+                Tem certeza que deseja excluir este boletim? Esta ação não poderá ser desfeita.
+              </p>
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                <button 
+                  onClick={() => setBoletimParaExcluir(null)}
+                  style={{ height: '44px', padding: '0 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/boletins?id=${boletimParaExcluir}`, { method: 'DELETE' })
+                      if (res.ok) {
+                        queryClient.invalidateQueries({ queryKey: ['boletins', turmaObj?.id || ''] })
+                        setBoletimParaExcluir(null)
+                        setShowSuccessExclusao(true)
+                      } else {
+                        const err = await res.json()
+                        alert('Erro ao excluir: ' + err.error)
+                      }
+                    } catch (error: any) {
+                      alert('Erro ao excluir: ' + error.message)
+                    }
+                  }}
+                  style={{ height: '44px', padding: '0 20px', background: '#ef4444', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(239,68,68,0.2)' }}
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Modal de Sucesso Moderno */}
+        {showSuccessExclusao && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
+            <div style={{ background: '#fff', borderRadius: '20px', width: '350px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                <CheckCircle size={28} />
+              </div>
+              <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Sucesso!</h3>
+              <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#64748b', lineHeight: '1.5' }}>
+                O boletim foi excluído com sucesso.
+              </p>
+              <button 
+                onClick={() => setShowSuccessExclusao(false)}
+                style={{ height: '44px', padding: '0: 24px', background: '#16a34a', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(22,163,74,0.2)' }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
+    </>
+  );
+
   // ── VISTA 1: HOME (Listagem de Turmas) ──────────────────────────────
   if (!turmaSel) {
     return (
@@ -542,263 +805,8 @@ export default function NotasPage() {
         )}
       </div>
 
-      {/* ── MODAL DE IMPORTAÇÃO (ULTRA PREMIUM) ────────────────── */}
-      {modalOpen && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-          <div style={{ background: '#fff', width:'100%', maxWidth:currentStep === 'preview' ? 1000 : 600, borderRadius: '24px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', transition: 'all 0.3s ease' }}>
-            
-            {/* Header */}
-            <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '20px 32px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 20, color: '#fff', margin: 0 }}>Importar Notas</h2>
-                <p style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)', margin: '2px 0 0 0' }}>Processamento inteligente de boletins.</p>
-              </div>
-              <button style={{ border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', cursor: 'pointer', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setModalOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Conteúdo */}
-            <div style={{ padding: '32px' }}>
-              
-              {/* Passo 1: Upload */}
-              {currentStep === 'upload' && (
-                <div style={{ textAlign: 'left' }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Importar Notas</h3>
-                  <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Copie o texto do PDF e cole no campo abaixo para processar.</p>
-                  
-                  <textarea 
-                    id="paste-text"
-                    style={{ width: '100%', height: '200px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', resize: 'vertical' }}
-                    placeholder="Cole o texto do boletim aqui..."
-                  />
-                  
-                  <button 
-                    type="button" 
-                    style={{ marginTop: 12, height: '38px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-                    onClick={() => {
-                      const text = (document.getElementById('paste-text') as HTMLTextAreaElement)?.value
-                      if (text) handleTextUpload(text)
-                    }}
-                  >
-                    Processar Texto
-                  </button>
-
-                  {uploading && (
-                    <div style={{ marginTop: 24 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#0f172a', fontWeight: 600, marginBottom: 8 }}>
-                        <span>Lendo arquivo...</span>
-                        <span>{progress}%</span>
-                      </div>
-                      <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${progress}%`, height: '100%', background: '#2563eb', transition: 'width 0.2s' }} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Passo 2: Validação */}
-              {currentStep === 'validation' && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20, padding: '12px', background: '#f0fdf4', borderRadius: '10px', color: '#15803d' }}>
-                    <CheckCircle size={16} />
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{importData.length} alunos detectados com sucesso!</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '40vh', overflowY: 'auto', paddingRight: '8px' }}>
-                    {importData.map((data, index) => (
-                      <div key={index} style={{ padding: '16px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{data.nomeERP}</div>
-                            <div style={{ fontSize: 11, color: '#64748b' }}>ID Detectado: {data.codigo}</div>
-                          </div>
-                          <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#e2e8f0', fontSize: 11, fontWeight: 700, color: '#475569' }}>{data.bimestre}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>
-                          Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF})`).join(', ')}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-                    <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('upload')}>Voltar</button>
-                    <button style={{ height: '40px', padding: '0: 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('preview')}>Ver Preview</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Passo 3: Preview (Estilo Boletim ERP) */}
-              {currentStep === 'preview' && (
-                <div>
-                  <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '10px' }}>
-                    {importData.map((data, index) => (
-                      <div key={index} style={{ border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: 20 }}>
-                        {/* Layout do Boletim (Simplificado para o preview) */}
-                        <div style={{ background: 'linear-gradient(110deg, #1d4ed8 0%, #1e3a8a 100%)', padding: '16px 24px', color: '#fff' }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.8 }}>BOLETIM DE AVALIAÇÃO ESCOLAR</div>
-                          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Outfit,sans-serif' }}>{data.nomeERP}</div>
-                          <div style={{ fontSize: 11, opacity: 0.8 }}>Matrícula: {data.codigo} | Ano Letivo: {data.ano}</div>
-                        </div>
-                        
-                        <div style={{ padding: '20px' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                            <thead>
-                              <tr style={{ background: '#1e3a8a', color: '#fff' }}>
-                                <th style={{ padding: '10px', textAlign: 'left' }}>Componente Curricular</th>
-                                <th style={{ padding: '10px', textAlign: 'center' }}>AVM</th>
-                                <th style={{ padding: '10px', textAlign: 'center' }}>AVB</th>
-                                <th style={{ padding: '10px', textAlign: 'center' }}>MediaF</th>
-                                <th style={{ padding: '10px', textAlign: 'center' }}>MediaG</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {data.disciplinas.map((d:any, di:number) => (
-                                <tr key={di} style={{ background: di % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                  <td style={{ padding: '10px', fontWeight: 600 }}>{d.nome}</td>
-                                  <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avm}</td>
-                                  <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avb}</td>
-                                  <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaF}</td>
-                                  <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaG}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
-                    <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('validation')}>Voltar</button>
-                    <button style={{ height: '40px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleConfirmImport}>
-                      <CheckCircle size={14} />
-                      Confirmar e Salvar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Modal de Visualização Ultra Moderno */}
-      {boletimParaVisualizar && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ background: '#fff', borderRadius: '24px', width: '700px', maxHeight: '85vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            
-            {/* Cabeçalho com Gradiente */}
-            <div style={{ background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', padding: '24px 32px', color: '#fff', position: 'relative' }}>
-              <button 
-                onClick={() => setBoletimParaVisualizar(null)} 
-                style={{ position: 'absolute', top: 20, right: 20, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-              >
-                <X size={18} />
-              </button>
-              
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', opacity: 0.8, marginBottom: 4 }}>BOLETIM DE AVALIAÇÃO</div>
-              <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, fontFamily: 'Outfit,sans-serif' }}>{boletimParaVisualizar.aluno?.nome}</h2>
-              
-              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, opacity: 0.9 }}>
-                <div><strong>Turma:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.nome || boletimParaVisualizar.aluno?.turma || '—'}</div>
-                <div><strong>Turno:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.turno || boletimParaVisualizar.aluno?.turno || '—'}</div>
-                <div><strong>Ano Letivo:</strong> {turmas.find(t => String(t.id) === String(boletimParaVisualizar.aluno?.turma))?.ano || '—'}</div>
-                <div><strong>Período:</strong> {boletimParaVisualizar.conteudo?.bimestre}</div>
-              </div>
-            </div>
-            
-            {/* Corpo do Modal */}
-            <div style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(85vh - 140px)' }}>
-              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    <th style={{ padding: '0 12px 8px 12px', textAlign: 'left' }}>Componente Curricular</th>
-                    <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVM</th>
-                    <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVB</th>
-                    <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>Média Final</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(boletimParaVisualizar.conteudo?.disciplinas || []).map((d: any, di: number) => (
-                    <tr key={di} style={{ background: '#f8fafc', borderRadius: '12px', transition: 'transform 0.2s, box-shadow 0.2s' }}>
-                      <td style={{ padding: '16px 12px', fontWeight: 600, color: '#0f172a', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}>{d.nome}</td>
-                      <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avm}</td>
-                      <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avb}</td>
-                      <td style={{ padding: '16px 12px', textAlign: 'center', color: '#2563eb', fontWeight: 700, fontSize: 14, borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>{d.mediaF}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Exclusão Moderno */}
-      {boletimParaExcluir && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '400px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fef2f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-              <AlertTriangle size={28} />
-            </div>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Excluir Boletim?</h3>
-            <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#64748b', lineHeight: '1.5' }}>
-              Tem certeza que deseja excluir este boletim? Esta ação não poderá ser desfeita.
-            </p>
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <button 
-                onClick={() => setBoletimParaExcluir(null)}
-                style={{ height: '44px', padding: '0 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/boletins?id=${boletimParaExcluir}`, { method: 'DELETE' })
-                    if (res.ok) {
-                      queryClient.invalidateQueries({ queryKey: ['boletins', turmaObj?.id || ''] })
-                      setBoletimParaExcluir(null)
-                      setShowSuccessExclusao(true)
-                    } else {
-                      const err = await res.json()
-                      alert('Erro ao excluir: ' + err.error)
-                    }
-                  } catch (error: any) {
-                    alert('Erro ao excluir: ' + error.message)
-                  }
-                }}
-                style={{ height: '44px', padding: '0 20px', background: '#ef4444', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(239,68,68,0.2)' }}
-              >
-                Excluir
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Modal de Sucesso Moderno */}
-      {showSuccessExclusao && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ background: '#fff', borderRadius: '20px', width: '350px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', textAlign: 'center' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-              <CheckCircle size={28} />
-            </div>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Sucesso!</h3>
-            <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#64748b', lineHeight: '1.5' }}>
-              O boletim foi excluído com sucesso.
-            </p>
-            <button 
-              onClick={() => setShowSuccessExclusao(false)}
-              style={{ height: '44px', padding: '0: 24px', background: '#16a34a', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(22,163,74,0.2)' }}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+            {renderModals()}
+        {renderModals()}
     </div>
   )
 }
