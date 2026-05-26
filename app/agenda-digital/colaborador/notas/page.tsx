@@ -365,73 +365,83 @@ function AlunoBoletimViewer({ boletins }: { boletins: any[] }) {
               <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a' }}>Rendimento por Disciplina</h3>
             </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <AnimatePresence mode="wait">
                 <motion.div 
                   key={selectedBimestreId} 
-                  initial={{ opacity: 0, y: 10 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0, y: -10 }} 
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  exit={{ opacity: 0 }} 
                   transition={{ duration: 0.3 }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}
                 >
                   {disciplinas.map((d: any, i: number) => {
                     const isPassed = d.mediaFNum >= 7.0
                     return (
-                      <div key={i} style={{ 
-                        padding: '14px', 
-                        background: '#f8fafc', 
-                        borderRadius: 14, 
-                        border: '1px solid #f1f5f9',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 12
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div>
-                            <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 14, marginBottom: 2 }}>{d.nome}</div>
-                            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', gap: 12 }}>
-                              <span>AVM: <strong>{d.avm}</strong></span>
-                              <span>AVB: <strong>{d.avb}</strong></span>
-                            </div>
+                      <motion.div 
+                        key={i}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: i * 0.05 }}
+                        whileHover={{ y: -2, boxShadow: '0 8px 20px rgba(0,0,0,0.04)' }}
+                        style={{ 
+                          padding: '16px', 
+                          background: '#f8fafc', 
+                          borderRadius: 16, 
+                          border: '1px solid #f1f5f9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>{d.nome}</div>
+                          
+                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 500 }}>
+                            <span>AVM: <strong style={{ color: '#475569' }}>{d.avm}</strong></span>
+                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#cbd5e1' }} />
+                            <span>AVB: <strong style={{ color: '#475569' }}>{d.avb}</strong></span>
                           </div>
                           
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            background: isPassed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            color: isPassed ? '#059669' : '#dc2626',
-                            width: 40,
-                            height: 40,
-                            borderRadius: 12,
-                            fontWeight: 800,
-                            fontSize: 16,
-                            fontFamily: 'Outfit, sans-serif',
-                            border: '1px solid ' + (isPassed ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)')
-                          }}>
-                            {d.mediaF}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{ flex: 1, height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ marginTop: 6, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
                             <motion.div 
                               initial={{ width: 0 }}
-                              animate={{ width: Math.min(d.mediaFNum * 10, 100) + '%' }}
-                              transition={{ duration: 1, ease: "easeOut", delay: 0.1 * i }}
+                              animate={{ width: `${Math.min(d.mediaFNum * 10, 100)}%` }}
+                              transition={{ duration: 1, ease: "easeOut", delay: 0.2 + (i * 0.05) }}
                               style={{ 
                                 height: '100%', 
                                 background: isPassed ? '#10b981' : '#ef4444', 
-                                borderRadius: 3 
+                                borderRadius: 2 
                               }} 
                             />
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: isPassed ? '#10b981' : '#ef4444', minWidth: 60, textAlign: 'right' }}>
-                            {isPassed ? 'Aprovado' : 'Atenção'}
-                          </span>
                         </div>
-                      </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                          <div style={{ 
+                            fontSize: 22, 
+                            fontWeight: 900, 
+                            fontFamily: 'Outfit, sans-serif',
+                            color: isPassed ? '#059669' : '#dc2626',
+                            lineHeight: 1
+                          }}>
+                            {d.mediaF}
+                          </div>
+                          <div style={{ 
+                            fontSize: 10, 
+                            fontWeight: 700, 
+                            textTransform: 'uppercase', 
+                            letterSpacing: 0.5,
+                            padding: '3px 8px',
+                            borderRadius: 10,
+                            background: isPassed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            color: isPassed ? '#059669' : '#dc2626'
+                          }}>
+                            {isPassed ? 'Aprovado' : 'Atenção'}
+                          </div>
+                        </div>
+                      </motion.div>
                     )
                   })}
                 </motion.div>
