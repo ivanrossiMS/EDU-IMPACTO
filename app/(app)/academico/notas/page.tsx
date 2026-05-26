@@ -521,6 +521,7 @@ export default function NotasPage() {
             </div>
           )}
         </div>
+        {renderModals()}
       </div>
     )
   }
@@ -804,9 +805,7 @@ export default function NotasPage() {
           })
         )}
       </div>
-
-            {renderModals()}
-        {renderModals()}
+      {renderModals()}
     </div>
   )
 }
