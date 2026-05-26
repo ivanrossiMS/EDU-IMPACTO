@@ -356,12 +356,14 @@ function MonitorContent() {
   const turmasRef = useRef(turmas)
   const configRef = useRef(config)
   const audioUnlockedRef = useRef(audioUnlocked)
+  const displayCallsRef = useRef(displayCalls)
 
   useEffect(() => {
     turmasRef.current = turmas
     configRef.current = config
     audioUnlockedRef.current = audioUnlocked
-  }, [turmas, config, audioUnlocked])
+    displayCallsRef.current = displayCalls
+  }, [turmas, config, audioUnlocked, displayCalls])
 
   // Listen for realtime from other tabs
   useEffect(() => {
@@ -404,7 +406,18 @@ function MonitorContent() {
           )
           return [...updated].sort(byTimeDesc).slice(0, 25)
         })
-        spokenRef.current.delete(d.callId)
+        
+        // Speak immediately
+        const theCall = displayCallsRef.current.find(c => c.id === d.callId)
+        if (theCall && audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported) {
+          spokenRef.current.add(d.callId)
+          const turmaObj = (currentTurmas || []).find((t: any) => String(t.id) === String(theCall.studentClass) || t.codigo === theCall.studentClass || t.nome === theCall.studentClass)
+          const tName = turmaObj?.nome || theCall.studentClass
+          const cName = currentConfig?.voiceTruncateTurma && currentConfig?.voiceTruncateChar ? tName.split(currentConfig.voiceTruncateChar)[0].trim() : tName
+          setTimeout(() => voice.speak(`${theCall.studentName}, turma ${cName}`), 600)
+        } else {
+          spokenRef.current.delete(d.callId)
+        }
       }
     })
     return () => { unsub() }

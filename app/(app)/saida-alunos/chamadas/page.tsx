@@ -584,7 +584,7 @@ interface SpecialLaunch {
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { callStudent, confirmPickup, activeCalls = [] } = useSaida()
+  const { callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
 
@@ -1024,16 +1024,21 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    callStudent(
-                      l.studentId,
-                      l.studentName,
-                      l.studentClass,
-                      'special-auth',
-                      l.authorizedPerson,
-                      'manual',
-                      undefined,
-                      l.studentPhoto
-                    )
+                    const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                    if (existingCall) {
+                      recallStudent(existingCall.id, () => {})
+                    } else {
+                      callStudent(
+                        l.studentId,
+                        l.studentName,
+                        l.studentClass,
+                        'special-auth',
+                        l.authorizedPerson,
+                        'manual',
+                        undefined,
+                        l.studentPhoto
+                      )
+                    }
                     showToast(`Aluno ${l.studentName} chamado novamente!`)
                   }}
                   title="Chamar Aluno"
