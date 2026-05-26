@@ -8,16 +8,13 @@ export const fetchCache = 'force-no-store'
 
 export async function GET(request: Request) {
   try {
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        global: {
-          fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
-        }
-      }
-    )
-    const { data, error } = await adminSupabase.from('saida_config').select('*')
+    const supabase = await createProtectedClient()
+    
+    // Verify auth
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
+
+    const { data, error } = await supabase.from('saida_config').select('*')
     if (error) {
       console.error('[saida_config GET] Fetch error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })

@@ -75,16 +75,20 @@ export async function POST(request: NextRequest) {
     const todasMovimentacoes: any[] = []
     const resultadosPorAluno: any[] = []
 
-    // 2. Processar cada aluno sequencialmente (evita race condition em cada JSONB)
-    for (const grupo of payload.alunos) {
-      // 2a. Buscar o aluno
-      const { data: aluno, error: alunoErr } = await supabase
-        .from('alunos')
-        .select('id, nome, dados')
-        .eq('id', grupo.aluno_id)
-        .single()
+    // 2. Pré-carregar todos os alunos envolvidos de uma só vez (Evita N+1 na leitura)
+    const alunoIds = payload.alunos.map((a: any) => a.aluno_id)
+    const { data: alunosBatch } = await supabase
+      .from('alunos')
+      .select('id, nome, dados')
+      .in('id', alunoIds)
+    const alunosMap = new Map((alunosBatch || []).map((a: any) => [a.id, a]))
 
-      if (alunoErr || !aluno) {
+    // 3. Processar cada aluno (as atualizações ainda ocorrem sequencialmente para segurança)
+    for (const grupo of payload.alunos) {
+      // 3a. Recupera o aluno do mapa pré-carregado
+      const aluno = alunosMap.get(grupo.aluno_id)
+
+      if (!aluno) {
         resultadosPorAluno.push({
           aluno_id: grupo.aluno_id,
           ok: false,

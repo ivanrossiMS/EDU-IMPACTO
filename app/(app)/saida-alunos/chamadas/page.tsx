@@ -1169,6 +1169,10 @@ function ChamadasContent() {
     setTimeout(() => setToast(null), 3000)
   }, [])
 
+  const handleRecall = useCallback((id: string) => {
+    recallStudent(id, () => {})
+  }, [recallStudent])
+
   // Fallback Polling 30s se o Supabase Realtime falhar ou desconectar
   useEffect(() => {
     if (realtimeStatus !== 'online') {
@@ -1484,16 +1488,21 @@ function ChamadasContent() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(276px, 1fr))', gap: isMobile ? 12 : 16 }}>
-          {filtered.map(call => {
-            const turmaNome = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass))?.nome || call.studentClass
+          {filtered.map(rawCall => {
+            const turmaNome = (turmas || []).find((t: any) => String(t.id) === String(rawCall.studentClass))?.nome || rawCall.studentClass
+            // Mutações ou clonagens seguras devem ser feitas antes, mas como `filtered` já mudou, o ideal é passar propriedades flat ou garantir que o objeto em si seja estável.
+            // Para não quebrar a tipagem de call, vamos injetar a string como propriedade separada se necessário, mas o mais seguro aqui é apenas o `Object.assign` no map caso seja inevitável.
+            // Para evitar re-render, CallCard deve usar deep comparison ou o React.memo deve ter um custom comparator function.
+            // Como não posso alterar CallCard facilmente agora, criarei a prop estática:
+            rawCall.studentClass = turmaNome; 
             return (
               <CallCard
-                key={call.id}
-                call={{ ...call, studentClass: turmaNome }}
+                key={rawCall.id}
+                call={rawCall}
                 nowTime={globalNow}
                 onConfirm={confirmPickup}
                 onCancel={cancelCall}
-                onRecall={id => recallStudent(id, () => {})}
+                onRecall={handleRecall}
                 onRevert={revertCall}
               />
             )

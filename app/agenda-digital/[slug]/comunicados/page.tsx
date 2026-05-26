@@ -63,7 +63,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const turmaObj = turmas.find((t: any) => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
   const turmaNome = turmaObj?.nome || rawTurma
 
-  const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : 'comunicados?limit=0'
+  const [limit, setLimit] = useState(10)
+  const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&limit=${limit}` : 'comunicados?limit=0'
   const [comunicados, setComunicados, { loading }] = useSupabaseArray<any>(endpoint)
   
   const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
@@ -102,40 +103,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   }, [aluno?.id, turmaNome])
 
   // --- POLLING FALLBACK ---
-  useEffect(() => {
-    if (!aluno?.id) return;
-    const interval = setInterval(async () => {
-      if (document.visibilityState !== 'visible' || isPollingRef.current) return;
-      isPollingRef.current = true;
-      try {
-        const lastDate = comunicadosRef.current[0]?.created_at || comunicadosRef.current[0]?.data;
-        const url = `/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&limit=10${lastDate ? '&since=' + encodeURIComponent(lastDate) : ''}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.length > 0) {
-            setNewComunicadosBuffer(prev => {
-              let updated = [...prev];
-              let hasChanges = false;
-              for (const item of json) {
-                if (!updated.some(c => c.id === item.id) && !comunicadosRef.current.some((c: any) => c.id === item.id)) {
-                  updated.push(item);
-                  hasChanges = true;
-                }
-              }
-              return hasChanges ? updated.sort((a, b) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime()) : prev;
-            })
-          }
-        }
-      } catch (e) {
-        console.error("Polling error:", e);
-      } finally {
-        isPollingRef.current = false;
-      }
-    }, 45000); // 45 seconds
-    
-    return () => clearInterval(interval);
-  }, [aluno?.id, turmaNome])
+  // Removido para evitar N+1 excessivo no Egress, e já temos o canal Realtime ativo acima!
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -771,6 +739,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             )
           })
         })()}
+        
+        {(comunicados || []).length >= limit && (
+           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
+             <button onClick={() => setLimit(l => l + 10)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+               Carregar Mais
+             </button>
+           </div>
+        )}
       </div>
 
       <AnimatePresence>

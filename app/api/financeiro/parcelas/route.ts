@@ -19,7 +19,17 @@ export async function GET(request: Request) {
     let query = supabase
       .from('fin_parcelas')
       .select(`
-        *,
+        id,
+        numero_parcela,
+        descricao,
+        vencimento,
+        valor_original,
+        desconto,
+        juros,
+        multa,
+        valor_pago,
+        data_pagamento,
+        status,
         fin_eventos!inner(
           aluno_id,
           tipo,

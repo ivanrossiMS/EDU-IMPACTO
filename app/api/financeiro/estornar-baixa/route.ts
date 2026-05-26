@@ -85,14 +85,16 @@ export async function POST(request: NextRequest) {
     // Usar LIKE 'codBaixa%' captura TODOS os formatos de forma robusta
     let movimentacoesDeleted = 0
 
-    for (const code of cod_baixa_codes) {
-      // Busca por ID usando LIKE: pega codBaixa exato E todos os sufixos (-P01, -SLUG-P01…)
-      const { data: movsExatos } = await supabase
+    if (cod_baixa_codes.length > 0) {
+      // Cria uma string de OR: "id.eq.COD1,id.like.COD1-%,id.eq.COD2,id.like.COD2-%..."
+      const orClauses = cod_baixa_codes.map((code: string) => `id.eq.${code},id.like.${code}-%`).join(',')
+      
+      const { data: movsExatos, error: selectErr } = await supabase
         .from('movimentacoes')
         .select('id')
-        .or(`id.eq.${code},id.like.${code}-%`)
+        .or(orClauses)
 
-      if (movsExatos && movsExatos.length > 0) {
+      if (!selectErr && movsExatos && movsExatos.length > 0) {
         const ids = movsExatos.map((m: any) => m.id)
         const { error: delErr } = await supabase
           .from('movimentacoes')
@@ -100,9 +102,9 @@ export async function POST(request: NextRequest) {
           .in('id', ids)
 
         if (delErr) {
-          console.warn(`[estornar-baixa] Erro ao deletar movimentações de ${code}:`, delErr.message)
+          console.warn(`[estornar-baixa] Erro ao deletar movimentações:`, delErr.message)
         } else {
-          movimentacoesDeleted += ids.length
+          movimentacoesDeleted = ids.length
         }
       }
     }

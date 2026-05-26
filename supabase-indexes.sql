@@ -25,6 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_contas_pagar_status_vencimento ON contas_pagar(st
 CREATE INDEX IF NOT EXISTS idx_alunos_status ON alunos(status);
 CREATE INDEX IF NOT EXISTS idx_alunos_turma ON alunos(turma);
 CREATE INDEX IF NOT EXISTS idx_alunos_serie ON alunos(serie);
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_alunos_nome_trgm ON alunos USING gin (nome gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_alunos_nome ON alunos(nome);
 CREATE INDEX IF NOT EXISTS idx_alunos_inadimplente ON alunos(inadimplente) WHERE inadimplente = true;
 CREATE INDEX IF NOT EXISTS idx_alunos_turma_status ON alunos(turma, status);
