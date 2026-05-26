@@ -152,6 +152,13 @@ export default function NotasPage() {
               <p style={{ fontSize: 14, color: '#64748b', margin: '2px 0 0 0' }}>Selecione uma turma para gerenciar os boletins de {anoLetivoSel}.</p>
             </div>
           </div>
+          <button 
+            onClick={handleOpenImportModal}
+            style={{ height: '46px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+          >
+            <Upload size={16} />
+            Importar em Lote
+          </button>
         </div>
 
         {/* Barra de Filtros */}
@@ -299,7 +306,8 @@ export default function NotasPage() {
         return {
           ...data,
           id: alunoEncontrado?.id || data.codigo,
-          nomeERP: alunoEncontrado?.nome || nomeFallback
+          nomeERP: alunoEncontrado?.nome || nomeFallback,
+          turma_id: alunoEncontrado?.turma || alunoEncontrado?.turma_id || turmaObj?.id
         }
       })
       
@@ -376,7 +384,8 @@ export default function NotasPage() {
         return {
           ...data,
           id: alunoEncontrado?.id || data.codigo,
-          nomeERP: alunoEncontrado?.nome || nomeFallback
+          nomeERP: alunoEncontrado?.nome || nomeFallback,
+          turma_id: alunoEncontrado?.turma || alunoEncontrado?.turma_id || turmaObj?.id
         }
       })
       
@@ -394,17 +403,20 @@ export default function NotasPage() {
   }
 
   const handleConfirmImport = async () => {
-    if (!turmaObj) return
     setUploading(true)
     const logs = []
     
     for (const data of importData) {
+      if (!data.turma_id) {
+        logs.push(`Turma não encontrada para o aluno ${data.nomeERP}`)
+        continue
+      }
       try {
         const res = await fetch('/api/boletins', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            turma_id: turmaObj.id,
+            turma_id: data.turma_id,
             aluno_id: data.id,
             bimestre: data.bimestre,
             dados: data,
@@ -423,10 +435,10 @@ export default function NotasPage() {
     setModalOpen(false)
     
     if (logs.length > 0) {
-      alert('Alguns erros ocorreram ao salvar: ' + logs.join(', '))
+      alert('Alguns erros ocorreram ao salvar:\\n' + logs.join('\\n'))
     } else {
-      // Recarrega os boletins
-      queryClient.invalidateQueries({ queryKey: ['boletins', turmaObj?.id || ''] })
+      // Recarrega os boletins globais e da turma selecionada
+      queryClient.invalidateQueries({ queryKey: ['boletins'] })
       alert('Notas importadas com sucesso!')
     }
   }
