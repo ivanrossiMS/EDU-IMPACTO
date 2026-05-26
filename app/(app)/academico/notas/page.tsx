@@ -38,11 +38,7 @@ export default function NotasPage() {
   const [filtroSeg, setFiltroSeg] = useState('todos')
   const [filtroBusca, setFiltroBusca] = useState('')
 
-  // Sincronizar ano vigente inicial
-  useEffect(() => {
-    const vigente = (cfgCalendarioLetivo || []).find((c: any) => c.isVigente)?.ano
-    if (vigente) setAnoLetivoSel(Number(vigente))
-  }, [cfgCalendarioLetivo])
+  // Sincronizar ano vigente inicial foi removido para forçar o usuário a escolher o ano letivo na tela inicial.
   
   // Estados do Modal de Importação
   const [modalOpen, setModalOpen] = useState(false)
