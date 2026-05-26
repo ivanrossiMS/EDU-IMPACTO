@@ -712,17 +712,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-    // 1. Trigger the student exit call (Status: Aguardando)
-    callStudent(
-      selectedStudent.id,
-      selectedStudent.nome,
-      selectedStudent.turmaNome || selectedStudent.turma,
-      'special-auth',
-      authorizedPerson,
-      'manual',
-      undefined,
-      selectedStudent.foto || selectedStudent.imagem1
-    )
+    // Student call removed per request. Will only be called via megaphone icon.
 
     // 3. Save special launch to localStorage feed
     const launch: SpecialLaunch = {
@@ -1027,6 +1017,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                     const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
                     if (existingCall) {
                       recallStudent(existingCall.id, () => {})
+                      showToast(`Aluno ${l.studentName} chamado novamente!`)
                     } else {
                       callStudent(
                         l.studentId,
@@ -1038,8 +1029,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         undefined,
                         l.studentPhoto
                       )
+                      showToast(`Aluno ${l.studentName} chamado na TV!`)
                     }
-                    showToast(`Aluno ${l.studentName} chamado novamente!`)
                   }}
                   title="Chamar Aluno"
                   style={{
