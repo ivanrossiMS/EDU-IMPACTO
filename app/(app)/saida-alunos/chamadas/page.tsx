@@ -579,6 +579,8 @@ interface SpecialLaunch {
   loggedBy: string
   date: string
   time: string
+  confirmedOut?: boolean
+  confirmedAt?: string
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
@@ -596,17 +598,63 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   // Launches State
   const [launches, setLaunches] = useState<SpecialLaunch[]>([])
 
-  // Load from localStorage
+  // Load from localStorage & Auto-clear at midnight
   useEffect(() => {
+    const checkDate = (list: SpecialLaunch[]) => {
+      const todayStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      return list.filter(l => l.date === todayStr)
+    }
+
     try {
       const stored = localStorage.getItem('edu-special-launches')
       if (stored) {
-        setLaunches(JSON.parse(stored))
+        const parsed = JSON.parse(stored)
+        const valid = checkDate(parsed)
+        setLaunches(valid)
+        if (valid.length !== parsed.length) localStorage.setItem('edu-special-launches', JSON.stringify(valid))
       }
     } catch (e) {
       console.error(e)
     }
+
+    const iv = setInterval(() => {
+      setLaunches(prev => {
+        const valid = checkDate(prev)
+        if (valid.length !== prev.length) {
+          localStorage.setItem('edu-special-launches', JSON.stringify(valid))
+          return valid
+        }
+        return prev
+      })
+    }, 60000)
+    return () => clearInterval(iv)
   }, [])
+
+  // Sync active calls to launches
+  useEffect(() => {
+    let updated = false
+    const newLaunches = launches.map(l => {
+      if (l.confirmedOut) return l
+      const matchingCall = activeCalls.find(c => 
+        c.studentId === l.studentId && 
+        c.status === 'confirmed' &&
+        c.guardianName === l.authorizedPerson
+      )
+      if (matchingCall) {
+        updated = true
+        return {
+          ...l,
+          confirmedOut: true,
+          confirmedAt: new Date(matchingCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        }
+      }
+      return l
+    })
+
+    if (updated) {
+      saveLaunches(newLaunches)
+    }
+  }, [activeCalls, launches])
 
   // Save to localStorage
   const saveLaunches = (list: SpecialLaunch[]) => {
@@ -664,8 +712,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
-    // 1. Trigger the student exit call
-    const call = callStudent(
+    // 1. Trigger the student exit call (Status: Aguardando)
+    callStudent(
       selectedStudent.id,
       selectedStudent.nome,
       selectedStudent.turmaNome || selectedStudent.turma,
@@ -675,11 +723,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       undefined,
       selectedStudent.foto || selectedStudent.imagem1
     )
-
-    // 2. Immediately confirm it
-    if (call) {
-      confirmPickup(call.id)
-    }
 
     // 3. Save special launch to localStorage feed
     const launch: SpecialLaunch = {
@@ -934,15 +977,18 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             <div
               key={l.id}
               style={{
-                background: 'hsl(var(--bg-surface))', border: '1px solid rgba(245,158,11,0.22)',
+                background: l.confirmedOut ? 'rgba(16,185,129,0.1)' : 'hsl(var(--bg-surface))', 
+                border: l.confirmedOut ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.22)',
                 borderRadius: 10, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
                 boxShadow: 'var(--shadow-sm)',
+                transition: 'all 0.3s'
               }}
             >
               <div style={{
                 width: 22, height: 22, borderRadius: 5, overflow: 'hidden',
-                background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
+                background: l.confirmedOut ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.12)', 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 900, color: l.confirmedOut ? '#10b981' : '#f59e0b', flexShrink: 0,
               }}>
                 {l.studentPhoto ? (
                   <img src={l.studentPhoto} alt={l.studentName} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
@@ -955,18 +1001,24 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   {l.studentName}
                 </div>
                 <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  retirado por: <span style={{ color: '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
+                  retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
                 </div>
                 <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
                   <span>{l.time}</span>
                   <span>·</span>
                   <span>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{l.loggedBy}</span></span>
                 </div>
+                {l.confirmedOut && (
+                  <div style={{ fontSize: 9, color: '#10b981', fontWeight: 800, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <CheckCircle2 size={10} /> Confirmada saída às {l.confirmedAt}
+                  </div>
+                )}
               </div>
               
               {/* MICRO ACTION BUTTONS */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {/* BUTTON: CALL STUDENT */}
+                {!l.confirmedOut && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1003,8 +1055,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 >
                   <Megaphone size={11} />
                 </button>
+                )}
 
                 {/* BUTTON: CONFIRM PICKUP */}
+                {!l.confirmedOut && (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1049,6 +1103,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 >
                   <CheckCircle2 size={11} />
                 </button>
+                )}
 
                 {/* BUTTON: DELETE LAUNCH */}
                 <button
