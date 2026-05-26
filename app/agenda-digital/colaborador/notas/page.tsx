@@ -428,18 +428,6 @@ function AlunoBoletimViewer({ boletins }: { boletins: any[] }) {
                           }}>
                             {d.mediaF}
                           </div>
-                          <div style={{ 
-                            fontSize: 10, 
-                            fontWeight: 700, 
-                            textTransform: 'uppercase', 
-                            letterSpacing: 0.5,
-                            padding: '3px 8px',
-                            borderRadius: 10,
-                            background: isPassed ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                            color: isPassed ? '#059669' : '#dc2626'
-                          }}>
-                            {isPassed ? 'Aprovado' : 'Atenção'}
-                          </div>
                         </div>
                       </motion.div>
                     )
