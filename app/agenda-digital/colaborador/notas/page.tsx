@@ -314,35 +314,46 @@ function AlunoBoletimViewer({ boletins }: { boletins: any[] }) {
             key={boletimAtual.id}
             style={{ 
               padding: 24, 
-              background: isAcima ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', 
-              color: 'white', 
-              borderRadius: 20,
-              border: 'none', 
+              background: isAcima ? 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)' : 'linear-gradient(135deg, #f8fafc 0%, #fef2f2 100%)', 
+              color: '#0f172a', 
+              borderRadius: 24,
+              border: isAcima ? '1px solid #e0e7ff' : '1px solid #fee2e2', 
               position: 'relative', 
               overflow: 'hidden',
-              boxShadow: isAcima ? '0 15px 30px -10px rgba(37,99,235,0.4)' : '0 15px 30px -10px rgba(239,68,68,0.4)'
+              boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
             }}
           >
-             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', filter: 'blur(40px)' }} />
+             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: isAcima ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '50%', filter: 'blur(40px)' }} />
              
-             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, position: 'relative' }}>
-               <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)' }}>
-                 <GraduationCap size={16} />
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+               <div>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                   <div style={{ width: 32, height: 32, borderRadius: 10, background: isAcima ? '#dbeafe' : '#fee2e2', color: isAcima ? '#2563eb' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <GraduationCap size={16} />
+                   </div>
+                   <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, fontSize: 12, color: '#64748b' }}>Média Global</div>
+                 </div>
+                 
+                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                   <div style={{ fontSize: 56, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: isAcima ? '#1e3a8a' : '#991b1b', letterSpacing: '-1px' }}>
+                     {mediaGlobal.toFixed(1)}
+                   </div>
+                   <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                     / 10.0
+                   </div>
+                 </div>
+                 
+                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
+                   Referente ao {boletimAtual.nome} {boletimAtual.dados.ano ? `de ${boletimAtual.dados.ano}` : ''}
+                 </div>
                </div>
-               <div style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, fontSize: 12, opacity: 0.95 }}>Média Global</div>
-             </div>
-             
-             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, position: 'relative' }}>
-               <div style={{ fontSize: 56, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, textShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                 {mediaGlobal.toFixed(1)}
+
+               <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.9)', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                 {isAcima ? <TrendingUp size={24} color="#10b981"/> : <TrendingDown size={24} color="#ef4444"/>}
+                 <span style={{ fontSize: 12, fontWeight: 700, color: isAcima ? '#059669' : '#b91c1c', textAlign: 'center', maxWidth: 120, lineHeight: 1.2 }}>
+                   {isAcima ? 'Desempenho esperado' : 'Requer atenção'}
+                 </span>
                </div>
-             </div>
-             
-             <div style={{ marginTop: 20, padding: '12px 16px', background: 'rgba(0,0,0,0.25)', borderRadius: 12, display: 'inline-flex', alignItems: 'center', gap: 10, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
-               {isAcima ? <TrendingUp size={16} color="#34d399"/> : <TrendingDown size={16} color="#fca5a5"/>}
-               <span style={{ fontSize: 13, fontWeight: 600 }}>
-                 {isAcima ? 'Desempenho dentro do esperado' : 'Requer atenção'}
-               </span>
              </div>
           </motion.div>
 
