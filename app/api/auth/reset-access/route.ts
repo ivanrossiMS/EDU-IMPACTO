@@ -48,8 +48,9 @@ export async function POST(request: Request) {
       }
 
       if (resp.email) {
-        emailFound = resp.email.trim().toLowerCase()
-        targetAuthUserId = await findAuthByEmail(emailFound)
+        const cleanEmail = resp.email.trim().toLowerCase()
+        emailFound = cleanEmail
+        targetAuthUserId = await findAuthByEmail(cleanEmail)
       }
     } else if (type === 'aluno') {
       // Find the student record
@@ -96,8 +97,9 @@ export async function POST(request: Request) {
         targetAuthUserId = byId.id
         emailFound = byId.email || null
       } else if (sysUser.email) {
-        emailFound = sysUser.email.trim().toLowerCase()
-        targetAuthUserId = await findAuthByEmail(emailFound)
+        const cleanSysEmail = sysUser.email.trim().toLowerCase()
+        emailFound = cleanSysEmail
+        targetAuthUserId = await findAuthByEmail(cleanSysEmail)
       }
 
       // Also reset password flag in DB
