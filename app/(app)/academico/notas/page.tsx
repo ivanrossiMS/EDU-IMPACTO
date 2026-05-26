@@ -135,6 +135,12 @@ export default function NotasPage() {
     )
   }
 
+  const handleOpenImportModal = () => {
+    setModalOpen(true)
+    setCurrentStep('upload')
+    setImportData([])
+  }
+
   // ── VISTA 1: HOME (Listagem de Turmas) ──────────────────────────────
   if (!turmaSel) {
     return (
@@ -260,12 +266,7 @@ export default function NotasPage() {
     )
   }
 
-  // ── VISTA 2: DETALHE DA TURMA (Alunos e Importação) ──────────────────
-  const handleOpenImportModal = () => {
-    setModalOpen(true)
-    setCurrentStep('upload')
-    setImportData([])
-  }
+
 
   const handleRealUpload = async (file: File) => {
     setUploading(true)
