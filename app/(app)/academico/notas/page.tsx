@@ -167,7 +167,19 @@ export default function NotasPage() {
             />
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <Filter size={16} style={{ color: '#64748b' }} />
+            <Calendar size={16} style={{ color: '#64748b' }} />
+            <select 
+              className="form-input" 
+              style={{ width: 120, height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} 
+              value={anoLetivoSel || ''} 
+              onChange={e => setAnoLetivoSel(Number(e.target.value))}
+            >
+              {anosDisponiveis.map(ano => (
+                <option key={ano} value={ano}>{ano}</option>
+              ))}
+            </select>
+
+            <Filter size={16} style={{ color: '#64748b', marginLeft: 8 }} />
             <select className="form-input" style={{ width: 180, height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroSeg} onChange={e => setFiltroSeg(e.target.value)}>
               <option value="todos">Todos os Segmentos</option>
               {cfgNiveisEnsino.map((n: any) => (
