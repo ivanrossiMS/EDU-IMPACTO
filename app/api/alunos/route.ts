@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer as supabase } from '@/lib/supabase'
+import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import fs from 'fs'
 import path from 'path'

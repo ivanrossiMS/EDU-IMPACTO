@@ -101,6 +101,13 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
     )
   }
 
+  const formatTime = (isoStr?: string) => {
+    if (!isoStr) return ''
+    try {
+      return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    } catch { return '' }
+  }
+
   if (isActive) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
@@ -112,10 +119,16 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
           color: 'white',
           boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
           cursor: 'default',
-          animation: 'shimmerYellow 2s linear infinite'
+          animation: 'shimmerYellow 2s linear infinite',
+          padding: '0 16px',
         }}>
-          <Loader2 size={18} className="spin-anim" />
-          <span className="ad-call-btn-label">Chamando Aluno</span>
+          <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2 }}>Chamando Aluno</span>
+            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+              por {call?.guardianName} às {formatTime(call?.calledAt)}
+            </span>
+          </div>
         </div>
         <button 
           onClick={() => cancelCall(call.id)}
@@ -165,10 +178,16 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
       color: 'white',
       boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
-      animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      padding: '0 16px',
     }}>
-      <CheckCircle2 size={18} />
-      <span className="ad-call-btn-label">Saída Confirmada!</span>
+      <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, overflow: 'hidden' }}>
+        <span className="ad-call-btn-label" style={{ lineHeight: 1.2 }}>Saída Confirmada!</span>
+        <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+          Retirado {call?.guardianName ? `por ${call.guardianName} ` : ''}às {call?.confirmedAt ? formatTime(call.confirmedAt) : formatTime(new Date().toISOString())}
+        </span>
+      </div>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
       `}} />
@@ -630,6 +649,8 @@ export default function AgendaDigitalFamilyLayout({
             align-items: center !important;
             flex-wrap: nowrap !important;
             gap: 8px !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
           }
           .ad-premium-card-header-flex {
             gap: 12px !important;
@@ -652,6 +673,7 @@ export default function AgendaDigitalFamilyLayout({
             align-items: center !important;
             flex: 1 !important;
             min-width: 0 !important;
+            overflow: hidden !important;
           }
           .ad-mini-card-icon-desktop {
             display: none !important;
@@ -779,6 +801,14 @@ export default function AgendaDigitalFamilyLayout({
         .ad-mobile-nav-bar {
           display: none;
         }
+
+        /* iOS App Store Compliance for Agenda Digital */
+        .ad-mobile-nav-bar, .ad-premium-card, .ad-switcher-item, .ad-btn-side, .ad-mini-card, .ad-mobile-nav-item {
+          user-select: none !important;
+          -webkit-user-select: none !important;
+          -webkit-touch-callout: none !important;
+        }
+
         /* Somente Modificacoes Mobile, intocavel no Desktop */
         @media (max-width: 768px) {
           .ad-desktop-sidebar {
@@ -816,10 +846,25 @@ export default function AgendaDigitalFamilyLayout({
           }
           .ad-content-page-area {
             padding-bottom: 80px !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
           }
           .ad-main-grid {
             grid-template-columns: 1fr !important;
             gap: 0px !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
+          }
+          .ad-premium-card-wrapper {
+            width: 100% !important;
+            max-width: 100vw !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
           }
           .ad-banner {
             height: 250px !important;
@@ -827,6 +872,10 @@ export default function AgendaDigitalFamilyLayout({
           .agenda-digital-wrapper {
             padding-bottom: 80px !important;
             background: #ffffff !important;
+            width: 100% !important;
+            max-width: 100vw !important;
+            min-width: 0 !important;
+            overflow-x: hidden !important;
           }
           .ad-student-banner {
             flex-direction: column !important;

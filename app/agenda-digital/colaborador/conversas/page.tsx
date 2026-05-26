@@ -1,41 +1,123 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
-
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, use } from 'react'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { Send, Search, Users, MessageSquare, Plus, X, StopCircle, GraduationCap, DollarSign, FileText, BookOpen, ChevronRight, ChevronLeft, Building, CheckCheck } from 'lucide-react'
+import { 
+  Send, Search, Users, MessageSquare, Plus, X, GraduationCap, 
+  DollarSign, FileText, BookOpen, ChevronRight, ChevronLeft, 
+  Building, CheckCheck, Inbox, Mail, User, HelpCircle, ArrowRight
+} from 'lucide-react'
 import { getInitials } from '@/lib/utils'
+import { motion, AnimatePresence } from 'framer-motion'
+import { TurmaDropdown } from '../components/TurmaDropdown'
 
-export default function ColaboradorConversasPage() {
-  const { messages, setMessages, chatsList, setChatsList } = useAgendaDigital()
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+
+export default function ADConversasPage() {
+  const { messages, setMessages, chatsList, setChatsList, chatGroups, adConfig } = useAgendaDigital()
+  
+  const { turmas = [] } = useData()
+  const [alunos] = useSupabaseArray<any>('alunos')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
   const { currentUser } = useApp()
+
+  
+  
+  
+  
+  const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
+
+  const turmaOptions = React.useMemo(() => {
+    const userGroups = (chatGroups || []).filter(g => g.colaboradoresIds?.includes(currentUser?.id || ''))
+    const accessibleTurmas = turmas.filter(t => {
+       return userGroups.some(g => String(g.id) === `sync-${t.id}` || g.nome === t.nome)
+    })
+    return [{ id: 'all', nome: 'Minhas Turmas' }, ...accessibleTurmas]
+  }, [turmas, chatGroups, currentUser])
+
+  const selectedTurmaName = React.useMemo(() => {
+    if (selectedTurmaId === 'all') return 'Minhas Turmas'
+    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
+    return t ? t.nome : 'Turma Selecionada'
+  }, [selectedTurmaId, turmas])
+
+  const alunosDaTurma = React.useMemo(() => {
+    if (selectedTurmaId === 'all') {
+      const accessibleTurmaIds = turmaOptions.filter(t => t.id !== 'all').map(t => String(t.id))
+      return alunos.filter(a => accessibleTurmaIds.includes(String(a.turma)) || accessibleTurmaIds.includes(String(a.turmaId)))
+    }
+    return alunos.filter(a => String(a.turma) === String(selectedTurmaId) || String(a.turmaId) === String(selectedTurmaId))
+  }, [alunos, selectedTurmaId, turmaOptions])
 
   const [chats, setChats] = useState<any[]>([])
   const [activeChat, setActiveChat] = useState<any>(null)
   const [inputText, setInputText] = useState('')
   const [showNovaConversa, setShowNovaConversa] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // New Conversation Flow State
+  const [selectedGroup, setSelectedGroup] = useState<any>(null)
+  const [selectedColaborador, setSelectedColaborador] = useState<any>(null)
+  const [composeSubject, setComposeSubject] = useState('')
+  const [composeBody, setComposeBody] = useState('')
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Filter chats that belong to this student
+  
   useEffect(() => {
-    if (currentUser) {
-       const staffChats = chatsList.filter(c => (c as any).targetId === currentUser.id || (c as any).authorId === currentUser.id)
-       if (staffChats.length > 0 && chats.length === 0) {
-         setChats(staffChats)
-       }
+    // Para o Colaborador, queremos ver todas as conversas relacionadas aos alunos das turmas que ele tem acesso.
+    // O ID do chat segue o formato: `${studentId}-${grupoId}-${colaboradorId}-${timestamp}`
+    const allowedStudentIds = new Set(alunosDaTurma.map(a => String(a.id)))
+    const myGroupIds = new Set((chatGroups || []).filter(g => g.colaboradoresIds?.includes(currentUser?.id || '')).map(g => String(g.id)))
+
+    const filteredChats = chatsList.filter(c => {
+      const parts = String(c.id).split('-')
+      const chatStudentId = parts[0]
+      const chatGroupId = parts[1]
+      const chatColabId = parts[2]
+      
+      // Admins see all. Collaborators see if they are the direct colab, or if the chat belongs to their group and allowed student
+      if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Direção') {
+         return allowedStudentIds.has(chatStudentId)
+      }
+      
+      const isMyChat = String(chatColabId) === String(currentUser?.id) || myGroupIds.has(String(chatGroupId))
+      return isMyChat && allowedStudentIds.has(chatStudentId)
+    })
+    
+    const uniqueChats = []
+    const seenIds = new Set()
+    for (const chat of filteredChats) {
+      if (!seenIds.has(chat.id)) {
+        seenIds.add(chat.id)
+        uniqueChats.push(chat)
+      }
     }
-  }, [chatsList, currentUser])
+    
+    uniqueChats.sort((a, b) => {
+      const parseDate = (d: string | undefined, t: string | undefined) => {
+        if (!d || !t) return 0;
+        const parts = d.split('/');
+        if (parts.length !== 3) return 0;
+        const [day, month, year] = parts;
+        const [hour, min] = t.split(':');
+        return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min)).getTime();
+      }
+      return parseDate(b.date, b.time) - parseDate(a.date, a.time);
+    })
+    
+    setChats(uniqueChats)
+    if (activeChat && !filteredChats.some(c => c.id === activeChat.id)) {
+      setActiveChat(null)
+    }
+  }, [chatsList, alunosDaTurma, currentUser])
 
-  const getFakeMessagesForChat = (chat: any) => {
-    return []
-  }
 
-  const activeMessages = activeChat ? messages[activeChat.id] || getFakeMessagesForChat(activeChat) : []
-
+  // Scroll to bottom of active message log
+  const activeMessages = activeChat ? messages[activeChat.id] || [] : []
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeMessages])
@@ -45,71 +127,189 @@ export default function ColaboradorConversasPage() {
     if (!inputText.trim() || !activeChat) return
 
     setMessages(prev => {
-      const current = prev[activeChat.id] || getFakeMessagesForChat(activeChat)
+      const current = prev[activeChat.id] || []
       return {
         ...prev,
-        [activeChat.id]: [...current, { id: Date.now(), text: inputText, sender: 'me', time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }]
+        [activeChat.id]: [...current, { 
+          id: Date.now(), 
+          text: inputText, 
+          sender: 'us', // 'them' is the parent/student in this layout
+          time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          date: new Date().toLocaleDateString('pt-BR'),
+          author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
+          authorRole: currentUser?.cargo || 'Responsável'
+        }]
       }
     })
     
-    setChats(prev => prev.map(c => String(c.id) === String(activeChat.id) ? { ...c, preview: inputText, time: 'Agora' } : c))
+    setChatsList(prev => {
+      const chatIndex = prev.findIndex(c => String(c.id) === String(activeChat.id))
+      if (chatIndex === -1) return prev
+      
+      const updatedChat = { 
+        ...prev[chatIndex], 
+        preview: inputText, 
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('pt-BR'),
+        unread: (prev[chatIndex].unread || 0) + 1
+      }
+      
+      const newList = [...prev]
+      newList.splice(chatIndex, 1)
+      return [updatedChat, ...newList]
+    })
     
     setInputText('')
+
+    
   }
 
-  // Generate target list (simulate families + other departments)
-  const familiasDestinatarios = alunos.slice(0, 10).map(a => ({
-     id: `fam-${a.id}`,
-     name: `Família: ${a.nome}`,
-     tag: `Turma ${a.turma}`,
-     icon: <Users size={20} color="#3b82f6" />,
-     color: '#3b82f6',
-     desc: `Responsável: ${a.responsavel || 'Não informado'}`
-  }))
+  // Find student's resolved class/turma object
+  const studentTurmaObj = null;
 
-  const setorDestinatarios = [
-    { id: `colab-coord`, name: 'Coordenação Pedagógica', tag: 'Equipe', icon: <GraduationCap size={20} color="#8b5cf6" />, color: '#8b5cf6', desc: 'Canal direto com os coordenadores.' },
-    { id: `colab-finan`, name: 'Setor de RH / Financeiro', tag: 'Administrativo', icon: <DollarSign size={20} color="#10b981" />, color: '#10b981', desc: 'Dúvidas sobre pagamentos e folha.' },
-    { id: `colab-dir`, name: 'Direção Escolar', tag: 'Diretoria', icon: <Building size={20} color="#ec4899" />, color: '#ec4899', desc: 'Comunicação executiva.' },
-  ]
+  // Filter groups that contain this student ID, match their class/turma, or are general administrative/sector groups
+  const studentGroups: any[] = [];
 
-  const destinatariosDisponiveis = [...setorDestinatarios, ...familiasDestinatarios]
+  const startNewConversa = () => {
+    if (!selectedColaborador || !selectedGroup || !composeSubject.trim() || !composeBody.trim()) return
 
-  const startNovaConversa = (dest: any) => {
-    const existing = chats.find(c => c.id === dest.id)
-    if (existing) {
-      setActiveChat(existing)
-    } else {
-      const novo = { id: dest.id, name: dest.name, status: 'online', preview: 'Inicie o contato...', time: 'Agora', unread: 0, tag: dest.tag, avatarColor: dest.color }
-      setChats(prev => [novo, ...prev])
-      setActiveChat(novo)
+    // Generate a strictly unique ID for each new conversation to ensure isolation
+    const newChatId = `${currentUser?.id}-${selectedGroup.id}-${selectedColaborador.id}-${Date.now()}`
+
+    // Create new chat
+    const novoChat = {
+      id: newChatId,
+      name: `${selectedColaborador.nome} (${selectedGroup.nome})`,
+      status: 'online',
+      preview: composeBody.substring(0, 30) + (composeBody.length > 30 ? '...' : ''),
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('pt-BR'),
+      startDate: new Date().toLocaleDateString('pt-BR'),
+      startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      unread: 1,
+      tag: composeSubject,
+      colaboradorId: selectedColaborador.id,
+      grupoId: selectedGroup.id
     }
+
+    setMessages(prev => ({
+      ...prev,
+      [newChatId]: [{
+        id: Date.now(),
+        text: composeBody,
+        sender: 'us',
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        date: new Date().toLocaleDateString('pt-BR'),
+        author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
+        authorRole: currentUser?.cargo || 'Responsável'
+      }]
+    }))
+
+    // Add to top of the list
+    setChatsList(prev => [novoChat, ...prev])
+    setActiveChat(novoChat)
+
+    // Reset flow states
     setShowNovaConversa(false)
+    setSelectedGroup(null)
+    setSelectedColaborador(null)
+    setComposeSubject('')
+    setComposeBody('')
   }
 
-  const filteredChats = chats.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.tag.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Get matching icon/color based on group name
+  const getGroupStyles = (name: string) => {
+    const lowercase = name.toLowerCase()
+    if (lowercase.includes('finance')) {
+      return { icon: <DollarSign size={22} color="#10b981" />, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' }
+    }
+    if (lowercase.includes('coord') || lowercase.includes('pedag')) {
+      return { icon: <GraduationCap size={22} color="#8b5cf6" />, color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' }
+    }
+    if (lowercase.includes('secret') || lowercase.includes('adm')) {
+      return { icon: <FileText size={22} color="#3b82f6" />, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' }
+    }
+    if (lowercase.includes('dire')) {
+      return { icon: <Building size={22} color="#ec4899" />, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' }
+    }
+    return { icon: <BookOpen size={22} color="#f59e0b" />, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' }
+  }
+
+  const getTagStyles = (tag: string) => {
+    const text = tag.toLowerCase()
+    if (text.includes('finance') || text.includes('pagament') || text.includes('boleto')) {
+      return { bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.15)' }
+    }
+    if (text.includes('secretar') || text.includes('doc') || text.includes('matricul')) {
+      return { bg: 'rgba(59, 130, 246, 0.08)', color: '#3b82f6', border: '1px solid rgba(59, 130, 246, 0.15)' }
+    }
+    if (text.includes('coordenac') || text.includes('pedagog') || text.includes('atraso') || text.includes('ocorr')) {
+      return { bg: 'rgba(139, 92, 246, 0.08)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.15)' }
+    }
+    if (text.includes('diretor') || text.includes('urgente')) {
+      return { bg: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.15)' }
+    }
+    return { bg: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.15)' }
+  }
+
+  const filteredChats = chats.filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.tag && c.tag.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
 
   return (
     <div className="ad-chat-container" style={{ display: 'flex', height: 'calc(100vh - 140px)', background: 'hsl(var(--bg-main))', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.03)' }}>
       
-      {/* Sidebar (Lista de Chats) */}
+      {/* Sidebar (List of Chats) */}
       <div className={`ad-chat-sidebar ${(activeChat || showNovaConversa) ? 'mobile-hidden' : ''}`} style={{ width: 360, background: 'hsl(var(--bg-surface))', borderRight: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '24px 20px', borderBottom: '1px solid rgba(0,0,0,0.02)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-main))' }}>Mensagens</h2>
-            <button 
-              onClick={() => setShowNovaConversa(true)}
-              style={{ background: 'var(--gradient-primary)', color: 'white', border: 'none', borderRadius: 20, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)', transition: 'transform 0.2s' }}
-            >
-              <Plus size={16} /> Nova
-            </button>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-main))', letterSpacing: '-0.02em', margin: 0 }}>Mensagens</h2>
+              
+              <div style={{ position: 'relative', zIndex: 50 }}>
+                <TurmaDropdown 
+                  turmaOptions={turmaOptions} 
+                  selectedTurmaId={selectedTurmaId} 
+                  setSelectedTurmaId={setSelectedTurmaId} 
+                  selectedTurmaName={selectedTurmaName} 
+                />
+              </div>
+            </div>
+
+            {adConfig?.permissoes?.chat !== false && (
+              <button 
+                onClick={() => { setShowNovaConversa(true); setActiveChat(null); setSelectedGroup(null); setSelectedColaborador(null); }}
+                style={{ 
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', 
+                  color: 'white', 
+                  border: 'none', 
+                  borderRadius: 20, 
+                  padding: '8px 16px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 6, 
+                  fontSize: 13, 
+                  fontWeight: 700, 
+                  cursor: 'pointer', 
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)', 
+                  transition: 'all 0.2s',
+                  alignSelf: 'flex-start'
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <Plus size={16} /> Nova
+              </button>
+            )}
           </div>
           
           <div style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: 14, top: 12, color: 'hsl(var(--text-muted))' }} />
             <input 
               className="form-input" 
-              placeholder="Pesquisar conversas..." 
+              placeholder="Pesquisar mensagens..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{ paddingLeft: 38, width: '100%', fontSize: 14, borderRadius: 12, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))', height: 42 }} 
@@ -120,264 +320,491 @@ export default function ColaboradorConversasPage() {
         <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
           {filteredChats.map(chat => {
             const isActive = activeChat?.id === chat.id
+            const styles = getGroupStyles(chat.name)
+            
+            const chatMessages = messages[chat.id] || []
+            const lastMessage = chatMessages[chatMessages.length - 1]
+            const lastMessageIsMine = lastMessage ? lastMessage.sender === 'them' : false
+
             return (
               <div 
                 key={chat.id} 
-                className={`ad-chat-list-item ${isActive ? 'active' : ''}`}
-                onClick={() => setActiveChat(chat)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderRadius: 16,
-                  cursor: 'pointer', transition: 'all 0.2s', marginBottom: 4,
-                  background: isActive ? 'rgba(99,102,241,0.08)' : 'transparent',
-                  border: isActive ? '1px solid rgba(99,102,241,0.15)' : '1px solid transparent'
+                onClick={() => { setActiveChat(chat); setShowNovaConversa(false); if (chat.unread > 0) { setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c)) } }}
+                style={{ 
+                  padding: '16px 14px', 
+                  marginBottom: 8,
+                  display: 'flex', 
+                  gap: 14, 
+                  cursor: 'pointer',
+                  background: isActive 
+                    ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%)' 
+                    : 'transparent',
+                  borderRadius: 16,
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  border: isActive ? '1px solid rgba(99, 102, 241, 0.2)' : '1px solid transparent',
+                  boxShadow: isActive ? '0 8px 24px rgba(99, 102, 241, 0.05)' : 'none',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}
-                onMouseEnter={e => !isActive && (e.currentTarget.style.background = 'rgba(0,0,0,0.02)')}
-                onMouseLeave={e => !isActive && (e.currentTarget.style.background = 'transparent')}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'hsl(var(--bg-main))' }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
+                {isActive && (
+                  <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 4, background: 'linear-gradient(to bottom, #6366f1, #a855f7)', borderRadius: '0 4px 4px 0' }} />
+                )}
                 <div style={{ position: 'relative' }}>
-                  <div className="avatar" style={{ width: 52, height: 52, fontSize: 18, background: chat.avatarColor || 'var(--gradient-purple)', color: 'white', borderRadius: 18, boxShadow: isActive ? `0 8px 16px ${chat.avatarColor}40` : 'none', transition: 'all 0.3s' }}>
-                    {getInitials(chat.name.replace('Família: ', ''))}
-                  </div>
-                  {chat.status === 'online' && (
-                    <div style={{ position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, background: '#10b981', border: '2.5px solid hsl(var(--bg-surface))', borderRadius: '50%' }} />
-                  )}
+                   <div style={{ 
+                     width: 48, 
+                     height: 48, 
+                     background: styles.color, 
+                     color: 'white', 
+                     borderRadius: '16px', 
+                     display: 'flex', 
+                     alignItems: 'center', 
+                     justifyContent: 'center', 
+                     fontWeight: 800, 
+                     fontSize: 16, 
+                     boxShadow: isActive ? `0 0 0 3px ${styles.color}20, 0 8px 20px ${styles.color}40` : 'none', 
+                     transition: 'all 0.3s' 
+                   }}>
+                     {getInitials(chat.name.split(' (')[0])}
+                   </div>
+                   <div style={{ 
+                     width: 12, 
+                     height: 12, 
+                     background: '#10b981', 
+                     border: '2px solid hsl(var(--bg-surface))', 
+                     borderRadius: '50%', 
+                     position: 'absolute', 
+                     bottom: -2, 
+                     right: -2,
+                     boxShadow: '0 2px 4px rgba(16,185,129,0.3)'
+                   }}></div>
                 </div>
-                
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <div style={{ fontWeight: isActive ? 800 : 700, fontSize: 15, color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {chat.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))', fontWeight: isActive ? 600 : 500, whiteSpace: 'nowrap' }}>
-                      {chat.time}
-                    </div>
+                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ fontWeight: isActive ? 800 : 700, fontSize: 14, color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-main))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.tag || 'Conversa sem assunto'}</div>
+                    <div style={{ fontSize: 11, color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))', fontWeight: isActive ? 600 : 500 }}>{chat.time}</div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: (chat.unread || 0) > 0 ? 600 : 400 }}>
-                      {chat.preview}
-                    </div>
-                    {chat.unread > 0 && (
-                      <div className="badge-pulse" style={{ background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 10, flexShrink: 0, boxShadow: '0 4px 12px rgba(225,29,72,0.3)' }}>
-                        {chat.unread}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                      {lastMessageIsMine && (
+                        chat.unread === 0 
+                          ? <CheckCheck size={14} color="#6366f1" style={{ flexShrink: 0 }} /> 
+                          : <CheckCheck size={14} color="#94a3b8" style={{ flexShrink: 0 }} />
+                      )}
+                      <div style={{ fontSize: 13, color: isActive ? 'hsl(var(--text-secondary))' : 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {chat.preview}
                       </div>
-                    )}
+                    </div>
+                    {(() => {
+                      const msgs = messages[chat.id] || []
+                      if (msgs.length === 0) return chat.unread > 0 ? (
+                        <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                          {chat.unread}
+                        </div>
+                      ) : null
+                      const lastMsg = msgs[msgs.length - 1]
+                      if (lastMsg.sender === 'us' && chat.unread > 0) {
+                        return (
+                          <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                            {chat.unread}
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
                   </div>
+                  {(() => {
+                    const tagStyles = getTagStyles(chat.tag || 'geral')
+                    return (
+                      <div style={{ 
+                        fontSize: 10, 
+                        color: tagStyles.color, 
+                        background: tagStyles.bg, 
+                        border: tagStyles.border,
+                        padding: '2px 8px', 
+                        borderRadius: 8, 
+                        alignSelf: 'flex-start', 
+                        marginTop: 6, 
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em',
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {chat.name}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
             )
           })}
-          
           {filteredChats.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-               <MessageSquare size={32} style={{ color: 'hsl(var(--border-subtle))', marginBottom: 12 }} />
-               <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14 }}>Nenhuma conversa encontrada.</p>
+            <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 14 }}>
+              <Inbox size={36} style={{ opacity: 0.2, margin: '0 auto 12px auto' }} />
+              Nenhuma conversa encontrada.
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Chat Area */}
-      <div className={`ad-chat-main ${!activeChat && !showNovaConversa ? 'mobile-hidden' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'hsl(var(--bg-surface))' }}>
-        
-        {showNovaConversa ? (
-          <div className="ad-new-chat-container" style={{ display: 'flex', flexDirection: 'column', height: '100%', animation: 'fadeIn 0.3s' }}>
-            <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))', display: 'flex', alignItems: 'center', gap: 16 }}>
-              <button 
-                onClick={() => setShowNovaConversa(false)} 
-                className="btn btn-secondary btn-sm" 
-                style={{ width: 40, height: 40, padding: 0, borderRadius: 20 }}
-              >
-                <X size={20} />
-              </button>
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Nova Conversa</h2>
-                <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>Selecione um contato para iniciar</p>
+      {/* Main Area (New Chat Flow or Active Message Log) */}
+      <div className={`ad-chat-main ${!(activeChat || showNovaConversa) ? 'mobile-hidden' : ''}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'hsl(var(--bg-main))', position: 'relative', width: '100%' }}>
+          
+          {showNovaConversa ? (
+            <div className="ad-nova-conversa-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '40px 60px', overflowY: 'auto' }}>
+              <div className="ad-nova-conversa-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 30 }}>
+                <div>
+                  <div className="ad-nova-conversa-titlebox" style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                    <button className="mobile-back-btn" onClick={() => { setShowNovaConversa(false); setSelectedGroup(null); }} style={{ background: 'transparent', border: 'none', padding: 0, display: 'none', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-main))' }}>
+                      <ChevronLeft size={24} />
+                    </button>
+                    {(selectedGroup || selectedColaborador) && (
+                      <button 
+                        onClick={() => {
+                          if (selectedColaborador) {
+                            setSelectedColaborador(null)
+                          } else {
+                            setSelectedGroup(null)
+                          }
+                        }} 
+                        style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', width: 36, height: 36, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}
+                      >
+                        <ChevronLeft size={18} />
+                      </button>
+                    )}
+                    <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-main))', margin: 0, letterSpacing: '-0.02em' }}>Nova Conversa Oficial</h2>
+                  </div>
+                  <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, maxWidth: 500, margin: 0 }}>
+                    {selectedColaborador 
+                      ? `Escreva um e-mail formal para a família de ${selectedColaborador.nome} (${selectedGroup.nome})`
+                      : selectedGroup 
+                        ? `Selecione um aluno da turma: ${selectedGroup.nome}` 
+                        : 'Selecione a turma para visualizar os alunos.'}
+                  </p>
+                </div>
+                <button onClick={() => { setShowNovaConversa(false); setSelectedGroup(null); setSelectedColaborador(null); }} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', width: 40, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
+                  <X size={20} />
+                </button>
               </div>
-            </div>
-            
-            <div style={{ flex: 1, overflowY: 'auto', padding: 32 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 16 }}>Destinatários Disponíveis</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                {destinatariosDisponiveis.map(dest => (
-                  <div 
-                    key={dest.id}
-                    className="ad-dest-card"
-                    onClick={() => startNovaConversa(dest)}
-                    style={{ background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: 20, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', gap: 16 }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = dest.color; e.currentTarget.style.backgroundColor = `${dest.color}05`; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.backgroundColor = 'hsl(var(--bg-main))'; e.currentTarget.style.transform = 'none' }}
-                  >
-                    <div style={{ width: 48, height: 48, borderRadius: 12, background: `${dest.color}15`, color: dest.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {dest.icon}
+
+              {/* Step 1: Select Turma */}
+              {!selectedGroup && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {turmaOptions.filter(t => t.id !== 'all').map(grupo => {
+                    const styles = { bg: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', icon: <Users size={24} color="#6366f1" /> }
+                    const totalAlunos = alunos.filter(a => String(a.turma) === String(grupo.id) || String(a.turmaId) === String(grupo.id)).length
+                    return (
+                      <div 
+                        key={grupo.id} 
+                        onClick={() => setSelectedGroup(grupo)} 
+                        style={{ 
+                          background: 'hsl(var(--bg-surface))', 
+                          border: '1px solid hsl(var(--border-subtle))', 
+                          borderRadius: 20, 
+                          padding: 24, 
+                          cursor: 'pointer', 
+                          display: 'flex', 
+                          gap: 16, 
+                          alignItems: 'center', 
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.01)', 
+                          transition: 'all 0.2s' 
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = styles.color
+                          e.currentTarget.style.transform = 'translateY(-4px)'
+                          e.currentTarget.style.boxShadow = `0 12px 24px ${styles.color}15`
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.01)'
+                        }}
+                      >
+                        <div style={{ width: 48, height: 48, borderRadius: 14, background: styles.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {styles.icon}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-main))', marginBottom: 2 }}>{grupo.nome}</div>
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{totalAlunos} Alunos matriculados</div>
+                        </div>
+                        <ChevronRight size={18} color="hsl(var(--text-muted))" style={{ opacity: 0.5 }} />
+                      </div>
+                    )
+                  })}
+                  {turmaOptions.filter(t => t.id !== 'all').length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px dashed hsl(var(--border-subtle))' }}>
+                       <HelpCircle size={48} style={{ color: 'hsl(var(--text-muted))', opacity: 0.3, marginBottom: 16 }} />
+                       <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Sem turmas vinculadas</h3>
+                       <p style={{ color: 'hsl(var(--text-muted))', maxWidth: 400, margin: '0 auto' }}>Você não tem turmas associadas ao seu perfil de colaborador.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 2: Select Aluno inside Turma */}
+              {selectedGroup && !selectedColaborador && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {(() => {
+                    const alunosDaTurmaSelecionada = alunosDaTurma.filter(a => String(a.turma) === String(selectedGroup.id) || String(a.turmaId) === String(selectedGroup.id))
+                    if (alunosDaTurmaSelecionada.length === 0) {
+                      return (
+                        <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px dashed hsl(var(--border-subtle))' }}>
+                           <Users size={48} style={{ color: 'hsl(var(--text-muted))', opacity: 0.3, marginBottom: 16 }} />
+                           <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Turma sem alunos</h3>
+                           <p style={{ color: 'hsl(var(--text-muted))', maxWidth: 400, margin: '0 auto' }}>Nenhum aluno encontrado nesta turma.</p>
+                        </div>
+                      )
+                    }
+
+                    return alunosDaTurmaSelecionada.map(aluno => {
+                      const styles = { color: '#6366f1' }
+                      return (
+                        <div 
+                          key={aluno.id} 
+                          onClick={() => setSelectedColaborador(aluno)} 
+                          style={{ 
+                            background: 'hsl(var(--bg-surface))', 
+                            border: '1px solid hsl(var(--border-subtle))', 
+                            borderRadius: 20, 
+                            padding: 20, 
+                            cursor: 'pointer', 
+                            display: 'flex', 
+                            gap: 14, 
+                            alignItems: 'center', 
+                            transition: 'all 0.2s' 
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = styles.color
+                            e.currentTarget.style.background = `${styles.color}05`
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                            e.currentTarget.style.background = 'hsl(var(--bg-surface))'
+                          }}
+                        >
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: styles.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>
+                            {getInitials(aluno.nome)}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{aluno.nome}</div>
+                            <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Aluno / Família</div>
+                          </div>
+                          <ArrowRight size={16} color={styles.color} />
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              )}
+
+              {/* Step 3: Write Subject and Body (Email style) */}
+              {selectedGroup && selectedColaborador && (
+                <div style={{ maxWidth: 600, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(0,0,0,0.02)', borderRadius: 16, marginBottom: 24 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
+                      {getInitials(selectedColaborador.nome)}
                     </div>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))', marginBottom: 4 }}>{dest.name}</div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: dest.color, marginBottom: 8, display: 'inline-block', padding: '2px 6px', background: `${dest.color}10`, borderRadius: 6 }}>{dest.tag}</div>
-                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>{dest.desc}</div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Para:</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{selectedColaborador.nome} ({selectedGroup.nome})</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : activeChat ? (
-          <>
-            <div className="ad-chat-header" style={{ padding: '20px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', zIndex: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                 <button 
-                  className="ad-mobile-back-btn btn btn-secondary btn-sm"
-                  onClick={() => setActiveChat(null)}
-                  style={{ width: 40, height: 40, padding: 0, borderRadius: 20, marginRight: -4 }}
-                >
-                  <ChevronLeft size={22} />
-                </button>
-                <div className="avatar" style={{ width: 48, height: 48, fontSize: 16, background: activeChat.avatarColor || 'var(--gradient-purple)', color: 'white', borderRadius: 16, boxShadow: `0 4px 12px ${activeChat.avatarColor || '#8B5CF6'}40` }}>
-                  {getInitials(activeChat.name.replace('Família: ', ''))}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 18, color: 'hsl(var(--text-main))', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {activeChat.name}
-                    {activeChat.status === 'online' && <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', display: 'inline-block' }}/>}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'hsl(var(--primary))', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {activeChat.tag}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                 <button className="btn btn-secondary btn-sm" style={{ width: 40, height: 40, padding: 0, borderRadius: 12 }}>
-                   <Search size={18} />
-                 </button>
-                 <button className="btn btn-secondary btn-sm" style={{ height: 40, borderRadius: 12, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)' }}>
-                   <StopCircle size={16} /> Encerrar
-                 </button>
-              </div>
-            </div>
-            
-            {/* Messages Area */}
-            <div className="ad-chat-messages" style={{ flex: 1, padding: '32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24, background: 'linear-gradient(180deg, hsl(var(--bg-main)), hsl(var(--bg-surface)))' }}>
-              
-              <div style={{ textAlign: 'center', marginBottom: 24 }}>
-                 <span style={{ background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-muted))', fontSize: 11, fontWeight: 600, padding: '6px 16px', borderRadius: 20, letterSpacing: 0.5 }}>
-                   CONVERSA INICIADA HOJE
-                 </span>
-              </div>
 
-              {activeMessages.map((msg: any) => {
-                const isMe = msg.sender === 'me'
-                return (
-                  <div key={msg.id} style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%', animation: 'fadeUp 0.3s ease-out forwards' }}>
-                    <div style={{ 
-                       background: isMe ? 'var(--gradient-primary)' : 'hsl(var(--bg-overlay))',
-                       color: isMe ? 'white' : 'hsl(var(--text-main))',
-                       padding: '14px 20px',
-                       borderRadius: 20,
-                       borderTopRightRadius: isMe ? 4 : 20,
-                       borderTopLeftRadius: !isMe ? 4 : 20,
-                       maxWidth: '75%',
-                       fontSize: 15,
-                       lineHeight: 1.5,
-                       boxShadow: isMe ? '0 8px 24px rgba(99,102,241,0.2)' : '0 4px 12px rgba(0,0,0,0.03)',
-                       border: isMe ? 'none' : '1px solid hsl(var(--border-subtle))'
-                    }}>
-                      {msg.text}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px' }}>
-                      {msg.time}
-                      {isMe && <CheckCheck size={14} color="#6366f1" />}
-                    </div>
+                  <div className="form-group" style={{ marginBottom: 20 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'block', color: 'hsl(var(--text-main))' }}>Assunto / Tópico</label>
+                    <input 
+                      className="form-input" 
+                      placeholder="Ex: Assunto financeiro / Dúvida sobre boletim" 
+                      value={composeSubject}
+                      onChange={e => setComposeSubject(e.target.value)}
+                      style={{ width: '100%', height: 48, borderRadius: 12, fontSize: 14 }}
+                    />
                   </div>
-                )
-              })}
-              <div ref={messagesEndRef} />
+
+                  <div className="form-group" style={{ marginBottom: 24 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, display: 'block', color: 'hsl(var(--text-main))' }}>Mensagem Inicial</label>
+                    <textarea 
+                      className="form-input" 
+                      placeholder="Escreva detalhadamente a sua solicitação..." 
+                      value={composeBody}
+                      onChange={e => setComposeBody(e.target.value)}
+                      style={{ width: '100%', minHeight: 140, borderRadius: 12, padding: 16, fontSize: 14, resize: 'none', lineHeight: 1.5 }}
+                    />
+                  </div>
+
+                  <button 
+                    onClick={startNewConversa}
+                    disabled={!composeSubject.trim() || !composeBody.trim()}
+                    style={{ 
+                      width: '100%', 
+                      height: 52, 
+                      borderRadius: 16, 
+                      background: (!composeSubject.trim() || !composeBody.trim()) ? 'hsl(var(--bg-surface-alt))' : 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', 
+                      color: (!composeSubject.trim() || !composeBody.trim()) ? 'hsl(var(--text-muted))' : 'white',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: 15,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      cursor: (!composeSubject.trim() || !composeBody.trim()) ? 'not-allowed' : 'pointer',
+                      boxShadow: (!composeSubject.trim() || !composeBody.trim()) ? 'none' : '0 8px 24px rgba(99, 102, 241, 0.25)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Send size={18} /> Iniciar Conversa por E-mail
+                  </button>
+                </div>
+              )}
             </div>
-            
-            {/* Input Area */}
-            <div className="ad-chat-input-area" style={{ padding: '24px 32px', background: 'hsl(var(--bg-surface))', borderTop: '1px solid hsl(var(--border-subtle))', position: 'relative', zIndex: 10 }}>
-              <form onSubmit={handleSend} style={{ display: 'flex', gap: 16 }}>
-                <div style={{ flex: 1, position: 'relative' }}>
-                  <input 
-                    className="form-input"
-                    placeholder="Digite sua mensagem profissional..."
-                    value={inputText}
-                    onChange={e => setInputText(e.target.value)}
-                    style={{ width: '100%', paddingLeft: 20, paddingRight: 48, height: 56, borderRadius: 28, fontSize: 15, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}
-                  />
-                  <div style={{ position: 'absolute', right: 8, top: 8, display: 'flex', gap: 4 }}>
-                    <button type="button" className="btn btn-secondary" style={{ width: 40, height: 40, padding: 0, borderRadius: 20, color: 'hsl(var(--text-muted))', border: 'none', background: 'transparent' }}>
-                      <FileText size={20} />
+
+          ) : activeChat ? (
+            <>
+               {/* Chat Header */}
+               <div className="ad-chat-header" style={{ padding: '20px 32px', background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(16px)', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                    <button className="mobile-back-btn" onClick={() => { setActiveChat(null); }} style={{ background: 'transparent', border: 'none', padding: 0, display: 'none', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-main))' }}>
+                      <ChevronLeft size={24} />
                     </button>
+                    {(() => {
+                      const styles = getGroupStyles(activeChat.name)
+                      return (
+                        <div className="avatar ad-chat-header-avatar" style={{ width: 52, height: 52, background: styles.color, color: 'white', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, boxShadow: `0 6px 16px ${styles.color}30` }}>
+                          {getInitials(activeChat.name.split(' (')[0])}
+                        </div>
+                      )
+                    })()}
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 18, color: 'hsl(var(--text-main))', marginBottom: 2 }}>{activeChat.tag || 'Conversa sem assunto'}</div>
+                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                        <div style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(99, 102, 241, 0.1)', color: 'hsl(var(--primary))', fontSize: 11, fontWeight: 700 }}>
+                          {activeChat.name}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+               </div>
+
+               {/* Messages Area */}
+               <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                 <div style={{ textAlign: 'center', margin: '10px 0 20px' }}>
+                   <span style={{ background: 'hsl(var(--bg-surface))', padding: '6px 16px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', border: '1px solid hsl(var(--border-subtle))' }}>
+                     Histórico de e-mails oficiais e respostas do atendimento
+                   </span>
+                 </div>
+                 
+                 {activeMessages.map((msg: any) => {
+                   const isMe = msg.sender === 'them'
+                   return (
+                     <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
+                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
+                         
+                         <div className="ad-chat-bubble" style={{ 
+                           background: isMe ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : 'hsl(var(--bg-surface))',
+                           color: isMe ? 'white' : 'hsl(var(--text-main))',
+                           padding: '16px 20px',
+                           borderRadius: isMe ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+                           width: '100%',
+                           border: isMe ? 'none' : '1px solid hsl(var(--border-subtle))',
+                           boxShadow: isMe ? '0 6px 18px rgba(99, 102, 241, 0.15)' : '0 4px 16px rgba(0,0,0,0.02)',
+                           position: 'relative'
+                         }}>
+                           <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                           
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: isMe ? 'flex-end' : 'flex-start', marginTop: 8, opacity: isMe ? 0.8 : 0.45 }}>
+                             <div style={{ fontSize: 10, fontWeight: 600 }}>{msg.time}</div>
+                             {isMe && <CheckCheck size={13} />}
+                           </div>
+                         </div>
+
+                       </div>
+                     </div>
+                   )
+                 })}
+                 <div ref={messagesEndRef} />
+               </div>
+
+               {/* Text input area */}
+               <div className="ad-chat-input-area" style={{ padding: '20px 40px', background: 'hsl(var(--bg-surface))', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                 <form onSubmit={handleSend} style={{ display: 'flex', gap: 14 }}>
+                   <input 
+                     value={inputText}
+                     onChange={e => setInputText(e.target.value)}
+                     className="form-input" 
+                     placeholder="Escreva sua mensagem aqui..." 
+                     style={{ flex: 1, borderRadius: 24, paddingLeft: 20, fontSize: 14, border: '1px solid hsl(var(--border-subtle))', height: 48, background: 'hsl(var(--bg-main))' }}
+                   />
+                   <button 
+                     type="submit" 
+                     className="btn btn-primary" 
+                     style={{ 
+                       width: 48, 
+                       height: 48, 
+                       padding: 0, 
+                       borderRadius: 24, 
+                       display: 'flex', 
+                       alignItems: 'center', 
+                       justifyContent: 'center', 
+                       background: inputText.trim() ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : 'hsl(var(--bg-surface-alt))', 
+                       color: inputText.trim() ? 'white' : 'hsl(var(--text-muted))', 
+                       border: 'none', 
+                       boxShadow: inputText.trim() ? '0 4px 14px rgba(99, 102, 241, 0.3)' : 'none', 
+                       transition: 'all 0.2s', 
+                       cursor: inputText.trim() ? 'pointer' : 'not-allowed' 
+                     }}
+                     disabled={!inputText.trim()}
+                   >
+                     <Send size={18} style={{ marginLeft: -2 }} />
+                   </button>
+                 </form>
+               </div>
+            </>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'hsl(var(--bg-main))', color: 'hsl(var(--text-muted))' }}>
+              <div style={{ width: 80, height: 80, borderRadius: 40, background: 'hsl(var(--bg-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, boxShadow: '0 8px 24px rgba(0,0,0,0.02)' }}>
+                 <Mail size={32} style={{ color: 'hsl(var(--primary))', opacity: 0.6 }} />
+              </div>
+              <h3 style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 8, fontFamily: 'Outfit, sans-serif' }}>Canais de Mensagens Oficiais</h3>
+              <p style={{ maxWidth: 460, textAlign: 'center', fontSize: 14, lineHeight: 1.6, color: 'hsl(var(--text-muted))', margin: '0 0 20px 0' }}>
+                Abra um canal de e-mail direto com a equipe pedagógica, financeira ou secretaria. Todas as conversas são seguras e auditadas pela escola.
+              </p>
+              {adConfig?.permissoes?.chat !== false ? (
                 <button 
-                  type="submit" 
-                  disabled={!inputText.trim()}
+                  onClick={() => { setShowNovaConversa(true); setSelectedGroup(null); setSelectedColaborador(null); }}
                   style={{ 
-                    width: 56, height: 56, borderRadius: 28,
-                    background: inputText.trim() ? 'var(--gradient-primary)' : 'hsl(var(--bg-overlay))',
-                    color: inputText.trim() ? 'white' : 'hsl(var(--text-muted))',
-                    border: 'none', cursor: inputText.trim() ? 'pointer' : 'not-allowed',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: inputText.trim() ? '0 8px 24px rgba(99,102,241,0.3)' : 'none',
-                    transition: 'all 0.3s'
+                    background: 'hsl(var(--bg-surface))', 
+                    color: 'hsl(var(--primary))', 
+                    border: '1px solid rgba(99, 102, 241, 0.2)', 
+                    borderRadius: 20, 
+                    padding: '10px 24px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8, 
+                    fontSize: 14, 
+                    fontWeight: 700, 
+                    cursor: 'pointer', 
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.05)'
                   }}
-                  onMouseEnter={e => inputText.trim() && (e.currentTarget.style.transform = 'scale(1.05)')}
-                  onMouseLeave={e => inputText.trim() && (e.currentTarget.style.transform = 'scale(1)')}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = 'transparent' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'hsl(var(--bg-surface))'; e.currentTarget.style.color = 'hsl(var(--primary))'; e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)' }}
                 >
-                  <Send size={22} style={{ transform: 'translateX(2px)' }} />
+                  <Plus size={16} /> Abrir Nova Conversa
                 </button>
-              </form>
+              ) : (
+                <div style={{ padding: '10px 20px', background: 'rgba(239, 68, 68, 0.05)', color: '#ef4444', borderRadius: 12, border: '1px solid rgba(239, 68, 68, 0.15)', fontSize: 13, fontWeight: 600 }}>
+                  O envio de novas mensagens foi suspenso temporariamente pela coordenação.
+                </div>
+              )}
             </div>
-          </>
-        ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, hsl(var(--bg-main)), hsl(var(--bg-surface)))' }}>
-             <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(99,102,241,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, boxShadow: 'inset 0 0 40px rgba(99,102,241,0.1)' }}>
-               <MessageSquare size={48} color="hsl(var(--primary))" opacity={0.6} />
-             </div>
-             <h3 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 12 }}>Atendimento Institucional</h3>
-             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, maxWidth: 400, textAlign: 'center', lineHeight: 1.6, marginBottom: 32 }}>
-               Selecione uma conversa na lista lateral ou inicie um novo contato com um responsável ou outro setor da escola.
-             </p>
-             <button 
-                onClick={() => setShowNovaConversa(true)}
-                className="btn btn-primary"
-                style={{ height: 48, padding: '0 24px', borderRadius: 24, fontSize: 15, fontWeight: 700 }}
-             >
-                <Plus size={18} /> Iniciar Novo Chat
-             </button>
-          </div>
-        )}
+          )}
       </div>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        .badge-pulse { animation: pulse 2s infinite; }
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .ad-mobile-back-btn { display: none !important; }
-
-        @media (max-width: 768px) {
-          .ad-chat-container { border-radius: 0 !important; border: none !important; height: calc(100vh - 200px) !important; box-shadow: none !important; }
-          .ad-chat-sidebar { width: 100% !important; border-right: none !important; }
-          .mobile-hidden { display: none !important; }
-          .ad-mobile-back-btn { display: flex !important; margin-right: 8px !important; }
-          
-          .ad-chat-header { padding: 16px 20px !important; }
-          .ad-chat-header .avatar { width: 40px !important; height: 40px !important; font-size: 14px !important; }
-          .ad-chat-header h2 { font-size: 18px !important; }
-          
-          .ad-chat-messages { padding: 20px !important; gap: 16px !important; }
-          
-          .ad-chat-input-area { padding: 16px !important; padding-bottom: calc(16px + env(safe-area-inset-bottom)) !important; border-top: 1px solid rgba(0,0,0,0.05) !important; }
-          .ad-chat-input-area .form-input { height: 48px !important; border-radius: 24px !important; font-size: 14px !important; }
-          .ad-chat-input-area button[type="submit"] { width: 48px !important; height: 48px !important; }
-          .ad-chat-input-area button[type="submit"] svg { width: 20px !important; height: 20px !important; }
-          
-          .ad-new-chat-container { padding-bottom: 24px !important; }
-          .ad-dest-card { padding: 16px !important; flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
-        }
-      `}} />
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { createSession } from '../actions/authActions'
 
-type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master'
+type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
 
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -43,6 +43,8 @@ export default function LoginPage() {
 
   // ── step manager
   const [step, setStep] = useState<Step>('login')
+  const [pendingAuth, setPendingAuth] = useState<any>(null)
+  const [hasDualRole, setHasDualRole] = useState(false)
 
   // ── login form
   const [email, setEmail]       = useState('')
@@ -151,7 +153,7 @@ export default function LoginPage() {
       const cargoReal = meta.cargo || 'Colaborador'
       const perfilReal = meta.perfil || 'Usuário'
 
-      setCurrentUser({ 
+      const userObj = { 
         id: authData.user.id, 
         nome: nomeReal, 
         email: email, 
@@ -160,7 +162,14 @@ export default function LoginPage() {
         foto: meta.foto || undefined,
         aluno_id: meta.aluno_id || '',
         responsavel_id: meta.responsavel_id || ''
-      })
+      }
+      setCurrentUser(userObj)
+      
+      // FIX: Force synchronous localStorage write to avoid React batching race condition before navigation
+      try {
+        localStorage.setItem('edu-current-user', JSON.stringify(userObj))
+        localStorage.setItem('edu-current-perfil', JSON.stringify(perfilReal))
+      } catch (e) {}
 
       if (cargoReal === 'Aluno') {
         if (meta.aluno_id) {
@@ -170,10 +179,36 @@ export default function LoginPage() {
         }
       } else if (perfilReal === 'Família' || cargoReal === 'Responsável') {
         window.location.href = '/agenda-digital/selecionar-aluno'
-      } else if (perfilReal === 'Professor') {
-        window.location.href = '/professor'
       } else {
-        window.location.href = '/dashboard'
+        // É um colaborador (Professor, Diretor, Coordenador, Financeiro, Secretaria, etc)
+        // 1. Verificamos se ele possui papel duplo usando o e-mail
+        let isAlsoFamily = !!meta.responsavel_id;
+        if (!isAlsoFamily && email) {
+           try {
+               const alunosRes = await fetch('/api/alunos?all=true')
+               if (alunosRes.ok) {
+                   const result = await alunosRes.json()
+                   const alunos = Array.isArray(result) ? result : result.data || []
+                   const targetEmail = email.toLowerCase()
+                   isAlsoFamily = alunos.some((a: any) => 
+                       JSON.stringify(a.dados || {}).toLowerCase().includes(targetEmail) ||
+                       (a.email && a.email.toLowerCase() === targetEmail) ||
+                       (a.responsavel && typeof a.responsavel === 'string' && a.responsavel.toLowerCase() === targetEmail)
+                   )
+               }
+           } catch (e) {
+               console.log("Erro verificando papel dupla", e)
+           }
+        }
+        
+        setPendingAuth({
+           cargo: cargoReal,
+           perfil: perfilReal
+        })
+        setHasDualRole(isAlsoFamily)
+        setStep('choose_system')
+        setLoginLoading(false)
+        return;
       }
     } catch (err: any) {
       setLoginLoading(false)
@@ -673,6 +708,107 @@ export default function LoginPage() {
   )
 
   // ────────────────────────────────────────────────────────────────
+  // STEP: Escolher Sistema (ERP vs Agenda)
+  // ────────────────────────────────────────────────────────────────
+  const ChooseSystemContent = (
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:540, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
+      <div style={{ marginBottom:36, textAlign:'center' }}>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acesso Autorizado</h2>
+        <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)' }}>Bem-vindo. Onde você deseja entrar?</p>
+      </div>
+
+      <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
+        <button type="button" 
+          onClick={() => {
+             const p = pendingAuth?.perfil;
+             if (p === 'Professor') window.location.href = '/professor';
+             else window.location.href = '/dashboard';
+          }}
+          style={{ flex:1, padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #3b82f6, #2563eb)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(59,130,246,0.4)' }}>🏢</div>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão Escolar</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Sistema ERP Principal</div>
+          </div>
+        </button>
+
+        <button type="button" 
+          onClick={() => {
+             if (hasDualRole) {
+                 setStep('choose_agenda_role')
+             } else {
+                 const p = pendingAuth?.perfil;
+                 if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
+                     window.location.href = '/agenda-digital/admin/comunicados';
+                 } else {
+                     window.location.href = '/agenda-digital/colaborador/comunicados';
+                 }
+             }
+          }}
+          style={{ flex:1, padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #8b5cf6, #6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(139,92,246,0.4)' }}>📱</div>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Agenda Digital</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Comunicação Diária</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  )
+
+  // ────────────────────────────────────────────────────────────────
+  // STEP: Escolher Contexto da Agenda (Duplo Perfil)
+  // ────────────────────────────────────────────────────────────────
+  const ChooseAgendaRoleContent = (
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:540, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
+      <button type="button" onClick={() => setStep('choose_system')} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'rgba(255,255,255,0.4)', background:'none', border:'none', cursor:'pointer', marginBottom:24, fontWeight:600 }}>← Voltar</button>
+      
+      <div style={{ marginBottom:36, textAlign:'center' }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(16,185,129,0.1)', border:'1px solid rgba(16,185,129,0.25)', marginBottom:16 }}>
+          <span style={{ fontSize:10, fontWeight:900, color:'#34d399' }}>MÚLTIPLOS PERFIS DETECTADOS</span>
+        </div>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acessar a Agenda como:</h2>
+      </div>
+
+      <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
+        <button type="button" 
+          onClick={() => { window.location.href = '/agenda-digital/selecionar-aluno'; }}
+          style={{ flex:1, padding:'28px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:56, height:56, borderRadius:18, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👨‍👩‍👧‍👦</div>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:'#fff', marginBottom:4 }}>Família</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)' }}>Perfil de Pais/Responsáveis</div>
+          </div>
+        </button>
+
+        <button type="button" 
+          onClick={() => {
+             const p = pendingAuth?.perfil;
+             if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
+                 window.location.href = '/agenda-digital/admin/comunicados';
+             } else {
+                 window.location.href = '/agenda-digital/colaborador/comunicados';
+             }
+          }}
+          style={{ flex:1, padding:'28px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(245,158,11,0.08)'; e.currentTarget.style.borderColor='rgba(245,158,11,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(245,158,11,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:56, height:56, borderRadius:18, background:'linear-gradient(135deg, #f59e0b, #d97706)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, boxShadow:'0 10px 24px rgba(245,158,11,0.4)' }}>💼</div>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:'#fff', marginBottom:4 }}>Colaborador</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)' }}>Perfil Escolar Interno</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
       {LeftPanel}
@@ -681,8 +817,14 @@ export default function LoginPage() {
         <div style={{ position:'absolute', bottom:'15%', left:'5%', width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%)', pointerEvents:'none' }} />
         {mounted && step === 'login'                && LoginContent}
         {mounted && step === 'first_access_verify'  && FirstAccessVerify}
-        {mounted && step === 'first_access_create'  && FirstAccessCreate}
-        {mounted && step === 'setup_master'         && SetupMasterContent}
+        {mounted && (
+          <>
+            {step === 'first_access_create' && FirstAccessCreate}
+            {step === 'setup_master' && SetupMasterContent}
+            {step === 'choose_system' && ChooseSystemContent}
+            {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
+          </>
+        )}
         <div style={{ position:'absolute', bottom:24, right:32, display:'flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:100, background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)' }}>
           <div style={{ width:5, height:5, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981' }} />
           <span style={{ fontSize:10, color:'rgba(16,185,129,0.7)', fontWeight:700, letterSpacing:'0.06em' }}>SISTEMA SEGURO</span>

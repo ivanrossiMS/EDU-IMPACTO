@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { supabaseServer } from '@/lib/supabase'
+import { supabaseServer } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
 

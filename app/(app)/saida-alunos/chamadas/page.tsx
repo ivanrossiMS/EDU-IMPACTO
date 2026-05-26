@@ -18,7 +18,7 @@ const getInitials = (name: string) => {
   return name.trim().split(/\s+/).map(n => n[0]).join('').toLowerCase()
 }
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -44,8 +44,8 @@ function statusMeta(call: PickupCall) {
   return { color: '#94a3b8', label: 'CANCELADO' }
 }
 
-function elapsedSec(since: string) {
-  return Math.floor((Date.now() - new Date(since).getTime()) / 1000)
+function elapsedSec(since: string, nowTime: number = Date.now()) {
+  return Math.max(0, Math.floor((nowTime - new Date(since).getTime()) / 1000))
 }
 
 function fmtTime(iso: string) {
@@ -53,21 +53,17 @@ function fmtTime(iso: string) {
 }
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
-function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
+const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, nowTime }: {
   call:      PickupCall
   onConfirm: (id: string) => void
   onCancel:  (id: string) => void
   onRecall:  (id: string) => void
   onRevert:  (id: string) => void
+  nowTime:   number
 }) {
   const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
-  const [secs, setSecs] = useState(elapsedSec(call.calledAt))
-
-  useEffect(() => {
-    const iv = setInterval(() => setSecs(elapsedSec(call.calledAt)), 1000)
-    return () => clearInterval(iv)
-  }, [call.calledAt])
+  const secs = elapsedSec(call.calledAt, nowTime)
 
   const isActive   = call.status === 'waiting' || call.status === 'called'
   const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
@@ -113,6 +109,7 @@ function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
           <img
             src={call.studentPhoto}
             alt={call.studentName}
+            decoding="async" loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
           />
         ) : (
@@ -276,10 +273,14 @@ function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
       </div>
     </div>
   )
-}
+}, (prev, next) => {
+  return prev.call.status === next.call.status &&
+         prev.call.id === next.call.id &&
+         prev.nowTime === next.nowTime
+})
 
 // ── Student search row with inline guardian buttons ───────────────────────────
-function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
+const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
   student: any
   activeCalls: PickupCall[]
   onCall: (sId: string, sName: string, sClass: string, gId: string, gName: string, foto?: string | null) => void
@@ -300,54 +301,60 @@ function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
   const todayKey = remap[todayIdx]
 
   // Also include responsáveis ERP as fallback if no autorizados defined
-  const respList: { id: string; name: string; role: string; rfid?: string; proibido?: boolean; diasSemana?: string[] }[] = []
-  const seen = new Set<string>()
+  const respList = useMemo(() => {
+    const list: { id: string; name: string; role: string; rfid?: string; proibido?: boolean; diasSemana?: string[] }[] = []
+    const seen = new Set<string>()
 
-  if (autorizados.length > 0) {
-    autorizados.forEach((aut, i) => {
-      const key = (aut.nome || '').toLowerCase().trim()
-      if (!key || seen.has(key)) return
-      seen.add(key)
-      respList.push({
-        id: `saude-aut-${i}`,
-        name: aut.nome,
-        role: aut.parentesco || 'Autorizado',
-        rfid: aut.rfid,
-        proibido: aut.proibido === true,
-        diasSemana: aut.diasSemana || [],
-      })
-    })
-  } else {
-    // Responsáveis from responsaveis array (Process first to get proibido and diasSemana!)
-    const resps: any[] = student.responsaveis || []
-    resps.forEach((r: any, i: number) => {
-      const key = (r.nome || '').toLowerCase().trim()
-      if (key && !seen.has(key)) {
+    if (autorizados.length > 0) {
+      autorizados.forEach((aut, i) => {
+        const key = (aut.nome || '').toLowerCase().trim()
+        if (!key || seen.has(key)) return
         seen.add(key)
-        respList.push({ 
-          id: `resp-${i}`, 
-          name: r.nome, 
-          role: r.parentesco || 'Responsável',
-          proibido: r.proibido === true,
-          diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
+        list.push({
+          id: `saude-aut-${i}`,
+          name: aut.nome,
+          role: aut.parentesco || 'Autorizado',
+          rfid: aut.rfid,
+          proibido: aut.proibido === true,
+          diasSemana: aut.diasSemana || [],
         })
-      }
-    })
-    // Fallback to ERP fields when no saude.autorizados configured
-    const erp: { name: string; role: string }[] = []
-    if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
-    if (student.responsavelFinanceiro?.trim()) erp.push({ name: student.responsavelFinanceiro.trim(), role: 'Financeiro' })
-    if (student.responsavelPedagogico?.trim()) erp.push({ name: student.responsavelPedagogico.trim(), role: 'Pedagógico' })
-    erp.forEach((c, i) => {
-      const key = c.name.toLowerCase().trim()
-      if (!seen.has(key)) { seen.add(key); respList.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
-    })
-  }
+      })
+    } else {
+      // Responsáveis from responsaveis array (Process first to get proibido and diasSemana!)
+      const resps: any[] = student.responsaveis || []
+      resps.forEach((r: any, i: number) => {
+        const key = (r.nome || '').toLowerCase().trim()
+        if (key && !seen.has(key)) {
+          seen.add(key)
+          list.push({ 
+            id: `resp-${i}`, 
+            name: r.nome, 
+            role: r.parentesco || 'Responsável',
+            proibido: r.proibido === true,
+            diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
+          })
+        }
+      })
+      // Fallback to ERP fields when no saude.autorizados configured
+      const erp: { name: string; role: string }[] = []
+      if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
+      if (student.responsavelFinanceiro?.trim()) erp.push({ name: student.responsavelFinanceiro.trim(), role: 'Financeiro' })
+      if (student.responsavelPedagogico?.trim()) erp.push({ name: student.responsavelPedagogico.trim(), role: 'Pedagógico' })
+      erp.forEach((c, i) => {
+        const key = c.name.toLowerCase().trim()
+        if (!seen.has(key)) { seen.add(key); list.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
+      })
+    }
+    return list
+  }, [autorizados, student.responsaveis, student.responsavel, student.responsavelFinanceiro, student.responsavelPedagogico])
 
-  const alreadyCalled = activeCalls.some(c =>
-    c.studentId === student.id && (c.status === 'waiting' || c.status === 'called')
-  )
-  const initials = student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
+  const alreadyCalled = useMemo(() => {
+    return activeCalls.some(c =>
+      c.studentId === student.id && (c.status === 'waiting' || c.status === 'called')
+    )
+  }, [activeCalls, student.id])
+
+  const initials = useMemo(() => student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase(), [student.nome])
 
   return (
     <div style={{
@@ -365,7 +372,7 @@ function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
           border: (student.foto || student.imagem1) ? '1px solid hsl(var(--border-subtle))' : 'none',
         }}>
           {(student.foto || student.imagem1) ? (
-            <img src={student.foto || student.imagem1} alt={student.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={student.foto || student.imagem1} alt={student.nome} decoding="async" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             initials
           )}
@@ -515,8 +522,10 @@ function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
       </div>
     </div>
   )
-}
-
+}, (prev, next) => {
+  return prev.student.id === next.student.id && 
+         prev.activeCalls === next.activeCalls
+})
 function CallCardSkeleton() {
   return (
     <div className="skeleton-shimmer" style={{
@@ -1081,6 +1090,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ChamadasContent() {
+  // -- Global Tick for Performant Timers --
+  const [globalNow, setGlobalNow] = useState(Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setGlobalNow(Date.now()), 10000)
+    return () => clearInterval(iv)
+  }, [])
+
   const { activeCalls = [], confirmPickup, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
   const [turmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
@@ -1174,20 +1190,23 @@ function ChamadasContent() {
   const blocked   = activeCalls.filter(c => c.status === 'blocked')
 
   const filtered = useMemo(() => {
-    let list = [...activeCalls].sort((a, b) =>
-      new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime()
-    )
+    // PRECALCULATE TIMESTAMPS AND SEARCH STRINGS FOR FAST SORTING/FILTERING
+    let list = activeCalls.map(c => ({
+      ...c,
+      _parsedTime: new Date(c.calledAt).getTime(),
+      _searchStr: (c.studentName + ' ' + c.studentClass + ' ' + (c.guardianName||'')).toLowerCase()
+    }))
+
+    list.sort((a, b) => b._parsedTime - a._parsedTime)
+
     if (filter === 'waiting')   list = list.filter(c => c.status === 'waiting' || c.status === 'called')
     if (filter === 'confirmed') list = list.filter(c => c.status === 'confirmed')
     if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
     if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')
+    
     if (callSearch.trim()) {
       const q = callSearch.toLowerCase()
-      list = list.filter(c =>
-        c.studentName.toLowerCase().includes(q) ||
-        c.studentClass.toLowerCase().includes(q) ||
-        c.guardianName.toLowerCase().includes(q)
-      )
+      list = list.filter(c => c._searchStr.includes(q))
     }
     return list
   }, [activeCalls, filter, callSearch])
@@ -1419,6 +1438,7 @@ function ChamadasContent() {
               <CallCard
                 key={call.id}
                 call={{ ...call, studentClass: turmaNome }}
+                nowTime={globalNow}
                 onConfirm={confirmPickup}
                 onCancel={cancelCall}
                 onRecall={id => recallStudent(id, () => {})}

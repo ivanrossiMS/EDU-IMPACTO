@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 interface NavItem {
   label: string
@@ -347,6 +348,9 @@ function NavGroupComp({ group, collapsed, onToggle, open }: { group: NavGroup; c
 export function Sidebar() {
   const router = useRouter()
   const { sidebarCollapsed: collapsed, toggleSidebar, currentUserPerfil, currentUser, hydrated, theme, setTheme, setCurrentUser } = useApp()
+  const isMobile = useIsMobile()
+  const effectiveCollapsed = isMobile ? false : collapsed
+  
   const { cfgCalendarioLetivo = [] } = useData()
   const anoVigente = cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || '2026'
   const [openGroup, setOpenGroup] = useState<string | null>('ACADÊMICO')
@@ -390,32 +394,53 @@ export function Sidebar() {
   if (!hydrated) return null
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: collapsed ? 90 : 285 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-      style={{
-        height: '100vh',
-        background: 'linear-gradient(165deg, #0f1129 0%, #060814 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        zIndex: 50,
-        overflow: 'hidden',
-        borderRight: '1px solid rgba(255,255,255,0.08)',
-        flexShrink: 0
-      }}
-    >
+    <>
+      {/* Mobile Backdrop Overlay */}
+      {isMobile && !collapsed && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={toggleSidebar}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 90
+          }}
+        />
+      )}
+
+      <motion.aside
+        initial={false}
+        animate={{ 
+          width: isMobile ? 285 : (collapsed ? 90 : 285),
+          x: isMobile ? (collapsed ? '-100%' : '0%') : '0%'
+        }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        style={{
+          height: '100vh',
+          background: 'linear-gradient(165deg, #0f1129 0%, #060814 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 100, // Acima do backdrop (90)
+          overflow: 'hidden',
+          borderRight: '1px solid rgba(255,255,255,0.08)',
+          flexShrink: 0
+        }}
+      >
       {/* Background Glows */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'radial-gradient(circle at 0% 50%, rgba(0, 210, 255, 0.08) 0%, transparent 50%), radial-gradient(circle at 100% 20%, rgba(121, 40, 202, 0.08) 0%, transparent 50%)', zIndex: 0, pointerEvents: 'none' }} />
 
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header / Logo */}
         <div style={{ padding: '40px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {!collapsed && (
+          {!effectiveCollapsed && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                  <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #FF0080, #7928CA)', borderRadius: 12, opacity: 0.2, filter: 'blur(8px)' }} />
@@ -430,13 +455,15 @@ export function Sidebar() {
               </div>
             </motion.div>
           )}
-          <button onClick={toggleSidebar} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
-            <motion.div animate={{ rotate: collapsed ? 180 : 0 }}><ChevronLeft size={16} /></motion.div>
-          </button>
+          {(!isMobile) && (
+            <button onClick={toggleSidebar} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white' }}>
+              <motion.div animate={{ rotate: effectiveCollapsed ? 180 : 0 }}><ChevronLeft size={16} /></motion.div>
+            </button>
+          )}
         </div>
 
         {/* Ano Letivo Widget */}
-        {!collapsed && (
+        {!effectiveCollapsed && (
           <div style={{ padding: '0 24px 16px' }}>
             <div style={{ padding: '8px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 10 }}>
                <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -454,7 +481,7 @@ export function Sidebar() {
             <NavGroupComp 
               key={group.title + i} 
               group={group} 
-              collapsed={collapsed} 
+              collapsed={effectiveCollapsed} 
               open={openGroup === group.title} 
               onToggle={() => setOpenGroup(openGroup === group.title ? null : group.title)} 
             />
@@ -496,17 +523,18 @@ export function Sidebar() {
                     e.stopPropagation();
                     setShowTopMenu(false);
                     router.push('/meu-perfil');
+                    if (isMobile) toggleSidebar();
                   }}
                   style={{
                     width: '100%',
-                    padding: collapsed ? '10px' : '10px 14px',
+                    padding: effectiveCollapsed ? '10px' : '10px 14px',
                     borderRadius: 12,
                     background: 'transparent',
                     border: 'none',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
                     gap: 12,
                     color: 'rgba(255, 255, 255, 0.8)',
                     transition: 'all 0.2s',
@@ -514,7 +542,7 @@ export function Sidebar() {
                   }}
                 >
                   <UserCircle size={18} color="#7928ca" style={{ filter: 'drop-shadow(0 0 5px rgba(121, 40, 202, 0.5))', flexShrink: 0 }} />
-                  {!collapsed && (
+                  {!effectiveCollapsed && (
                     <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Meu Perfil</span>
                   )}
                 </motion.button>
@@ -536,14 +564,14 @@ export function Sidebar() {
                   }}
                   style={{
                     width: '100%',
-                    padding: collapsed ? '10px' : '10px 14px',
+                    padding: effectiveCollapsed ? '10px' : '10px 14px',
                     borderRadius: 12,
                     background: 'transparent',
                     border: 'none',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: collapsed ? 'center' : 'flex-start',
+                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
                     gap: 12,
                     color: '#ef4444',
                     transition: 'all 0.2s',
@@ -551,7 +579,7 @@ export function Sidebar() {
                   }}
                 >
                   <LogOut size={18} color="#ef4444" style={{ filter: 'drop-shadow(0 0 5px rgba(239, 68, 68, 0.5))', flexShrink: 0 }} />
-                  {!collapsed && (
+                  {!effectiveCollapsed && (
                     <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Sair</span>
                   )}
                 </motion.button>
@@ -580,7 +608,7 @@ export function Sidebar() {
                 />
                 <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderRadius: 6, background: '#10b981', border: '2px solid #060814', boxShadow: '0 0 8px #10b981' }} />
               </div>
-              {!collapsed && (
+              {!effectiveCollapsed && (
                 <>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
@@ -601,7 +629,7 @@ export function Sidebar() {
                       <motion.button 
                         whileHover={{ background: 'rgba(255,255,255,0.15)', scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={(e) => { e.stopPropagation(); router.push('/agenda-digital/admin/comunicados') }}
+                        onClick={(e) => { e.stopPropagation(); router.push('/agenda-digital/admin/comunicados'); if(isMobile) toggleSidebar(); }}
                         style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
                       >
                         <Bell size={17} color="white" />
@@ -614,11 +642,11 @@ export function Sidebar() {
           </div>
         </div>
       </div>
-
       <style dangerouslySetInnerHTML={{__html: `
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </motion.aside>
+    </>
   )
 }

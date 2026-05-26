@@ -18,16 +18,14 @@ export default function BackupSection() {
   const [contasPagar = []] = useSupabaseArray<any>('contas-pagar')
   const [movimentacoes = []] = useSupabaseArray<any>('financeiro/movimentacoes')
   const [notasFiscais = []] = useSupabaseArray<any>('financeiro/notas-fiscais')
-  const [fornecedores = []] = useSupabaseArray<any>('fornecedores')
-
+  
   const [funcionarios = []] = useSupabaseArray<any>('rh/funcionarios')
   const [adiantamentos = []] = useSupabaseArray<any>('rh/adiantamentos')
   const [advertencias = []] = useSupabaseArray<any>('rh/advertencias')
   const [ausencias = []] = useSupabaseArray<any>('rh/ausencias')
 
   const [leads = []] = useSupabaseArray<any>('leads')
-  const [agendamentos = []] = useSupabaseArray<any>('agendamentos')
-
+  
   const [comunicados = []] = useSupabaseArray<any>('comunicados')
   const [tarefas = []] = useSupabaseArray<any>('tarefas')
   const [eventosAgenda = []] = useSupabaseArray<any>('agenda/eventos')
@@ -84,7 +82,6 @@ export default function BackupSection() {
         { label: 'Contas a Pagar', count: contasPagar.length, data: contasPagar, sheetName: 'Fin-Pagar' },
         { label: 'Movimentações Manuais', count: movimentacoes.length, data: movimentacoes, sheetName: 'Fin-Movimentações' },
         { label: 'Notas Fiscais', count: notasFiscais.length, data: notasFiscais, sheetName: 'Fin-NotasFiscais' },
-        { label: 'Fornecedores', count: fornecedores.length, data: fornecedores, sheetName: 'Fornecedores' },
       ]
     },
     {
@@ -104,7 +101,6 @@ export default function BackupSection() {
       color: '#ec4899',
       items: [
         { label: 'Leads', count: leads.length, data: leads, sheetName: 'CRM-Leads' },
-        { label: 'Agendamentos', count: agendamentos.length, data: agendamentos, sheetName: 'CRM-Agendamentos' },
       ]
     },
     {
@@ -142,9 +138,9 @@ export default function BackupSection() {
     }
   ], [
     alunos, turmas, ocorrencias, transferencias, frequencias, notas,
-    titulos, contasPagar, movimentacoes, notasFiscais, fornecedores,
+    titulos, contasPagar, movimentacoes, notasFiscais, 
     funcionarios, adiantamentos, advertencias, ausencias,
-    leads, agendamentos,
+    leads, 
     comunicados, tarefas, eventosAgenda, rotinaItems, autorizacoes, momentos, enquetes,
     guardians, calls, saidaLogs,
     mantenedores, systemLogs

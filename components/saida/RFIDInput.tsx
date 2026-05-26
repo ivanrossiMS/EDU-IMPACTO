@@ -30,14 +30,17 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
     // Keep focus on input
     useEffect(() => {
       if (!enabled) return
-      const refocus = () => {
-        if (document.activeElement !== inputRef.current) inputRef.current?.focus()
+      const refocus = (e: MouseEvent) => {
+        if ((e.target as HTMLElement)?.id === 'test-rfid-input') return
+        if (document.activeElement !== inputRef.current && document.activeElement?.id !== 'test-rfid-input') {
+          inputRef.current?.focus()
+        }
       }
       document.addEventListener('click', refocus)
       
       const handleBlur = () => {
         setTimeout(() => {
-          if (enabled) inputRef.current?.focus()
+          if (enabled && document.activeElement?.id !== 'test-rfid-input') inputRef.current?.focus()
         }, 10)
       }
       inputRef.current?.addEventListener('blur', handleBlur)

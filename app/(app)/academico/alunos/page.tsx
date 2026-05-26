@@ -6,7 +6,7 @@ import {
   Trash2, Edit, Eye, Check, X, Camera, Upload, 
   UserPlus, SearchIcon, CreditCard, Calendar, Phone, Mail,
   MapPin, Shield, DoorOpen, HardHat, Briefcase, Tag, Sparkles,
-  Loader2, Lock, AlertTriangle, CheckCircle2
+  Loader2, Lock, AlertTriangle, CheckCircle2, Info
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
@@ -52,6 +52,7 @@ export default function AlunosPage() {
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     step: 'password' | 'deleting' | 'success' | 'error';
@@ -154,7 +155,42 @@ export default function AlunosPage() {
     setFormData(prev => {
       if (index !== undefined && section === 'responsaveis') {
         const newArray = [...prev.responsaveis]
-        newArray[index] = { ...newArray[index], [field]: value }
+        
+        // Regra 2: Apenas 1 responsável pode ser financeiro
+        if (field === 'isFinanceiro' && value === true) {
+          newArray.forEach((resp, i) => {
+            if (i !== index) newArray[i] = { ...newArray[i], isFinanceiro: false }
+          })
+        }
+
+        let updatedResp = { ...newArray[index], [field]: value }
+
+        // Regra 1: Pai e Mãe devem ser pelo menos Pedagógico ou Financeiro
+        if (field === 'parentesco' && (value === 'pai' || value === 'mae')) {
+          if (!updatedResp.isFinanceiro) {
+            updatedResp.isPedagogico = true
+          }
+          updatedResp.isOutro = false
+        }
+        
+        // Regra 3: O tipo de responsável 'outro' marca o tipo 'outro' automaticamente
+        if (field === 'parentesco' && value === 'outro') {
+          updatedResp.isOutro = true
+        }
+
+        // Regra 1 (prevenção): Se for pai/mãe, não deixa desmarcar Pedagógico manualmente SE não for financeiro
+        if (field === 'isPedagogico' && value === false && (updatedResp.parentesco === 'pai' || updatedResp.parentesco === 'mae')) {
+          if (!updatedResp.isFinanceiro) {
+            updatedResp.isPedagogico = true // Força a ser true
+          }
+        }
+
+        // Regra 1 (prevenção extra): Se desmarcar o financeiro de um pai/mãe, ele volta a ser pedagógico obrigatoriamente
+        if (field === 'isFinanceiro' && value === false && (updatedResp.parentesco === 'pai' || updatedResp.parentesco === 'mae')) {
+          updatedResp.isPedagogico = true
+        }
+
+        newArray[index] = updatedResp
         return { ...prev, responsaveis: newArray }
       }
       return {
@@ -227,10 +263,19 @@ export default function AlunosPage() {
         if (!resp.parentesco || !resp.parentesco.trim()) {
           errors.push({ field: `resp_${index}_parentesco`, label: `Parentesco${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
         }
-        if (!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro) {
+        if (!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro') {
           errors.push({ field: `resp_${index}_tipo`, label: `Tipo de Responsável (Selecione pelo menos um: Financeiro, Pedagógico ou Outro)${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
         }
+        
+        if ((resp.parentesco === 'pai' || resp.parentesco === 'mae') && !resp.isPedagogico && !resp.isFinanceiro) {
+          errors.push({ field: `resp_${index}_tipo`, label: `O pai ou mãe deve ser marcado pelo menos como responsável pedagógico ou financeiro${suffix}`, tab: 'responsavel', tabLabel: 'Responsáveis' })
+        }
       })
+      
+      const qtdFinanceiro = formData.responsaveis.filter(r => r.isFinanceiro).length
+      if (qtdFinanceiro > 1) {
+        errors.push({ field: 'responsaveis_financeiro', label: 'Apenas UM responsável pode ser definido como Financeiro', tab: 'responsavel', tabLabel: 'Responsáveis' })
+      }
     }
 
     // 3. Turma validation
@@ -747,11 +792,11 @@ export default function AlunosPage() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button 
               type="button"
-              onClick={handleDeleteAll} 
+              onClick={() => setIsHelpModalOpen(true)}
               className="neo-btn" 
-              style={{ padding: '12px 24px', fontSize: 14, background: '#dc2626', color: 'white', border: 'none', boxShadow: '0 8px 20px rgba(220, 38, 38, 0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+              style={{ padding: '12px 20px', fontSize: 14, background: 'linear-gradient(135deg, #f59e0b 0%, #eab308 100%)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 15px rgba(245, 158, 11, 0.3)' }}
             >
-              <Trash2 size={18} /> Excluir Todos
+              <Info size={18} /> Ajuda e Regras
             </button>
             <button onClick={handleNovoAluno} className="neo-btn neo-btn-primary" style={{ padding: '12px 24px', fontSize: 14 }}>
               <Plus size={18} /> Novo Aluno
@@ -1315,7 +1360,8 @@ export default function AlunosPage() {
                     </button>
                     <div style={{ fontSize: 13, color: '#64748b', alignSelf: 'center', padding: '0 10px' }}>ou</div>
                     <button onClick={() => {
-                      setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false }] });
+                      const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+                      setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false }] });
                       setMostrarFormResponsavel(true);
                     }} className="neo-btn neo-btn-primary" style={{ height: 40 }}>
                       <Plus size={16} /> Novo Responsável
@@ -1447,7 +1493,7 @@ export default function AlunosPage() {
                                 <Check size={10} /> Outro
                               </span>
                             )}
-                            {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && (
+                            {!resp.isFinanceiro && !resp.isPedagogico && !resp.isOutro && resp.parentesco !== 'outro' && (
                               <span className="pulse-warning" style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', background: '#fee2e2', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                 <AlertTriangle size={10} /> Tipo Obrigatório *
                               </span>
@@ -1619,7 +1665,10 @@ export default function AlunosPage() {
                       ))}
 
                       <button 
-                        onClick={() => setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false }] })} 
+                        onClick={() => {
+                          const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+                          setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false }] })
+                        }} 
                         className="neo-btn" 
                         style={{ 
                           width: '100%', 
@@ -1974,6 +2023,86 @@ export default function AlunosPage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AJUDA */}
+      {isHelpModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)' }} onClick={() => setIsHelpModalOpen(false)} />
+          <div className="glass-card" style={{ position: 'relative', width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', padding: 32, borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', animation: 'modalScaleUp 0.3s ease-out' }}>
+            
+            <button onClick={() => setIsHelpModalOpen(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,0.05)', border: 'none', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', cursor: 'pointer' }}>
+              <X size={16} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 16, background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                <Info size={24} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Ajuda e Regras de Cadastro</h2>
+                <p style={{ fontSize: 14, color: '#94a3b8', margin: 0 }}>Guia rápido para adicionar alunos e responsáveis manualmente</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              
+              {/* PASSO A PASSO */}
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: '#3b82f6', color: 'white', fontSize: 12 }}>1</span>
+                  Passo a Passo
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid #3b82f6', padding: '12px 16px', borderRadius: '0 8px 8px 0', color: '#cbd5e1', fontSize: 14, lineHeight: 1.5 }}>
+                    <strong style={{ color: '#f8fafc' }}>1. Dados do Aluno:</strong> Clique em "Novo Aluno" e preencha os dados da criança. <br/>
+                    <span style={{ color: '#94a3b8', fontSize: 13 }}>Campos obrigatórios: Nome Completo (o ID numérico deve ser igual ao "Código" do aluno no sistema MHUND/SAE. Se deixar em branco, o sistema sugerirá um).</span>
+                  </div>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid #3b82f6', padding: '12px 16px', borderRadius: '0 8px 8px 0', color: '#cbd5e1', fontSize: 14, lineHeight: 1.5 }}>
+                    <strong style={{ color: '#f8fafc' }}>2. Buscar Responsável Existente:</strong> No passo de responsáveis, digite o nome ou ID no campo principal. Se a pessoa já estiver cadastrada, os dados dela serão preenchidos automaticamente. <br/>
+                    <span style={{ color: '#94a3b8', fontSize: 13 }}>Nota: O ID do responsável deve ser igual ao "Código" do respectivo responsável no sistema MHUND/SAE.</span>
+                  </div>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid #3b82f6', padding: '12px 16px', borderRadius: '0 8px 8px 0', color: '#cbd5e1', fontSize: 14, lineHeight: 1.5 }}>
+                    <strong style={{ color: '#f8fafc' }}>3. Cadastrar Novo Responsável:</strong> Se a pessoa não existir no sistema, preencha os dados. <br/>
+                    <span style={{ color: '#94a3b8', fontSize: 13 }}>Campos obrigatórios: ID (numérico, único e igual ao "Código" no MHUND/SAE), Nome Completo, Parentesco e no mínimo 1 Tipo de Responsável.</span>
+                  </div>
+                  <div style={{ background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid #3b82f6', padding: '12px 16px', borderRadius: '0 8px 8px 0', color: '#cbd5e1', fontSize: 14, lineHeight: 1.5 }}>
+                    <strong style={{ color: '#f8fafc' }}>4. Finalizar:</strong> Clique em "Próximo Passo", escolha a turma do aluno (opcional) e clique em "Finalizar Cadastro".
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.05)' }}></div>
+
+              {/* REGRAS IMPORTANTES */}
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={18} color="#f59e0b" /> Regras Importantes
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: 16, borderRadius: 16 }}>
+                    <h4 style={{ color: '#f8fafc', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}><Shield size={16} color="#8b5cf6"/> Pais e Mães</h4>
+                    <p style={{ color: '#cbd5e1', fontSize: 14, margin: 0, lineHeight: 1.5 }}>Ao selecionar o parentesco <strong>Pai</strong> ou <strong>Mãe</strong>, o sistema exige que ele seja classificado. Ele deve ser obrigatoriamente <strong>Pedagógico</strong> ou <strong>Financeiro</strong> (ou ambos). Se já for Financeiro, não é obrigado a ser Pedagógico.</p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: 16, borderRadius: 16 }}>
+                    <h4 style={{ color: '#f8fafc', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}><Tag size={16} color="#10b981"/> Outros Vínculos</h4>
+                    <p style={{ color: '#cbd5e1', fontSize: 14, margin: 0, lineHeight: 1.5 }}>Para responsáveis com parentesco <strong>Outro</strong> (Tio, Avó, etc), não é necessário marcar Pedagógico nem Financeiro. O sistema marca a tag "Outro" automaticamente.</p>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', padding: 16, borderRadius: 16 }}>
+                    <h4 style={{ color: '#f8fafc', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} color="#3b82f6"/> Múltiplos Responsáveis</h4>
+                    <p style={{ color: '#cbd5e1', fontSize: 14, margin: 0, lineHeight: 1.5 }}>Um aluno pode ter vários responsáveis vinculados. Clique em "Adicionar Outro Responsável" no final do formulário para inserir mais de um.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setIsHelpModalOpen(false)} className="neo-btn neo-btn-primary" style={{ width: '100%', marginTop: 24, padding: '14px 0', fontSize: 15 }}>
+              Entendi, fechar ajuda
+            </button>
           </div>
         </div>
       )}

@@ -11,10 +11,12 @@ interface DestinatariosModalProps {
   onClose: () => void
   onAdd: (selected: {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]) => void
   initialSelected?: {id: string, name: string}[]
+  allowedTurmasIds?: string[]
 }
 
-export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [] }: DestinatariosModalProps) {
-  const { turmas } = useData();
+export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
+  const data = useData();
+  const turmas = allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || []);
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [search, setSearch] = useState('')
   const [activeFolder, setActiveFolder] = useState<{ id: string, name: string, type?: string } | null>(null)

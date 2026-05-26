@@ -16,8 +16,8 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   const { aluno } = useSelectedStudent()
   
   // Consumindo dados via API usando React Query (mesma da página Admin para garantir os dados mapeados 'dados')
-  const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : null
-  const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint)
+  const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : ''
+  const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint, undefined, { enabled: !!endpoint })
   const ocorrencias = rawOcorrencias || []
 
   // Impede visualização se a coordenação/admin bloqueou no config

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return NextResponse.json({ error: 'Faltam as variáveis de ambiente do Supabase.' }, { status: 500 })
       }
-      const supabaseAdmin = require('@supabase/supabase-js').createClient(
+      const supabaseAdmin = createSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.SUPABASE_SERVICE_ROLE_KEY
       )
@@ -48,7 +49,7 @@ export async function GET(req: Request) {
     }, [])
 
     // Fetch active Auth users to check their actual existence and map orphaned records
-    const supabaseAdmin = require('@supabase/supabase-js').createClient(
+    const supabaseAdmin = createSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
@@ -112,7 +113,7 @@ export async function POST(req: Request) {
     }
 
     // Always use service-role admin for Auth provisioning
-    const supabaseAdmin = require('@supabase/supabase-js').createClient(
+    const supabaseAdmin = createSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
@@ -137,7 +138,6 @@ export async function POST(req: Request) {
        // Bootstrap Mode — bypass RLS
        supabaseClientToUse = supabaseAdmin;
     } else {
-       const { createProtectedClient } = require('@/lib/server/supabaseAuthFactory');
        supabaseClientToUse = await createProtectedClient();
        
        const { data: { user } } = await supabaseClientToUse.auth.getUser();

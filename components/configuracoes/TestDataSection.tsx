@@ -240,7 +240,7 @@ export default function TestDataSection() {
                 createdAt:isoNow(),
               })
             }
-            data.setFornecedoresCad(p => [...p, ...items])
+
             addLog({ module:'Fornecedores', count:q, ok:true })
             break
           }
@@ -303,12 +303,12 @@ export default function TestDataSection() {
             for (let i=0;i<q;i++) {
               const status = rnd(['pago','pendente']) as 'pago'|'pendente'
               const fornId = genFornecedorIds.length ? rnd(genFornecedorIds) : ''
-              const fornObj = data.fornecedoresCad.find(f=>f.id===fornId)
+
               items.push({
                 id:sid(), descricao:`Despesa ${rnd(CATS)} ${i+1}`,
                 categoria:rnd(CATS), valor:rndF(100,8000),
                 vencimento:status==='pago'?dateStr(rndN(5,60)):futureDateStr(rndN(5,90)),
-                status, fornecedor:fornObj?.razaoSocial||nomeCompleto(),
+                status, fornecedor: nomeCompleto(),
                 numeroDocumento:`NF${rndN(10000,99999)}`,
                 planoContasId:genPlanoIds[0]||'',
               })
@@ -347,11 +347,11 @@ export default function TestDataSection() {
               const caixaId = genCaixaIds.length ? rnd(genCaixaIds) : `${S}DEFAULT`
               const planoId = genPlanoIds.length ? rnd(genPlanoIds) : ''
               const fornId  = genFornecedorIds.length ? rnd(genFornecedorIds) : ''
-              const fornObj = data.fornecedoresCad.find(f=>f.id===fornId)
+
               const tipo = rnd(['receita','despesa']) as 'receita'|'despesa'
               items.push({
                 id:sid(), caixaId, tipo,
-                fornecedorId:fornId, fornecedorNome:fornObj?.razaoSocial||nomeCompleto(),
+                fornecedorId:fornId, fornecedorNome:nomeCompleto(),
                 descricao:`${tipo==='receita'?'Recebimento':'Pagamento'} ${i+1}`,
                 dataLancamento:dateStr(rndN(0,20)),
                 dataMovimento:dateStr(rndN(0,20)),
@@ -729,7 +729,7 @@ export default function TestDataSection() {
     data.setTurmas(p => p.filter(x => !isSeed(x.id)))
     data.setTitulos(p => p.filter(x => !isSeed(x.id)))
     data.setContasPagar(p => p.filter(x => !isSeed(x.id)))
-    data.setFornecedoresCad(p => p.filter(x => !isSeed(x.id)))
+
     data.setCaixasAbertos(p => p.filter(x => !isSeed(x.id)))
     data.setMovimentacoesManuais(p => p.filter(x => !isSeed(x.id)))
     data.setCfgPlanoContas(p => p.filter(x => !isSeed(x.id)))

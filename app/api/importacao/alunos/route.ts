@@ -90,11 +90,36 @@ export async function POST(request: Request) {
         }
         console.log(`[Import] Linha ${index + 2} respData extraído:`, respData)
 
-        if (!alunoData.nome && !alunoData.codigo) {
+        const isOnlyRespUpdate = (step === 3 || step === 4) && !alunoData.nome && !alunoData.codigo && respData.nome && respData.rfid !== undefined;
+
+        if (!alunoData.nome && !alunoData.codigo && !isOnlyRespUpdate) {
           console.log('[Import] Linha', index, 'Nome e Código do aluno vazios ou não mapeados')
           erros++
           erroDetails.push({ linha: index + 2, msg: 'Nome ou Código do aluno deve ser mapeado' })
           continue
+        }
+
+        if (isOnlyRespUpdate) {
+          const { data: foundResps } = await supabase.from('responsaveis').select('*').ilike('nome', `%${respData.nome.trim()}%`);
+          let targetResp = null;
+          if (foundResps && foundResps.length > 0) {
+            targetResp = foundResps.find((r:any) => normalize(r.nome) === normalize(respData.nome));
+            if (!targetResp) targetResp = foundResps[0];
+          }
+
+          if (targetResp) {
+            const { error: updateError } = await supabase.from('responsaveis').update({ rfid: String(respData.rfid) }).eq('id', targetResp.id);
+            if (updateError) {
+              erros++
+              erroDetails.push({ linha: index + 2, msg: `Erro ao atualizar RFID de ${respData.nome}: ${updateError.message}` })
+            } else {
+              atualizados++
+            }
+          } else {
+            erros++
+            erroDetails.push({ linha: index + 2, msg: `Responsável não encontrado: ${respData.nome}.` })
+          }
+          continue;
         }
 
         // Normalizar datas
@@ -462,7 +487,7 @@ export async function POST(request: Request) {
       inseridos,
       atualizados,
       erros,
-      erroDetails: erroDetails.slice(0, 20),
+      erroDetails: erroDetails,
     })
 
   } catch (e: any) {

@@ -52,8 +52,13 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
         warnings.push('A coluna correspondente ao "NOME COMPLETO ALUNO" é obrigatória e ainda não foi mapeada!')
       }
     } else if (step === 3 || step === 4) {
-      if (!mappedValues.includes('aluno_codigo') && !mappedValues.includes('aluno_nome')) {
-        warnings.push('A coluna correspondente ao "ID ALUNO / MATRÍCULA" ou "NOME COMPLETO ALUNO" é necessária para vincular o responsável ao aluno!')
+      const hasStudentLink = mappedValues.includes('aluno_codigo') || mappedValues.includes('aluno_nome');
+      if (!hasStudentLink) {
+        if (mappedValues.includes('resp_nome') && mappedValues.includes('resp_rfid')) {
+          warnings.push('Aviso: Sem dados de Aluno, o sistema apenas buscará o responsável pelo Nome para atualizar o RFID.')
+        } else {
+          warnings.push('A coluna correspondente ao "ID ALUNO / MATRÍCULA" ou "NOME COMPLETO ALUNO" é necessária para vincular o responsável ao aluno!')
+        }
       }
       if (!mappedValues.includes('resp_nome')) {
         warnings.push('A coluna correspondente ao "NOME RESPONSAVEL" é obrigatória e ainda não foi mapeada!')

@@ -1320,7 +1320,7 @@ interface DataState {
   leads: Lead[]; setLeads: Setter<Lead[]>
   titulos: Titulo[]; setTitulos: Setter<Titulo[]>
   contasPagar: ContaPagar[]; setContasPagar: Setter<ContaPagar[]>
-  agendamentos: Agendamento[]; setAgendamentos: Setter<Agendamento[]>
+  
   comunicados: Comunicado[]; setComunicados: Setter<Comunicado[]>
   tarefas: Tarefa[]; setTarefas: Setter<Tarefa[]>
   mantenedores: Mantenedor[]; setMantenedores: Setter<Mantenedor[]>
@@ -1359,7 +1359,7 @@ interface DataState {
   // Operações Financeiras
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
   caixasAbertos: CaixaAberta[]; setCaixasAbertos: Setter<CaixaAberta[]>
-  fornecedoresCad: FornecedorCad[]; setFornecedoresCad: Setter<FornecedorCad[]>
+  
   unidadesFiscais: UnidadeFiscal[]; setUnidadesFiscais: Setter<UnidadeFiscal[]>
   notasFiscais: NotaFiscal[]; setNotasFiscais: Setter<NotaFiscal[]>
   // RH
@@ -1401,7 +1401,7 @@ const DataContext = createContext<DataState>({
   leads: [], setLeads: NOOP,
   titulos: [], setTitulos: NOOP,
   contasPagar: [], setContasPagar: NOOP,
-  agendamentos: [], setAgendamentos: NOOP,
+  
   comunicados: [], setComunicados: NOOP,
   tarefas: [], setTarefas: NOOP,
   mantenedores: [], setMantenedores: NOOP,
@@ -1437,7 +1437,7 @@ const DataContext = createContext<DataState>({
   cfgCalendarioLetivo: [], setCfgCalendarioLetivo: NOOP,
   movimentacoesManuais: [], setMovimentacoesManuais: NOOP,
   caixasAbertos: [], setCaixasAbertos: NOOP,
-  fornecedoresCad: [], setFornecedoresCad: NOOP,
+  
   unidadesFiscais: [], setUnidadesFiscais: NOOP,
   notasFiscais: [], setNotasFiscais: NOOP,
   advertencias: [], setAdvertencias: NOOP,
@@ -1481,7 +1481,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // (alunos, titulos, contas-pagar, caixas, funcionários foram desacoplados para SWR Regional nas próprias telas para não travar Context global)
   const [turmas, setTurmas] = useSupabaseArray<Turma>('turmas')
   const [leads, setLeads] = useSupabaseArray<Lead>('leads')
-  const [agendamentos, setAgendamentos] = useSupabaseArray<Agendamento>('agendamentos')
+  
   const [comunicados, setComunicados] = useSupabaseArray<Comunicado>('comunicados')
   const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
   const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
@@ -1568,7 +1568,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
   const [movimentacoesManuais, setMovimentacoesManuais] = useSupabaseArray<MovimentacaoManual>('financeiro/movimentacoes')
   // caixasAbertos movido para SWR Direto na Tela de Caixas
-  const [fornecedoresCad, setFornecedoresCad] = useSupabaseArray<FornecedorCad>('fornecedores')
+  
   const [unidadesFiscais, setUnidadesFiscais] = useSupabaseArray<UnidadeFiscal>('financeiro/unidades-fiscais')
   const [notasFiscais, setNotasFiscais] = useSupabaseArray<NotaFiscal>('financeiro/notas-fiscais')
   const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
@@ -1756,7 +1756,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     // Only keeping the ones that actually exist in the current DataContext implementation
     setTurmas([]); setLeads([])
-    setAgendamentos([])
+
     setComunicados([]); setTarefas([]); setMantenedores([])
     setEventosAgenda([]); setRotinaItems([]); setAutorizacoes([])
     setMomentos([]); setEnquetes([])
@@ -1764,7 +1764,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgSeries([]); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgGruposAvaliacao([]); setCfgArredondamentos([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
     setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
-    setMovimentacoesManuais([]); setFornecedoresCad([])
+
     setUnidadesFiscais([]); setNotasFiscais([])
     setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
     setCensoPendencias([]); setCensoExports([]); setCensoAuditLogs([]); setCensoOperacoes([])
@@ -1775,7 +1775,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const trackedSetters = useMemo(() => ({
     setTurmas: createTrackedSetter('Acadêmico', 'Turmas', setTurmas),
     setLeads: createTrackedSetter('Comercial', 'Leads', setLeads),
-    setAgendamentos: createTrackedSetter('Comercial', 'Agendamentos', setAgendamentos),
+
     setComunicados: createTrackedSetter('Comunicação', 'Comunicados', setComunicados),
     setTarefas: createTrackedSetter('Operacional', 'Tarefas', setTarefas),
     setMantenedores: createTrackedSetter('Configurações', 'Mantenedores', setMantenedores),
@@ -1810,7 +1810,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCfgConvenios: createTrackedSetter('Configurações', 'Convênios Bancários', setCfgConvenios),
     setCfgCalendarioLetivo: createTrackedSetter('Configurações', 'Calendário Letivo', setCfgCalendarioLetivo),
     setMovimentacoesManuais: createTrackedSetter('Financeiro', 'Movimentações Manuais', setMovimentacoesManuais),
-    setFornecedoresCad: createTrackedSetter('Operacional', 'Fornecedores', setFornecedoresCad),
+
     setAdvertencias: createTrackedSetter('RH', 'Advertências', setAdvertencias),
     setAdiantamentos: createTrackedSetter('RH', 'Adiantamentos', setAdiantamentos),
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1827,7 +1827,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     turmas, ...{ setTurmas: trackedSetters.setTurmas },
     leads, ...{ setLeads: trackedSetters.setLeads },
-    agendamentos, ...{ setAgendamentos: trackedSetters.setAgendamentos },
+    
     comunicados, ...{ setComunicados: trackedSetters.setComunicados },
     tarefas, ...{ setTarefas: trackedSetters.setTarefas },
     mantenedores, ...{ setMantenedores: trackedSetters.setMantenedores },
@@ -1863,7 +1863,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     cfgCalendarioLetivo, ...{ setCfgCalendarioLetivo: trackedSetters.setCfgCalendarioLetivo },
 
     movimentacoesManuais, ...{ setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais },
-    fornecedoresCad, ...{ setFornecedoresCad: trackedSetters.setFornecedoresCad },
+    
     unidadesFiscais, setUnidadesFiscais,
     notasFiscais, setNotasFiscais,
     advertencias, ...{ setAdvertencias: trackedSetters.setAdvertencias },
@@ -1890,14 +1890,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
-    turmas, leads, agendamentos, comunicados, tarefas, mantenedores,
+    turmas, leads, comunicados, tarefas, mantenedores,
     eventosAgenda, rotinaItems, autorizacoes, momentos, enquetes,
     ocorrencias, transferencias, frequencias, lancamentosNota,
     cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas,
     cfgNiveisEnsino, cfgSeries, cfgTiposOcorrencia, cfgEsquemasAvaliacao, cfgGruposAvaliacao, cfgArredondamentos, esquemaNota, cfgFormulasNotas,
     cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto,
     cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios,
-    cfgCalendarioLetivo, movimentacoesManuais, fornecedoresCad,
+    cfgCalendarioLetivo, movimentacoesManuais,
     unidadesFiscais, notasFiscais, advertencias, adiantamentos,
     systemLogs, logSystemAction, wipeAll,
     censoConfig, censoPendencias, censoExports, censoAuditLogs,

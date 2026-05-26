@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer as supabase } from '@/lib/supabase'
+import { supabaseServer as supabase } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +29,10 @@ export async function GET(request: Request) {
     }
 
     if (rfid) {
-      query = query.eq('rfid', rfid.trim())
+      const cleanRfid = rfid.trim()
+      const strippedRfid = cleanRfid.replace(/^0+/, '') || cleanRfid
+      const paddedRfid = strippedRfid.padStart(10, '0')
+      query = query.or(`rfid.eq.${cleanRfid},rfid.eq.${strippedRfid},rfid.eq.${paddedRfid}`)
     }
 
     let queryExec = query.order('nome')
@@ -67,7 +70,7 @@ export async function GET(request: Request) {
     if (studentIds.length > 0) {
       const { data: studentData, error: studentError } = await supabase
         .from('alunos')
-        .select('id, nome')
+        .select('*')
         .in('id', studentIds)
         
       if (studentError) {

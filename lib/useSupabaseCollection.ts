@@ -299,7 +299,13 @@ export function useSupabaseArray<T>(
       const sep = endpoint.includes('?') ? '&' : '?';
       return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, cache: 'no-store' })
         .then(async r => {
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            if (!r.ok) {
+              if (r.status === 404 || r.status === 500) {
+                console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
+                return [];
+              }
+              throw new Error(`HTTP ${r.status}`);
+            }
             const text = await r.text();
             if (!text) return [];
             try {

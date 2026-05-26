@@ -1,25 +1,37 @@
 'use client'
 
 import { useApp } from '@/lib/context'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getInitials } from '@/lib/utils'
 import { ChevronDown, LogOut } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export default function AgendaDigitalAdminLayout({
   children
 }: {
   children: React.ReactNode
 }) {
-  const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
+  const { currentUser, currentUserPerfil, setCurrentUser, hydrated } = useApp()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const p = currentUser?.perfil
+    const cargo = currentUser?.cargo
+    const allowed = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
+    if (!allowed.includes(p as string) && !allowed.includes(cargo as string)) {
+      router.push('/login')
+    }
+  }, [hydrated, currentUser, router])
 
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' })
       setCurrentUser(null)
-      window.location.href = '/login'
+      router.push('/login')
     } catch (e) {
-      window.location.href = '/login'
+      router.push('/login')
     }
   }
 

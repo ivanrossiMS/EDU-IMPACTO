@@ -83,23 +83,51 @@ export async function POST(req: NextRequest) {
             await client.authenticate()
 
             const baseUrl = device.porta === 80 ? `http://${device.ip}:80` : `https://${device.ip}:${device.porta}`
-            const res = await fetch(`${baseUrl}/load_objects.fcgi`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Cookie: `session=${(client as any).session}`
-              },
-              body: JSON.stringify({
-                object: "access_logs",
-                where: { access_logs: { time: timeFilter } }
+            
+            let lastId = 0
+            let keepFetching = true
+            let deviceLogs: any[] = []
+            
+            while (keepFetching) {
+              const res = await fetch(`${baseUrl}/load_objects.fcgi`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Cookie: `session=${(client as any).session}`
+                },
+                body: JSON.stringify({
+                  object: "access_logs",
+                  where: { access_logs: { time: timeFilter, id: { ">": lastId } } },
+                  limit: 1000
+                })
               })
-            })
 
-            if (res.ok) {
-              const data = await res.json()
-              const logs = data.access_logs || []
-              allLogs = allLogs.concat(logs.map((l: any) => ({ ...l, device_id: device.id || l.device_id })))
+              if (res.ok) {
+                const data = await res.json()
+                const logs = data.access_logs || []
+                
+                if (logs.length > 0) {
+                  deviceLogs = deviceLogs.concat(logs)
+                  lastId = Math.max(...logs.map((l: any) => l.id))
+                }
+                
+                if (logs.length < 1000) {
+                  keepFetching = false
+                }
+              } else {
+                console.error(`Erro buscando logs do dispositivo ${device.nome}: ${res.status}`)
+                keepFetching = false
+              }
             }
+
+            // Aplicar o filtro de data localmente para garantir que o limitador funcionou perfeitamente
+            if (startDateStr && endDateStr) {
+               const startT = Math.floor(new Date(`${startDateStr}T00:00:00-03:00`).getTime() / 1000)
+               const endT = Math.floor(new Date(`${endDateStr}T23:59:59-03:00`).getTime() / 1000)
+               deviceLogs = deviceLogs.filter((l: any) => l.time >= startT && l.time <= endT)
+            }
+
+            allLogs = allLogs.concat(deviceLogs.map((l: any) => ({ ...l, device_id: device.id || l.device_id })))
           } catch (err: any) {
             console.error(`Erro conectando ao dispositivo ${device.nome}:`, err.message)
           }

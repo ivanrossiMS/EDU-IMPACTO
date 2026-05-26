@@ -365,10 +365,84 @@ function TabletCardSkeleton() {
   )
 }
 
+// ─── HOOK DE CACHE LOCAL (PORTARIA) ──────────────────────────────────────────
+function usePortariaCache() {
+  const [alunos, setAlunos] = useState<any[]>([])
+  const [responsaveis, setResponsaveis] = useState<any[]>([])
+  const [ready, setReady] = useState(false)
+
+  const fetchCache = useCallback(async () => {
+    try {
+      // 1. Alunos Ativos
+      const { data: aData } = await supabase
+        .from('alunos')
+        .select('id, nome, matricula, turma, status, foto, saude')
+        .in('status', ['Ativo', 'matriculado', 'Ativo ', 'matriculado '])
+      
+      // 2. Responsáveis + Vínculos
+      const { data: rData } = await supabase
+        .from('responsaveis')
+        .select(`
+          id, nome, parentesco, rfid, proibido, dias_acesso,
+          aluno_responsavel (
+            aluno_id, parentesco, resp_pedagogico, resp_financeiro, resp_outro,
+            alunos ( id, nome, turma, status, foto, saude )
+          )
+        `)
+
+      if (aData) setAlunos(aData)
+      
+      if (rData) {
+        // Mapeia para o mesmo formato que a API retorna em "alunosVinculados"
+        const mappedR = rData.map((r: any) => ({
+          ...r,
+          alunosVinculados: (r.aluno_responsavel || [])
+            .map((link: any) => link.alunos ? {
+              ...link.alunos,
+              parentesco: link.parentesco,
+              resp_pedagogico: link.resp_pedagogico,
+              resp_financeiro: link.resp_financeiro,
+              resp_outro: link.resp_outro
+            } : null)
+            .filter(Boolean)
+        }))
+        setResponsaveis(mappedR)
+      }
+      setReady(true)
+    } catch (e) {
+      console.error('Erro ao carregar cache da portaria:', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCache()
+    
+    // Atualiza automaticamente a cada 5 minutos por segurança
+    const interval = setInterval(fetchCache, 300000)
+
+    // Invalidação via Realtime
+    const channel = supabase.channel('portaria_cache')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alunos' }, fetchCache)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'responsaveis' }, fetchCache)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'aluno_responsavel' }, fetchCache)
+      .subscribe()
+
+    return () => {
+      clearInterval(interval)
+      supabase.removeChannel(channel)
+    }
+  }, [fetchCache])
+
+  return { alunos, responsaveis, ready, refetch: fetchCache }
+}
+
 function PainelTabletContent() {
   const isMobile = useIsMobile()
   const { config, callStudent, blockAttempt, recallStudent, activeCalls, realtimeStatus, refreshCalls } = useSaida()
-  const [turmas] = useSupabaseArray<any>('turmas');
+  const [turmas] = useSupabaseArray<any>('turmas')
+  
+  // ── Cache ultra-rápido ──
+  const { alunos: cachedAlunos, responsaveis: cachedResponsaveis, ready: cacheReady, refetch: cacheRefetch } = usePortariaCache()
 
   const [mode,              setMode]             = useState<'idle' | 'rfid' | 'manual'>('idle')
   const [rfidCode,          setRfidCode]         = useState<string | undefined>()
@@ -411,9 +485,9 @@ function PainelTabletContent() {
     }
   }, [realtimeStatus, refreshCalls])
 
-  // ── Debounced Search Server-side ───────────────────────────────────────────
+  // ── Busca Manual Ultra-Rápida (In-Memory) ──────────────────────────────────
   useEffect(() => {
-    const q = search.trim()
+    const q = search.trim().toLowerCase()
     if (q.length < 3) {
       setManualStudents([])
       setIsSearching(false)
@@ -424,34 +498,17 @@ function PainelTabletContent() {
     setIsSearching(true)
     setHasSearched(true)
 
-    const timer = setTimeout(async () => {
-      try {
-        let query = supabase.from('alunos').select('id, nome, matricula, turma, serie, turno, status, foto, saude')
-        
-        // Se for numérico, busca por ID ou matrícula. Se for texto, apenas por nome
-        const isNumeric = /^\d+$/.test(q)
-        if (isNumeric) {
-          query = query.or(`id.eq.${q},matricula.eq.${q}`)
-        } else {
-          query = query.ilike('nome', `%${q}%`)
-        }
-
-        // Apenas alunos ativos/matriculados
-        query = query.in('status', ['Ativo', 'matriculado', 'Ativo ', 'matriculado '])
-
-        const { data, error } = await query.limit(16)
-        if (error) throw error
-        setManualStudents(data || [])
-      } catch (err) {
-        console.error('Erro na busca manual de alunos:', err)
-        setManualStudents([])
-      } finally {
-        setIsSearching(false)
+    const isNumeric = /^\d+$/.test(q)
+    const results = cachedAlunos.filter(a => {
+      if (isNumeric) {
+        return String(a.id) === q || String(a.matricula) === q
       }
-    }, 300)
+      return a.nome?.toLowerCase().includes(q)
+    }).slice(0, 16)
 
-    return () => clearTimeout(timer)
-  }, [search])
+    setManualStudents(results)
+    setIsSearching(false)
+  }, [search, cachedAlunos])
 
   const doBlockReset = useCallback(() => {
     rfidRef.current?.clear()
@@ -466,18 +523,35 @@ function PainelTabletContent() {
     setRfidError(null)
     setBlockInfo(null)
 
-    // 1. Buscar responsável por RFID via API
-    console.log('Buscando responsável por RFID via API:', code.trim());
+    // 1. Buscar responsável por RFID (Prioridade para o Cache Local In-Memory)
+    console.log('Analisando leitura RFID:', code.trim());
     let resp: any = null;
-    try {
-      const res = await fetch(`/api/responsaveis?rfid=${encodeURIComponent(code.trim())}`)
-      if (!res.ok) throw new Error(res.statusText)
-      const payload = await res.json()
-      resp = payload.data && payload.data.length > 0 ? payload.data[0] : null
-    } catch (error: any) {
-      console.error('Erro ao buscar responsável via API:', error)
-      showToast('Erro ao buscar responsável. Tente novamente.', false)
-      return
+    
+    const cleanRfid = code.trim();
+    const strippedRfid = cleanRfid.replace(/^0+/, '') || cleanRfid;
+    const paddedRfid = strippedRfid.padStart(10, '0');
+
+    resp = cachedResponsaveis.find((r: any) => {
+      const rVal = String(r.rfid || '').trim();
+      return rVal === cleanRfid || rVal === strippedRfid || rVal === paddedRfid;
+    });
+
+    // Fallback: Se não achou na memória (cache desatualizado), busca na API
+    if (!resp) {
+      console.log('RFID não encontrado no cache local. Acionando Fallback na API...');
+      try {
+        const res = await fetch(`/api/responsaveis?rfid=${encodeURIComponent(cleanRfid)}`)
+        if (res.ok) {
+          const payload = await res.json()
+          resp = payload.data && payload.data.length > 0 ? payload.data[0] : null
+          if (resp) {
+            // Atualiza o cache em background silenciosamente para as próximas leituras
+            cacheRefetch();
+          }
+        }
+      } catch (error: any) {
+        console.error('Erro ao buscar responsável no fallback:', error)
+      }
     }
 
     if (!resp) {
@@ -524,22 +598,8 @@ function PainelTabletContent() {
       return
     }
 
-    // 2. Buscar dados completos dos alunos de forma otimizada
-    let matchedStudents: any[] = []
-    try {
-      const { data, error } = await supabase
-        .from('alunos')
-        .select('id, nome, matricula, turma, serie, turno, status, foto, saude')
-        .in('id', studentIds)
-      
-      if (error) throw error
-      matchedStudents = data || []
-    } catch (err) {
-      console.error('Erro ao buscar alunos vinculados:', err)
-      showToast('Erro ao carregar dados dos alunos.', false)
-      doBlockReset()
-      return
-    }
+    // 2. Usar dados completos dos alunos que já vieram da API
+    let matchedStudents: any[] = filhos || []
 
     // 3. Validar dias de acesso do responsável
     const diasAcesso: string[] = resp.dias_acesso || []
@@ -578,10 +638,15 @@ function PainelTabletContent() {
 
       // Verificar se no JSON do aluno este responsável está marcado como proibido
       const autorizados: any[] = alunoCompleto.saude?.autorizados || []
-      const autInfo = autorizados.find((a: any) => 
-        a.nome?.trim().toLowerCase() === gName.trim().toLowerCase() ||
-        a.rfid?.trim().toUpperCase() === code.trim().toUpperCase()
-      )
+      const autInfo = autorizados.find((a: any) => {
+        const safeRfid = String(a.rfid || '').trim().replace(/^0+/, '').toUpperCase() || String(a.rfid || '').trim().toUpperCase()
+        const safeCode = String(code || '').trim().replace(/^0+/, '').toUpperCase() || String(code || '').trim().toUpperCase()
+        
+        return (
+          a.nome?.trim().toLowerCase() === gName.trim().toLowerCase() ||
+          (safeRfid && safeCode && safeRfid === safeCode)
+        )
+      })
 
       const autObj = {
         rfid: code,
@@ -1195,6 +1260,23 @@ function PainelTabletContent() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* --- Test Input (Bottom Left) --- */}
+        <div style={{ position: 'fixed', bottom: 10, left: 10, zIndex: 9999, opacity: 0.5 }}>
+          <input
+            id="test-rfid-input"
+            type="text"
+            placeholder="Teste RFID..."
+            style={{ width: 120, padding: '4px 8px', fontSize: 10, background: '#111', color: '#0f0', border: '1px solid #333', borderRadius: 4 }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleRFID(e.currentTarget.value)
+                e.currentTarget.value = ''
+              }
+            }}
+          />
+        </div>
+
       </div>
     </div>
   )

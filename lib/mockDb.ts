@@ -8,7 +8,6 @@ export const db = {
   tarefas: [] as any[],
   funcionarios: [] as any[],
   mantenedores: [] as any[],
-  agendamentos: [] as any[],
   leads: [] as any[],
   cfgDisciplinas: [] as any[],
   lancamentosNota: [] as any[],

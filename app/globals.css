@@ -211,6 +211,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  max-width: 100vw;
 }
 
 html {
@@ -219,6 +220,11 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none; /* Impede o efeito "borracha" (rubber-banding) nativo do Safari */
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 body {
@@ -229,6 +235,23 @@ body {
   line-height: 1.65;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-variant-numeric: tabular-nums;
+  -webkit-touch-callout: none; /* Remove o menu de opções ao segurar pressionado (iOS) */
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Compliance com App Store: Impede a seleção de texto em botões e menus para parecer um app nativo */
+.btn, .nav-item, .sidebar, .tab-trigger, th {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Restaura seleção normal de textos e inputs */
+input, textarea, select, .page-content p, .page-content span, td {
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 
 /* Scrollbar */
@@ -445,6 +468,9 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   display: flex;
   min-height: 100vh;
   background: hsl(var(--bg-base));
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -808,11 +834,100 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
 }
 
 @media (max-width: 768px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .page-content { padding: 16px; }
+  /* ── Grids ── */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; gap: 14px !important; }
+  
+  /* ── Layout & Wrapper ── */
+  .page-content { padding: 16px 12px !important; padding-bottom: calc(24px + env(safe-area-inset-bottom)) !important; }
   .sidebar { transform: translateX(-100%); }
   .sidebar.mobile-open { transform: translateX(0); }
-  .main-content { margin-left: 0; }
+  .main-content { margin-left: 0 !important; width: 100vw; max-width: 100vw; overflow-x: hidden; }
+
+  /* ── Page Headers ── */
+  .page-header { 
+    flex-direction: column; 
+    align-items: flex-start !important; 
+    gap: 16px; 
+    margin-bottom: 24px !important;
+  }
+  .page-header > div { width: 100%; display: flex; gap: 10px; flex-wrap: wrap; }
+  .page-header .btn { flex: 1; justify-content: center; min-height: 46px; }
+  .page-title { font-size: 22px !important; line-height: 1.3 !important; }
+
+  /* ── Touch-Friendly Forms & Buttons ── */
+  .form-input, select, textarea { 
+    min-height: 48px !important; 
+    font-size: 16px !important; /* 16px evita o zoom automático no iOS Safari */
+    padding: 12px 14px !important;
+  }
+  .btn { min-height: 46px !important; font-size: 15px !important; }
+  .btn-sm { min-height: 38px !important; }
+
+  /* ── Modais como Bottom Sheets ── */
+  .modal-overlay { 
+    padding: 0 !important; 
+    align-items: flex-end !important; /* Empurra o modal para baixo */
+  }
+  .modal {
+    max-width: 100vw !important;
+    width: 100vw !important;
+    max-height: 92vh !important;
+    border-radius: 24px 24px 0 0 !important; /* Arredondamento premium no topo */
+    margin: 0 !important;
+    animation: slideUpSheet 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    display: flex;
+    flex-direction: column;
+  }
+  /* Para modais que usam padding fixo internamente, garantir scroll */
+  .modal > div { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  
+  /* ── Tabelas Inteligentes (Native Scroll Feel) ── */
+  .table-container { 
+    margin: 0 -12px !important; /* Sangria para grudar nas bordas do celular */
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    overflow-x: auto !important; 
+    -webkit-overflow-scrolling: touch !important; /* Aceleração nativa iOS/Android */
+    scroll-snap-type: x proximity;
+    padding-bottom: 4px;
+    box-shadow: inset -10px 0 10px -10px rgba(0,0,0,0.1); /* Indicador sutil de scroll */
+  }
+  table { 
+    min-width: max-content; /* Força scroll horizontal ao invés de espremer o texto */
+  }
+  th, td { 
+    padding: 14px 16px !important; 
+    white-space: nowrap !important;
+    font-size: 13px !important;
+  }
+  td:first-child, th:first-child { scroll-snap-align: start; padding-left: 20px !important; }
+  td:last-child, th:last-child { padding-right: 20px !important; }
+
+  /* ── Cards & KPI ── */
+  .card, .kpi-card, .chart-container { 
+    padding: 16px !important; 
+    border-radius: 16px !important;
+  }
+  
+  /* ── Search & Utils ── */
+  .search-input { width: 100% !important; min-height: 48px !important; font-size: 16px !important; }
+  .search-input:focus { width: 100% !important; }
+  
+  /* Conversão de Flex Horizontal para Empilhamento Vertical em forms */
+  .flex.items-end.gap-4, .flex.gap-4 { 
+    flex-direction: column !important; 
+    align-items: stretch !important;
+    gap: 16px !important;
+  }
+  /* Exceções para manter coisas lado a lado se necessário (ex: botões de rádio ou ícones) */
+  .flex-row-mobile { flex-direction: row !important; align-items: center !important; }
+}
+
+@keyframes slideUpSheet { 
+  from { transform: translateY(100%); opacity: 0.8; } 
+  to { transform: translateY(0); opacity: 1; } 
 }
 
 /* --- Kanban --- */

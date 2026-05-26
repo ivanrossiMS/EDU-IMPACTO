@@ -1,13 +1,15 @@
 'use client'
-
-import React from 'react'
+import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/lib/context'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { UserAvatar } from '@/components/UserAvatar'
+import React, { useState, useEffect } from 'react'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
-  BarChart2, UserCog, LogOut, ArrowLeft
+  UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText
 } from 'lucide-react'
 
 export default function AgendaDigitalColaboradorLayout({ 
@@ -15,18 +17,43 @@ export default function AgendaDigitalColaboradorLayout({
 }: { 
   children: React.ReactNode 
 }) {
-  const { currentUser, setCurrentUser } = useApp()
+  const { currentUser, hydrated, setCurrentUser } = useApp()
+  const { adConfig, setAdLoading } = useAgendaDigital();
   const pathname = usePathname()
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    if (!hydrated || !currentUser) return
+    setIsLoading(false)
+  }, [hydrated, currentUser])
+
+  useEffect(() => {
+    if (setAdLoading) setAdLoading(isLoading);
+    return () => { if (setAdLoading) setAdLoading(false); }
+  }, [isLoading, setAdLoading]);
 
   const navItems = [
-    { label: 'Comunicados', href: `/agenda-digital/colaborador/comunicados`, icon: <Bell size={18} /> },
-    { label: 'Mensagens', href: `/agenda-digital/colaborador/conversas`, icon: <MessageSquare size={18} /> },
-    { label: 'Momentos', href: `/agenda-digital/colaborador/momentos`, icon: <ImageIcon size={18} /> },
-    { label: 'Calendário', href: `/agenda-digital/colaborador/calendario`, icon: <Calendar size={18} /> },
-    { label: 'Meu Perfil', href: `/agenda-digital/colaborador/perfil`, icon: <UserCog size={18} /> },
+    { label: 'Comunicados', href: '/agenda-digital/colaborador/comunicados', icon: <Bell size={18} /> },
+    { label: 'Mensagens', href: '/agenda-digital/colaborador/conversas', icon: <MessageSquare size={18} /> },
+    { label: 'Fotos/Vídeos', href: '/agenda-digital/colaborador/momentos', icon: <ImageIcon size={18} /> },
+    { label: 'Frequência', href: '/agenda-digital/colaborador/frequencia', icon: <Calendar size={18} /> },
+    { label: 'Ocorrências', href: '/agenda-digital/colaborador/ocorrencias', icon: <ShieldCheck size={18} /> },
+    { label: 'Notas', href: '/agenda-digital/colaborador/notas', icon: <FileText size={18} /> },
+    { label: 'Calendário', href: '/agenda-digital/colaborador/calendario', icon: <Calendar size={18} /> },
+    { label: 'Meu Perfil', href: '/agenda-digital/colaborador/perfil', icon: <UserCog size={18} /> },
   ]
 
-  if (!currentUser || (currentUser.cargo === 'Aluno')) return null
+  if (isLoading || !currentUser || currentUser.cargo === 'Aluno') {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        minHeight: '80vh', width: '100%', gap: '24px', fontFamily: 'system-ui, sans-serif'
+      }}>
+         <p>Carregando Agenda...</p>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -34,272 +61,461 @@ export default function AgendaDigitalColaboradorLayout({
       <style dangerouslySetInnerHTML={{__html: `
         .ad-main-grid {
           display: grid;
-          grid-template-columns: 240px 1fr;
-          gap: 32px;
+          grid-template-columns: 1fr;
+          gap: 0px;
           align-items: start;
+          position: relative;
+          z-index: 2;
         }
-        .ad-student-banner {
-          background: hsl(var(--bg-surface));
-          border: 1px solid hsl(var(--border-subtle));
-          border-radius: 16px;
+
+        .ad-premium-card-wrapper {
+          margin-top: -16px;
+          position: relative;
+          z-index: 1;
+          width: 100%;
+        }
+
+        .ad-premium-card {
+          background: #ffffff;
+          border-radius: 24px;
+          box-shadow: 0 12px 40px rgba(15, 12, 36, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+          border: 1px solid rgba(0, 0, 0, 0.04);
           padding: 24px 32px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+          display: grid;
+          grid-template-columns: 1fr auto;
           gap: 24px;
+          align-items: center;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .ad-banner-actions {
+
+        .ad-premium-card:hover {
+          transform: translateY(-5px) scale(1.005);
+          box-shadow: 0 30px 60px rgba(59, 130, 246, 0.12), 0 10px 20px rgba(0, 0, 0, 0.04);
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        @keyframes neonSlide {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+
+        .ad-premium-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 6px;
+          background: linear-gradient(90deg, #3b82f6, #6366f1, #2dd4bf, #3b82f6);
+          background-size: 200% 100%;
+          animation: neonSlide 3s linear infinite;
+          box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), inset 0 0 8px rgba(99, 102, 241, 0.4);
+        }
+
+        .ad-mini-cards-grid {
           display: flex;
-          align-items: center;
-          gap: 24px;
           flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 8px;
         }
-        .ad-mobile-nav {
+
+        .ad-mini-card {
+          background: #f8fafc;
+          border: 1px solid rgba(0, 0, 0, 0.04);
+          border-radius: 12px;
+          padding: 8px 12px;
           display: flex;
-          flex-direction: column;
-          gap: 4px;
+          align-items: center;
+          gap: 10px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .ad-desktop-sidebar {
+
+        .ad-mini-card:hover {
+          background: #ffffff;
+          border-color: rgba(59, 130, 246, 0.22);
+          box-shadow: 0 8px 20px rgba(59, 130, 246, 0.06);
+          transform: translateY(-2px);
+        }
+
+        .ad-right-section {
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
+
+        .ad-btn-side {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          height: 30px;
+          padding: 0 10px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          color: #475569;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%;
+          justify-content: center;
+          font-family: 'Outfit', sans-serif;
+        }
+
+        .ad-btn-side:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #0f172a;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+        }
+
+        .ad-btn-side.logout {
+          border-color: #fecaca;
+          color: #ef4444;
+        }
+
+        .ad-btn-side.logout:hover {
+          background: #fef2f2;
+          border-color: #fca5a5;
+          color: #dc2626;
+        }
+
+        @media (max-width: 1200px) {
+          .ad-premium-card {
+            grid-template-columns: 1fr;
+            gap: 28px;
+          }
+        }
+        
+        @media (max-width: 640px) {
+          .ad-premium-card-wrapper {
+            margin-top: 0 !important;
+          }
+          .ad-premium-card {
+            padding: 16px 12px !important;
+            border-radius: 20px !important;
+            gap: 16px !important;
+            position: relative !important;
+            overflow: visible !important;
+          }
+          .ad-premium-card-avatar {
+            width: 86px !important;
+            height: 86px !important;
+            border-radius: 20px !important;
+          }
+          .ad-premium-student-name {
+            font-size: 16px !important;
+            white-space: nowrap !important;
+            max-width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            flex-wrap: nowrap !important;
+            gap: 8px !important;
+          }
+          .ad-premium-card-header-flex {
+            gap: 12px !important;
+          }
+          .ad-mini-cards-grid {
+            display: flex !important;
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
+            overflow-x: auto !important;
+            padding-bottom: 2px !important;
+          }
+          .ad-mini-card {
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 6px !important;
+            gap: 2px !important;
+            align-items: center !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+          }
+          .ad-mini-card-icon-desktop {
+            display: none !important;
+          }
+          .ad-mini-card-icon-mobile {
+            display: inline-flex !important;
+          }
+          .ad-mini-card-label {
+            font-size: 10px !important;
+            margin-bottom: 0 !important;
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 4px !important;
+          }
+          .ad-mini-card-value {
+            width: 100% !important;
+            font-size: 10px !important;
+            text-align: center !important;
+            justify-content: center !important;
+          }
+          .ad-right-section {
+            position: absolute !important;
+            top: -46px !important;
+            right: 8px !important;
+            min-width: 0 !important;
+            width: auto !important;
+            margin-top: 0 !important;
+            z-index: 100 !important;
+            height: auto !important;
+            justify-content: flex-start !important;
+          }
+          .ad-mini-cards-grid {
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
+            justify-content: space-between !important;
+            width: 100% !important;
+            margin-top: 4px !important;
+          }
+          .ad-mini-card {
+            padding: 6px !important;
+            gap: 4px !important;
+            border-radius: 8px !important;
+            flex: 1 !important;
+            min-width: 0 !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            text-align: center !important;
+          }
+          .ad-mini-card > div:first-child {
+            width: 20px !important;
+            height: 20px !important;
+          }
+          .ad-mini-card > div:first-child svg {
+            width: 10px !important;
+            height: 10px !important;
+          }
+          .ad-mini-card-label {
+            font-size: 7px !important;
+            margin-bottom: 0 !important;
+          }
+          .ad-mini-card-value {
+            font-size: 9px !important;
+            flex-direction: column !important;
+            gap: 2px !important;
+          }
+          .ad-mini-card-value span {
+            font-size: 7px !important;
+            padding: 1px 4px !important;
+          }
+        }
+        
+        .ad-content-page-area {
+          padding-bottom: 80px !important;
+        }
+
         .ad-mobile-nav-bar {
           display: none;
         }
-        /* Somente Modificacoes Mobile, intocavel no Desktop */
         @media (max-width: 768px) {
-          .ad-desktop-sidebar {
-            display: none !important;
-          }
           .ad-mobile-nav-bar {
             display: flex !important;
+            background: linear-gradient(135deg, #07060f 0%, #15092a 50%, #020106 100%) !important;
+            background-size: 200% 200% !important;
+            animation: gradientShiftNav 6s ease infinite !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
           }
-          .ad-content-page-area {
-            padding-bottom: 80px !important;
+          .ad-mobile-nav-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #3b82f6, #6366f1, #2dd4bf, #3b82f6);
+            background-size: 200% 100%;
+            animation: neonSlide 3s linear infinite;
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.8), 0 0 4px rgba(99, 102, 241, 0.5);
+            z-index: 10000;
           }
-          .ad-main-grid {
-            grid-template-columns: 1fr !important;
-            gap: 0px !important;
-          }
-          .ad-banner {
-            height: 250px !important;
-          }
-          .agenda-digital-wrapper {
-            padding-bottom: 80px !important;
-            background: #ffffff !important;
-          }
-          .ad-student-banner {
-            flex-direction: column !important;
-            align-items: center !important;
-            padding: 0 16px 0 16px !important;
-            gap: 4px !important;
-            border: none !important;
-            border-radius: 0 !important;
-            border-bottom: none !important;
-            background: transparent !important;
-            margin-top: 0 !important;
-            box-shadow: none !important;
-            position: relative;
-            z-index: 20;
-          }
-          @keyframes popUpPulseAvatar {
-            0% { transform: scale(0.5) translateY(20px); opacity: 0; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
-            70% { transform: scale(1.05) translateY(-2px); opacity: 1; }
-            100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
-          }
-          @keyframes premiumFloat {
-            0% { transform: translateY(0px); box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 0 0 rgba(59, 130, 246, 0.3); }
-            50% { transform: translateY(-4px); box-shadow: 0 8px 16px rgba(0,0,0,0.15), 0 0 0 8px rgba(59, 130, 246, 0); }
-            100% { transform: translateY(0px); box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 0 0 rgba(59, 130, 246, 0); }
-          }
-          .ad-banner-avatar-wrapper {
-            margin-top: -40px !important;
-            border: 3px solid #ffffff !important;
-            width: 64px !important;
-            height: 64px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-            background: #ffffff !important;
-            animation: popUpPulseAvatar 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, premiumFloat 4s ease-in-out infinite 0.8s !important;
-          }
-          .ad-banner-left {
-            width: 100% !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            text-align: center !important;
-            gap: 4px !important;
-          }
-          .ad-student-name {
-            font-size: 16px !important;
-            line-height: 1.2 !important;
-            white-space: normal !important;
-            font-weight: 800 !important;
-          }
-          .ad-student-details {
-            font-size: 11px !important;
-            line-height: 1.2 !important;
-          }
-          .ad-banner-actions {
-            width: 100% !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            border: 1px solid rgba(0,0,0,0.06) !important;
-            border-radius: 12px !important;
-            background: linear-gradient(180deg, #ffffff, rgba(59,130,246,0.04)) !important;
-            padding: 12px 14px !important;
-            margin-top: 4px !important;
-            gap: 10px !important;
-            text-align: center !important;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.03) !important;
-          }
-          .ad-banner-actions .btn {
-            height: 26px !important;
-            min-height: 26px !important;
-            font-size: 10px !important;
-            border-radius: 6px !important;
-            padding: 0 12px !important;
-          }
-          .ad-banner-actions .btn svg {
-            width: 14px !important;
-            height: 14px !important;
-          }
-          .ad-banner-actions-right {
-            align-items: center !important;
-            text-align: center !important;
-          }
-          .ad-banner-actions-right > div:first-child {
-            font-size: 8px !important;
-            margin-bottom: 0 !important;
-            letter-spacing: 0.5px !important;
-          }
-          .ad-banner-btn-group {
-            flex-direction: row !important;
-            justify-content: center !important;
-            align-items: center !important;
-            gap: 10px !important;
-            margin-top: 0 !important;
-            width: 100% !important;
-          }
-          .ad-page-header h2 {
-            font-size: 18px !important;
-            margin-bottom: 0px !important;
+          @keyframes gradientShiftNav {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
           }
         }
       `}} />
 
-      {/* Top Banner specific to the staff */}
-      <div className="ad-student-banner">
-        <div className="ad-banner-left" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div className="avatar ad-banner-avatar-wrapper" style={{ width: 64, height: 64, fontSize: 24, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', borderRadius: 16, overflow: 'hidden', boxShadow: '0 8px 16px rgba(0,0,0,0.1)', transition: 'transform 0.3s ease' }}
-               onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-               onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'} >
-             {getInitials(currentUser.nome || 'Colaborador')}
-          </div>
-          <div>
-            <div className="ad-student-name" style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>
-              {currentUser.nome}
+      {/* Dynamic Header floating profile card */}
+      <div className="ad-premium-card-wrapper">
+        <div className="ad-premium-card">
+          {/* AREA 1: PERFIL COLABORADOR (À esquerda) */}
+          <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+            <div className="ad-premium-card-avatar" style={{ 
+              width: 96, 
+              height: 96, 
+              borderRadius: 24, 
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+              boxShadow: '0 8px 24px rgba(59, 130, 246, 0.3)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'white', 
+              fontWeight: 900, 
+              fontSize: 30, 
+              fontFamily: 'Outfit, sans-serif',
+              flexShrink: 0,
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <UserAvatar 
+                userId={currentUser?.id} 
+                name={currentUser?.nome || 'Colaborador'} 
+                fotoUrl={currentUser?.foto}
+                size={96}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
+              />
             </div>
-            <div className="ad-student-details" style={{ fontSize: 14, color: 'hsl(var(--text-muted))' }}>
-              Acesso Institucional • {currentUser.cargo || currentUser.perfil}
-            </div>
-          </div>
-        </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
+              <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                <span style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{currentUser.nome}</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b82f6" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+              </h2>
 
-        <div className="ad-banner-actions">
-          <div className="ad-banner-btn-group" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Link href="/agenda-digital/selecionar-aluno" style={{ textDecoration: 'none' }}>
-              <button className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', cursor: 'pointer' }}>
-                <ArrowLeft size={16} />
-                <span style={{ whiteSpace: 'nowrap' }}>Voltar p/ Seleção</span>
+              {/* Row of 3 mini cards */}
+              <div className="ad-mini-cards-grid" style={{ marginTop: 0 }}>
+                {/* Mini Card 1: Cargo */}
+                <div className="ad-mini-card">
+                  <div className="ad-mini-card-icon-desktop" style={{ color: '#3b82f6', background: 'rgba(59, 130, 246, 0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Briefcase size={14} />
+                  </div>
+                  <div style={{ minWidth: 0, width: '100%' }}>
+                    <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span className="ad-mini-card-icon-mobile" style={{ display: 'none', color: '#3b82f6' }}><Briefcase size={10} /></span>
+                      Cargo
+                    </div>
+                    <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {currentUser.cargo || currentUser.perfil}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini Card 2: Acesso */}
+                <div className="ad-mini-card">
+                  <div className="ad-mini-card-icon-desktop" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ShieldCheck size={14} />
+                  </div>
+                  <div style={{ minWidth: 0, width: '100%' }}>
+                    <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span className="ad-mini-card-icon-mobile" style={{ display: 'none', color: '#8b5cf6' }}><ShieldCheck size={10} /></span>
+                      Acesso
+                    </div>
+                    <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      Institucional
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini Card 3: Status */}
+                <div className="ad-mini-card">
+                  <div className="ad-mini-card-icon-desktop" style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CheckCircle2 size={14} />
+                  </div>
+                  <div style={{ minWidth: 0, width: '100%' }}>
+                    <div className="ad-mini-card-label" style={{ fontSize: 9, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span className="ad-mini-card-icon-mobile" style={{ display: 'none', color: '#10b981' }}><CheckCircle2 size={10} /></span>
+                      Status
+                    </div>
+                    <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#10b981', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      Ativo
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* AREA 3: AÇÕES LATERAIS (À direita) */}
+          <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+              <Link href="/agenda-digital/selecionar-aluno" style={{ textDecoration: 'none' }}>
+                <button className="ad-btn-side" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}>
+                  <Users size={14} /> Voltar p/ Seleção
+                </button>
+              </Link>
+              <button 
+                onClick={async () => { 
+                  setCurrentUser(null); 
+                  await fetch('/api/auth/logout', { method: 'POST' }); 
+                  window.location.href = '/login'; 
+                }} 
+                className="ad-btn-side logout" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
+              >
+                <LogOut size={14} /> Sair da Conta
               </button>
-            </Link>
-            <button 
-              onClick={async () => { 
-                setCurrentUser(null); 
-                await fetch('/api/auth/logout', { method: 'POST' }); 
-                window.location.href = '/login'; 
-              }} 
-              className="btn btn-secondary btn-sm" 
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#ef4444', cursor: 'pointer' }}
-            >
-              <LogOut size={16} />
-              <span>Sair da Conta</span>
-            </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Grid containing Sidebar and Page Content */}
+      {/* Main Grid containing Page Content */}
       <div className="ad-main-grid" style={{ marginTop: 24 }}>
-        {/* Sidebar for Desktop */}
-        <div className="ad-desktop-sidebar">
-          {navItems.map((item, idx) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
-                <button 
-                  className={isActive ? 'btn' : 'btn btn-ghost'} 
-                  style={{ 
-                    width: '100%', 
-                    justifyContent: 'flex-start', 
-                    background: isActive ? 'rgba(59, 130, 246, 0.1)' : 'transparent', 
-                    color: isActive ? '#3b82f6' : 'inherit',
-                    gap: 12,
-                    padding: '12px 16px',
-                    borderRadius: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    border: 'none',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(0, 0, 0, 0.02)' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                >
-                  {item.icon}
-                  <span style={{ fontWeight: isActive ? 700 : 500, fontSize: 14 }}>{item.label}</span>
-                </button>
-              </Link>
-            )
-          })}
-        </div>
-
         {/* Page Content Area */}
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
           {children}
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation (Glassmorphic overlay) */}
-      <div className="ad-mobile-nav-bar" style={{
+      {/* Mobile Bottom Navigation (Ultra Modern Neon) */}
+      <div className="ad-mobile-nav-bar hide-scrollbar" style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
-        height: 68,
-        background: 'rgba(255, 255, 255, 0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
-        justifyContent: 'space-around',
-        alignItems: 'center',
+        width: '100%',
+        height: 72,
         zIndex: 9999,
-        padding: '0 12px',
-        boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.06)'
+        padding: '0 4px',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        alignItems: 'center'
       }}>
-        {navItems.slice(0, 5).map((item, idx) => {
-          const isActive = pathname.startsWith(item.href);
-          return (
-            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, color: isActive ? '#3b82f6' : '#94a3b8', flex: 1, minWidth: 0 }}>
-              <div style={{ transform: isActive ? 'scale(1.1)' : 'scale(1)', transition: 'transform 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {React.cloneElement(item.icon, { size: 22, color: isActive ? '#3b82f6' : '#94a3b8' })}
-              </div>
-              <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
-            </Link>
-          )
-        })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', minWidth: 'min-content', margin: '0 auto', height: '100%' }}>
+          {navItems.map((item, idx) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  style={{ 
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, 
+                    width: 72, height: 56, borderRadius: 16, flexShrink: 0,
+                    background: isActive ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
+                    border: isActive ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
+                    color: isActive ? 'white' : 'rgba(255,255,255,0.4)',
+                    boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.2), 0 0 10px rgba(59, 130, 246, 0.1)' : 'none',
+                    transition: 'all 0.3s'
+                  }}
+                >
+                  <div style={{ 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: isActive ? '#3b82f6' : 'inherit',
+                    filter: isActive ? 'drop-shadow(0 0 8px #3b82f6)' : 'none'
+                  }}>
+                    {React.cloneElement(item.icon, { size: 20, color: 'currentColor' })}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
+                </motion.div>
+              </Link>
+            )
+          })}
+        </div>
       </div>
+        <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
     </>
   )

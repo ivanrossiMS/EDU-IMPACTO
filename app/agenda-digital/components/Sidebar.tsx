@@ -153,7 +153,7 @@ export function ADSidebar() {
           <div style={{ flex: 1, padding: '0 16px', overflowY: 'auto', overflowX: 'hidden' }} className="no-scrollbar">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {/* Seção ERP/Admin (oculta para perfil Família pura) */}
-              {!isFamily && menuItems.map((item) => {
+              {!isFamily && alunoId !== "colaborador" && menuItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
                 return (
                   <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
@@ -275,7 +275,6 @@ export function ADSidebar() {
                         const msgs = messages[c.id] || []
                         if (msgs.length === 0) return (c.unread || 0) > 0
                         const lastMsg = msgs[msgs.length - 1]
-                        // Student views 'us' as the other sender (Admin)
                         return lastMsg.sender === 'us' && (c.unread || 0) > 0
                       }).length || undefined
                     },
@@ -286,7 +285,12 @@ export function ADSidebar() {
                     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
                     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
-                  ].map((item, idx) => {
+                  ].filter(item => {
+                    if (alunoId === 'colaborador') {
+                      return ['Comunicados', 'Mensagens', 'Fotos/Vídeos', 'Frequência', 'Ocorrências', 'Notas', 'Calendário', 'Meu Perfil'].includes(item.label)
+                    }
+                    return true
+                  }).map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)
                     return (
                       <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
@@ -370,8 +374,14 @@ export function ADSidebar() {
                 boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
-                    {currentUser?.nome ? currentUser.nome.substring(0,2).toUpperCase() : 'UI'}
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14, overflow: 'hidden' }}>
+                    <UserAvatar 
+                      userId={currentUser?.id} 
+                      name={currentUser?.nome || 'Usuário'} 
+                      fotoUrl={currentUser?.foto}
+                      size={36}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
+                    />
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
@@ -410,8 +420,14 @@ export function ADSidebar() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
-                  {currentUser?.nome ? currentUser.nome.substring(0,2).toUpperCase() : 'UI'}
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14, overflow: 'hidden' }}>
+                  <UserAvatar 
+                    userId={currentUser?.id} 
+                    name={currentUser?.nome || 'Usuário'} 
+                    fotoUrl={currentUser?.foto}
+                    size={40}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
+                  />
                 </div>
                 {currentUser?.cargo !== 'Aluno' && (
                   <button 
