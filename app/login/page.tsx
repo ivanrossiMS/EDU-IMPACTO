@@ -98,14 +98,17 @@ export default function LoginPage() {
     
     // Verifica se direcao@colegioimpacto.net já existe para exibir botão Master
     fetch('/api/configuracoes/usuarios?checkMaster=true', { cache: 'no-store' })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('API não retornou 200 OK')
+        return r.json()
+      })
       .then(data => {
-        setIsSystemEmpty(!data.masterExists)
+        // Se a API confirmar que não existe (false), o sistema está vazio. Se for true, não está.
+        setIsSystemEmpty(data.masterExists === false)
       })
       .catch(() => {
-        const sysUsers = JSON.parse(localStorage.getItem('edu-sys-users') ?? '[]')
-        const temDirecao = sysUsers.some((u: any) => u.email?.toLowerCase() === 'direcao@colegioimpacto.net')
-        setIsSystemEmpty(!temDirecao)
+        // Em caso de falha (ex: falta de variáveis de ambiente no Netlify), esconde o botão por segurança
+        setIsSystemEmpty(false)
       })
 
     return () => window.removeEventListener('mousemove', h)
