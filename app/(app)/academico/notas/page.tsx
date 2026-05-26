@@ -528,7 +528,7 @@ export default function NotasPage() {
 
 
 
-  const handleRealUpload = async (file: File) => {
+  async function handleRealUpload(file: File) {
     setUploading(true)
     setProgress(10)
     
@@ -586,7 +586,7 @@ export default function NotasPage() {
     }
   }
 
-  const handleTextUpload = async (text: string) => {
+  async function handleTextUpload(text: string) {
     setUploading(true)
     setProgress(10)
     
@@ -663,7 +663,7 @@ export default function NotasPage() {
     }
   }
 
-  const handleConfirmImport = async () => {
+  async function handleConfirmImport() {
     setUploading(true)
     const logs = []
     
