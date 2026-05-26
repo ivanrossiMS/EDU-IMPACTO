@@ -172,13 +172,16 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const channelRef = useRef<any>(null)
+  const processedBroadcasts = useRef<Set<string>>(new Set())
 
   const sendBroadcast = useCallback((event: string, data: any) => {
     if (channelRef.current) {
+      const eventId = Math.random().toString(36).substring(2, 15);
+      processedBroadcasts.current.add(eventId);
       channelRef.current.send({
         type: 'broadcast',
         event: 'CALL_EVENT',
-        payload: { event, data }
+        payload: { event, data, eventId }
       })
     }
   }, [])
@@ -228,7 +231,12 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
           'broadcast',
           { event: 'CALL_EVENT' },
           (payload: any) => {
-            const { event, data } = payload.payload || {}
+            const { event, data, eventId } = payload.payload || {}
+            if (eventId) {
+              if (processedBroadcasts.current.has(eventId)) return;
+              processedBroadcasts.current.add(eventId);
+              if (processedBroadcasts.current.size > 200) processedBroadcasts.current.clear();
+            }
             if (event === 'CALL_STUDENT') {
               setActiveCalls((prev: PickupCall[]) => {
                 if (prev.some(c => c.id === data.id)) return prev

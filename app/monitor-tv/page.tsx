@@ -341,8 +341,9 @@ function MonitorContent() {
   useEffect(() => {
     if (!audioUnlocked || !config?.voiceEnabled || !voice.isSupported) return
     displayCalls.forEach(call => {
-      if (!spokenRef.current.has(call.id)) {
-        spokenRef.current.add(call.id)
+      const speechKey = call.id + '_' + (call.calledAt || Date.now())
+      if (!spokenRef.current.has(speechKey)) {
+        spokenRef.current.add(speechKey)
         setTimeout(() => {
           const turmaObj = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass) || t.codigo === call.studentClass || t.nome === call.studentClass)
           const tName = turmaObj?.nome || call.studentClass
@@ -377,8 +378,9 @@ function MonitorContent() {
           const next = prev.find(c => c.id === d.id) ? prev : [d, ...prev]
           return [...next].sort(byTimeDesc).slice(0, 25)
         })
-        if (audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported && !spokenRef.current.has(d.id)) {
-          spokenRef.current.add(d.id)
+        const speechKey = d.id + '_' + (d.calledAt || Date.now())
+        if (audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported && !spokenRef.current.has(speechKey)) {
+          spokenRef.current.add(speechKey)
           const turmaObj = (currentTurmas || []).find((t: any) => String(t.id) === String(d.studentClass) || t.codigo === d.studentClass || t.nome === d.studentClass)
           const tName = turmaObj?.nome || d.studentClass
           const cName = currentConfig?.voiceTruncateTurma && currentConfig?.voiceTruncateChar ? tName.split(currentConfig.voiceTruncateChar)[0].trim() : tName
@@ -409,14 +411,13 @@ function MonitorContent() {
         
         // Speak immediately
         const theCall = displayCallsRef.current.find(c => c.id === d.callId)
-        if (theCall && audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported) {
-          spokenRef.current.add(d.callId)
+        const speechKey = d.callId + '_' + (d.calledAt || Date.now())
+        if (theCall && audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported && !spokenRef.current.has(speechKey)) {
+          spokenRef.current.add(speechKey)
           const turmaObj = (currentTurmas || []).find((t: any) => String(t.id) === String(theCall.studentClass) || t.codigo === theCall.studentClass || t.nome === theCall.studentClass)
           const tName = turmaObj?.nome || theCall.studentClass
           const cName = currentConfig?.voiceTruncateTurma && currentConfig?.voiceTruncateChar ? tName.split(currentConfig.voiceTruncateChar)[0].trim() : tName
           setTimeout(() => voice.speak(`${theCall.studentName}, turma ${cName}`), 600)
-        } else {
-          spokenRef.current.delete(d.callId)
         }
       }
     })
