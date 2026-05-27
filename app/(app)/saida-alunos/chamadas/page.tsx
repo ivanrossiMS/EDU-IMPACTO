@@ -585,7 +585,7 @@ interface SpecialLaunch {
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
+  const { addSpecialAuth, cancelCall, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
 
@@ -596,76 +596,27 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
   const [authorizedPerson, setAuthorizedPerson] = useState('')
 
-  // Launches State
-  const [launches, setLaunches] = useState<SpecialLaunch[]>([])
-
-  // Load from localStorage & Auto-clear at midnight
-  useEffect(() => {
-    const checkDate = (list: SpecialLaunch[]) => {
-      const todayStr = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      return list.filter(l => l.date === todayStr)
-    }
-
-    try {
-      const stored = localStorage.getItem('edu-special-launches')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const valid = checkDate(parsed)
-        setLaunches(valid)
-        if (valid.length !== parsed.length) localStorage.setItem('edu-special-launches', JSON.stringify(valid))
-      }
-    } catch (e) {
-      console.error(e)
-    }
-
-    const iv = setInterval(() => {
-      setLaunches(prev => {
-        const valid = checkDate(prev)
-        if (valid.length !== prev.length) {
-          localStorage.setItem('edu-special-launches', JSON.stringify(valid))
-          return valid
-        }
-        return prev
-      })
-    }, 60000)
-    return () => clearInterval(iv)
-  }, [])
-
-  // Sync active calls to launches
-  useEffect(() => {
-    let updated = false
-    const newLaunches = launches.map(l => {
-      if (l.confirmedOut) return l
-      const matchingCall = activeCalls.find(c => 
-        c.studentId === l.studentId && 
-        c.status === 'confirmed' &&
-        c.guardianName === l.authorizedPerson
-      )
-      if (matchingCall) {
-        updated = true
+  // Computed Launches from real-time database
+  const launches = useMemo(() => {
+    return activeCalls
+      .filter(c => c.status === 'special_auth')
+      .map(c => {
+        // Verifica se o aluno já teve uma saída confirmada hoje em chamadas normais
+        const wasPickedUp = activeCalls.some(ac => ac.studentId === c.studentId && ac.status === 'confirmed')
         return {
-          ...l,
-          confirmedOut: true,
-          confirmedAt: new Date(matchingCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          id: c.id,
+          studentId: c.studentId,
+          studentName: c.studentName,
+          studentClass: c.studentClass,
+          studentPhoto: c.studentPhoto,
+          authorizedPerson: c.guardianName,
+          loggedBy: c.operatorId || 'Sistema',
+          date: c.calledAt.split('T')[0],
+          time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          confirmedOut: wasPickedUp
         }
-      }
-      return l
-    })
-
-    if (updated) {
-      saveLaunches(newLaunches)
-    }
-  }, [activeCalls, launches])
-
-  // Save to localStorage
-  const saveLaunches = (list: SpecialLaunch[]) => {
-    setLaunches(list)
-    try {
-      localStorage.setItem('edu-special-launches', JSON.stringify(list))
-    } catch (e) {
-      console.error(e)
-    }
-  }
+      })
+  }, [activeCalls])
 
   // Search autocomplete debounced
   useEffect(() => {
@@ -709,29 +660,17 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     if (!selectedStudent || !authorizedPerson.trim()) return
 
     const operatorName = currentUser?.nome || 'Admin Logado'
-    const today = new Date()
-    const timeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    
+    addSpecialAuth(
+      selectedStudent.id,
+      selectedStudent.nome,
+      selectedStudent.turmaNome || selectedStudent.turma,
+      authorizedPerson,
+      operatorName,
+      selectedStudent.foto || selectedStudent.imagem1
+    )
 
-    // Student call removed per request. Will only be called via megaphone icon.
-
-    // 3. Save special launch to localStorage feed
-    const launch: SpecialLaunch = {
-      id: crypto.randomUUID(),
-      studentId: selectedStudent.id,
-      studentName: selectedStudent.nome,
-      studentClass: selectedStudent.turmaNome || selectedStudent.turma,
-      studentPhoto: selectedStudent.foto || selectedStudent.imagem1,
-      authorizedPerson: authorizedPerson.trim(),
-      loggedBy: operatorName,
-      date: dateStr,
-      time: timeStr
-    }
-
-    const updated = [launch, ...launches].slice(0, 50)
-    saveLaunches(updated)
-
-    showToast(`Saída especial de ${selectedStudent.nome} registrada com sucesso!`)
+    showToast('Autorização especial lançada e sincronizada.', true)
 
     // Reset Form
     setSelectedStudent(null)
@@ -1105,7 +1044,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 {/* BUTTON: DELETE LAUNCH */}
                 <button
                   type="button"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteLaunch(l.id, e); }}
+                  onClick={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (window.confirm('Remover esta autorização especial?')) {
+                      cancelCall(l.id)
+                    }
+                  }}
                   title="Excluir Lançamento"
                   style={{
                     background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer',

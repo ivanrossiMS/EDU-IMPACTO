@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type GuardianType = 'mae' | 'pai' | 'avo' | 'motorista' | 'outro'
-export type CallStatus = 'called' | 'waiting' | 'confirmed' | 'cancelled' | 'recalled' | 'blocked'
+export type CallStatus = 'called' | 'waiting' | 'confirmed' | 'cancelled' | 'recalled' | 'blocked' | 'special_auth'
 export type CallSource = 'rfid' | 'manual'
 
 export interface Guardian {
@@ -132,6 +132,7 @@ interface SaidaCtx {
   cancelCall: (callId: string) => void
   recallStudent: (callId: string, speakFn: (text: string) => void) => void
   revertCall: (callId: string) => void
+  addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
   addGuardian: (g: Omit<Guardian, 'id'>) => Guardian
   updateGuardian: (id: string, data: Partial<Guardian>) => void
   removeGuardian: (id: string) => void
@@ -423,6 +424,25 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
     addLog('REVERT', `Chamada revertida: ${call.studentName}`)
   }, [activeCalls, emit, addLog, sendBroadcast])
 
+  // ─── addSpecialAuth ───────────────────────────────────────────────────────
+  const addSpecialAuth = useCallback((
+    studentId: string, studentName: string, studentClass: string,
+    authorizedPerson: string, operatorName: string, studentPhoto?: string | null
+  ): PickupCall => {
+    const call: PickupCall = {
+      id: uid(), studentId, studentName, studentClass,
+      studentPhoto: studentPhoto ?? null,
+      guardianId: 'special', guardianName: authorizedPerson,
+      operatorId: operatorName,
+      calledAt: now(), status: 'special_auth', source: 'manual',
+    }
+    setActiveCalls(prev => [call, ...prev])
+    emit('CALL_STUDENT', { ...call })
+    sendBroadcast('CALL_STUDENT', call)
+    addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}`)
+    return call
+  }, [emit, addLog, sendBroadcast])
+
   // ─── Guardian CRUD ────────────────────────────────────────────────────────
   const addGuardian = useCallback((g: Omit<Guardian, 'id'>): Guardian => {
     const newG = { ...g, id: uid() }
@@ -528,7 +548,7 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      readRFID, callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall,
+      readRFID, callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, addSpecialAuth,
       addGuardian, updateGuardian, removeGuardian,
       addRFID, removeRFID,
       linkStudentGuardian, unlinkStudentGuardian,

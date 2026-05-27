@@ -130,13 +130,13 @@ export default function AlunosPage() {
       autorizadoSairSozinho: false
     },
     responsaveis: [{
-      id: '',
+      id: Math.floor(1000000 + Math.random() * 9000000).toString(),
       nome: '',
       dataNasc: '',
       email: '',
       telefone: '',
       profissao: '',
-      codigo: '',
+      codigo: Math.floor(1000000 + Math.random() * 9000000).toString(),
       codigoAluno: '',
       rfid: '',
       parentesco: '',
@@ -211,12 +211,13 @@ export default function AlunosPage() {
   }
 
   const handleNovoAluno = () => {
+    const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
     setFormData({
       aluno: {
         codigo: '', nome: '', dataNasc: '', telefone: '', email: '', ativo: true, autorizadoSairSozinho: false, foto: null
       },
       responsaveis: [{
-        id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false
+        id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false
       }],
       historicoTurmas: []
     })
@@ -1551,9 +1552,11 @@ export default function AlunosPage() {
                           className="form-input" 
                           style={{ borderColor: hasError(`resp_${index}_id`) ? '#ef4444' : undefined, boxShadow: hasError(`resp_${index}_id`) ? '0 0 0 1px #ef4444' : undefined }}
                           placeholder="Ex: RESP001" 
-                          value={resp.codigo || resp.id || ''} 
+                          value={resp.id || resp.codigo || ''} 
                           onChange={e => {
-                            handleInputChange('responsaveis', 'id', e.target.value, index);
+                            const val = e.target.value;
+                            handleInputChange('responsaveis', 'id', val, index);
+                            handleInputChange('responsaveis', 'codigo', val, index);
                             if (hasError(`resp_${index}_id`)) {
                               setValidationErrors(prev => prev.filter(err => err.field !== `resp_${index}_id`));
                             }
