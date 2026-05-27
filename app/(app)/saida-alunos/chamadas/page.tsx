@@ -678,15 +678,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setAuthorizedPerson('')
   }
 
-  const handleDeleteLaunch = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setTimeout(() => {
-      if (window.confirm('Excluir este lançamento do sticker?')) {
-        const updated = launches.filter(l => l.id !== id)
-        saveLaunches(updated)
-      }
-    }, 50)
-  }
 
   return (
     <div style={{
