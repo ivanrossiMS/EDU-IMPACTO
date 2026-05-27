@@ -585,7 +585,7 @@ interface SpecialLaunch {
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { addSpecialAuth, cancelCall, activeCalls = [] } = useSaida()
+  const { addSpecialAuth, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
 
@@ -602,7 +602,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       .filter(c => c.status === 'special_auth')
       .map(c => {
         // Verifica se o aluno já teve uma saída confirmada hoje em chamadas normais
-        const wasPickedUp = activeCalls.some(ac => ac.studentId === c.studentId && ac.status === 'confirmed')
+        const pickUpCall = activeCalls.find(ac => ac.studentId === c.studentId && ac.status === 'confirmed')
         return {
           id: c.id,
           studentId: c.studentId,
@@ -613,7 +613,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           loggedBy: c.operatorId || 'Sistema',
           date: c.calledAt.split('T')[0],
           time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          confirmedOut: wasPickedUp
+          confirmedOut: !!pickUpCall,
+          confirmedAt: pickUpCall ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : undefined
         }
       })
   }, [activeCalls])
