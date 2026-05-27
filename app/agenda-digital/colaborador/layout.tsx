@@ -203,7 +203,7 @@ export default function AgendaDigitalColaboradorLayout({
         
         @media (max-width: 640px) {
           .ad-premium-card-wrapper {
-            margin-top: 24px !important;
+            margin-top: 64px !important;
           }
           .ad-premium-card {
             padding: 16px 12px !important;
@@ -279,8 +279,14 @@ export default function AgendaDigitalColaboradorLayout({
             justify-content: space-between !important;
           }
           .ad-right-section > div {
+            display: flex !important;
             flex-direction: row !important;
+            width: 100% !important;
             gap: 8px !important;
+          }
+          .ad-right-section > div > a, .ad-right-section > div > button {
+            flex: 1 !important;
+            width: 100% !important;
           }
           .ad-mini-cards-grid {
             flex-wrap: nowrap !important;

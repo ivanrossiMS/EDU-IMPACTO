@@ -311,6 +311,31 @@ export default function ColaboradorComunicadosPage() {
   }
 
   return (
+    <>
+      <div className="ad-mobile-only" style={{ marginBottom: 16 }}>
+        <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
+          <input 
+            className="form-input" 
+            placeholder="Buscar..." 
+            style={{
+              paddingLeft: 40,
+              width: '100%',
+              height: 44,
+              borderRadius: 14,
+              border: '1px solid rgba(99, 102, 241, 0.15)',
+              background: 'rgba(255, 255, 255, 0.7)',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
+              fontSize: 14,
+              color: '#0f172a',
+              transition: 'all 0.3s'
+            }} 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
     <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
@@ -371,8 +396,14 @@ export default function ColaboradorComunicadosPage() {
           50% { opacity: 0.55; transform: scale(1.2) translate(-30px, 30px); }
         }
         @keyframes pulseGlowAmbientTwo {
-          0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
+          0%, 100% { opacity: 0.3; transform: scale(1) translate(0, 0); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
+        }
+        .ad-mobile-only { display: none !important; }
+        .ad-desktop-only { display: block !important; }
+        @media (max-width: 768px) {
+          .ad-mobile-only { display: block !important; }
+          .ad-desktop-only { display: none !important; }
         }
         @media (max-width: 768px) {
           .ad-comunicados-wrapper {
@@ -402,34 +433,14 @@ export default function ColaboradorComunicadosPage() {
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { 
             width: 100% !important; 
-            flex-direction: column-reverse !important; 
-            align-items: stretch !important; 
+            flex-direction: row !important; 
+            align-items: center !important; 
+            justify-content: flex-end !important;
             gap: 12px !important; 
             margin-top: 0 !important; 
           }
           .ad-com-actions > button {
             align-self: flex-end !important;
-          }
-          .ad-com-search { 
-            width: 100% !important; 
-            justify-content: center !important; 
-          }
-          .ad-com-search input { 
-            width: 100% !important; 
-            max-width: 100% !important; 
-            height: 40px !important; 
-            padding-left: 36px !important; 
-            font-size: 14px !important; 
-            border-radius: 9999px !important; 
-            background: #ffffff !important;
-            border: 1px solid #e2e8f0 !important;
-            box-shadow: none !important;
-            color: #0f172a !important;
-          }
-          .ad-com-search input:focus {
-            width: 100% !important;
-            border-color: #cbd5e1 !important;
-            background: #ffffff !important;
           }
           .ad-com-search svg {
             width: 14px !important;
@@ -558,7 +569,7 @@ export default function ColaboradorComunicadosPage() {
           </div>
           
           <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
-            <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
               <input 
                 className="form-input" 
@@ -600,7 +611,9 @@ export default function ColaboradorComunicadosPage() {
               <Filter size={16} /> Filtros
             </button>
             <button className="btn btn-primary" onClick={handleNovo} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, borderRadius: 14, padding: '0 18px', fontSize: 14, fontWeight: 600 }}>
-              <Plus size={16} /> Novo Comunicado
+              <Plus size={16} />
+              <span className="ad-desktop-only">Novo Comunicado</span>
+              <span className="ad-mobile-only">Novo</span>
             </button>
           </div>
         </div>
@@ -1739,5 +1752,6 @@ export default function ColaboradorComunicadosPage() {
         }
       `}</style>
     </div>
+    </>
   )
 }
