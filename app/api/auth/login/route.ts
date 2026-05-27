@@ -31,99 +31,74 @@ export async function POST(request: NextRequest) {
     const isEmailFormat = loginInput.includes('@') && !loginInput.endsWith('@impactoedu.local')
 
     if (!isEmailFormat) {
-      // ── Busca filtrada no banco (sem full table scan) ─────────────────────
+      // ── Busca filtrada no banco com Promise.all (Paralelo) ─────────────────────
       const loginDigits = loginInput.replace(/\D/g, '')
 
-      // 1. Tentar aluno por matrícula
-      const { data: alunoByMatricula } = await supabaseAdmin
+      let alunoQuery = `matricula.eq.${loginInput}`
+      if (loginDigits.length >= 11) alunoQuery += `,dados->>cpf.eq.${loginDigits}`
+
+      let respQuery = `codigo.eq.${loginInput}`
+      if (loginDigits.length >= 11) respQuery += `,dados->>cpf.eq.${loginDigits}`
+      if (loginDigits.length >= 10) respQuery += `,celular.eq.${loginDigits},telefone.eq.${loginDigits}`
+
+      const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
-        .eq('matricula', loginInput)
-        .maybeSingle()
+        .or(alunoQuery)
+        .limit(1)
+        .then(r => r.data?.[0] || null)
 
-      if (alunoByMatricula) {
-        alunoRecord = alunoByMatricula
-      } else if (loginDigits.length >= 11) {
-        // 2. Tentar aluno por CPF (armazenado em dados JSONB)
-        const { data: alunosByCpf } = await supabaseAdmin
-          .from('alunos')
-          .select('id, nome, email, matricula, dados, status')
-          .eq('dados->>cpf', loginDigits)
-          .limit(1)
-        alunoRecord = alunosByCpf?.[0] || null
-      }
+      const responsavelPromise = supabaseAdmin
+        .from('responsaveis')
+        .select('id, nome, email, celular, codigo, telefone, dados')
+        .or(respQuery)
+        .limit(1)
+        .then(r => r.data?.[0] || null)
 
-      if (alunoRecord) {
+      const [alunoResult, responsavelResult] = await Promise.all([alunoPromise, responsavelPromise])
+
+      if (alunoResult) {
+        alunoRecord = alunoResult
         const matricula   = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
         const storedEmail = (alunoRecord.email || '').trim().toLowerCase()
-        // Use virtual email pattern (same one registered at first-access)
         resolvedEmail = isValidEmail(storedEmail)
           ? storedEmail
           : `aluno.${matricula}@impactoedu.local`
         userType = 'aluno'
-      } else {
-        // 3. Tentar responsável por código
-        const { data: respByCodigo } = await supabaseAdmin
-          .from('responsaveis')
-          .select('id, nome, email, celular, codigo, telefone, dados')
-          .eq('codigo', loginInput)
-          .maybeSingle()
-
-        if (respByCodigo) {
-          responsavelRecord = respByCodigo
-        } else if (loginDigits.length >= 10) {
-          // 4. Tentar responsável por CPF
-          if (loginDigits.length >= 11) {
-            const { data: respByCpf } = await supabaseAdmin
-              .from('responsaveis')
-              .select('id, nome, email, celular, codigo, telefone, dados')
-              .eq('dados->>cpf', loginDigits)
-              .limit(1)
-            responsavelRecord = respByCpf?.[0] || null
-          }
-          // 5. Tentar responsável por celular (só se ainda não achou)
-          if (!responsavelRecord) {
-            const { data: respByCelular } = await supabaseAdmin
-              .from('responsaveis')
-              .select('id, nome, email, celular, codigo, telefone, dados')
-              .or(`celular.eq.${loginDigits},telefone.eq.${loginDigits}`)
-              .limit(1)
-            responsavelRecord = respByCelular?.[0] || null
-          }
-        }
-
-        if (responsavelRecord) {
-          resolvedEmail   = (responsavelRecord.email || '').trim().toLowerCase()
-          userType        = 'responsavel'
-          if (!resolvedEmail || !resolvedEmail.includes('@')) {
-            return NextResponse.json({ error: 'Responsável sem e-mail cadastrado. Faça o Primeiro Acesso primeiro.' }, { status: 401 })
-          }
+      } else if (responsavelResult) {
+        responsavelRecord = responsavelResult
+        resolvedEmail   = (responsavelRecord.email || '').trim().toLowerCase()
+        userType        = 'responsavel'
+        if (!resolvedEmail || !resolvedEmail.includes('@')) {
+          return NextResponse.json({ error: 'Responsável sem e-mail cadastrado. Faça o Primeiro Acesso primeiro.' }, { status: 401 })
         }
       }
     } else {
-      // Email format — check if responsavel or aluno first, fallback to system_user
-      const { data: alunoByEmail } = await supabaseAdmin
+      // Email format — check if responsavel or aluno first, fallback to system_user (Parallel)
+      const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
         .eq('email', loginInput)
         .maybeSingle()
+        .then(r => r.data || null)
+        
+      const respPromise = supabaseAdmin
+        .from('responsaveis')
+        .select('id, nome, email')
+        .eq('email', loginInput)
+        .maybeSingle()
+        .then(r => r.data || null)
+        
+      const [alunoByEmail, respByEmail] = await Promise.all([alunoPromise, respPromise])
       
       if (alunoByEmail) {
         alunoRecord   = alunoByEmail
         userType      = 'aluno'
         resolvedEmail = loginInput
-      } else {
-        const { data: respByEmail } = await supabaseAdmin
-          .from('responsaveis')
-          .select('id, nome, email')
-          .eq('email', loginInput)
-          .maybeSingle()
-        
-        if (respByEmail) {
-          responsavelRecord = respByEmail
-          userType          = 'responsavel'
-          resolvedEmail     = loginInput
-        }
+      } else if (respByEmail) {
+        responsavelRecord = respByEmail
+        userType          = 'responsavel'
+        resolvedEmail     = loginInput
       }
     }
     if (userType === 'responsavel' && responsavelRecord) {
@@ -205,6 +180,7 @@ export async function POST(request: NextRequest) {
     let aluno_id = ''
 
     // 1. Check system_users
+    let hasDualRole = false
     if (userType === 'system_user') {
       const { data: dbSystemUser } = await supabaseAdmin
         .from('system_users')
@@ -235,6 +211,14 @@ export async function POST(request: NextRequest) {
         nome   = dbSystemUser.nome   || nome
         cargo  = dbSystemUser.cargo  || cargo
         perfil = dbSystemUser.perfil || perfil
+        
+        // Verifica papel duplo para colaboradores rapidamente
+        const { data: respFound } = await supabaseAdmin
+          .from('responsaveis')
+          .select('id')
+          .eq('email', resolvedEmail)
+          .limit(1)
+        if (respFound && respFound.length > 0) hasDualRole = true
       }
     } else if (userType === 'responsavel' && responsavelRecord) {
       dbRecordExists = true
@@ -271,19 +255,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 403 })
     }
 
-    // Persist enriched metadata
+    // Persist enriched metadata if changed
     const userMetadataUpdate: any = { nome, cargo, perfil }
     if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
     if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
 
     if (user) {
-      supabaseAdmin.auth.admin.updateUserById(user.id, {
-        user_metadata: userMetadataUpdate
-      }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
+      const currentMeta = user.user_metadata || {}
+      let hasChanges = false
+      for (const key of Object.keys(userMetadataUpdate)) {
+        if (currentMeta[key] !== userMetadataUpdate[key]) hasChanges = true
+      }
+      if (hasChanges) {
+        supabaseAdmin.auth.admin.updateUserById(user.id, {
+          user_metadata: userMetadataUpdate
+        }).catch((e: any) => console.warn('[login] metadata update failed:', e.message))
+      }
     }
 
     const enrichedUser = {
       ...user,
+      hasDualRole,
       user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }
 

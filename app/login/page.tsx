@@ -95,21 +95,24 @@ export default function LoginPage() {
     setMounted(true)
     const h = (e: MouseEvent) => setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight })
     window.addEventListener('mousemove', h); 
-    
-    // Verifica se direcao@colegioimpacto.net já existe para exibir botão Master
-    fetch('/api/configuracoes/usuarios?checkMaster=true', { cache: 'no-store' })
-      .then(r => {
-        if (!r.ok) throw new Error('API não retornou 200 OK')
-        return r.json()
-      })
-      .then(data => {
-        // Se a API confirmar que não existe (false), o sistema está vazio. Se for true, não está.
-        setIsSystemEmpty(data.masterExists === false)
-      })
-      .catch(() => {
-        // Em caso de falha (ex: falta de variáveis de ambiente no Netlify), esconde o botão por segurança
-        setIsSystemEmpty(false)
-      })
+    // Otimização: verifica se o sistema está vazio apenas 1 vez por navegador
+    const systemChecked = localStorage.getItem('edu-master-checked')
+    if (!systemChecked) {
+      fetch('/api/configuracoes/usuarios?checkMaster=true', { cache: 'no-store' })
+        .then(r => {
+          if (!r.ok) throw new Error('API não retornou 200 OK')
+          return r.json()
+        })
+        .then(data => {
+          setIsSystemEmpty(data.masterExists === false)
+          if (data.masterExists === true) {
+            localStorage.setItem('edu-master-checked', 'true')
+          }
+        })
+        .catch(() => {
+          setIsSystemEmpty(false)
+        })
+    }
 
     return () => window.removeEventListener('mousemove', h)
   }, [])
@@ -176,33 +179,16 @@ export default function LoginPage() {
 
       if (cargoReal === 'Aluno') {
         if (meta.aluno_id) {
-          window.location.href = `/agenda-digital/${meta.aluno_id}/comunicados`
+          router.push(`/agenda-digital/${meta.aluno_id}/comunicados`)
         } else {
-          window.location.href = '/agenda-digital'
+          router.push('/agenda-digital')
         }
       } else if (perfilReal === 'Família' || cargoReal === 'Responsável') {
-        window.location.href = '/agenda-digital/selecionar-aluno'
+        router.push('/agenda-digital/selecionar-aluno')
       } else {
         // É um colaborador (Professor, Diretor, Coordenador, Financeiro, Secretaria, etc)
-        // 1. Verificamos se ele possui papel duplo usando o e-mail
-        let isAlsoFamily = !!meta.responsavel_id;
-        if (!isAlsoFamily && email) {
-           try {
-               const alunosRes = await fetch('/api/alunos?all=true')
-               if (alunosRes.ok) {
-                   const result = await alunosRes.json()
-                   const alunos = Array.isArray(result) ? result : result.data || []
-                   const targetEmail = email.toLowerCase()
-                   isAlsoFamily = alunos.some((a: any) => 
-                       JSON.stringify(a.dados || {}).toLowerCase().includes(targetEmail) ||
-                       (a.email && a.email.toLowerCase() === targetEmail) ||
-                       (a.responsavel && typeof a.responsavel === 'string' && a.responsavel.toLowerCase() === targetEmail)
-                   )
-               }
-           } catch (e) {
-               console.log("Erro verificando papel dupla", e)
-           }
-        }
+        // Verificação de papel duplo feita no backend de forma performática
+        const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
         
         setPendingAuth({
            cargo: cargoReal,
