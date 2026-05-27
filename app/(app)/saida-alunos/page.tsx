@@ -7,7 +7,7 @@ const ITEMS = [
     icon: Tablet,   color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', bd: 'rgba(6,182,212,0.25)',
     title: 'Painel Tablet',
     desc: 'Controle de saída via RFID — abre em tela cheia sem sidebar',
-    href: '/painel-tablet', newTab: true,
+    href: '/painel-tablet', newTab: false,
   },
   {
     icon: Monitor,  color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', bd: 'rgba(167,139,250,0.25)',
