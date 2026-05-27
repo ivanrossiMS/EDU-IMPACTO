@@ -210,6 +210,43 @@ export default function MeuPerfilPage() {
 
   return (
     <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        .profile-grid {
+          display: grid;
+          grid-template-columns: 300px 1fr;
+          gap: 20px;
+        }
+        .info-fields-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 12px;
+        }
+        .comp-fields-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+        .edit-fields-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 768px) {
+          .profile-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .info-fields-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .comp-fields-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .edit-fields-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}} />
 
       {/* Header */}
       <div className="page-header">
@@ -224,7 +261,7 @@ export default function MeuPerfilPage() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20 }}>
+      <div className="profile-grid">
 
         {/* ── SIDEBAR ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -349,7 +386,7 @@ export default function MeuPerfilPage() {
                 <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Dados gerenciados pelo administrador do sistema</div>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            <div className="info-fields-grid">
               {[
                 { label: 'Nome completo',  value: displayNome },
                 { label: 'E-mail cadastrado', value: dbEmail || displayEmail },
@@ -389,7 +426,7 @@ export default function MeuPerfilPage() {
 
             {editMode ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="edit-fields-grid">
                   <div>
                     <label className="form-label">Telefone</label>
                     <input className="form-input" value={form.telefone} onChange={e => setForm(p => ({ ...p, telefone: e.target.value }))} placeholder="(11) 98888-0000" />
@@ -405,7 +442,7 @@ export default function MeuPerfilPage() {
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+              <div className="comp-fields-grid">
                 {[
                   { label: 'Telefone', value: extra.telefone || '—' },
                   { label: 'Unidade de trabalho', value: extra.unidade || '—' },
