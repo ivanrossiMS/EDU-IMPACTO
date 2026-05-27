@@ -69,3 +69,40 @@ export async function updateProfilePhotoAction(userId: string, fotoUrl: string) 
     return { error: e.message }
   }
 }
+
+/**
+ * Atualiza os campos adicionais (bio, telefone, unidade) no JSONB 'dados' da tabela system_users.
+ */
+export async function updateProfileExtraAction(
+  userId: string, 
+  data: { bio: string; telefone: string; unidade: string }
+) {
+  const supabase = createAdminClient()
+
+  try {
+    const { data: current } = await supabase
+      .from('system_users')
+      .select('dados')
+      .eq('id', userId)
+      .single()
+
+    const newDados = { 
+      ...(current?.dados || {}), 
+      bio: data.bio, 
+      telefone: data.telefone, 
+      unidade: data.unidade 
+    }
+
+    const { error: dbErr } = await supabase
+      .from('system_users')
+      .update({ dados: newDados })
+      .eq('id', userId)
+
+    if (dbErr) return { error: dbErr.message }
+
+    return { ok: true }
+  } catch (e: any) {
+    return { error: e.message }
+  }
+}
+

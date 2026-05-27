@@ -6,7 +6,7 @@ import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
   Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock, Loader2
 } from 'lucide-react'
-import { updateProfilePhotoAction } from './actions'
+import { updateProfilePhotoAction, updateProfileExtraAction } from './actions'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage } from '@/lib/mediaCompressor'
 
@@ -117,8 +117,10 @@ export default function MeuPerfilPage() {
              const oficialEmail = me.email || me.dados?.email
              if (oficialEmail) setDbEmail(oficialEmail)
              
-             // Extrair foto do campo 'foto' ou de dentro do JSON 'dados'
              const remoteFoto = me.foto || me.dados?.foto
+             const remoteBio = me.dados?.bio || ''
+             const remoteTelefone = me.telefone || me.dados?.telefone || ''
+             const remoteUnidade = me.unidade || me.dados?.unidade || ''
              
              const updates: any = {}
              if (oficialEmail && oficialEmail.toLowerCase() !== currentUser.email?.toLowerCase()) {
@@ -132,22 +134,42 @@ export default function MeuPerfilPage() {
              
              if (Object.keys(updates).length > 0) {
                 setCurrentUser({ ...currentUser, ...updates })
-                if (updates.foto) {
-                  setExtra(p => ({ ...p, foto: updates.foto }))
-                  setForm(p => ({ ...p, foto: updates.foto }))
-                }
              }
+             
+             const updatedExtra = {
+               bio: remoteBio || loaded.bio,
+               telefone: remoteTelefone || loaded.telefone,
+               unidade: remoteUnidade || loaded.unidade,
+               foto: remoteFoto || loaded.foto
+             }
+             setProfileExtra(currentUser.id, updatedExtra)
+             setExtra(updatedExtra)
+             setForm(updatedExtra)
           }
         }
       })
       .catch(err => console.error('[MeuPerfil] Erro ao buscar dados da API:', err))
   }, [currentUser?.id])
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     if (!currentUser) return
     setProfileExtra(currentUser.id, form)
     setExtra(form)
     setCurrentUser({ ...currentUser, foto: form.foto })
+    
+    try {
+      const res = await updateProfileExtraAction(currentUser.id, {
+        bio: form.bio,
+        telefone: form.telefone,
+        unidade: form.unidade
+      })
+      if (res.error) {
+        console.error('[MeuPerfil] Erro ao salvar dados adicionais:', res.error)
+      }
+    } catch (err) {
+      console.error('[MeuPerfil] Erro ao salvar dados adicionais:', err)
+    }
+
     setEditMode(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
