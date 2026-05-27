@@ -33,6 +33,16 @@ export default function AgendaDigitalColaboradorLayout({
     return () => { if (setAdLoading) setAdLoading(false); }
   }, [isLoading, setAdLoading]);
 
+  const formatName = (fullName: string) => {
+    if (!fullName) return '';
+    const parts = fullName.trim().split(' ');
+    if (parts.length <= 2) return fullName;
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    const middle = parts.slice(1, -1).map(p => p.length > 2 ? p[0] + '.' : p).join(' ');
+    return `${first} ${middle} ${last}`;
+  }
+
   const navItems = [
     { label: 'Comunicados', href: '/agenda-digital/colaborador/comunicados', icon: <Bell size={18} /> },
     { label: 'Mensagens', href: '/agenda-digital/colaborador/conversas', icon: <MessageSquare size={18} /> },
@@ -69,7 +79,7 @@ export default function AgendaDigitalColaboradorLayout({
         }
 
         .ad-premium-card-wrapper {
-          margin-top: -16px;
+          margin-top: 0;
           position: relative;
           z-index: 1;
           width: 100%;
@@ -257,15 +267,20 @@ export default function AgendaDigitalColaboradorLayout({
             justify-content: center !important;
           }
           .ad-right-section {
-            position: absolute !important;
-            top: -46px !important;
-            right: 8px !important;
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
             min-width: 0 !important;
-            width: auto !important;
-            margin-top: 0 !important;
-            z-index: 100 !important;
+            width: 100% !important;
+            margin-top: 12px !important;
+            z-index: 1 !important;
             height: auto !important;
-            justify-content: flex-start !important;
+            flex-direction: row !important;
+            justify-content: space-between !important;
+          }
+          .ad-right-section > div {
+            flex-direction: row !important;
+            gap: 8px !important;
           }
           .ad-mini-cards-grid {
             flex-wrap: nowrap !important;
@@ -310,40 +325,6 @@ export default function AgendaDigitalColaboradorLayout({
         .ad-content-page-area {
           padding-bottom: 80px !important;
         }
-
-        .ad-mobile-nav-bar {
-          display: none;
-        }
-        @media (max-width: 768px) {
-          .ad-mobile-nav-bar {
-            display: flex !important;
-            background: linear-gradient(135deg, #07060f 0%, #15092a 50%, #020106 100%) !important;
-            background-size: 200% 200% !important;
-            animation: gradientShiftNav 6s ease infinite !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-            box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-          }
-          .ad-mobile-nav-bar::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, #3b82f6, #6366f1, #2dd4bf, #3b82f6);
-            background-size: 200% 100%;
-            animation: neonSlide 3s linear infinite;
-            box-shadow: 0 0 12px rgba(59, 130, 246, 0.8), 0 0 4px rgba(99, 102, 241, 0.5);
-            z-index: 10000;
-          }
-          @keyframes gradientShiftNav {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-        }
       `}} />
 
       {/* Dynamic Header floating profile card */}
@@ -379,7 +360,7 @@ export default function AgendaDigitalColaboradorLayout({
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
               <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <span style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{currentUser.nome}</span>
+                <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatName(currentUser.nome)}</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b82f6" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
               </h2>
 
@@ -466,56 +447,6 @@ export default function AgendaDigitalColaboradorLayout({
           {children}
         </div>
       </div>
-
-      {/* Mobile Bottom Navigation (Ultra Modern Neon) */}
-      <div className="ad-mobile-nav-bar hide-scrollbar" style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        width: '100%',
-        height: 72,
-        zIndex: 9999,
-        padding: '0 4px',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        alignItems: 'center'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', minWidth: 'min-content', margin: '0 auto', height: '100%' }}>
-          {navItems.map((item, idx) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  style={{ 
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, 
-                    width: 72, height: 56, borderRadius: 16, flexShrink: 0,
-                    background: isActive ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
-                    border: isActive ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid transparent',
-                    color: isActive ? 'white' : 'rgba(255,255,255,0.4)',
-                    boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.2), 0 0 10px rgba(59, 130, 246, 0.1)' : 'none',
-                    transition: 'all 0.3s'
-                  }}
-                >
-                  <div style={{ 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: isActive ? '#3b82f6' : 'inherit',
-                    filter: isActive ? 'drop-shadow(0 0 8px #3b82f6)' : 'none'
-                  }}>
-                    {React.cloneElement(item.icon, { size: 20, color: 'currentColor' })}
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
-                </motion.div>
-              </Link>
-            )
-          })}
-        </div>
-      </div>
-        <style dangerouslySetInnerHTML={{__html: `
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
     </div>
     </>
   )

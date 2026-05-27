@@ -375,10 +375,17 @@ export default function ColaboradorComunicadosPage() {
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
         @media (max-width: 768px) {
+          .ad-comunicados-wrapper {
+            padding: 16px 8px !important;
+            margin: 0 !important;
+            border-radius: 16px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+          }
           .ad-comunicados-wrapper .ad-page-header { 
             margin-top: -12px !important; 
             margin-bottom: 16px !important; 
-            align-items: center !important; 
+            align-items: flex-start !important; 
             flex-direction: row !important; 
             justify-content: space-between !important; 
             width: 100% !important;
@@ -386,7 +393,13 @@ export default function ColaboradorComunicadosPage() {
             padding: 0 4px !important;
           }
           .ad-com-filter-btn { display: none !important; }
-          .ad-com-actions { width: auto !important; justify-content: flex-end !important; margin-top: 0 !important; align-self: center !important; }
+          .ad-com-actions { 
+            width: auto !important; 
+            flex-direction: column-reverse !important; 
+            align-items: flex-end !important; 
+            gap: 8px !important; 
+            margin-top: 0 !important; 
+          }
           .ad-com-search { width: auto !important; justify-content: flex-end !important; }
           .ad-com-search input { 
             width: 140px !important; 
@@ -412,31 +425,30 @@ export default function ColaboradorComunicadosPage() {
             color: #94a3b8 !important;
           }
           .ad-com-header-icon-box {
-            width: 40px !important;
-            height: 40px !important;
-            border-radius: 12px !important;
-            flex-shrink: 0 !important;
-          }
-          .ad-com-header-icon-box svg {
-            width: 18px !important;
-            height: 18px !important;
+            display: none !important;
           }
           .ad-com-header-title {
             font-size: 20px !important;
             font-weight: 800 !important;
           }
           
-          .ad-com-timeline-node { width: 50px !important; margin-right: 12px !important; }
-          .ad-com-date-box { width: 50px !important; padding-right: 12px !important; }
-          .ad-com-date-box > div:nth-child(1) { font-size: 18px !important; }
-          .ad-com-date-box > div:nth-child(2) { font-size: 8px !important; }
-          .ad-com-date-box > div:nth-child(3) { font-size: 9px !important; }
+          .ad-com-timeline-node { width: 36px !important; margin-right: 8px !important; }
+          .ad-com-date-box { width: 36px !important; padding-right: 8px !important; }
+          .ad-com-date-box > div:nth-child(1) { font-size: 14px !important; }
+          .ad-com-date-box > div:nth-child(2) { font-size: 7px !important; }
+          .ad-com-date-box > div:nth-child(3) { font-size: 8px !important; }
           
-          .ad-com-timeline-line { left: 45px !important; }
-          .ad-com-timeline-dot { right: -5px !important; width: 10px !important; height: 10px !important; top: 28px !important; border-width: 2px !important; }
+          .ad-com-timeline-line { left: 32px !important; }
+          .ad-com-timeline-dot { right: -4px !important; width: 8px !important; height: 8px !important; top: 28px !important; border-width: 2px !important; }
           
-          .ad-feed-card { padding: 16px 16px !important; gap: 12px !important; }
-          .ad-com-card-title { font-size: 15px !important; }
+          .ad-feed-card { padding: 12px 12px !important; gap: 8px !important; }
+          .ad-com-card-title { font-size: 14px !important; }
+          
+          /* Badges 30% smaller */
+          .badge-status {
+            font-size: 9px !important;
+            padding: 2px 8px !important;
+          }
         }
       `}} />
 
@@ -529,7 +541,6 @@ export default function ColaboradorComunicadosPage() {
             </div>
             <div>
               <h2 className="ad-com-header-title" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
-              <p className="ad-text-hide-mobile" style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
             </div>
           </div>
           
@@ -783,9 +794,9 @@ export default function ColaboradorComunicadosPage() {
                          
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                           <span className="badge badge-status" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
                          ) : (
-                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>Lido</span>
+                           <span className="badge badge-neutral badge-status" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>LIDO</span>
                          )}
                        </div>
 
