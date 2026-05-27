@@ -231,25 +231,25 @@ export function AuthAlunosTab() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const handleResetPassword = () => {
+  const handleResetPassword = async () => {
     if (!resetModal) return
-    let existingAuth = resetModal.auth
-    if (!existingAuth || existingAuth.id?.startsWith('virtual-')) {
-       existingAuth = handleCreateAuth(resetModal.aluno)
-    }
-
-    setAuthUsers(prev => prev.map(u => {
-      if (u.id === existingAuth.id) {
-        return { ...u, status: 'ATIVO', last_password_reset: new Date().toISOString() }
+    
+    try {
+      const res = await fetch('/api/auth/reset-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'aluno', id: resetModal.aluno.id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'Acesso reiniciado com sucesso!');
+        logSystemAction('Config (Acessos)', 'Edição', `Redefinição de acesso (Aluno: ${resetModal.aluno.nome})`, { registroId: resetModal.aluno.id })
+      } else {
+        alert(data.error || 'Erro ao reiniciar acesso.');
       }
-      return u
-    }))
-
-    const allPass = JSON.parse(localStorage.getItem('edu-user-passwords') || '{}')
-    delete allPass[existingAuth.id]
-    localStorage.setItem('edu-user-passwords', JSON.stringify(allPass))
-
-    logSystemAction('Config (Acessos)', 'Edição', `Redefinição de acesso (Aluno: ${resetModal.aluno.nome})`, { registroId: existingAuth.id })
+    } catch (e) {
+      alert('Erro ao comunicar com o servidor.');
+    }
     setResetModal(null)
   }
 

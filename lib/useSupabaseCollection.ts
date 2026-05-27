@@ -343,7 +343,7 @@ export function useSupabaseArray<T>(
             .then(async r => {
               const contentType = r.headers.get('content-type')
               if (r.ok && contentType && contentType.includes('text/html')) {
-                console.error(`[useSupabaseArray] Endpoint /${endpoint} returned HTML (likely auth redirect).`)
+                r.text().then(html => console.error(`[useSupabaseArray] HTML returned from /${endpoint}:`, html.substring(0, 300)));
                 throw new Error(`Auth Redirect`)
               }
               if (!r.ok) {

@@ -120,13 +120,22 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const hasResponded = !!previousSubmission;
 
   
-  const handleCiencia = (comunicadoId: string) => {
+  const handleCiencia = async (comunicadoId: string) => {
     setComunicados(prev => prev.map(c => {
       if (c.id === comunicadoId) {
         return { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: new Date().toISOString() } }
       }
       return c
     }))
+    try {
+      const { data: dbCom } = await supabase.from('comunicados').select('dados').eq('id', comunicadoId).single();
+      if (dbCom) {
+        const dados = dbCom.dados || {};
+        const newCiencias = { ...(dados.ciencias || {}), [resolvedParams.slug]: new Date().toISOString() };
+        dados.ciencias = newCiencias;
+        await supabase.from('comunicados').update({ dados }).eq('id', comunicadoId);
+      }
+    } catch (e) { console.error('Failed to save ciencia', e) }
   }
 
   const handleDownload = (filename: string) => {
@@ -252,6 +261,15 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
         @media (max-width: 768px) {
+          .ad-comunicados-wrapper {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            margin-left: calc(-50vw + 50%) !important;
+            margin-right: calc(-50vw + 50%) !important;
+            width: 100vw !important;
+            border-radius: 0 !important;
+            padding: 24px 16px !important;
+          }
           .ad-comunicados-wrapper .ad-page-header { 
             margin-top: -12px !important; 
             margin-bottom: 16px !important; 
@@ -657,9 +675,9 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                          
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
                          ) : (
-                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>Lido</span>
+                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
                          )}
                        </div>
 

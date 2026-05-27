@@ -29,10 +29,11 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -61,6 +62,26 @@ export function ADSidebar() {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
+  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0 })
+
+  // usando useEffect do top-level (já deve estar importado ou usamos o top level)
+  useEffect(() => {
+    if (!isFamily || !alunoId || alunoId === 'colaborador') return
+    let isMounted = true
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch(`/api/agenda/notificacoes/unread?aluno_id=${alunoId}`)
+        if (res.ok && isMounted) {
+          const data = await res.json()
+          setUnreadStats(data)
+        }
+      } catch (e) {}
+    }
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 30000)
+    return () => { isMounted = false; clearInterval(interval) }
+  }, [isFamily, alunoId])
+
   const getBadgeValue = (id: string) => {
     if (id === 'comunicados') {
       // Para admin: número de rascunhos e agendados
@@ -80,6 +101,135 @@ export function ADSidebar() {
       return (momentosFeed || []).filter(m => m.status === 'pending').length || undefined
     }
     return undefined
+  }
+
+  const isMobile = useIsMobile()
+
+  if (isMobile) {
+    let mobileTabs: any[] = []
+    
+    if (!isFamily && alunoId !== "colaborador" && !alunoId) {
+      mobileTabs = [
+        { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
+        { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
+        { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
+        { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/admin/conversas' },
+        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
+        { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
+        { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
+        { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
+        { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' }
+      ]
+    } else if (alunoId) {
+      mobileTabs = [
+        { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/${alunoId}/conversas`, badgeVal: unreadStats.unreadChat || undefined },
+        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
+        { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
+        { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
+        { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
+        { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
+        { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
+        { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
+      ].filter(item => {
+        if (alunoId === 'colaborador') {
+          return ['comunicados', 'mensagens', 'fotos/vídeos', 'Frequência', 'Ocorrências', 'Notas', 'Agenda', 'Perfil'].includes(item.label)
+        }
+        return true
+      })
+    }
+
+    return (
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: 'rgba(10, 12, 26, 0.85)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+        zIndex: 9999,
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+        boxShadow: '0 -10px 40px rgba(0,0,0,0.5)'
+      }}>
+        {/* Borda Neon Animada */}
+        <div className="animated-neon-border" />
+        
+        
+        <div className="no-scrollbar" style={{ 
+           display: 'flex', 
+           alignItems: 'center', 
+           overflowX: 'auto', 
+           padding: '12px 16px 8px',
+           gap: 4,
+           scrollSnapType: 'x mandatory'
+        }}>
+          {mobileTabs.map((item, idx) => {
+            const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
+            const badge = item.badgeVal !== undefined ? item.badgeVal : getBadgeValue(item.id)
+            
+            return (
+              <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 76, scrollSnapAlign: 'start' }}>
+                <motion.div 
+                  whileTap={{ scale: 0.9 }}
+                  style={{
+                    position: 'relative',
+                    width: 48, height: 32,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 16,
+                    background: isActive ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
+                    color: isActive ? '#00D2FF' : 'rgba(255,255,255,0.4)',
+                    transition: 'all 0.3s',
+                    boxShadow: isActive ? '0 0 15px rgba(0,210,255,0.2)' : 'none'
+                  }}
+                >
+                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 8px rgba(0, 210, 255, 0.5))' : 'none' }} />
+                  {badge && (
+                    <div style={{ 
+                      position: 'absolute', top: -6, right: 0, 
+                      background: 'linear-gradient(135deg, #FF0080, #7928ca)', 
+                      color: 'white', fontSize: 10, fontWeight: 800, 
+                      padding: '0 5px', borderRadius: 10, 
+                      border: '2px solid #0a0c1a', minWidth: 16, textAlign: 'center',
+                      boxShadow: '0 0 8px rgba(255,0,128,0.5)'
+                    }}>
+                      {badge}
+                    </div>
+                  )}
+                </motion.div>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? 'white' : 'rgba(255,255,255,0.4)', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>
+                  {item.label}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+        <style dangerouslySetInnerHTML={{__html: `
+          .no-scrollbar::-webkit-scrollbar { display: none; }
+          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+          @keyframes border-sweep {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          .animated-neon-border {
+            position: absolute;
+            top: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #FF0080, #7928CA, #00D2FF, #7928CA, #FF0080);
+            background-size: 200% 200%;
+            animation: border-sweep 3s linear infinite;
+            box-shadow: 0 0 12px rgba(255, 0, 128, 0.6), 0 0 15px rgba(0, 210, 255, 0.5);
+            z-index: 10;
+          }
+        `}} />
+      </div>
+    )
   }
 
   return (

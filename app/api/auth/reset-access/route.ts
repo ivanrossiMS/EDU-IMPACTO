@@ -28,10 +28,21 @@ export async function POST(request: Request) {
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sys.id).catch(() => ({ data: { user: null } }))
         if (user) return user.id
       }
-      // 2. Fallback: listUsers pequeno
-      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 50 })
-      const found = list?.users?.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-      return found?.id || null
+      // 2. Fallback: listUsers grande
+      let foundUser = null;
+      let page = 1;
+      while (page <= 5) { // Busca até 5000 usuários
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 })
+        if (!list || !list.users || list.users.length === 0) break;
+        const found = list.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
+        if (found) {
+          foundUser = found.id;
+          break;
+        }
+        if (list.users.length < 1000) break;
+        page++;
+      }
+      return foundUser;
     }
 
     if (type === 'responsavel') {
@@ -69,14 +80,25 @@ export async function POST(request: Request) {
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       const realEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
 
-      // Tenta primeiro pelo email virtual, depois pelo email real
-      targetAuthUserId = await findAuthByEmail(virtualEmail)
-      if (!targetAuthUserId && realEmail) {
-        targetAuthUserId = await findAuthByEmail(realEmail)
+      // Tenta apagar os dois se existirem para garantir reset total
+      const idsToDelete = [];
+      const virtualAuthId = await findAuthByEmail(virtualEmail);
+      if (virtualAuthId) idsToDelete.push(virtualAuthId);
+      
+      if (realEmail) {
+        const realAuthId = await findAuthByEmail(realEmail);
+        if (realAuthId && realAuthId !== virtualAuthId) {
+          idsToDelete.push(realAuthId);
+        }
       }
-      if (targetAuthUserId) {
-        const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(targetAuthUserId).catch(() => ({ data: { user: null } }))
-        emailFound = user?.email || null
+      
+      if (idsToDelete.length > 0) {
+        for (const authId of idsToDelete) {
+          const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(authId).catch(() => ({ data: { user: null } }))
+          if (user?.email) emailFound = (emailFound ? emailFound + ', ' + user.email : user.email)
+          await supabaseAdmin.auth.admin.deleteUser(authId).catch(() => {})
+        }
+        return NextResponse.json({ ok: true, message: `Acesso reiniciado com sucesso para: ${emailFound}` })
       }
     } else if (type === 'system_user') {
       // Find system user

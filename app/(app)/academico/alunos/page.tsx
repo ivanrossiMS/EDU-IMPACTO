@@ -39,7 +39,7 @@ function formatName(fullName: string) {
 }
 
 export default function AlunosPage() {
-  const { cfgNiveisEnsino, logSystemAction } = useData()
+  const { cfgNiveisEnsino, cfgCalendarioLetivo, logSystemAction } = useData()
   const queryClient = useQueryClient()
   
   const [busca, setBusca] = useState('')
@@ -146,9 +146,7 @@ export default function AlunosPage() {
       isOutro: false,
       proibido: false
     }],
-    turma: {
-      serieTurma: ''
-    }
+    historicoTurmas: [] as any[]
   })
 
   const handleInputChange = (section: string, field: string, value: any, index?: number) => {
@@ -220,7 +218,7 @@ export default function AlunosPage() {
       responsaveis: [{
         id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false
       }],
-      turma: { serieTurma: '' }
+      historicoTurmas: []
     })
     setEditingAlunoId(null)
     setMostrarFormResponsavel(false)
@@ -279,11 +277,14 @@ export default function AlunosPage() {
     }
 
     // 3. Turma validation
-    if (!segmentoSelecionado) {
-      errors.push({ field: 'segmento', label: 'Segmento', tab: 'turma', tabLabel: 'Vínculo de Turma' })
-    }
-    if (!formData.turma.serieTurma) {
-      errors.push({ field: 'serieTurma', label: 'Série / Turma', tab: 'turma', tabLabel: 'Vínculo de Turma' })
+    if (!formData.historicoTurmas || formData.historicoTurmas.length === 0) {
+      errors.push({ field: 'historico_empty', label: 'Adicione pelo menos um vínculo de turma', tab: 'turma', tabLabel: 'Vínculo de Turma' })
+    } else {
+      formData.historicoTurmas.forEach((hist, index) => {
+        const suffix = ` (Vínculo #${index + 1})`
+        if (!hist.anoLetivo) errors.push({ field: `hist_${index}_anoLetivo`, label: `Ano Letivo${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
+        if (!hist.serieTurma) errors.push({ field: `hist_${index}_serieTurma`, label: `Série / Turma${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
+      })
     }
 
     return errors
@@ -302,7 +303,7 @@ export default function AlunosPage() {
       ...formData.aluno,
       responsavel: formData.responsaveis[0] || null,
       responsaveis: formData.responsaveis,
-      turma: formData.turma.serieTurma
+      historicoTurmas: formData.historicoTurmas
     }
     
     const method = editingAlunoId ? 'PUT' : 'POST'
@@ -366,9 +367,15 @@ export default function AlunosPage() {
         ...r, 
         diasAcesso: r.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'] 
       })),
-      turma: {
-        serieTurma: turmaDoAluno?.id || aluno.turma || ''
-      }
+      historicoTurmas: (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
+        ? aluno.dados.historicoTurmas 
+        : (aluno.turma ? [{
+            id: `HIST-${Date.now()}`,
+            anoLetivo: aluno.dados?.anoLetivo || aluno.ano_letivo || new Date().getFullYear().toString(),
+            segmento: segmento,
+            serieTurma: turmaDoAluno?.id || aluno.turma || '',
+            status: 'Matriculado'
+          }] : [])
     })
     setEditingAlunoId(aluno.id)
     setMostrarFormResponsavel(!!aluno.responsavel)
@@ -1728,52 +1735,137 @@ export default function AlunosPage() {
                 </div>
               )}
 
-              {/* TAB: TURMA */}
+              {/* TAB: TURMA (HISTÓRICO) */}
               {activeTab === 'turma' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento *</label>
-                    <select 
-                      className="form-input" 
-                      style={{ borderColor: hasError('segmento') ? '#ef4444' : undefined, boxShadow: hasError('segmento') ? '0 0 0 1px #ef4444' : undefined }}
-                      value={segmentoSelecionado} 
-                      onChange={e => {
-                        setSegmentoSelecionado(e.target.value)
-                        handleInputChange('turma', 'serieTurma', '') // Reset turma
-                        if (hasError('segmento')) {
-                          setValidationErrors(prev => prev.filter(err => err.field !== 'segmento'));
-                        }
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', margin: 0 }}>Histórico de Turmas</h3>
+                      <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>Gerencie os vínculos do aluno com turmas e anos letivos.</p>
+                    </div>
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serieTurma: '' }];
+                        setFormData(prev => ({ ...prev, historicoTurmas: novoHist }));
                       }}
+                      style={{ background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
                     >
-                      <option value="">Selecione o segmento…</option>
-                      {cfgNiveisEnsino?.map((n: any) => (
-                        <option key={n.id} value={n.nome}>{n.nome}</option>
-                      ))}
-                    </select>
+                      <Plus size={16} /> Adicionar Vínculo
+                    </button>
                   </div>
+                  
+                  {hasError('historico_empty') && (
+                    <div style={{ padding: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>
+                      É necessário adicionar pelo menos um vínculo de turma.
+                    </div>
+                  )}
 
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série / Turma *</label>
-                    <select 
-                      className="form-input" 
-                      style={{ borderColor: hasError('serieTurma') ? '#ef4444' : undefined, boxShadow: hasError('serieTurma') ? '0 0 0 1px #ef4444' : undefined }}
-                      value={formData.turma.serieTurma} 
-                      onChange={e => {
-                        handleInputChange('turma', 'serieTurma', e.target.value);
-                        if (hasError('serieTurma')) {
-                          setValidationErrors(prev => prev.filter(err => err.field !== 'serieTurma'));
-                        }
-                      }}
-                      disabled={!segmentoSelecionado}
-                    >
-                      <option value="">Selecione a turma…</option>
-                      {todasTurmas
-                        .filter((t: any) => t.dados?.segmento === segmentoSelecionado)
-                        .map((t: any) => (
-                          <option key={t.id} value={t.id}>{t.nome} ({t.serie})</option>
-                        ))}
-                    </select>
-                  </div>
+
+
+                  {(() => {
+                    const sortedIndices = formData.historicoTurmas
+                      .map((_, originalIndex) => originalIndex)
+                      .reverse();
+
+                    return sortedIndices.map((originalIndex, sortedPos) => {
+                      const hist = formData.historicoTurmas[originalIndex];
+                      const index = originalIndex;
+                      const isActive = sortedPos === 0;
+                      const badgeBg = isActive ? '#dcfce7' : '#fef08a';
+                      const badgeColor = isActive ? '#166534' : '#854d0e';
+                      const badgeText = isActive ? 'Matriculado (Cursando)' : 'Histórico (Anterior)';
+                      
+                      return (
+                        <div key={hist.id || index} style={{ background: '#f8fafc', border: `1px solid ${isActive ? '#86efac' : '#e2e8f0'}`, borderRadius: 12, padding: 16, position: 'relative' }}>
+                          <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 8 }}>
+                            <button 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                const newHist = formData.historicoTurmas.filter((_, i) => i !== index);
+                                setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                              }}
+                              style={{ background: 'white', color: '#ef4444', border: '1px solid #fee2e2', padding: 6, borderRadius: 6, cursor: 'pointer' }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                            <h4 style={{ fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>Vínculo #{sortedPos + 1}</h4>
+                            <span style={{ background: badgeBg, color: badgeColor, fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 4, textTransform: 'uppercase' }}>
+                              {badgeText}
+                            </span>
+                          </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Ano Letivo *</label>
+                          <select 
+                            className="form-input" 
+                            style={{ borderColor: hasError(`hist_${index}_anoLetivo`) ? '#ef4444' : undefined, boxShadow: hasError(`hist_${index}_anoLetivo`) ? '0 0 0 1px #ef4444' : undefined }}
+                            value={hist.anoLetivo} 
+                            onChange={e => {
+                              const newHist = [...formData.historicoTurmas];
+                              newHist[index].anoLetivo = e.target.value;
+                              setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                              if (hasError(`hist_${index}_anoLetivo`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_anoLetivo`));
+                            }}
+                          >
+                            <option value="">Selecione o ano...</option>
+                            {cfgCalendarioLetivo?.map((c: any) => (
+                              <option key={c.id} value={c.ano}>{c.ano}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento</label>
+                          <select 
+                            className="form-input" 
+                            value={hist.segmento} 
+                            onChange={e => {
+                              const newHist = [...formData.historicoTurmas];
+                              newHist[index].segmento = e.target.value;
+                              newHist[index].serieTurma = ''; // Reset turma ao mudar segmento
+                              setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                            }}
+                          >
+                            <option value="">Selecione o segmento...</option>
+                            {cfgNiveisEnsino?.map((n: any) => (
+                              <option key={n.id} value={n.nome}>{n.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série / Turma *</label>
+                          <select 
+                            className="form-input" 
+                            style={{ borderColor: hasError(`hist_${index}_serieTurma`) ? '#ef4444' : undefined, boxShadow: hasError(`hist_${index}_serieTurma`) ? '0 0 0 1px #ef4444' : undefined }}
+                            value={hist.serieTurma} 
+                            onChange={e => {
+                              const newHist = [...formData.historicoTurmas];
+                              newHist[index].serieTurma = e.target.value;
+                              setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                              if (hasError(`hist_${index}_serieTurma`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_serieTurma`));
+                            }}
+                            disabled={!hist.segmento}
+                          >
+                            <option value="">Selecione a turma...</option>
+                            {todasTurmas
+                              .filter((t: any) => t.dados?.segmento === hist.segmento)
+                              .map((t: any) => (
+                                <option key={t.id} value={t.id}>{t.nome} ({t.serie})</option>
+                              ))}
+                          </select>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
                   
                   <div style={{ background: 'rgba(59,130,246,0.05)', padding: '16px 20px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1d4ed8' }}>
@@ -1781,7 +1873,7 @@ export default function AlunosPage() {
                     </div>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0 }}>Dica de Secretário</p>
-                      <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>Vincular o aluno a uma turma automaticamente gera sua agenda de aulas e horários.</p>
+                      <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>O último vínculo adicionado será considerado como a turma atual (Matriculado) do aluno para acesso às agendas e catracas do ano vigente.</p>
                     </div>
                   </div>
                 </div>

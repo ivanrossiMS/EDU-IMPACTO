@@ -25,11 +25,12 @@ export async function POST(request: Request) {
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
-    const { rows, mapping, config, tipoResponsavelConfig, hasHeaders, headers, step } = body as { 
+    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step } = body as { 
       rows: any[][]; 
       mapping: Record<string, string>; 
       config: string;
       tipoResponsavelConfig?: 'acrescentar' | 'substituir';
+      tipoTurmaConfig?: 'acrescentar' | 'substituir';
       hasHeaders: boolean;
       headers: any[] | null;
       step?: number;
@@ -148,9 +149,13 @@ export async function POST(request: Request) {
         }
 
         // Resolver nome da turma para ID (Normalizado)
+        let resolvedTurmaId = ''
+        let resolvedSegmento = ''
         if (alunoData.turma) {
           const found = turmasMap.get(normalize(alunoData.turma))
           if (found) {
+            resolvedTurmaId = found.id
+            resolvedSegmento = found.segmento || ''
             filteredAlunoData.turma = found.id
             if (found.segmento) {
               if (!filteredAlunoData.dados) filteredAlunoData.dados = {}
@@ -239,6 +244,33 @@ export async function POST(request: Request) {
         if (alunoData.autorizadoSairSozinho !== undefined) {
           if (!finalAlunoData.dados) finalAlunoData.dados = {}
           finalAlunoData.dados.autorizadoSairSozinho = String(alunoData.autorizadoSairSozinho).toLowerCase() === 'sim' || alunoData.autorizadoSairSozinho === true
+        }
+
+        // Processar Histórico de Turmas
+        if (alunoData.turma && resolvedTurmaId) {
+          const novoVinculo = {
+            id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),
+            segmento: resolvedSegmento,
+            serieTurma: resolvedTurmaId
+          }
+          
+          if (!finalAlunoData.dados) finalAlunoData.dados = {}
+          const historicoAnterior = Array.isArray(existingAluno?.dados?.historicoTurmas) ? existingAluno.dados.historicoTurmas : []
+          
+          if (tipoTurmaConfig === 'substituir') {
+            finalAlunoData.dados.historicoTurmas = [novoVinculo]
+          } else {
+            // Evita duplicar se já existir exatamente a mesma turma e ano letivo
+            const jaExiste = historicoAnterior.some((h: any) => h.serieTurma === resolvedTurmaId && String(h.anoLetivo) === String(novoVinculo.anoLetivo))
+            
+            if (!jaExiste) {
+              finalAlunoData.dados.historicoTurmas = [...historicoAnterior, novoVinculo]
+            }
+          }
+          
+          // Sempre define a turma recém importada como a turma atual
+          finalAlunoData.turma = resolvedTurmaId
         }
 
         // Salvar Aluno

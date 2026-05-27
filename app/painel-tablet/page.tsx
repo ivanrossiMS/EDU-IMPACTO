@@ -11,7 +11,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { RFIDInput, RFIDInputHandle } from '@/components/saida/RFIDInput'
 import {
   Scan, X, Tablet, ShieldOff, Phone, Search,
-  GraduationCap, CheckCircle2, Clock, Megaphone, Tag
+  GraduationCap, CheckCircle2, Clock, Megaphone,
 } from 'lucide-react'
 
 // ─── CSS vars standalone + animações ──────────────────────────────────────────
@@ -163,23 +163,23 @@ function StudentCard({
         animationDelay: `${index * 90}ms`,
         borderRadius: 24,
         overflow: 'hidden',
-        border: `1px solid ${isProibido ? 'rgba(239,68,68,0.3)' : alreadyCalled ? 'rgba(245,158,11,0.3)' : 'rgba(6,182,212,0.3)'}`,
-        background: '#0f172a',
-        boxShadow: blocked ? 'none' : `0 8px 32px rgba(0,0,0,0.5)`,
+        border: `2px solid ${isProibido ? 'rgba(239,68,68,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
+        background: isProibido ? 'rgba(239,68,68,0.04)' : '#0f1c2e',
+        boxShadow: blocked ? 'none' : `0 8px 48px ${accent}20, 0 2px 12px rgba(0,0,0,0.4)`,
         cursor: blocked ? 'not-allowed' : 'pointer',
         display: 'flex', flexDirection: 'column',
         userSelect: 'none',
       }}
     >
-      {/* ── PHOTO AREA — portrait 4/5 ──────────────────────────────────── */}
+      {/* ── PHOTO AREA — square 1:1 ──────────────────────────────────── */}
       <div style={{
-        position: 'relative', width: '100%', aspectRatio: '4/5',
+        position: 'relative', width: '100%', aspectRatio: '1/1',
         background: foto ? 'transparent' : `linear-gradient(145deg, ${accentDim}, rgba(0,0,0,0.35))`,
         overflow: 'hidden',
         flexShrink: 0,
       }}>
         {foto ? (
-          <Image src={foto} alt={aluno.nome} width={400} height={500} style={{
+          <Image src={foto} alt={aluno.nome} width={400} height={400} style={{
             width: '100%', height: '100%', objectFit: 'cover',
             filter: (blocked && !alreadyCalled) ? 'grayscale(70%) brightness(0.6)' : 'none',
             transition: 'filter 0.3s',
@@ -189,93 +189,98 @@ function StudentCard({
             width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
+            {/* Avatar: doubled size (200px), rounded-square */}
             <div style={{
-              width: 140, height: 140, borderRadius: '50%',
-              background: `linear-gradient(135deg, ${accent}55, ${accent}18)`,
-              border: `2px solid ${accent}50`,
+              width: 200, height: 200, borderRadius: 36,
+              background: `linear-gradient(145deg, ${accent}55, ${accent}18)`,
+              border: `4px solid ${accent}50`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 900, fontSize: 52, color: '#fff',
+              fontWeight: 900, fontSize: 82, color: '#fff',
               fontFamily: 'Outfit, sans-serif',
-              boxShadow: `0 8px 30px ${accent}30`,
+              letterSpacing: '-4px',
+              boxShadow: `0 16px 60px ${accent}30, inset 0 1px 0 rgba(255,255,255,0.12)`,
             }}>{initials}</div>
           </div>
         )}
 
-        {/* Gradient overlay at bottom of photo */}
+        {/* Gradient overlay at bottom */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%',
-          background: 'linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0.7) 40%, transparent 100%)',
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
+          background: 'linear-gradient(to top, rgba(10,18,30,0.98) 0%, rgba(10,18,30,0.6) 50%, transparent 100%)',
           pointerEvents: 'none',
         }}/>
 
         {/* Status badge top-right */}
         <div style={{
-          position: 'absolute', top: 14, right: 14,
-          padding: '6px 14px', borderRadius: 100,
-          fontSize: 10, fontWeight: 900, letterSpacing: '0.04em',
+          position: 'absolute', top: 12, right: 12,
+          padding: '5px 12px', borderRadius: 100,
+          fontSize: 10, fontWeight: 900, letterSpacing: '0.06em',
+          backdropFilter: 'blur(8px)',
           background: isProibido
-            ? '#ef4444'
+            ? 'rgba(239,68,68,0.9)'
             : alreadyCalled
-              ? '#f59e0b'
-              : '#0ea5e9',
+              ? 'rgba(245,158,11,0.9)'
+              : 'rgba(6,182,212,0.9)',
           color: '#fff',
           display: 'flex', alignItems: 'center', gap: 5,
-          boxShadow: `0 4px 16px rgba(0,0,0,0.3)`,
+          boxShadow: `0 2px 12px ${accent}50`,
         }}>
           {isProibido
-            ? <><ShieldOff size={12}/> BLOQUEADO</>
+            ? <><ShieldOff size={10}/> BLOQUEADO</>
             : alreadyCalled
-              ? <><Clock size={12}/> EM CHAMADA</>
-              : <><CheckCircle2 size={12}/> AUTORIZADO</>}
+              ? <><Clock size={10}/> EM CHAMADA</>
+              : <><CheckCircle2 size={10}/> AUTORIZADO</>}
         </div>
 
         {/* Turma chip top-left */}
         <div style={{
-          position: 'absolute', top: 14, left: 14,
-          padding: '6px 12px', borderRadius: 100,
-          fontSize: 10, fontWeight: 800, letterSpacing: '0.02em',
-          backdropFilter: 'blur(12px)',
-          background: 'rgba(255,255,255,0.1)',
-          color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 6,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          position: 'absolute', top: 12, left: 12,
+          padding: '4px 10px', borderRadius: 8,
+          fontSize: 11, fontWeight: 800, letterSpacing: '0.04em',
+          backdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.6)',
+          color: 'rgba(255,255,255,0.9)',
+          display: 'flex', alignItems: 'center', gap: 5,
+          border: '1px solid rgba(255,255,255,0.1)',
         }}>
-          <GraduationCap size={12}/> {aluno.turmaNome || aluno.turma || '—'}
+          <GraduationCap size={10}/> {aluno.turmaNome || aluno.turma || '—'}
         </div>
 
         {/* Name overlay at bottom of photo */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          padding: '20px 20px 16px',
+          padding: '12px 18px 14px',
         }}>
           <div style={{
-            fontWeight: 800, fontSize: 18, color: '#fff',
-            lineHeight: 1.25, letterSpacing: '-0.02em',
+            fontWeight: 900, fontSize: 18, color: '#fff',
+            lineHeight: 1.2, letterSpacing: '-0.02em',
+            textShadow: '0 2px 8px rgba(0,0,0,0.8)',
           }}>{aluno.nome}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
             {aluno.turno}{aluno.serie ? ` · ${aluno.serie}` : ''}
             {aluno.id ? ` · Cód. ${aluno.id}` : ''}
           </div>
         </div>
       </div>
 
-      {/* ── INFO BAR (Solid Dark) ──────────────────────────────────────────────────── */}
+      {/* ── INFO BAR ──────────────────────────────────────────────────── */}
       <div style={{
-        padding: '16px 20px',
+        padding: '14px 18px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12,
-        background: 'transparent',
+        background: 'rgba(0,0,0,0.3)',
+        borderTop: `1px solid ${accent}30`,
       }}>
         {/* Left info */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
           {isProibido && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 12, fontWeight: 700 }}>
-              <ShieldOff size={12}/> Proibido de retirar
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f87171', fontSize: 12, fontWeight: 800 }}>
+              <ShieldOff size={12}/> Proibido de retirar este aluno
             </div>
           )}
           {!isProibido && !diaOk && (
             <div style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>
-              ⚠ Apenas: {(aut?.diasSemana||[]).join(', ')}
+              ⚠ Permitido apenas: {(aut?.diasSemana||[]).join(', ')}
             </div>
           )}
           {alreadyCalled && !isProibido && diaOk && (
@@ -284,13 +289,13 @@ function StudentCard({
             </div>
           )}
           {!blocked && !alreadyCalled && (
-            <div style={{ fontSize: 12, color: isProibido ? '#ef4444' : '#0ea5e9', fontWeight: 600 }}>
+            <div style={{ fontSize: 12, color: `${accent}cc`, fontWeight: 600 }}>
               Toque para chamar o aluno
             </div>
           )}
           {aut?.rfid && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: 1 }}>
-              <Tag size={10}/> {aut.rfid}
+            <div style={{ fontSize: 10, color: '#334155', fontFamily: 'monospace', letterSpacing: 1 }}>
+              📡 {aut.rfid}
             </div>
           )}
         </div>
@@ -301,31 +306,32 @@ function StudentCard({
             onClick={handleRecall}
             disabled={recalling}
             style={{
-              padding: '0 16px', height: 48, borderRadius: 14, flexShrink: 0,
-              background: recalling ? 'rgba(245,158,11,0.1)' : '#f59e0b',
-              border: 'none',
+              padding: '10px 16px', borderRadius: 14, flexShrink: 0,
+              background: recalling ? 'rgba(245,158,11,0.08)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: recalling ? '1px solid rgba(245,158,11,0.3)' : 'none',
               color: recalling ? '#f59e0b' : '#fff',
-              fontWeight: 800, fontSize: 12, cursor: recalling ? 'default' : 'pointer',
+              fontWeight: 900, fontSize: 12, cursor: recalling ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', gap: 7,
-              boxShadow: recalling ? 'none' : '0 4px 12px rgba(245,158,11,0.3)',
+              boxShadow: recalling ? 'none' : '0 4px 16px rgba(245,158,11,0.4)',
               transition: 'all 0.2s', whiteSpace: 'nowrap',
             }}>
-            <Megaphone size={16}/>
+            <Megaphone size={14}/>
             {recalling ? 'Chamando...' : 'Chamar Novamente'}
           </button>
         ) : (
         <div style={{
-          width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+          width: 54, height: 54, borderRadius: 16, flexShrink: 0,
           background: blocked
-            ? 'rgba(255,255,255,0.05)'
-            : '#0ea5e9',
+            ? 'rgba(255,255,255,0.04)'
+            : `linear-gradient(135deg, #06b6d4, #6366f1)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: blocked ? 'none' : `0 4px 12px rgba(14,165,233,0.3)`,
+          boxShadow: blocked ? 'none' : `0 6px 20px ${accent}45`,
+          border: blocked ? '1px solid rgba(255,255,255,0.06)' : 'none',
           transition: 'all 0.2s',
         }}>
           {isProibido
-            ? <ShieldOff size={20} color="rgba(239,68,68,0.8)"/>
-            : <Megaphone size={20} color="#fff"/>}
+            ? <ShieldOff size={22} color="#ef444480"/>
+            : <Megaphone size={22} color="#fff"/>}
         </div>
         )}
       </div>
@@ -446,6 +452,7 @@ function PainelTabletContent() {
   const [matchedGuardianName, setMatchedGuardianName] = useState('')
   const [matchedGuardianRole, setMatchedGuardianRole] = useState('')
   const [rfidStudents,        setRfidStudents]        = useState<any[]>([])
+  const [isProcessingRFID,    setIsProcessingRFID]    = useState(false)
   
   // Manual search states
   const [search,              setSearch]              = useState('')
@@ -514,7 +521,7 @@ function PainelTabletContent() {
   }, [])
 
   // ── RFID handler ───────────────────────────────────────────────────────────
-  const handleRFID = useCallback(async (code: string) => {
+  const handleRFIDCore = useCallback(async (code: string) => {
     setRfidError(null)
     setBlockInfo(null)
 
@@ -676,7 +683,16 @@ function PainelTabletContent() {
     setRfidStudents(students)
     setRfidCode(code)
     setMode('rfid')
-  }, [showToast, blockAttempt, doBlockReset])
+  }, [showToast, blockAttempt, doBlockReset, cachedResponsaveis, cacheRefetch])
+
+  const handleRFID = useCallback(async (code: string) => {
+    setIsProcessingRFID(true)
+    try {
+      await handleRFIDCore(code)
+    } finally {
+      setIsProcessingRFID(false)
+    }
+  }, [handleRFIDCore])
 
   // ── Call student ───────────────────────────────────────────────────────────
   const handleCall = useCallback((a: any) => {
@@ -808,142 +824,87 @@ function PainelTabletContent() {
 </motion.div>
 )}</AnimatePresence>
 
-      {/* ── HEADER ────────────────────────────────────────────────────── */}
-      <div style={{
-        background: 'linear-gradient(135deg, #080f1c 0%, #0d1b2e 100%)',
-        borderBottom: '1px solid rgba(6,182,212,0.18)',
-        padding: isMobile ? '14px 16px' : '16px 32px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 50, gap: 12,
-        boxShadow: '0 4px 30px rgba(0,0,0,0.4)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-          <div style={{
-            width: isMobile ? 38 : 46, height: isMobile ? 38 : 46, borderRadius: 14, flexShrink: 0,
-            background: 'linear-gradient(135deg, #06b6d4, #6366f1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 24px rgba(6,182,212,0.4)',
-          }}>
-            <Tablet size={isMobile ? 18 : 22} color="#fff"/>
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 17, color: '#f1f5f9', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
-              PORTARIA · CONTROLE DE SAÍDA
-            </div>
-            {!isMobile && (
-              <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, marginTop: 1 }}>
-                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          {/* Connection Status Badge */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            borderRadius: 10,
-            fontSize: 10,
-            fontWeight: 900,
-            letterSpacing: '0.05em',
-            background: realtimeStatus === 'online' ? 'rgba(16,185,129,0.12)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
-            border: `1px solid ${realtimeStatus === 'online' ? 'rgba(16,185,129,0.25)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
-            color: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
-            transition: 'all 0.3s ease',
-          }}>
-            <div style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
-              boxShadow: `0 0 6px ${realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444'}`,
-              animation: realtimeStatus !== 'online' ? 'pulseUrgent 1.5s infinite' : 'none'
-            }} />
-            <span style={{ textTransform: 'uppercase' }}>
-              {realtimeStatus === 'online' ? 'ONLINE' : realtimeStatus === 'connecting' ? 'CONECTANDO' : 'OFFLINE'}
-            </span>
-          </div>
-
-
-          {mode !== 'idle' && (
-            <button onClick={handleReset} style={{
-              padding: isMobile ? '10px 18px' : '11px 28px', borderRadius: 12,
-              border: 'none',
-              background: 'linear-gradient(135deg, #dc2626, #ef4444)',
-              color: '#fff', cursor: 'pointer', fontWeight: 900,
-              fontSize: isMobile ? 13 : 15,
-              display: 'flex', alignItems: 'center', gap: 8,
-              boxShadow: '0 4px 16px rgba(239,68,68,0.5)',
-              transition: 'all 0.15s', letterSpacing: '0.02em',
-            }}>
-              <X size={isMobile ? 14 : 16}/> CANCELAR
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* ── MAIN CONTENT ──────────────────────────────────────────────── */}
-      <div style={{ padding: isMobile ? '24px 16px' : '36px 32px', maxWidth: 1000, margin: '0 auto' }}>
+      {/* Added bottom padding so the footer doesn't overlap content */}
+      <div style={{ padding: isMobile ? '8px 16px 100px' : '12px 32px 120px', maxWidth: 1000, margin: '0 auto' }}>
 
         {/* ── IDLE ────────────────────────────────────────────────────── */}
         {mode === 'idle' && (
           <div style={{ textAlign: 'center', padding: isMobile ? '48px 0' : '72px 0', animation: 'slideUp 0.4s ease' }}>
-            <div style={{
-              width: isMobile ? 180 : 250, height: isMobile ? 180 : 250,
-              borderRadius: '50%', margin: '0 auto 40px',
-              background: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, rgba(6,182,212,0.03) 75%)',
-              border: '2px solid rgba(6,182,212,0.35)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative',
-              boxShadow: '0 0 35px rgba(6,182,212,0.25)',
-              overflow: 'hidden',
-              animation: 'scanPulse 3s ease-in-out infinite',
-            }}>
-              {/* Spinning dashed ring */}
-              <div style={{
-                position: 'absolute', inset: 8, borderRadius: '50%',
-                border: '2px dashed rgba(6,182,212,0.25)',
-                animation: 'spinSlow 15s linear infinite',
-                pointerEvents: 'none',
-              }} />
-
-              {/* Sweeping laser line */}
-              <div style={{
-                position: 'absolute', left: 0, right: 0, height: 3,
-                background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
-                boxShadow: '0 0 14px #06b6d4, 0 0 28px #06b6d4',
-                animation: 'laserSweep 3s ease-in-out infinite',
-                zIndex: 2,
-              }} />
-
-              <Scan size={isMobile ? 76 : 108} color="#06b6d4" strokeWidth={1.1} style={{ animation: 'radarPulse 3s ease-in-out infinite', zIndex: 1 }}/>
-            </div>
-            <h2 style={{
-              fontWeight: 900,
-              fontSize: isMobile ? 32 : 48,
-              margin: '0 0 16px',
-              color: '#fff',
-              letterSpacing: '-0.04em',
-              textShadow: '0 0 24px rgba(6,182,212,0.5)',
-              animation: 'textPulse 3s ease-in-out infinite',
-            }}>
-              Aguardando Leitura
-            </h2>
-            <p style={{ fontSize: isMobile ? 15 : 18, color: '#64748b', margin: '0 0 32px', lineHeight: 1.6, fontWeight: 600 }}>
-              Aproxime o cartão RFID do responsável
-            </p>
-
-            {rfidError && (
-              <div style={{
-                marginTop: 28, padding: '14px 24px', borderRadius: 14, display: 'inline-flex',
-                background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)',
-                color: '#f87171', fontWeight: 700, fontSize: 13, alignItems: 'center', gap: 8,
-              }}>
-                ⚠ {rfidError}
+            {isProcessingRFID ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'fadeIn 0.3s' }}>
+                <div style={{ position: 'relative', width: 120, height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 30 }}>
+                  <div style={{ position: 'absolute', inset: 0, border: '4px solid rgba(6,182,212,0.1)', borderRadius: '50%' }} />
+                  <div style={{ position: 'absolute', inset: 0, border: '4px solid transparent', borderTopColor: '#06b6d4', borderRightColor: '#06b6d4', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <div style={{ position: 'absolute', inset: 12, border: '4px solid rgba(99,102,241,0.1)', borderRadius: '50%' }} />
+                  <div style={{ position: 'absolute', inset: 12, border: '4px solid transparent', borderBottomColor: '#6366f1', borderLeftColor: '#6366f1', borderRadius: '50%', animation: 'spin 1.5s linear infinite reverse' }} />
+                  <Scan size={36} color="#06b6d4" style={{ animation: 'pulse 1.5s infinite' }} />
+                </div>
+                <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: '#f1f5f9', marginBottom: 8, textShadow: '0 0 20px rgba(6,182,212,0.5)', animation: 'textPulse 1.5s ease-in-out infinite' }}>
+                  Processando Leitura...
+                </h2>
+                <p style={{ fontSize: isMobile ? 14 : 16, color: '#64748b', fontWeight: 600 }}>
+                  Validando informações do responsável
+                </p>
               </div>
+            ) : (
+              <>
+                <div style={{
+                  width: isMobile ? 180 : 250, height: isMobile ? 180 : 250,
+                  borderRadius: '50%', margin: '0 auto 40px',
+                  background: 'radial-gradient(circle, rgba(6,182,212,0.2) 0%, rgba(6,182,212,0.03) 75%)',
+                  border: '2px solid rgba(6,182,212,0.35)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  position: 'relative',
+                  boxShadow: '0 0 35px rgba(6,182,212,0.25)',
+                  overflow: 'hidden',
+                  animation: 'scanPulse 3s ease-in-out infinite',
+                }}>
+                  {/* Spinning dashed ring */}
+                  <div style={{
+                    position: 'absolute', inset: 8, borderRadius: '50%',
+                    border: '2px dashed rgba(6,182,212,0.25)',
+                    animation: 'spinSlow 15s linear infinite',
+                    pointerEvents: 'none',
+                  }} />
+
+                  {/* Sweeping laser line */}
+                  <div style={{
+                    position: 'absolute', left: 0, right: 0, height: 3,
+                    background: 'linear-gradient(90deg, transparent, #06b6d4, transparent)',
+                    boxShadow: '0 0 14px #06b6d4, 0 0 28px #06b6d4',
+                    animation: 'laserSweep 3s ease-in-out infinite',
+                    zIndex: 2,
+                  }} />
+
+                  <Scan size={isMobile ? 76 : 108} color="#06b6d4" strokeWidth={1.1} style={{ animation: 'radarPulse 3s ease-in-out infinite', zIndex: 1 }}/>
+                </div>
+
+                <h2 style={{
+                  fontWeight: 900,
+                  fontSize: isMobile ? 32 : 48,
+                  margin: '0 0 16px',
+                  color: '#fff',
+                  letterSpacing: '-0.04em',
+                  textShadow: '0 0 24px rgba(6,182,212,0.5)',
+                  animation: 'textPulse 3s ease-in-out infinite',
+                }}>
+                  Aguardando Leitura
+                </h2>
+                <p style={{ fontSize: isMobile ? 15 : 18, color: '#64748b', margin: '0 0 32px', lineHeight: 1.6, fontWeight: 600 }}>
+                  Aproxime o cartão RFID do responsável
+                </p>
+
+                {rfidError && (
+                  <div style={{
+                    marginTop: 28, padding: '14px 24px', borderRadius: 14, display: 'inline-flex',
+                    background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)',
+                    color: '#f87171', fontWeight: 700, fontSize: 13, alignItems: 'center', gap: 8,
+                  }}>
+                    ⚠ {rfidError}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -966,20 +927,17 @@ function PainelTabletContent() {
                 <div style={{
                   width: isMobile ? 58 : 72, height: isMobile ? 58 : 72,
                   borderRadius: '50%', flexShrink: 0,
-                  background: '#0ea5e9',
-                  border: 'none',
+                  background: 'linear-gradient(135deg, #06b6d490, #6366f140)',
+                  border: '2px solid rgba(6,182,212,0.4)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 900, fontSize: isMobile ? 24 : 28, color: '#fff',
-                  boxShadow: 'inset 0 -2px 10px rgba(0,0,0,0.2)',
+                  fontWeight: 900, fontSize: isMobile ? 24 : 30, color: '#fff',
+                  boxShadow: '0 4px 20px rgba(6,182,212,0.3)',
                 }}>
                   {(matchedGuardianName[0] || '?').toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, color: '#10b981', letterSpacing: '0.05em', marginBottom: 6 }}>
-                    <div style={{ background: '#10b981', color: '#fff', borderRadius: 4, width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <CheckCircle2 size={10} strokeWidth={3}/>
-                    </div>
-                    RESPONSÁVEL IDENTIFICADO VIA RFID
+                  <div style={{ fontSize: 10, fontWeight: 800, color: '#475569', letterSpacing: '0.1em', marginBottom: 6 }}>
+                    ✅ RESPONSÁVEL IDENTIFICADO VIA RFID
                   </div>
                   <div style={{ fontWeight: 900, fontSize: isMobile ? 20 : 26, color: '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
                     {matchedGuardianName}
@@ -987,13 +945,12 @@ function PainelTabletContent() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{matchedGuardianRole}</span>
                     <span style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      fontSize: 10, padding: '4px 12px', borderRadius: 100,
-                      background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)',
-                      fontWeight: 700,
+                      fontSize: 10, padding: '2px 10px', borderRadius: 100,
+                      background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
+                      fontWeight: 800, border: '1px solid rgba(6,182,212,0.25)',
                       fontFamily: 'monospace', letterSpacing: 1,
                     }}>
-                      <Tag size={12}/> {rfidCode}
+                      📡 {rfidCode}
                     </span>
                     <span style={{
                       fontSize: 10, padding: '2px 10px', borderRadius: 100,
@@ -1091,24 +1048,9 @@ function PainelTabletContent() {
         {mode === 'manual' && (
           <div style={{ animation: 'slideUp 0.4s ease' }}>
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 20, color: '#f1f5f9', marginBottom: 6 }}>Busca Manual</div>
+              <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 20, color: '#f1f5f9', marginBottom: 6 }}>Resultados da Busca</div>
               <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
                 Localize o aluno e clique no responsável para chamar.
-              </div>
-              <div style={{ position: 'relative' }}>
-                <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#475569' }}/>
-                <input
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Nome, turma ou matrícula..."
-                  autoFocus
-                  style={{
-                    width: '100%', padding: '13px 14px 13px 42px', borderRadius: 14,
-                    border: '1px solid rgba(255,255,255,0.1)', background: '#0f1c2e',
-                    color: '#f1f5f9', fontSize: 14, outline: 'none', fontFamily: 'Outfit, sans-serif',
-                    boxSizing: 'border-box',
-                  }}
-                />
               </div>
             </div>
 
@@ -1260,22 +1202,117 @@ function PainelTabletContent() {
           )}
         </AnimatePresence>
 
-        {/* --- Test Input (Bottom Left) --- */}
-        <div style={{ position: 'fixed', bottom: 10, left: 10, zIndex: 9999, opacity: 0.5 }}>
+      </div>
+
+      {/* ── FOOTER ────────────────────────────────────────────────────── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #080f1c 0%, #0d1b2e 100%)',
+        borderTop: '1px solid rgba(6,182,212,0.18)',
+        padding: isMobile ? '14px 16px' : '16px 32px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50, gap: 12,
+        boxShadow: '0 -4px 30px rgba(0,0,0,0.6)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          <div style={{
+            width: isMobile ? 38 : 46, height: isMobile ? 38 : 46, borderRadius: 14, flexShrink: 0,
+            background: 'linear-gradient(135deg, #06b6d4, #6366f1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 24px rgba(6,182,212,0.4)',
+          }}>
+            <Tablet size={isMobile ? 18 : 22} color="#fff"/>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: isMobile ? 14 : 17, color: '#f1f5f9', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
+              PORTARIA · CONTROLE DE SAÍDA
+            </div>
+            {!isMobile && (
+              <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, marginTop: 1 }}>
+                {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Campo discreto para RFID centralizado na barra */}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 60 }}>
           <input
             id="test-rfid-input"
             type="text"
-            placeholder="Teste RFID..."
-            style={{ width: 120, padding: '4px 8px', fontSize: 10, background: '#111', color: '#0f0', border: '1px solid #333', borderRadius: 4 }}
+            placeholder="RFID..."
+            style={{ 
+              width: 70, padding: '4px', fontSize: 10, 
+              background: 'rgba(15, 28, 46, 0.2)', color: 'rgba(241, 245, 249, 0.15)', 
+              border: '1px solid rgba(6,182,212,0.05)', borderRadius: 6,
+              outline: 'none', textAlign: 'center',
+              backdropFilter: 'blur(2px)', transition: 'all 0.2s'
+            }}
+            onFocus={(e) => { 
+              e.target.style.color = '#f1f5f9'; 
+              e.target.style.background = 'rgba(15, 28, 46, 0.8)'; 
+              e.target.style.border = '1px solid rgba(6,182,212,0.4)';
+              e.target.style.width = '120px';
+            }}
+            onBlur={(e) => { 
+              e.target.style.color = 'rgba(241, 245, 249, 0.15)'; 
+              e.target.style.background = 'rgba(15, 28, 46, 0.2)'; 
+              e.target.style.border = '1px solid rgba(6,182,212,0.05)';
+              e.target.style.width = '70px';
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleRFID(e.currentTarget.value)
                 e.currentTarget.value = ''
+                e.currentTarget.blur()
               }
             }}
           />
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {/* Connection Status Badge */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            borderRadius: 10,
+            fontSize: 10,
+            fontWeight: 900,
+            letterSpacing: '0.05em',
+            background: realtimeStatus === 'online' ? 'rgba(16,185,129,0.12)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)',
+            border: `1px solid ${realtimeStatus === 'online' ? 'rgba(16,185,129,0.25)' : realtimeStatus === 'connecting' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+            color: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+            transition: 'all 0.3s ease',
+          }}>
+            <div style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444',
+              boxShadow: `0 0 6px ${realtimeStatus === 'online' ? '#10b981' : realtimeStatus === 'connecting' ? '#f59e0b' : '#ef4444'}`,
+              animation: realtimeStatus !== 'online' ? 'pulseUrgent 1.5s infinite' : 'none'
+            }} />
+            <span style={{ textTransform: 'uppercase' }}>
+              {realtimeStatus === 'online' ? 'ONLINE' : realtimeStatus === 'connecting' ? 'CONECTANDO' : 'OFFLINE'}
+            </span>
+          </div>
+
+          {mode !== 'idle' && (
+            <button onClick={handleReset} style={{
+              padding: isMobile ? '10px 18px' : '11px 28px', borderRadius: 12,
+              border: 'none',
+              background: 'linear-gradient(135deg, #dc2626, #ef4444)',
+              color: '#fff', cursor: 'pointer', fontWeight: 900,
+              fontSize: isMobile ? 13 : 15,
+              display: 'flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 4px 16px rgba(239,68,68,0.5)',
+              transition: 'all 0.15s', letterSpacing: '0.02em',
+            }}>
+              <X size={isMobile ? 14 : 16}/> CANCELAR
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

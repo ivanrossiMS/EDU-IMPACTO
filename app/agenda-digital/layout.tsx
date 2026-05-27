@@ -25,7 +25,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
     return (
       <FormulariosProvider>
         <SaidaProvider>
-          <AgendaDigitalProvider>
+          <AgendaDigitalProvider isFamily={isFamily}>
             <AgendaDigitalLayoutInner>
               {children}
             </AgendaDigitalLayoutInner>
@@ -40,7 +40,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
       <FormulariosProvider>
         <RelatoriosProvider>
           <SaidaProvider>
-            <AgendaDigitalProvider>
+            <AgendaDigitalProvider isFamily={isFamily}>
               <AgendaDigitalLayoutInner>
                 {children}
               </AgendaDigitalLayoutInner>
@@ -138,7 +138,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
 
           @media (max-width: 1024px) {
-            .ad-sidebar-container { display: none; }
+            /* .ad-sidebar-container handled by component logic */
           }
           
           @media (max-width: 768px) {
@@ -165,6 +165,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             }
             .ad-content-inner {
               padding: 16px !important;
+              padding-bottom: 100px !important;
             }
             .ad-content-inner.ad-has-banner {
               margin-top: 0 !important;

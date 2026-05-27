@@ -205,57 +205,16 @@ export async function POST(request: NextRequest) {
     let aluno_id = ''
 
     // 1. Check system_users
-    const { data: dbSystemUser } = await supabaseAdmin
-      .from('system_users')
-      .select('id, nome, email, cargo, perfil, status')
-      .or(`id.eq."${user.id}",email.eq."${user.email}"`)
-      .maybeSingle()
-
-    if (dbSystemUser) {
-      dbRecordExists = true
-      if (dbSystemUser.status === 'inativo') {
-        const supabaseSignOut = createServerClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          {
-            cookies: {
-              getAll() { return request.cookies.getAll() },
-              setAll(cookiesToSet) {
-                cookiesToSet.forEach(({ name, value, options }) => {
-                  response.cookies.set(name, value, { ...options, maxAge: 0 })
-                })
-              },
-            },
-          }
-        )
-        await supabaseSignOut.auth.signOut()
-        return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 403 })
-      }
-      nome   = dbSystemUser.nome   || nome
-      cargo  = dbSystemUser.cargo  || cargo
-      perfil = dbSystemUser.perfil || perfil
-    } else {
-      // 2. Check responsaveis
-      const { data: dbResp } = await supabaseAdmin
-        .from('responsaveis')
-        .select('id, nome, email')
-        .or(`id.eq."${user.id}",email.eq."${user.email}"`)
+    if (userType === 'system_user') {
+      const { data: dbSystemUser } = await supabaseAdmin
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, status')
+        .eq('email', resolvedEmail)
         .maybeSingle()
 
-      if (dbResp) {
+      if (dbSystemUser) {
         dbRecordExists = true
-        responsavel_id = dbResp.id
-        // Check active financial or pedagogical links
-        const { data: links } = await supabaseAdmin
-          .from('aluno_responsavel')
-          .select('resp_financeiro, resp_pedagogico')
-          .eq('responsavel_id', dbResp.id)
-
-        const isAllowed = (links || []).some(
-          (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
-        )
-
-        if (!isAllowed) {
+        if (dbSystemUser.status === 'inativo') {
           const supabaseSignOut = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -271,30 +230,25 @@ export async function POST(request: NextRequest) {
             }
           )
           await supabaseSignOut.auth.signOut()
-          return NextResponse.json({ 
-            error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico com alunos ativos possuem login.' 
-          }, { status: 403 })
+          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 403 })
         }
-
-        nome   = dbResp.nome || nome
-        cargo  = 'Responsável'
-        perfil = 'Família'
-      } else {
-        // 3. Check alunos
-        const { data: dbAluno } = await supabaseAdmin
-          .from('alunos')
-          .select('id, nome, email, status')
-          .or(`id.eq."${user.id}",email.eq."${user.email}"`)
-          .maybeSingle()
-
-        if (dbAluno) {
-          dbRecordExists = true
-          aluno_id = dbAluno.id
-          nome   = dbAluno.nome || nome
-          cargo  = 'Aluno'
-          perfil = 'Família'
-        }
+        nome   = dbSystemUser.nome   || nome
+        cargo  = dbSystemUser.cargo  || cargo
+        perfil = dbSystemUser.perfil || perfil
       }
+    } else if (userType === 'responsavel' && responsavelRecord) {
+      dbRecordExists = true
+      responsavel_id = responsavelRecord.id
+      nome   = responsavelRecord.nome || nome
+      cargo  = 'Responsável'
+      perfil = 'Família'
+      // As permissões financeiro/pedagógico já foram checadas na linha 129
+    } else if (userType === 'aluno' && alunoRecord) {
+      dbRecordExists = true
+      aluno_id = alunoRecord.id
+      nome   = alunoRecord.nome || nome
+      cargo  = 'Aluno'
+      perfil = 'Família'
     }
 
     if (!dbRecordExists) {
@@ -313,11 +267,6 @@ export async function POST(request: NextRequest) {
         }
       )
       await supabaseSignOut.auth.signOut()
-      
-      // Se a conta de login autenticou mas não existe na base escolar, ela é deletada imediatamente
-      if (user?.id) {
-        await supabaseAdmin.auth.admin.deleteUser(user.id).catch((e: any) => console.error('Erro ao deletar conta fantasma ao logar:', e))
-      }
 
       return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 403 })
     }

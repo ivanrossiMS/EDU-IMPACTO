@@ -793,7 +793,7 @@ function buildRow(a: any) {
     id, nome, matricula, turma, serie, turno, status, email, 
     data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, 
     telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto,
-    responsaveis, _responsaveis,
+    responsaveis, _responsaveis, historicoTurmas,
     ...rest 
   } = a
 
@@ -836,11 +836,22 @@ function buildRow(a: any) {
     return val
   }
 
+  let activeTurma = turma || '';
+  
+  if (historicoTurmas && Array.isArray(historicoTurmas) && historicoTurmas.length > 0) {
+    rest.historicoTurmas = historicoTurmas;
+    // A última turma adicionada é sempre considerada a turma atual (matriculado)
+    const mainTurma = historicoTurmas[historicoTurmas.length - 1];
+      
+    activeTurma = mainTurma.serieTurma || activeTurma;
+    rest.anoLetivo = mainTurma.anoLetivo;
+  }
+
   return {
     id: finalId,
     nome: mappedNome,
     matricula: mappedMatricula,
-    turma: turma || '',
+    turma: activeTurma,
     serie: serie || '',
     turno: turno || '',
     status: mappedStatus || 'matriculado',

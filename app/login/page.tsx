@@ -274,8 +274,8 @@ export default function LoginPage() {
         setCreateLoading(false); setCreateSuccess(true)
        await new Promise(r => setTimeout(r, 2200))
        setStep('login')
-       // For alunos, login is the matricula; for others, the email
-       const loginHint = (faUser?.matricula) ? faUser.matricula : faRegEmail
+       // Preenche com o e-mail cadastrado ou a matrícula
+       const loginHint = faRegEmail ? faRegEmail : (faUser?.matricula || '')
        setEmail(loginHint)
        setFaQuery(''); setFaUser(null); setNewPass(''); setConfirmPass(''); setCreateSuccess(false)
     } catch (err: any) {
@@ -606,7 +606,7 @@ export default function LoginPage() {
                   style={{ ...baseInputStyle }} onFocus={focusOn} onBlur={focusOff} />
               </div>
               {faUser?.cargo === 'Aluno' && (
-                <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:6 }}>Seu login na plataforma será: <strong style={{color:'rgba(255,255,255,0.6)'}}>{faUser?.matricula || faUser?.id}</strong></p>
+                <p style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:6 }}>Seu login pode ser este e-mail ou sua matrícula: <strong style={{color:'rgba(255,255,255,0.6)'}}>{faUser?.matricula || faUser?.id}</strong></p>
               )}
             </div>
             {/* Nova senha */}

@@ -21,90 +21,19 @@ export default function SelecionarAluno() {
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
 
-  const [alunosRaw, , alunosStatus] = useSupabaseArray<any>('alunos?select=id,nome,turma,responsavel,responsavel_financeiro,responsavelPedagogico,emailResponsavel,email_responsavel,dados,status,foto,serie,unidade,responsaveis&limit=9999');
-  const [respsRaw, , respsStatus] = useSupabaseArray<any>('responsaveis?limit=9999');
+  // 2. Usar a nova API otimizada Ultra-Rápida
+  const isResponsavel = currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família');
+  const meusAlunosQuery = isResponsavel 
+    ? `agenda/meus-alunos?respId=${respId}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}` 
+    : '';
+
+  const [meusAlunosRaw, , meusAlunosStatus] = useSupabaseArray<any>(meusAlunosQuery, [], { refreshIntervalMs: 0 });
+  const meusAlunos: any[] = isResponsavel ? (Array.isArray(meusAlunosRaw) ? meusAlunosRaw : []) : [];
+
+  const isDataLoading = meusAlunosStatus.loading;
   
-  // Se o responsável autenticado tiver ID, filtra os vínculos apenas dele para alta performance e segurança
-  const linksQuery = respId ? `aluno-responsavel?responsavel_id=${respId}` : 'aluno-responsavel?limit=9999';
-  const [linksRaw, , linksStatus] = useSupabaseArray<any>(linksQuery);
-
-  const [titulosRaw] = useSupabaseArray<any>('titulos?limit=9999');
-
-  const alunos: any[] = Array.isArray(alunosRaw) ? alunosRaw : [];
-  const titulos: any[] = Array.isArray(titulosRaw) ? titulosRaw : [];
-  const links: any[] = Array.isArray(linksRaw) ? linksRaw : [];
-  const resps: any[] = Array.isArray(respsRaw) ? respsRaw : [];
-  
-  const isDataLoading = alunosStatus.loading || linksStatus.loading || respsStatus.loading;
-
-  // Use a reliable boolean: if alunos is empty, we are 100% still loading (a school always has students).
-  // Also wait for the current user to be fully hydrated.
-  const isStillLoading = !hydrated || alunos.length === 0 || (currentUser === undefined)
-
-  let meusAlunos = (alunos || []).filter(a => {
-    const s = a.status?.toLowerCase()
-    return s === 'matriculado' || s === 'ativo' || s === 'em_cadastro' || s === 'pendente'
-  })
-
-  if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
-    // 1. Encontra todos os IDs de responsáveis que batem com o email ou nome do usuário atual
-    const matchedRespIds = new Set<string>()
-    
-    // Adiciona o ID resolvido via metadado de autenticação (método principal e mais seguro)
-    if (respId) {
-      matchedRespIds.add(String(respId))
-    }
-
-    // Fallback: faz busca no array de responsáveis carregados
-    resps.forEach(r => {
-      const rEmail = (r.email || '').toLowerCase().trim()
-      const rNome = (r.nome || '').toLowerCase().trim()
-      if ((emailBusca && rEmail === emailBusca) || (nomeBusca && rNome === nomeBusca)) {
-        matchedRespIds.add(String(r.id))
-      }
-    })
-
-    // 2. Encontra todos os aluno_ids vinculados a esses responsáveis
-    const linkedAlunoIds = new Set<string>()
-    links.forEach(l => {
-      if (matchedRespIds.has(String(l.responsavel_id))) {
-        linkedAlunoIds.add(String(l.aluno_id))
-      }
-    })
-
-    meusAlunos = meusAlunos.filter(a => {
-      // Se está vinculado via tabela aluno_responsavel
-      if (linkedAlunoIds.has(String(a.id))) return true
-
-      // Fallback para campos diretos (snake_case e camelCase)
-      if (a.responsavel && a.responsavel.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavelFinanceiro && a.responsavelFinanceiro.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavel_financeiro && a.responsavel_financeiro.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavelPedagogico && a.responsavelPedagogico.toLowerCase().trim() === nomeBusca) return true
-      if (a.responsavel_pedagogico && a.responsavel_pedagogico.toLowerCase().trim() === nomeBusca) return true
-
-      if (a.emailResponsavel && emailBusca && a.emailResponsavel.toLowerCase().trim() === emailBusca) return true
-      if ((a as any).email_responsavel && emailBusca && (a as any).email_responsavel.toLowerCase().trim() === emailBusca) return true
-      if ((a as any).dados?.emailResponsavel && emailBusca && (a as any).dados.emailResponsavel.toLowerCase().trim() === emailBusca) return true
-      if ((a as any).dados?.email_responsavel && emailBusca && (a as any).dados.email_responsavel.toLowerCase().trim() === emailBusca) return true
-
-      // Checa array de responsáveis se existir
-      const respArr = (a as any).responsaveis || (a as any)._responsaveis || []
-      if (Array.isArray(respArr)) {
-        return respArr.some(r => 
-          (r.nome && r.nome.toLowerCase().trim() === nomeBusca) ||
-          (r.email && emailBusca && r.email.toLowerCase().trim() === emailBusca) ||
-          (r.emailResponsavel && emailBusca && r.emailResponsavel.toLowerCase().trim() === emailBusca) ||
-          (r.email_responsavel && emailBusca && r.email_responsavel.toLowerCase().trim() === emailBusca)
-        )
-      }
-
-      return false
-    })
-  } else if (!currentUser || (currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável')) {
-    // Se não for Família/Responsável, não mostra alunos simulados
-    meusAlunos = []
-  }
+  // O carregamento inicial pode demorar frações de segundo, aguarde a hidratação e o loading da API
+  const isStillLoading = !hydrated || isDataLoading || (currentUser === undefined);
 
   // Effect responsavel pelo redirecionamento automatico
   useEffect(() => {
@@ -117,12 +46,11 @@ export default function SelecionarAluno() {
         return
       }
       const nomeLower = (currentUser.nome || '').toLowerCase().trim()
-      const myAluno = (alunos || []).find(a => 
-        (a.nome || '').toLowerCase().trim() === nomeLower || 
-        (currentUser.id && currentUser.id.includes(String(a.id)))
-      )
-      if (myAluno) {
-        setTimeout(() => { window.location.href = `/agenda-digital/${myAluno.id}/comunicados` }, 50)
+      // Se for aluno, não temos os dados carregados nesta tela focada em responsáveis.
+      // O redirecionamento direto (acima) já resolve 99% dos casos.
+      if (currentUser.id) {
+        // Redireciona diretamente se houver fallback necessário (pouco provável para aluno)
+        setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
       }
     } else if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
       if (meusAlunos.length === 1) {
@@ -131,7 +59,7 @@ export default function SelecionarAluno() {
         }, 50)
       }
     }
-  }, [isStillLoading, meusAlunos.length, alunos.length, currentUser])
+  }, [isStillLoading, meusAlunos.length, isDataLoading, currentUser])
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '8vh', paddingBottom: 60, animation: 'fadeUp 0.8s ease-out forwards', opacity: 0 }}>
@@ -353,8 +281,7 @@ export default function SelecionarAluno() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {meusAlunos.map((a, index) => {
-                const titulosAluno = titulos.filter(t => t.aluno === a.nome || (t as any).alunoId === a.id)
-                const pendentes = titulosAluno.filter(t => t.status === 'atrasado')
+                const pendenciasCount = a.pendenciasAtrasadas || 0;
 
                 return (
                   <Link key={a.id} href={`/agenda-digital/${a.id}/comunicados`} style={{ textDecoration: 'none', animation: 'fadeUp 0.6s ease-out ' + (0.1 + index * 0.15) + 's forwards', opacity: 0 }}>
@@ -394,9 +321,14 @@ export default function SelecionarAluno() {
                           </span>
                         </div>
                         
-                        {pendentes.length > 0 && (
-                          <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(239,68,68,0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.15)' }}>
+                        {pendenciasCount > 0 && (
+                          <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(239,68,68,0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.15)', position: 'relative' }}>
                             <AlertTriangle size={20} />
+                            {pendenciasCount > 1 && (
+                              <span className="badge-counter" style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 900, width: 20, height: 20, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid hsl(var(--bg-surface))' }}>
+                                {pendenciasCount}
+                              </span>
+                            )}
                           </div>
                         )}
 

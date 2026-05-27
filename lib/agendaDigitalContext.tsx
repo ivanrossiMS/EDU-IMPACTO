@@ -116,12 +116,15 @@ const MOCK_CHATS: ADChat[] = []
 const MOCK_MESSAGES: Record<string, ADMessage[]> = {}
 const MOCK_MOMENTOS: ADMomento[] = []
 
-export function AgendaDigitalProvider({ children }: { children: React.ReactNode }) {
-  const [comunicados, setComunicadosState] = useSupabaseArray<ADComunicado>('comunicados')
-  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats', [], { refreshIntervalMs: 5000 })
-  const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos')
-  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], { refreshIntervalMs: 5000 })
-  const [momentosFeed, setMomentosFeed] = useSupabaseArray<ADMomento>('agenda/momentos')
+export function AgendaDigitalProvider({ children, isFamily = false }: { children: React.ReactNode, isFamily?: boolean }) {
+  // Se for família, não faz fetch global massivo (Páginas buscam localmente)
+  const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
+
+  const [comunicados, setComunicadosState] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
+  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
+  const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], familyOptions)
+  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
+  const [momentosFeed, setMomentosFeed] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
 
   const messages = React.useMemo(() => {
     const record: Record<string, ADMessage[]> = {}

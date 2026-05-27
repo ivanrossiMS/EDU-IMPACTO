@@ -243,19 +243,23 @@ export default function UsuariosPage() {
     }
   }
 
-  const reiniciarAcesso = (uid: string) => {
-    if (!confirm('Deseja reiniciar o primeiro acesso deste usuário? Ele perderá a senha atual e precisará criar uma nova passnword no primeiro acesso.')) return;
+  const reiniciarAcesso = async (uid: string, nome: string) => {
+    if (!confirm(`Deseja reiniciar o acesso de ${nome}? Ele perderá a senha atual e precisará criar uma nova no primeiro acesso.`)) return;
     try {
-      const p = JSON.parse(localStorage.getItem('edu-user-passwords') || '{}');
-      if (p[uid]) {
-        delete p[uid];
-        localStorage.setItem('edu-user-passwords', JSON.stringify(p));
-        alert('Primeiro acesso reiniciado com sucesso! O usuário pode configurá-lo novamente através da tela de Login.');
+      const res = await fetch('/api/auth/reset-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'system_user', id: uid })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || 'Primeiro acesso reiniciado com sucesso!');
+        queryClient.invalidateQueries({ queryKey: ['usuarios'] });
       } else {
-        alert('Este usuário ainda não configurou uma senha / primeiro acesso.');
+        alert(data.error || 'Erro ao reiniciar acesso.');
       }
     } catch (e) {
-      alert('Erro ao limpar a senha.');
+      alert('Erro ao comunicar com o servidor.');
     }
   }
 
@@ -370,7 +374,7 @@ export default function UsuariosPage() {
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Ver detalhes" onClick={() => setShowUser(u)}><Eye size={12} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Editar" onClick={() => openEditUser(u)}><Pencil size={12} /></button>
-                          <button className="btn btn-ghost btn-icon btn-sm" title="Reiniciar 1º Acesso" onClick={() => reiniciarAcesso(u.id)}><RotateCcw size={12} /></button>
+                          <button className="btn btn-ghost btn-icon btn-sm" title="Reiniciar 1º Acesso" onClick={() => reiniciarAcesso(u.id, u.nome)}><RotateCcw size={12} /></button>
                           <button className="btn btn-ghost btn-icon btn-sm" title="Excluir" style={{ color: '#f87171' }} onClick={() => setDeleteUserId(u.id)}><Trash2 size={12} /></button>
                         </div>
                       </td>

@@ -511,7 +511,6 @@ export default function AgendaDigitalFamilyLayout({
           gap: 24px;
           align-items: center;
           position: relative;
-          overflow: hidden;
           transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -624,7 +623,10 @@ export default function AgendaDigitalFamilyLayout({
         
         @media (max-width: 640px) {
           .ad-premium-card-wrapper {
-            margin-top: 0 !important;
+            margin-top: 65px !important;
+          }
+          .ad-main-grid {
+            margin-top: 8px !important;
           }
           .ad-premium-card {
             padding: 16px 12px !important;
@@ -632,6 +634,8 @@ export default function AgendaDigitalFamilyLayout({
             gap: 16px !important;
             position: relative !important;
             overflow: visible !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
           .ad-premium-hero {
             padding: 32px 16px 90px 16px;
@@ -701,21 +705,27 @@ export default function AgendaDigitalFamilyLayout({
             display: none !important;
           }
           .ad-right-section {
-            position: absolute !important;
-            top: -46px !important;
-            right: 8px !important;
-            min-width: 0 !important;
-            width: auto !important;
-            margin-top: 0 !important;
-            z-index: 100 !important;
+            position: relative !important;
+            top: auto !important;
+            right: auto !important;
+            min-width: 100% !important;
+            width: 100% !important;
+            margin-top: 4px !important;
+            z-index: 10 !important;
             height: auto !important;
-            justify-content: flex-start !important;
+            justify-content: center !important;
+            align-items: center !important;
           }
-          .ad-premium-cta-btn, .ad-right-section > div > div {
-            height: 34px !important;
-            font-size: 11px !important;
-            padding: 0 12px !important;
-            border-radius: 12px !important;
+          .ad-right-section > div {
+            width: 100% !important;
+          }
+          .ad-premium-cta-btn {
+            width: 100% !important;
+            height: 48px !important;
+            font-size: 14px !important;
+            padding: 0 16px !important;
+            border-radius: 16px !important;
+            justify-content: center !important;
           }
           .ad-call-btn-arrow {
             display: none !important;
@@ -727,7 +737,8 @@ export default function AgendaDigitalFamilyLayout({
             display: none !important;
           }
           .ad-call-btn-label {
-            font-size: 10px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
             white-space: nowrap !important;
           }
           .ad-premium-student-name {
@@ -1635,51 +1646,7 @@ export default function AgendaDigitalFamilyLayout({
         </div>
       </div>
 
-      {/* Mobile Bottom Navigation (Ultra Modern Neon) */}
-      <div className="ad-mobile-nav-bar hide-scrollbar" style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        width: '100%',
-        height: 72,
-        zIndex: 9999,
-        padding: '0 4px',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        alignItems: 'center'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 12px', minWidth: 'min-content', margin: '0 auto', height: '100%' }}>
-          {filteredNavItems.map((item, idx) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
-              <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
-                <motion.div
-                  whileTap={{ scale: 0.95 }}
-                  style={{ 
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, 
-                    width: 72, height: 56, borderRadius: 16, flexShrink: 0,
-                    background: isActive ? 'rgba(255, 255, 255, 0.06)' : 'transparent',
-                    border: isActive ? '1px solid rgba(0, 210, 255, 0.3)' : '1px solid transparent',
-                    color: isActive ? 'white' : 'rgba(255,255,255,0.4)',
-                    boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.2), 0 0 10px rgba(0, 210, 255, 0.1)' : 'none',
-                    transition: 'all 0.3s'
-                  }}
-                >
-                  <div style={{ 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: isActive ? '#00D2FF' : 'inherit',
-                    filter: isActive ? 'drop-shadow(0 0 8px #00D2FF)' : 'none'
-                  }}>
-                    {React.cloneElement(item.icon, { size: 20, color: 'currentColor' })}
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{item.label}</span>
-                </motion.div>
-              </Link>
-            )
-          })}
-        </div>
-      </div>
+
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

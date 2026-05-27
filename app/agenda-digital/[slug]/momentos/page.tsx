@@ -11,7 +11,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials } from '@/lib/utils'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { momentosFeed } = useAgendaDigital()
+  // removido const { momentosFeed } = useAgendaDigital()
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos', []);
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
@@ -22,7 +22,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const turmaObj = turmas.find(t => String(t.id) === String(turmaDoAluno) || String(t.codigo) === String(turmaDoAluno))
   const nomeTurmaDoAluno = turmaObj?.nome || turmaDoAluno
   
-  const { setMomentosFeed } = useAgendaDigital()
+  const [momentosFeed, setMomentosFeed] = useSupabaseArray<any>('agenda/momentos', [])
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
 
   const handleLike = (momentId: number | string) => {
@@ -33,7 +33,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       const isLiked = likesArray.includes(myName)
       return {
         ...m,
-        likes: isLiked ? likesArray.filter(name => name !== myName) : [...likesArray, myName]
+        likes: isLiked ? likesArray.filter((name: string) => name !== myName) : [...likesArray, myName]
       }
     }))
   }
@@ -57,7 +57,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const meusMomentos = momentosFeed.filter(m => {
     if (m.status !== 'approved') return false // pais só veem aprovados
     if (!m.targetClasses || m.targetClasses.length === 0) return true
-    return m.targetClasses.some(tc => 
+    return m.targetClasses.some((tc: string) => 
       tc.toLowerCase() === 'todos' || 
       tc.toLowerCase() === 'toda a escola' || 
       tc.toLowerCase() === 'toda a escola' || 
@@ -128,7 +128,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
         @media (max-width: 768px) {
           .ad-momentos-header {
-            margin: -48px 16px 16px 16px !important;
+            margin: 8px 16px 16px 16px !important;
             padding: 12px 16px !important;
             gap: 12px !important;
           }
@@ -311,7 +311,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                     boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.3)',
                     border: '1px solid rgba(0,0,0,0.1)'
                   }}>
-                    {(m.media || []).map((med, i) => (
+                    {(m.media || []).map((med: any, i: number) => (
                       <div key={i} style={{ width: '100%', height: '100%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {med.type === 'video' || med.url.match(/\.(mp4|webm)$/i) ? (
                           <video src={med.url} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -360,7 +360,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                     {/* Comentários Minimais */}
                     {(m.comments || []).length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4, background: '#f8fafc', padding: 8, borderRadius: 10, border: '1px solid #f1f5f9' }}>
-                        {(m.comments || []).map(c => (
+                        {(m.comments || []).map((c: any) => (
                           <div key={c.id} style={{ fontSize: 12, lineHeight: 1.4 }}>
                             <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
                             <span style={{ color: '#475569' }}>{c.text}</span>

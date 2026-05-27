@@ -39,9 +39,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ user: sysUser })
     }
 
-    // Fetch active Auth users to check their actual existence
-    const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
-    const authUsersList = listData?.users || []
+    // Helper: busca auth user por email
+    const findAuthByEmail = async (email: string) => {
+      let page = 1;
+      while (page <= 5) {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 }).catch(() => ({ data: { users: [] } }))
+        if (!list || !list.users || list.users.length === 0) break;
+        const found = list.users.find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
+        if (found) return found;
+        if (list.users.length < 1000) break;
+        page++;
+      }
+      return null;
+    }
 
     // ── 2. Check ALUNOS — by email, matricula or CPF ────────────────
     const { data: alunosRows } = await supabaseAdmin
@@ -71,13 +81,15 @@ export async function POST(request: Request) {
       const matricula = aluno.matricula || aluno.dados?.codigo || aluno.id
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       const storedAlunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
-      const authEmail = isValidEmail(storedAlunoEmail) ? storedAlunoEmail : virtualEmail
-      const existingAuth = authUsersList.find(
-        (u: any) => u.email?.toLowerCase() === virtualEmail || (isValidEmail(storedAlunoEmail) && u.email?.toLowerCase() === storedAlunoEmail)
-      )
-      if (existingAuth?.last_sign_in_at) {
+      
+      let existingAuth = await findAuthByEmail(virtualEmail)
+      if (!existingAuth && isValidEmail(storedAlunoEmail)) {
+        existingAuth = await findAuthByEmail(storedAlunoEmail)
+      }
+      
+      if (existingAuth) {
         return NextResponse.json({ 
-          error: 'Sua senha já foi configurada. Use Login normal com sua matrícula.' 
+          error: 'Sua senha já foi configurada. Use Login normal ou recuperação de senha.' 
         }, { status: 409 })
       }
 
@@ -131,16 +143,11 @@ export async function POST(request: Request) {
         }, { status: 403 })
       }
 
-      const existingAuthResp = authUsersList.find(
-        (u: any) => u.email?.toLowerCase() === (responsavel.email || '').toLowerCase()
-      )
-      if (existingAuthResp) {
-        // Se a conta no Auth existe mas o ID NÃO coincide com o do responsável no banco (conta fantasma)
-        if (existingAuthResp.id !== responsavel.id) {
-          await supabaseAdmin.auth.admin.deleteUser(existingAuthResp.id).catch((e: any) => console.error('Erro ao deletar conta fantasma de responsável no primeiro acesso:', e))
-        } else if (existingAuthResp.last_sign_in_at) {
+      if (responsavel.email) {
+        const existingAuthResp = await findAuthByEmail((responsavel.email || '').trim())
+        if (existingAuthResp) {
           return NextResponse.json({ 
-            error: 'Sua senha já foi configurada. Use Login normal.' 
+            error: 'Sua senha já foi configurada. Use Login normal ou recuperação de senha.' 
           }, { status: 409 })
         }
       }
@@ -157,13 +164,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Se não há cadastro ativo correspondente mas a conta existe no Auth, limpa a conta fantasma imediatamente
-    const authGhost = authUsersList.find((u: any) => u.email?.toLowerCase() === q)
-    if (authGhost) {
-      await supabaseAdmin.auth.admin.deleteUser(authGhost.id).catch((e: any) => console.error('Erro ao deletar conta fantasma órfã no primeiro acesso:', e))
-    }
-
-    return NextResponse.json({ error: 'Nenhum cadastro encontrado. Verifique com a administração.' }, { status: 404 })
+    return NextResponse.json({ error: 'Nenhum cadastro ativo encontrado.' }, { status: 404 })
   } catch (err: any) {
     console.error('[API verify-first-access]', err)
     return NextResponse.json({ error: 'Erro interno na verificação' }, { status: 500 })

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, use } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApp } from '@/lib/context'
@@ -14,7 +15,34 @@ import { getInitials } from '@/lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function ADConversasPage({ params }: { params: Promise<{ slug: string }>}) {
-  const { messages, setMessages, chatsList, setChatsList, chatGroups, adConfig } = useAgendaDigital()
+  const { adConfig } = useAgendaDigital()
+  const [chatGroups] = useSupabaseArray<any>('agenda/grupos')
+  const [chatsList, setChatsList] = useSupabaseArray<any>('agenda/chats', [], { refreshIntervalMs: 5000 })
+  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], { refreshIntervalMs: 5000 })
+
+  const messages = React.useMemo(() => {
+    const record: Record<string, any[]> = {}
+    if (messagesArray) {
+      messagesArray.forEach((item: any) => {
+        record[item.id] = item.messages || []
+      })
+    }
+    return record
+  }, [messagesArray])
+
+  const setMessages = React.useCallback((updater: any) => {
+    setMessagesArray((prev: any[]) => {
+      const record: Record<string, any[]> = {}
+      if (prev) {
+        prev.forEach((item: any) => {
+          record[item.id] = item.messages || []
+        })
+      }
+      const nextRecord = typeof updater === 'function' ? updater(record) : updater
+      return Object.entries(nextRecord).map(([id, msgs]) => ({ id, messages: msgs })) as any[]
+    })
+  }, [setMessagesArray])
+
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const { turmas = [] } = useData()
   const [alunos] = useSupabaseArray<any>('alunos')
@@ -83,7 +111,7 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
     e.preventDefault()
     if (!inputText.trim() || !activeChat) return
 
-    setMessages(prev => {
+    setMessages((prev: any) => {
       const current = prev[activeChat.id] || []
       return {
         ...prev,
@@ -127,7 +155,7 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
       if (currentHourStr < inicio || currentHourStr > fim) {
         const chatId = activeChat.id;
         setTimeout(() => {
-          setMessages(prev => {
+          setMessages((prev: any) => {
             const current = prev[chatId] || []
             return {
               ...prev,
@@ -178,7 +206,7 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
   // Filter groups that contain this student ID, match their class/turma, or are general administrative/sector groups
   const studentGroups = chatGroups?.filter(g => {
     // 1. Classroom group: explicitly contains student ID
-    const inAlunosIds = g.alunosIds?.some(id => String(id) === String(studentId))
+    const inAlunosIds = g.alunosIds?.some((id: any) => String(id) === String(studentId))
     
     // 2. Classroom group: synced with student's class/turma
     const isStudentTurmaSync = studentTurmaObj && (
@@ -215,7 +243,7 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
       grupoId: selectedGroup.id
     }
 
-    setMessages(prev => ({
+    setMessages((prev: any) => ({
       ...prev,
       [newChatId]: [{
         id: Date.now(),
@@ -338,7 +366,20 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
             return (
               <div 
                 key={chat.id} 
-                onClick={() => { setActiveChat(chat); setShowNovaConversa(false); if (chat.unread > 0) { setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c)) } }}
+                onClick={async () => { 
+                  setActiveChat(chat); 
+                  setShowNovaConversa(false); 
+                  if (chat.unread > 0) { 
+                    setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c)) 
+                    try {
+                      const { data: dbChat } = await supabase.from('agenda_chats').select('dados').eq('id', chat.id).single();
+                      if (dbChat) {
+                        const newDados = { ...(dbChat.dados || {}), unread: 0 };
+                        await supabase.from('agenda_chats').update({ dados: newDados }).eq('id', chat.id);
+                      }
+                    } catch(e) {}
+                  } 
+                }}
                 style={{ 
                   padding: '16px 14px', 
                   marginBottom: 8,

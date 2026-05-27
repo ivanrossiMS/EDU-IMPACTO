@@ -108,9 +108,9 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
         />
         {/* Visual indicator */}
         <div style={{
-          position: 'fixed', bottom: 24, right: 24,
+          position: 'fixed', top: 24, right: 24,
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 14px', borderRadius: 100,
+          padding: '10px 18px', borderRadius: 100,
           background: pulse ? 'rgba(16,185,129,0.15)' : 'rgba(6,182,212,0.08)',
           border: `1px solid ${pulse ? 'rgba(16,185,129,0.4)' : 'rgba(6,182,212,0.2)'}`,
           fontSize: 11, fontWeight: 700, color: pulse ? '#10b981' : '#06b6d4',

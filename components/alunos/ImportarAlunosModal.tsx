@@ -32,6 +32,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [config, setConfig] = useState('manter')
   const [tipoResponsavelConfig, setTipoResponsavelConfig] = useState<'acrescentar' | 'substituir'>('acrescentar')
+  const [tipoTurmaConfig, setTipoTurmaConfig] = useState<'acrescentar' | 'substituir'>('acrescentar')
   const [hasHeaders, setHasHeaders] = useState(true)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ linha: number; msg: string }[]>([])
@@ -84,6 +85,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
     { value: 'aluno_uf', label: 'ESTADO (UF)' },
     { value: 'aluno_ativo', label: 'ALUNO ATIVO' },
     { value: 'aluno_autorizadoSairSozinho', label: 'Pode Sair Sozinho' },
+    { value: 'aluno_ano_letivo', label: 'ANO LETIVO' },
     { value: 'aluno_segmento', label: 'SEGMENTO' },
     { value: 'aluno_serie', label: 'SÉRIE' },
     { value: 'aluno_turma', label: 'TURMA' },
@@ -122,6 +124,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'EMAIL',
           'ALUNO ATIVO',
           'Pode Sair Sozinho',
+          'ANO LETIVO',
           'SEGMENTO',
           'SÉRIE',
           'TURMA'
@@ -134,6 +137,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'arthur.souza@impacto.com.br',
           'Sim',
           'Não',
+          '2026',
           'Ensino Fundamental I',
           '5º Ano',
           'Turma A'
@@ -146,6 +150,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'bianca.duarte@impacto.com.br',
           'Sim',
           'Sim',
+          '2026',
           'Ensino Fundamental I',
           '4º Ano',
           'Turma B'
@@ -271,7 +276,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             rows: hasHeaders ? data.slice(1) : data,
-            mapping, config, tipoResponsavelConfig, hasHeaders, step,
+            mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, step,
             headers: hasHeaders ? data[0] : null,
           })
         })
@@ -520,6 +525,79 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
                           }}
                         >
                           🔄 Substituir existentes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {step === 2 && (
+                    <div style={{
+                      background: 'hsl(var(--bg-elevated))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 16,
+                      padding: '16px 20px',
+                      marginBottom: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          background: 'rgba(37, 99, 235, 0.1)',
+                          color: '#2563eb',
+                          borderRadius: 10,
+                          width: 40,
+                          height: 40,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <Users size={20} />
+                        </div>
+                        <div>
+                          <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Vínculo de Turma</h4>
+                          <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: '2px 0 0 0' }}>
+                            Como salvar a turma se o aluno já estiver cadastrado?
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => setTipoTurmaConfig('acrescentar')}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: tipoTurmaConfig === 'acrescentar' ? '2px solid #2563eb' : '1px solid hsl(var(--border-subtle))',
+                            background: tipoTurmaConfig === 'acrescentar' ? 'rgba(37, 99, 235, 0.08)' : 'transparent',
+                            color: tipoTurmaConfig === 'acrescentar' ? '#2563eb' : 'hsl(var(--text-muted))',
+                            transition: 'all 0.2s ease-in-out'
+                          }}
+                        >
+                          ➕ Acrescentar ao Histórico
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTipoTurmaConfig('substituir')}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: 10,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            border: tipoTurmaConfig === 'substituir' ? '2px solid #ef4444' : '1px solid hsl(var(--border-subtle))',
+                            background: tipoTurmaConfig === 'substituir' ? 'rgba(239, 68, 68, 0.08)' : 'transparent',
+                            color: tipoTurmaConfig === 'substituir' ? '#ef4444' : 'hsl(var(--text-muted))',
+                            transition: 'all 0.2s ease-in-out'
+                          }}
+                        >
+                          🔄 Substituir a turma atual
                         </button>
                       </div>
                     </div>
