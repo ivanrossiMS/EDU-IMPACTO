@@ -206,12 +206,12 @@ export default function AgendaDigitalColaboradorLayout({
             margin-top: 64px !important;
           }
           .ad-main-grid {
-            margin-top: 8px !important;
+            margin-top: 2px !important;
           }
           .ad-premium-card {
-            padding: 16px 12px !important;
+            padding: 14px 12px 10px 12px !important;
             border-radius: 20px !important;
-            gap: 16px !important;
+            gap: 8px !important;
             position: relative !important;
             overflow: visible !important;
           }
@@ -429,15 +429,17 @@ export default function AgendaDigitalColaboradorLayout({
           {/* AREA 3: AÇÕES LATERAIS (À direita) */}
           <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-              <Link href="/agenda-digital/selecionar-aluno" style={{ textDecoration: 'none' }}>
-                <button className="ad-btn-side" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}>
-                  <Users size={14} /> Voltar p/ Seleção
-                </button>
-              </Link>
               <button 
-                onClick={async () => { 
+                onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                className="ad-btn-side" 
+                style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
+              >
+                <Users size={14} /> Voltar p/ Seleção
+              </button>
+              <button 
+                onClick={() => { 
                   setCurrentUser(null); 
-                  await fetch('/api/auth/logout', { method: 'POST' }); 
+                  fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                   window.location.href = '/login'; 
                 }} 
                 className="ad-btn-side logout" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
