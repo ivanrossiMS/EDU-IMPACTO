@@ -102,9 +102,13 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
           }}
           autoComplete="off"
           autoCorrect="off"
+          autoCapitalize="none"
           spellCheck={false}
           tabIndex={-1}
           aria-label="Captura RFID"
+          inputMode="none"
+          data-form-type="other"
+          name="rfid-capture"
         />
         {/* Visual indicator */}
         <div style={{
