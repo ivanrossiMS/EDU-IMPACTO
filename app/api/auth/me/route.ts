@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton';
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -25,11 +26,22 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Combine top-level auth data (id, email) with user_metadata
+  // Fetch the latest profile data from system_users to ensure it is always up to date
+  const supabaseAdmin = getAdminClient();
+  const { data: dbUser } = await supabaseAdmin
+    .from('system_users')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  // Combine top-level auth data (id, email) with user_metadata and database fields
   const userData = {
     ...user.user_metadata,
     id: user.id,
     email: user.email,
+    foto: dbUser?.foto || dbUser?.dados?.foto || user.user_metadata?.foto || null,
+    perfil: dbUser?.perfil || user.user_metadata?.perfil,
+    cargo: dbUser?.cargo || user.user_metadata?.cargo,
   };
 
   return NextResponse.json({ user: userData }, {
