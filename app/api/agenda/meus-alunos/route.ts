@@ -57,11 +57,11 @@ export async function GET(request: Request) {
       let fallbackQuery = supabase.from('alunos').select('id,nome,turma,status,foto,serie,unidade,dados')
       
       if (email && nome) {
-        fallbackQuery = fallbackQuery.or(`responsavel.ilike.${nome},responsavel_financeiro.ilike.${nome},emailResponsavel.ilike.${email},email_responsavel.ilike.${email}`)
+        fallbackQuery = fallbackQuery.or(`responsavel.ilike.%${nome}%,responsavel_financeiro.ilike.%${nome}%`)
       } else if (nome) {
-        fallbackQuery = fallbackQuery.or(`responsavel.ilike.${nome},responsavel_financeiro.ilike.${nome}`)
+        fallbackQuery = fallbackQuery.or(`responsavel.ilike.%${nome}%,responsavel_financeiro.ilike.%${nome}%`)
       } else if (email) {
-        fallbackQuery = fallbackQuery.or(`emailResponsavel.ilike.${email},email_responsavel.ilike.${email}`)
+        // No text fields in alunos match email, so we do nothing here to prevent syntax errors
       }
 
       const { data: fallbackAlunos } = await fallbackQuery

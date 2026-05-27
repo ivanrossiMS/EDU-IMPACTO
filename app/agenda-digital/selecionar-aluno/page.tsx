@@ -9,7 +9,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, LayoutDashboard } from 'lucide-react'
 
 export default function SelecionarAluno() {
   const { turmas = [] } = useData();
@@ -20,15 +20,11 @@ export default function SelecionarAluno() {
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
-
   // 2. Usar a nova API otimizada Ultra-Rápida
-  const isResponsavel = currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família');
-  const meusAlunosQuery = isResponsavel 
-    ? `agenda/meus-alunos?respId=${respId}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}` 
-    : '';
+  const meusAlunosQuery = `agenda/meus-alunos?respId=${respId}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
 
   const [meusAlunosRaw, , meusAlunosStatus] = useSupabaseArray<any>(meusAlunosQuery, [], { refreshIntervalMs: 0 });
-  const meusAlunos: any[] = isResponsavel ? (Array.isArray(meusAlunosRaw) ? meusAlunosRaw : []) : [];
+  const meusAlunos: any[] = Array.isArray(meusAlunosRaw) ? meusAlunosRaw : [];
 
   const isDataLoading = meusAlunosStatus.loading;
   
@@ -37,13 +33,17 @@ export default function SelecionarAluno() {
 
   // Effect responsavel pelo redirecionamento automatico
   useEffect(() => {
-    if (isStillLoading) return;
-
-    if (currentUser?.cargo === 'Aluno') {
-      const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
-      if (directAlunoId) {
-        setTimeout(() => { window.location.href = `/agenda-digital/${directAlunoId}/comunicados` }, 50)
-        return
+    if (currentUser && currentUser.perfil === 'Aluno') {
+      // Se for um aluno normal, pode redirecionar para a interface restrita, se quiser.
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('edu-current-user')
+        if (stored) {
+          const u = JSON.parse(stored)
+          if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
+            setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
+            return
+          }
+        }
       }
       const nomeLower = (currentUser.nome || '').toLowerCase().trim()
       // Se for aluno, não temos os dados carregados nesta tela focada em responsáveis.
@@ -52,7 +52,7 @@ export default function SelecionarAluno() {
         // Redireciona diretamente se houver fallback necessário (pouco provável para aluno)
         setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
       }
-    } else if (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família')) {
+    } else if (currentUser) {
       if (meusAlunos.length === 1) {
         setTimeout(() => {
           window.location.href = `/agenda-digital/${meusAlunos[0].id}/comunicados`
@@ -63,6 +63,73 @@ export default function SelecionarAluno() {
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '8vh', paddingBottom: 60, animation: 'fadeUp 0.8s ease-out forwards', opacity: 0 }}>
+      {isStillLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '20vh' }}>
+          <div className="skeleton-loader" style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 24 }}></div>
+          <div className="skeleton-loader" style={{ width: 240, height: 28, borderRadius: 8, marginBottom: 12 }}></div>
+          <div className="skeleton-loader" style={{ width: 180, height: 20, borderRadius: 8 }}></div>
+        </div>
+      ) : (
+        <>
+          <div style={{ textAlign: 'center', marginBottom: 40, animation: 'fadeUp 0.6s ease-out forwards', opacity: 0 }}>
+            {currentUser?.foto ? (
+              <img src={currentUser.foto} alt="Avatar" style={{ width: 88, height: 88, borderRadius: 28, objectFit: 'cover', marginBottom: 20, border: '4px solid hsl(var(--bg-surface))', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }} />
+            ) : (
+              <div style={{ width: 88, height: 88, borderRadius: 28, background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: 'white', fontSize: 32, fontWeight: 700, border: '4px solid hsl(var(--bg-surface))', boxShadow: '0 8px 24px rgba(var(--primary-rgb),0.2)' }}>
+                {(currentUser?.nome || 'F').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', letterSpacing: '-0.02em', color: 'hsl(var(--text-primary))' }}>
+              Bem-vindo(a),
+            </h1>
+            <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: 'hsl(var(--text-secondary))' }}>
+              {currentUser?.nome || 'Responsável'}
+            </h2>
+          </div>
+
+          {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
+            <div style={{ marginBottom: 40, animation: 'fadeUp 0.6s ease-out 0.1s forwards', opacity: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Acesso Funcional
+                </h3>
+              </div>
+              <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+                <div className="premium-card interactive-card" style={{ display: 'flex', alignItems: 'center', padding: 24, borderRadius: 24, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', gap: 20 }}>
+                  <div className="premium-card-icon" style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <LayoutDashboard size={28} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px', color: 'hsl(var(--text-primary))' }}>
+                      Gestão Escolar (ERP)
+                    </h4>
+                    <p style={{ fontSize: 14, margin: 0, color: 'hsl(var(--text-secondary))', lineHeight: 1.5 }}>
+                      Acessar o painel administrativo com perfil de {currentUser.perfil}
+                    </p>
+                  </div>
+                  <div style={{ color: 'hsl(var(--text-muted))' }}>
+                    <ChevronRight size={24} />
+                  </div>
+                </div>
+              </Link>
+            </div>
+          )}
+
+          {meusAlunos.length > 0 && (
+            <div style={{ animation: 'fadeUp 0.6s ease-out 0.2s forwards', opacity: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Acesso Familiar
+                </h3>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-elevated))', padding: '4px 12px', borderRadius: 20 }}>
+                  {meusAlunos.length} aluno{meusAlunos.length !== 1 && 's'}
+                </span>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes fadeUp {
           from { opacity: 0; transform: translateY(30px); }
