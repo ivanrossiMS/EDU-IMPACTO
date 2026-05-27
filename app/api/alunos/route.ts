@@ -154,6 +154,14 @@ export async function POST(request: Request) {
     
     console.error(`[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
 
+    // 0. Verifica duplicidade de ID do Aluno
+    if (row.id && !row.id.startsWith('TEMP-')) {
+      const { data: existingStudent } = await supabase.from('alunos').select('id, nome').eq('id', row.id).maybeSingle()
+      if (existingStudent) {
+        return NextResponse.json({ error: `O ID "${row.id}" já está em uso pelo aluno "${existingStudent.nome}". Por favor, escolha um ID diferente.` }, { status: 400 })
+      }
+    }
+
     // 1. Salvar o aluno (Insert para criação)
     const { data: studentData, error: studentError } = await supabase
       .from('alunos')
@@ -178,6 +186,14 @@ export async function POST(request: Request) {
       const respDataToSave: any = {}
       
       const isNewResp = !resp.id || (typeof resp.id === 'string' && resp.id.startsWith('TEMP-')) || resp.id === ''
+      
+      // Verifica se o responsável é NOVO (adicionado na interface) e o ID digitado já existe
+      if (resp.isNewAdded && resp.id && !resp.id.startsWith('TEMP-')) {
+        const { data: existing } = await supabase.from('responsaveis').select('id, nome').eq('id', resp.id).maybeSingle()
+        if (existing) {
+          throw new Error(`O ID "${resp.id}" já pertence ao responsável "${existing.nome}". Por favor, escolha outro ID para este novo responsável.`)
+        }
+      }
       
       // Preservar e mesclar com dados existentes no banco
       const dados = { ...(resp.dados || {}) }
@@ -333,6 +349,14 @@ export async function PUT(request: Request) {
       const respDataToSave: any = {}
 
       const isNewResp = !resp.id || (typeof resp.id === 'string' && resp.id.startsWith('TEMP-')) || resp.id === ''
+      
+      // Verifica se o responsável é NOVO (adicionado na interface) e o ID digitado já existe
+      if (resp.isNewAdded && resp.id && !resp.id.startsWith('TEMP-')) {
+        const { data: existing } = await supabase.from('responsaveis').select('id, nome').eq('id', resp.id).maybeSingle()
+        if (existing) {
+          throw new Error(`O ID "${resp.id}" já pertence ao responsável "${existing.nome}". Por favor, escolha outro ID para este novo responsável.`)
+        }
+      }
       
       // Preservar e mesclar com dados existentes no banco
       const dados = { ...(resp.dados || {}) }
