@@ -11,7 +11,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { RFIDInput, RFIDInputHandle } from '@/components/saida/RFIDInput'
 import {
   Scan, X, Tablet, ShieldOff, Phone, Search,
-  GraduationCap, CheckCircle2, Clock, Megaphone,
+  GraduationCap, CheckCircle2, Clock, Megaphone, Tag
 } from 'lucide-react'
 
 // ─── CSS vars standalone + animações ──────────────────────────────────────────
@@ -163,23 +163,23 @@ function StudentCard({
         animationDelay: `${index * 90}ms`,
         borderRadius: 24,
         overflow: 'hidden',
-        border: `2px solid ${isProibido ? 'rgba(239,68,68,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
-        background: isProibido ? 'rgba(239,68,68,0.04)' : '#0f1c2e',
-        boxShadow: blocked ? 'none' : `0 8px 48px ${accent}20, 0 2px 12px rgba(0,0,0,0.4)`,
+        border: `1px solid ${isProibido ? 'rgba(239,68,68,0.3)' : alreadyCalled ? 'rgba(245,158,11,0.3)' : 'rgba(6,182,212,0.3)'}`,
+        background: '#0f172a',
+        boxShadow: blocked ? 'none' : `0 8px 32px rgba(0,0,0,0.5)`,
         cursor: blocked ? 'not-allowed' : 'pointer',
         display: 'flex', flexDirection: 'column',
         userSelect: 'none',
       }}
     >
-      {/* ── PHOTO AREA — square 1:1 ──────────────────────────────────── */}
+      {/* ── PHOTO AREA — portrait 4/5 ──────────────────────────────────── */}
       <div style={{
-        position: 'relative', width: '100%', aspectRatio: '1/1',
+        position: 'relative', width: '100%', aspectRatio: '4/5',
         background: foto ? 'transparent' : `linear-gradient(145deg, ${accentDim}, rgba(0,0,0,0.35))`,
         overflow: 'hidden',
         flexShrink: 0,
       }}>
         {foto ? (
-          <Image src={foto} alt={aluno.nome} width={400} height={400} style={{
+          <Image src={foto} alt={aluno.nome} width={400} height={500} style={{
             width: '100%', height: '100%', objectFit: 'cover',
             filter: (blocked && !alreadyCalled) ? 'grayscale(70%) brightness(0.6)' : 'none',
             transition: 'filter 0.3s',
@@ -189,98 +189,93 @@ function StudentCard({
             width: '100%', height: '100%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {/* Avatar: doubled size (200px), rounded-square */}
             <div style={{
-              width: 200, height: 200, borderRadius: 36,
-              background: `linear-gradient(145deg, ${accent}55, ${accent}18)`,
-              border: `4px solid ${accent}50`,
+              width: 140, height: 140, borderRadius: '50%',
+              background: `linear-gradient(135deg, ${accent}55, ${accent}18)`,
+              border: `2px solid ${accent}50`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 900, fontSize: 82, color: '#fff',
+              fontWeight: 900, fontSize: 52, color: '#fff',
               fontFamily: 'Outfit, sans-serif',
-              letterSpacing: '-4px',
-              boxShadow: `0 16px 60px ${accent}30, inset 0 1px 0 rgba(255,255,255,0.12)`,
+              boxShadow: `0 8px 30px ${accent}30`,
             }}>{initials}</div>
           </div>
         )}
 
-        {/* Gradient overlay at bottom */}
+        {/* Gradient overlay at bottom of photo */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
-          background: 'linear-gradient(to top, rgba(10,18,30,0.98) 0%, rgba(10,18,30,0.6) 50%, transparent 100%)',
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%',
+          background: 'linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0.7) 40%, transparent 100%)',
           pointerEvents: 'none',
         }}/>
 
         {/* Status badge top-right */}
         <div style={{
-          position: 'absolute', top: 12, right: 12,
-          padding: '5px 12px', borderRadius: 100,
-          fontSize: 10, fontWeight: 900, letterSpacing: '0.06em',
-          backdropFilter: 'blur(8px)',
+          position: 'absolute', top: 14, right: 14,
+          padding: '6px 14px', borderRadius: 100,
+          fontSize: 10, fontWeight: 900, letterSpacing: '0.04em',
           background: isProibido
-            ? 'rgba(239,68,68,0.9)'
+            ? '#ef4444'
             : alreadyCalled
-              ? 'rgba(245,158,11,0.9)'
-              : 'rgba(6,182,212,0.9)',
+              ? '#f59e0b'
+              : '#0ea5e9',
           color: '#fff',
           display: 'flex', alignItems: 'center', gap: 5,
-          boxShadow: `0 2px 12px ${accent}50`,
+          boxShadow: `0 4px 16px rgba(0,0,0,0.3)`,
         }}>
           {isProibido
-            ? <><ShieldOff size={10}/> BLOQUEADO</>
+            ? <><ShieldOff size={12}/> BLOQUEADO</>
             : alreadyCalled
-              ? <><Clock size={10}/> EM CHAMADA</>
-              : <><CheckCircle2 size={10}/> AUTORIZADO</>}
+              ? <><Clock size={12}/> EM CHAMADA</>
+              : <><CheckCircle2 size={12}/> AUTORIZADO</>}
         </div>
 
         {/* Turma chip top-left */}
         <div style={{
-          position: 'absolute', top: 12, left: 12,
-          padding: '4px 10px', borderRadius: 8,
-          fontSize: 11, fontWeight: 800, letterSpacing: '0.04em',
-          backdropFilter: 'blur(8px)',
-          background: 'rgba(0,0,0,0.6)',
-          color: 'rgba(255,255,255,0.9)',
-          display: 'flex', alignItems: 'center', gap: 5,
-          border: '1px solid rgba(255,255,255,0.1)',
+          position: 'absolute', top: 14, left: 14,
+          padding: '6px 12px', borderRadius: 100,
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.02em',
+          backdropFilter: 'blur(12px)',
+          background: 'rgba(255,255,255,0.1)',
+          color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 6,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         }}>
-          <GraduationCap size={10}/> {aluno.turmaNome || aluno.turma || '—'}
+          <GraduationCap size={12}/> {aluno.turmaNome || aluno.turma || '—'}
         </div>
 
         {/* Name overlay at bottom of photo */}
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
-          padding: '12px 18px 14px',
+          padding: '20px 20px 16px',
         }}>
           <div style={{
-            fontWeight: 900, fontSize: 18, color: '#fff',
-            lineHeight: 1.2, letterSpacing: '-0.02em',
-            textShadow: '0 2px 8px rgba(0,0,0,0.8)',
+            fontWeight: 800, fontSize: 18, color: '#fff',
+            lineHeight: 1.25, letterSpacing: '-0.02em',
           }}>{aluno.nome}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6 }}>
             {aluno.turno}{aluno.serie ? ` · ${aluno.serie}` : ''}
             {aluno.id ? ` · Cód. ${aluno.id}` : ''}
           </div>
         </div>
       </div>
 
-      {/* ── INFO BAR ──────────────────────────────────────────────────── */}
+      {/* ── INFO BAR (Solid Dark) ──────────────────────────────────────────────────── */}
       <div style={{
-        padding: '14px 18px',
+        padding: '16px 20px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 12,
-        background: 'rgba(0,0,0,0.3)',
-        borderTop: `1px solid ${accent}30`,
+        background: 'transparent',
       }}>
         {/* Left info */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           {isProibido && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f87171', fontSize: 12, fontWeight: 800 }}>
-              <ShieldOff size={12}/> Proibido de retirar este aluno
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#ef4444', fontSize: 12, fontWeight: 700 }}>
+              <ShieldOff size={12}/> Proibido de retirar
             </div>
           )}
           {!isProibido && !diaOk && (
             <div style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>
-              ⚠ Permitido apenas: {(aut?.diasSemana||[]).join(', ')}
+              ⚠ Apenas: {(aut?.diasSemana||[]).join(', ')}
             </div>
           )}
           {alreadyCalled && !isProibido && diaOk && (
@@ -289,13 +284,13 @@ function StudentCard({
             </div>
           )}
           {!blocked && !alreadyCalled && (
-            <div style={{ fontSize: 12, color: `${accent}cc`, fontWeight: 600 }}>
+            <div style={{ fontSize: 12, color: isProibido ? '#ef4444' : '#0ea5e9', fontWeight: 600 }}>
               Toque para chamar o aluno
             </div>
           )}
           {aut?.rfid && (
-            <div style={{ fontSize: 10, color: '#334155', fontFamily: 'monospace', letterSpacing: 1 }}>
-              📡 {aut.rfid}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace', letterSpacing: 1 }}>
+              <Tag size={10}/> {aut.rfid}
             </div>
           )}
         </div>
@@ -306,32 +301,31 @@ function StudentCard({
             onClick={handleRecall}
             disabled={recalling}
             style={{
-              padding: '10px 16px', borderRadius: 14, flexShrink: 0,
-              background: recalling ? 'rgba(245,158,11,0.08)' : 'linear-gradient(135deg, #f59e0b, #d97706)',
-              border: recalling ? '1px solid rgba(245,158,11,0.3)' : 'none',
+              padding: '0 16px', height: 48, borderRadius: 14, flexShrink: 0,
+              background: recalling ? 'rgba(245,158,11,0.1)' : '#f59e0b',
+              border: 'none',
               color: recalling ? '#f59e0b' : '#fff',
-              fontWeight: 900, fontSize: 12, cursor: recalling ? 'default' : 'pointer',
+              fontWeight: 800, fontSize: 12, cursor: recalling ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', gap: 7,
-              boxShadow: recalling ? 'none' : '0 4px 16px rgba(245,158,11,0.4)',
+              boxShadow: recalling ? 'none' : '0 4px 12px rgba(245,158,11,0.3)',
               transition: 'all 0.2s', whiteSpace: 'nowrap',
             }}>
-            <Megaphone size={14}/>
+            <Megaphone size={16}/>
             {recalling ? 'Chamando...' : 'Chamar Novamente'}
           </button>
         ) : (
         <div style={{
-          width: 54, height: 54, borderRadius: 16, flexShrink: 0,
+          width: 48, height: 48, borderRadius: 14, flexShrink: 0,
           background: blocked
-            ? 'rgba(255,255,255,0.04)'
-            : `linear-gradient(135deg, #06b6d4, #6366f1)`,
+            ? 'rgba(255,255,255,0.05)'
+            : '#0ea5e9',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: blocked ? 'none' : `0 6px 20px ${accent}45`,
-          border: blocked ? '1px solid rgba(255,255,255,0.06)' : 'none',
+          boxShadow: blocked ? 'none' : `0 4px 12px rgba(14,165,233,0.3)`,
           transition: 'all 0.2s',
         }}>
           {isProibido
-            ? <ShieldOff size={22} color="#ef444480"/>
-            : <Megaphone size={22} color="#fff"/>}
+            ? <ShieldOff size={20} color="rgba(239,68,68,0.8)"/>
+            : <Megaphone size={20} color="#fff"/>}
         </div>
         )}
       </div>
@@ -972,17 +966,20 @@ function PainelTabletContent() {
                 <div style={{
                   width: isMobile ? 58 : 72, height: isMobile ? 58 : 72,
                   borderRadius: '50%', flexShrink: 0,
-                  background: 'linear-gradient(135deg, #06b6d490, #6366f140)',
-                  border: '2px solid rgba(6,182,212,0.4)',
+                  background: '#0ea5e9',
+                  border: 'none',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 900, fontSize: isMobile ? 24 : 30, color: '#fff',
-                  boxShadow: '0 4px 20px rgba(6,182,212,0.3)',
+                  fontWeight: 900, fontSize: isMobile ? 24 : 28, color: '#fff',
+                  boxShadow: 'inset 0 -2px 10px rgba(0,0,0,0.2)',
                 }}>
                   {(matchedGuardianName[0] || '?').toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#475569', letterSpacing: '0.1em', marginBottom: 6 }}>
-                    ✅ RESPONSÁVEL IDENTIFICADO VIA RFID
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, color: '#10b981', letterSpacing: '0.05em', marginBottom: 6 }}>
+                    <div style={{ background: '#10b981', color: '#fff', borderRadius: 4, width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CheckCircle2 size={10} strokeWidth={3}/>
+                    </div>
+                    RESPONSÁVEL IDENTIFICADO VIA RFID
                   </div>
                   <div style={{ fontWeight: 900, fontSize: isMobile ? 20 : 26, color: '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
                     {matchedGuardianName}
@@ -990,12 +987,13 @@ function PainelTabletContent() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{matchedGuardianRole}</span>
                     <span style={{
-                      fontSize: 10, padding: '2px 10px', borderRadius: 100,
-                      background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
-                      fontWeight: 800, border: '1px solid rgba(6,182,212,0.25)',
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      fontSize: 10, padding: '4px 12px', borderRadius: 100,
+                      background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)',
+                      fontWeight: 700,
                       fontFamily: 'monospace', letterSpacing: 1,
                     }}>
-                      📡 {rfidCode}
+                      <Tag size={12}/> {rfidCode}
                     </span>
                     <span style={{
                       fontSize: 10, padding: '2px 10px', borderRadius: 100,
