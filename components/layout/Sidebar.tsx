@@ -108,7 +108,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
         label: 'SAÍDA DE ALUNOS', icon: <DoorOpen size={16} />,
         children: [
           { label: 'CHAMADAS', href: '/saida-alunos/chamadas', icon: <LogOut size={11} /> },
-          { label: 'PAINEL-TABLET', href: '/painel-tablet', icon: <Tablet size={11} />, target: '_blank' },
+          { label: 'PAINEL-TABLET', href: '/painel-tablet', icon: <Tablet size={11} /> },
           { label: 'MONITOR TV (VERTICAL)', href: '/monitor-tv', icon: <Monitor size={11} />, target: '_blank' },
           { label: 'RELATÓRIOS', href: '/saida-alunos/relatorios', icon: <FileText size={11} /> },
           { label: 'CONFIGURAÇÕES', href: '/saida-alunos/configuracoes', icon: <Settings size={11} /> },
