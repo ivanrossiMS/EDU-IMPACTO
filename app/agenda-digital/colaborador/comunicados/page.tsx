@@ -383,30 +383,43 @@ export default function ColaboradorComunicadosPage() {
             box-sizing: border-box !important;
           }
           .ad-comunicados-wrapper .ad-page-header { 
-            margin-top: -12px !important; 
+            margin-top: 0 !important; 
             margin-bottom: 16px !important; 
-            align-items: flex-start !important; 
-            flex-direction: row !important; 
-            justify-content: space-between !important; 
+            align-items: stretch !important; 
+            flex-direction: column !important; 
             width: 100% !important;
-            gap: 8px !important;
-            padding: 0 4px !important;
+            gap: 16px !important;
+            padding: 0 !important;
+          }
+          .ad-page-header > div:first-child {
+            order: 2 !important;
+            display: flex !important;
+            justify-content: flex-start !important;
+          }
+          .ad-page-header > div:last-child {
+            order: 1 !important;
           }
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { 
-            width: auto !important; 
+            width: 100% !important; 
             flex-direction: column-reverse !important; 
-            align-items: flex-end !important; 
-            gap: 8px !important; 
+            align-items: stretch !important; 
+            gap: 12px !important; 
             margin-top: 0 !important; 
           }
-          .ad-com-search { width: auto !important; justify-content: flex-end !important; }
+          .ad-com-actions > button {
+            align-self: flex-end !important;
+          }
+          .ad-com-search { 
+            width: 100% !important; 
+            justify-content: center !important; 
+          }
           .ad-com-search input { 
-            width: 140px !important; 
+            width: 100% !important; 
             max-width: 100% !important; 
-            height: 36px !important; 
-            padding-left: 32px !important; 
-            font-size: 13px !important; 
+            height: 40px !important; 
+            padding-left: 36px !important; 
+            font-size: 14px !important; 
             border-radius: 9999px !important; 
             background: #ffffff !important;
             border: 1px solid #e2e8f0 !important;
@@ -414,7 +427,7 @@ export default function ColaboradorComunicadosPage() {
             color: #0f172a !important;
           }
           .ad-com-search input:focus {
-            width: 150px !important;
+            width: 100% !important;
             border-color: #cbd5e1 !important;
             background: #ffffff !important;
           }
@@ -428,7 +441,7 @@ export default function ColaboradorComunicadosPage() {
             display: none !important;
           }
           .ad-com-header-title {
-            font-size: 20px !important;
+            font-size: 24px !important;
             font-weight: 800 !important;
           }
           
