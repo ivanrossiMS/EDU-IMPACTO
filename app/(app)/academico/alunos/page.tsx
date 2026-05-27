@@ -1404,7 +1404,7 @@ export default function AlunosPage() {
                     <div style={{ fontSize: 13, color: '#64748b', alignSelf: 'center', padding: '0 10px' }}>ou</div>
                     <button onClick={() => {
                       const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
-                      setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, isNewAdded: true }] });
+                      setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, isNewAdded: true } as any] });
                       setMostrarFormResponsavel(true);
                     }} className="neo-btn neo-btn-primary" style={{ height: 40 }}>
                       <Plus size={16} /> Novo Responsável

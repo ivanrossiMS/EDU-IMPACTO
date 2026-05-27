@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Email format — check if responsavel or aluno first, fallback to system_user (Parallel)
+      // Email format — check se é aluno, responsavel ou system_user (Paralelo)
       const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
@@ -89,11 +89,21 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
         .then(r => r.data || null)
         
-      const [alunoByEmail, respByEmail] = await Promise.all([alunoPromise, respPromise])
+      const sysUserPromise = supabaseAdmin
+        .from('system_users')
+        .select('id, nome, email')
+        .eq('email', loginInput)
+        .maybeSingle()
+        .then(r => r.data || null)
+        
+      const [alunoByEmail, respByEmail, sysUserByEmail] = await Promise.all([alunoPromise, respPromise, sysUserPromise])
       
       if (alunoByEmail) {
         alunoRecord   = alunoByEmail
         userType      = 'aluno'
+        resolvedEmail = loginInput
+      } else if (sysUserByEmail) {
+        userType      = 'system_user'
         resolvedEmail = loginInput
       } else if (respByEmail) {
         responsavelRecord = respByEmail
