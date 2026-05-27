@@ -86,12 +86,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     if (['Financeiro', 'Tesouraria'].includes(p) && pathname.startsWith('/academico')) {
-      router.replace('/financeiro')
+      router.replace('/financeiro/receber')
       return
     }
 
     if (['Secretaria', 'Acadêmico'].includes(p) && pathname.startsWith('/financeiro')) {
-      router.replace('/academico')
+      router.replace('/academico/alunos')
       return
     }
   }, [pathname, authState, currentUser, router])
