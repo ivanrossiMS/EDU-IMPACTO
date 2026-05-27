@@ -312,7 +312,7 @@ export default function ColaboradorComunicadosPage() {
 
   return (
     <>
-      <div className="ad-mobile-only" style={{ marginBottom: 16 }}>
+      <div className="ad-mobile-only" style={{ marginBottom: 8 }}>
         <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
           <input 
@@ -415,24 +415,25 @@ export default function ColaboradorComunicadosPage() {
           }
           .ad-comunicados-wrapper .ad-page-header { 
             margin-top: 0 !important; 
-            margin-bottom: 16px !important; 
-            align-items: stretch !important; 
-            flex-direction: column !important; 
+            margin-bottom: 12px !important; 
+            align-items: center !important; 
+            flex-direction: row !important; 
             width: 100% !important;
-            gap: 16px !important;
+            justify-content: space-between !important;
+            gap: 8px !important;
             padding: 0 !important;
           }
           .ad-page-header > div:first-child {
-            order: 2 !important;
+            order: 1 !important;
             display: flex !important;
             justify-content: flex-start !important;
           }
           .ad-page-header > div:last-child {
-            order: 1 !important;
+            order: 2 !important;
           }
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { 
-            width: 100% !important; 
+            width: auto !important; 
             flex-direction: row !important; 
             align-items: center !important; 
             justify-content: flex-end !important;
@@ -440,7 +441,7 @@ export default function ColaboradorComunicadosPage() {
             margin-top: 0 !important; 
           }
           .ad-com-actions > button {
-            align-self: flex-end !important;
+            align-self: center !important;
           }
           .ad-com-search svg {
             width: 14px !important;
