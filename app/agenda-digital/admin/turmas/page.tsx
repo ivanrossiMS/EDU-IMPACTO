@@ -93,6 +93,12 @@ export default function ADAdminTurmas() {
   const [isLoaded, setIsLoaded] = useState(false)
   // Filtro de ano letivo na tela de detalhe da equipe
   const [anoFiltroEquipe, setAnoFiltroEquipe] = useState<string>('')
+  // Edição de equipe
+  const [showEditarEquipe, setShowEditarEquipe] = useState(false)
+  const [editNome, setEditNome] = useState('')
+  const [editCor, setEditCor] = useState(DEFAULT_COLORS[0])
+  const [editIcone, setEditIcone] = useState('Users')
+  const [editDescricao, setEditDescricao] = useState('')
 
   // ── Dados derivados ──────────────────────────────────────────────────────────
   const activeGrupo = useMemo(() => (grupos || []).find(g => g.id === activeGrupoId), [grupos, activeGrupoId])
@@ -237,6 +243,26 @@ export default function ADAdminTurmas() {
     setEquipes((equipes || []).map(e => e.id === activeEquipe.id ? { ...e, membrosIds: (e.membrosIds || []).filter(m => m !== userId) } : e))
   }
 
+  const abrirEdicaoEquipe = () => {
+    if (!activeEquipe) return
+    setEditNome(activeEquipe.nome)
+    setEditCor(activeEquipe.cor)
+    setEditIcone(activeEquipe.icone)
+    setEditDescricao(activeEquipe.descricao || '')
+    setShowEditarEquipe(true)
+  }
+
+  const salvarEdicaoEquipe = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeEquipe || !editNome.trim()) return
+    setEquipes((equipes || []).map(eq =>
+      eq.id === activeEquipe.id
+        ? { ...eq, nome: editNome.trim(), cor: editCor, icone: editIcone, descricao: editDescricao.trim() }
+        : eq
+    ))
+    setShowEditarEquipe(false)
+  }
+
   // Busca colaboradores
   const searchResultsAlunos = buscaAluno.length > 2 ? (alunos || []).filter(a => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 5) : []
   const searchResultsColabs = buscaColab.length > 0 ? (funcionarios || []).filter((f: any) => f.nome.toLowerCase().includes(buscaColab.toLowerCase())).slice(0, 10) : []
@@ -311,6 +337,9 @@ export default function ADAdminTurmas() {
           </div>
           <button onClick={() => excluirEquipe(activeEquipe.id)} className="btn btn-secondary" style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Trash2 size={16} /> Excluir Equipe
+          </button>
+          <button onClick={abrirEdicaoEquipe} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
+            <Pencil size={15} /> Editar Equipe
           </button>
         </div>
 
@@ -476,6 +505,86 @@ export default function ADAdminTurmas() {
             )}
           </div>
         </div>
+
+        {/* ══ Modal Editar Equipe ══ */}
+        <AnimatePresence>
+          {showEditarEquipe && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+              onClick={e => { if (e.target === e.currentTarget) setShowEditarEquipe(false) }}
+            >
+              <motion.div
+                initial={{ scale: 0.94, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.94, y: 16 }}
+                style={{ background: 'white', borderRadius: 28, width: 520, padding: '32px', boxShadow: '0 32px 80px rgba(0,0,0,0.18)', maxHeight: '90vh', overflowY: 'auto' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+                  <div>
+                    <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>Editar Equipe</h3>
+                    <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: '4px 0 0' }}>Altere nome, descrição, ícone e cor.</p>
+                  </div>
+                  <button onClick={() => setShowEditarEquipe(false)} style={{ width: 34, height: 34, borderRadius: 17, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <X size={15} />
+                  </button>
+                </div>
+
+                <form onSubmit={salvarEdicaoEquipe} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Nome da Equipe</label>
+                    <input className="form-input" placeholder="Ex: Coordenação Fund. 1" autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} required style={{ width: '100%', borderRadius: 12, fontWeight: 700, fontSize: 15 }} />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>Descrição <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}>(opcional)</span></label>
+                    <input className="form-input" placeholder="Ex: Responsável pelas turmas do Fund. 1" value={editDescricao} onChange={e => setEditDescricao(e.target.value)} style={{ width: '100%', borderRadius: 12 }} />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Ícone</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                      {ICONES_EQUIPE.map(ic => {
+                        const IconC = ic.icon
+                        const isSel = editIcone === ic.id
+                        return (
+                          <div key={ic.id} onClick={() => setEditIcone(ic.id)} style={{ padding: '12px 0', borderRadius: 14, border: `2px solid ${isSel ? editCor : 'hsl(var(--border-subtle))'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', background: isSel ? `${editCor}10` : 'transparent', transition: 'all 0.15s' }}>
+                            <IconC size={20} color={isSel ? editCor : 'hsl(var(--text-muted))'} />
+                            <span style={{ fontSize: 10, fontWeight: 700, color: isSel ? editCor : 'hsl(var(--text-muted))' }}>{ic.label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Cor</label>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {DEFAULT_COLORS.map(c => (
+                        <div key={c} onClick={() => setEditCor(c)} style={{ width: 36, height: 36, borderRadius: 18, background: c, cursor: 'pointer', transition: 'all 0.15s', boxShadow: editCor === c ? `0 0 0 3px white, 0 0 0 5px ${c}` : 'none', transform: editCor === c ? 'scale(1.15)' : 'scale(1)' }} />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '16px 20px', borderRadius: 18, background: `${editCor}08`, border: `1.5px solid ${editCor}30`, display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 15, background: editCor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0, boxShadow: `0 6px 16px ${editCor}50` }}>
+                      {(() => { const P = getIconComponent(editIcone); return <P size={22} /> })()}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: editCor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editNome || 'Nome da Equipe'}</div>
+                      <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editDescricao || 'Descrição da equipe'}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
+                    <button type="button" onClick={() => setShowEditarEquipe(false)} className="btn btn-secondary" style={{ borderRadius: 12 }}>Cancelar</button>
+                    <motion.button type="submit" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} style={{ background: `linear-gradient(135deg, ${editCor}, ${editCor}cc)`, color: 'white', border: 'none', padding: '10px 26px', borderRadius: 12, fontWeight: 800, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Check size={16} /> Salvar Alterações
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
