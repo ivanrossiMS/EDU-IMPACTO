@@ -58,43 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Runs ONLY on mount
 
-  // EFFECT 2: Check RBAC when pathname or authState changes
-  useEffect(() => {
-    if (authState !== 'authorized' || !currentUser) return
-
-    const p = currentUser.perfil
-    const cargo = currentUser.cargo
-
-    // ── RBAC: Políticas de redirecionamento por perfil ──────────────
-    if (p === 'Família' || cargo === 'Aluno' || cargo === 'Responsável' || p === 'Aluno') {
-      if (!pathname.startsWith('/agenda-digital')) {
-        router.replace('/agenda-digital')
-        return
-      }
-    }
-
-    if (p === 'Professor') {
-      if (
-        !pathname.startsWith('/professor') &&
-        !pathname.startsWith('/academico') &&
-        !pathname.startsWith('/dashboard') &&
-        !pathname.startsWith('/agenda-digital')
-      ) {
-        router.replace('/dashboard')
-        return
-      }
-    }
-
-    if (['Financeiro', 'Tesouraria'].includes(p) && pathname.startsWith('/academico')) {
-      router.replace('/financeiro/receber')
-      return
-    }
-
-    if (['Secretaria', 'Acadêmico'].includes(p) && pathname.startsWith('/financeiro')) {
-      router.replace('/academico/alunos')
-      return
-    }
-  }, [pathname, authState, currentUser, router])
+  // (EFFECT 2 removido: a pedido do usuário, a navegação agora é estritamente manual via cliques no menu)
 
   // Enquanto verifica auth, renderiza o shell do layout com conteúdo mascarado.
   // Isso elimina o flash de tela em branco: a sidebar, topbar e estrutura ficam visíveis
