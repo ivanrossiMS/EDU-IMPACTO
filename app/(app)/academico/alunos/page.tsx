@@ -2941,8 +2941,8 @@ export default function AlunosPage() {
       {isFiltrosAvancadosModalOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
           <div 
-            className="w-full max-w-[520px] max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded-[24px] relative bg-[#f8fafc]"
-            style={{ animation: 'zoomFadeIn 0.2s ease-out' }}
+            className="w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded-[24px] relative bg-[#f8fafc]"
+            style={{ maxWidth: '520px', animation: 'zoomFadeIn 0.2s ease-out' }}
           >
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-slate-200/60 bg-white z-10 flex items-center justify-between">
