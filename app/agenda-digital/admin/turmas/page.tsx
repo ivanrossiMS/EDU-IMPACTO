@@ -940,88 +940,123 @@ export default function ADAdminTurmas() {
       </div>
 
       {/* ── ABA TURMAS ──────────────────────────────────────────────────────── */}
-      {abaLista === 'turmas' && (
-        <div style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
-                {['Grupo / Turma', 'Alunos', 'Equipes', 'Colaboradores', 'Status', ''].map(h => (
-                  <th key={h} style={{ padding: '14px 20px', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(grupos || []).map(g => {
-                const equipesDoGrupo = (equipes || []).filter(e => (g.equipesIds || []).includes(e.id))
-                const todosColabs = resolveColaboradoresGrupo(g)
-                return (
-                  <tr key={g.id} onClick={() => { setActiveGrupoId(g.id); setTelaAtual('detalhe-grupo'); setTabDetalheGrupo('alunos') }} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.02)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{ width: 40, height: 40, borderRadius: 12, background: g.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: `0 4px 12px ${g.cor}40` }}>
-                          <BookOpen size={18} />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: 14 }}>{g.nome}</div>
-                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mural Digital Ativo</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Users size={14} color="hsl(var(--text-muted))" />
-                        <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      {equipesDoGrupo.length === 0 ? (
-                        <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Nenhuma</span>
-                      ) : (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {equipesDoGrupo.map(eq => {
-                            const EqI = getIconComponent(eq.icone)
-                            return (
-                              <div key={eq.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, background: `${eq.cor}15`, color: eq.cor, fontSize: 11, fontWeight: 700 }}>
-                                <EqI size={10} /> {eq.nome}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
-                        {todosColabs.slice(0, 4).map((colId, idx) => {
-                          const info = (funcionarios || []).find((f: any) => f.id === colId)
-                          return <div key={colId} style={{ marginLeft: idx > 0 ? -10 : 0, border: '2px solid white', borderRadius: '50%', zIndex: 10 - idx }}><UserAvatar userId={colId} name={info?.nome || 'C'} size={28} /></div>
-                        })}
-                        {todosColabs.length > 4 && <div style={{ marginLeft: -10, width: 28, height: 28, borderRadius: 14, background: 'hsl(var(--bg-muted))', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>+{todosColabs.length - 4}</div>}
-                        {todosColabs.length === 0 && <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Nenhum</span>}
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 800 }}>
-                        <Check size={11} strokeWidth={3} /> Sincronizado
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <button className="btn btn-secondary btn-sm" style={{ padding: '5px 12px', borderRadius: 10, fontSize: 12, fontWeight: 700 }}>Gerenciar</button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          {(grupos || []).length === 0 && (
-            <div style={{ padding: '60px 0', textAlign: 'center' }}>
+      {abaLista === 'turmas' && (() => {
+        // Agrupar turmas por ano letivo
+        const gruposPorAno: Record<string, GrupoDigital[]> = {};
+        (grupos || []).forEach(g => {
+          const turmaId = g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null
+          const turmaERP = turmaId ? turmas.find(t => String(t.id) === turmaId) : null
+          const ano = turmaERP?.ano ? String(turmaERP.ano) : 'Outros / Sem Ano Letivo'
+          if (!gruposPorAno[ano]) gruposPorAno[ano] = []
+          gruposPorAno[ano].push(g)
+        })
+
+        // Ordenar anos em ordem decrescente (2025, 2024, etc.), deixando "Outros" pro final
+        const anosOrdenados = Object.keys(gruposPorAno).sort((a, b) => {
+          if (a === 'Outros / Sem Ano Letivo') return 1;
+          if (b === 'Outros / Sem Ano Letivo') return -1;
+          return b.localeCompare(a);
+        })
+
+        if ((grupos || []).length === 0) {
+          return (
+            <div style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)', padding: '60px 0', textAlign: 'center' }}>
               <BookOpen size={40} color="hsl(var(--text-muted))" style={{ opacity: 0.2, marginBottom: 16 }} />
               <p style={{ color: 'hsl(var(--text-muted))' }}>Nenhum grupo encontrado. Clique em "Sincronizar ERP".</p>
             </div>
-          )}
-        </div>
-      )}
+          )
+        }
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+            {anosOrdenados.map(ano => (
+              <div key={ano}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                  <div style={{ padding: '6px 16px', background: 'hsl(var(--bg-muted))', borderRadius: 20, fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-main))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Ano Letivo: {ano}
+                  </div>
+                  <div style={{ flex: 1, height: 1, background: 'hsl(var(--border-subtle))' }} />
+                </div>
+                
+                <div style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
+                        {['Grupo / Turma', 'Alunos', 'Equipes', 'Colaboradores', 'Status', ''].map(h => (
+                          <th key={h} style={{ padding: '14px 20px', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gruposPorAno[ano].map(g => {
+                        const equipesDoGrupo = (equipes || []).filter(e => (g.equipesIds || []).includes(e.id))
+                        const todosColabs = resolveColaboradoresGrupo(g)
+                        return (
+                          <tr key={g.id} onClick={() => { setActiveGrupoId(g.id); setTelaAtual('detalhe-grupo'); setTabDetalheGrupo('alunos') }} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.02)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                <div style={{ width: 40, height: 40, borderRadius: 12, background: g.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: `0 4px 12px ${g.cor}40` }}>
+                                  <BookOpen size={18} />
+                                </div>
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 14 }}>{g.nome}</div>
+                                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mural Digital Ativo</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Users size={14} color="hsl(var(--text-muted))" />
+                                <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 20px' }}>
+                              {equipesDoGrupo.length === 0 ? (
+                                <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Nenhuma</span>
+                              ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                  {equipesDoGrupo.map(eq => {
+                                    const EqI = getIconComponent(eq.icone)
+                                    return (
+                                      <div key={eq.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, background: `${eq.cor}15`, color: eq.cor, fontSize: 11, fontWeight: 700 }}>
+                                        <EqI size={10} /> {eq.nome}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
+                                {todosColabs.slice(0, 4).map((colId, idx) => {
+                                  const info = (funcionarios || []).find((f: any) => f.id === colId)
+                                  return <div key={colId} style={{ marginLeft: idx > 0 ? -10 : 0, border: '2px solid white', borderRadius: '50%', zIndex: 10 - idx }}><UserAvatar userId={colId} name={info?.nome || 'C'} size={28} /></div>
+                                })}
+                                {todosColabs.length > 4 && <div style={{ marginLeft: -10, width: 28, height: 28, borderRadius: 14, background: 'hsl(var(--bg-muted))', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>+{todosColabs.length - 4}</div>}
+                                {todosColabs.length === 0 && <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Nenhum</span>}
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 20px' }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 800 }}>
+                                <Check size={11} strokeWidth={3} /> Sincronizado
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                              <button className="btn btn-secondary btn-sm" style={{ padding: '5px 12px', borderRadius: 10, fontSize: 12, fontWeight: 700 }}>Gerenciar</button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* ── ABA EQUIPES ────────────────────────────────────────────────────── */}
       {abaLista === 'equipes' && (
