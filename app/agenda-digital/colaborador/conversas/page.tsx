@@ -172,25 +172,51 @@ export default function ADConversasPage() {
   const studentGroups: any[] = [];
 
   const startNewConversa = () => {
+    // selectedColaborador aqui é o ALUNO selecionado na tela do colaborador
     if (!selectedColaborador || !selectedGroup || !composeSubject.trim() || !composeBody.trim()) return
 
-    // Generate a strictly unique ID for each new conversation to ensure isolation
-    const newChatId = `${currentUser?.id}-${selectedGroup.id}-${selectedColaborador.id}-${Date.now()}`
+    const alunoSelecionado = selectedColaborador
 
-    // Create new chat
+    // BUG FIX: O ID SEMPRE começa com o ID do ALUNO para que o aluno possa filtrar suas conversas
+    // Formato correto: alunoId-grupoId-colaboradorId-timestamp
+    // Proteção extra: verificar se já existe conversa para esse aluno/grupo para evitar duplicatas
+    const existingChat = (chatsList || []).find(c => {
+      if (!c?.id) return false
+      const parts = String(c.id).split('-')
+      // O chat já existe se o alunoId (pos 0) e grupoId (pos 1) forem iguais
+      return parts[0] === String(alunoSelecionado.id) && parts[1] === String(selectedGroup.id)
+    })
+
+    if (existingChat) {
+      // Conversa já existe → apenas abrir ela em vez de duplicar
+      setActiveChat(existingChat)
+      setShowNovaConversa(false)
+      setSelectedGroup(null)
+      setSelectedColaborador(null)
+      setComposeSubject('')
+      setComposeBody('')
+      return
+    }
+
+    // Cria novo ID com aluno SEMPRE na posição 0
+    const newChatId = `${alunoSelecionado.id}-${selectedGroup.id}-${currentUser?.id}-${Date.now()}`
+
     const novoChat = {
       id: newChatId,
-      name: `${selectedColaborador.nome} (${selectedGroup.nome})`,
+      // Nomear com nome do aluno + setor para o colaborador identificar facilmente
+      name: `${alunoSelecionado.nome} (${selectedGroup.nome})`,
       status: 'online',
       preview: composeBody.substring(0, 30) + (composeBody.length > 30 ? '...' : ''),
       time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       date: new Date().toLocaleDateString('pt-BR'),
       startDate: new Date().toLocaleDateString('pt-BR'),
       startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      unread: 1,
+      unread: 0, // A escola criou, então não é não-lida para a escola
       tag: composeSubject,
-      colaboradorId: selectedColaborador.id,
-      grupoId: selectedGroup.id
+      // Metadados explícitos para evitar dependência do split do ID
+      alunoId: String(alunoSelecionado.id),
+      colaboradorId: String(currentUser?.id),
+      grupoId: String(selectedGroup.id)
     }
 
     setMessages(prev => ({
@@ -198,19 +224,17 @@ export default function ADConversasPage() {
       [newChatId]: [{
         id: Date.now(),
         text: composeBody,
-        sender: 'us',
+        sender: 'us', // 'us' = escola, 'them' = família/aluno — consistente em todo sistema
         time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         date: new Date().toLocaleDateString('pt-BR'),
-        author: currentUser?.nome || (currentUser?.cargo === 'Aluno' ? 'Aluno' : 'Responsável'),
-        authorRole: currentUser?.cargo || 'Responsável'
+        author: currentUser?.nome || 'Escola',
+        authorRole: currentUser?.cargo || 'Colaborador'
       }]
     }))
 
-    // Add to top of the list
     setChatsList(prev => [novoChat, ...prev])
     setActiveChat(novoChat)
 
-    // Reset flow states
     setShowNovaConversa(false)
     setSelectedGroup(null)
     setSelectedColaborador(null)
@@ -417,7 +441,9 @@ export default function ADConversasPage() {
             
             const chatMessages = messages[chat.id] || []
             const lastMessage = chatMessages[chatMessages.length - 1]
-            const lastMessageIsMine = lastMessage ? lastMessage.sender === 'them' : false
+            // BUG FIX: Na tela do colaborador, 'us' = escola = nossa mensagem
+            // O ícone de duplo-check deve aparecer quando a última mensagem foi NOSSA (escola)
+            const lastMessageIsMine = lastMessage ? lastMessage.sender === 'us' : false
 
             return (
               <div 
@@ -498,7 +524,9 @@ export default function ADConversasPage() {
                         </div>
                       ) : null
                       const lastMsg = msgs[msgs.length - 1]
-                      if (lastMsg.sender === 'us' && chat.unread > 0) {
+                      // BUG FIX: Badge de não-lidas no colaborador = quando a FAMÍLIA enviou ('them') e há mensagens não lidas
+                      // O colaborador precisa ver quando TEM mensagem nova da família para responder
+                      if (lastMsg.sender === 'them' && chat.unread > 0) {
                         return (
                           <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
                             {chat.unread}
@@ -793,7 +821,9 @@ export default function ADConversasPage() {
                  </div>
                  
                  {activeMessages.map((msg: any) => {
-                   const isMe = msg.sender === 'them'
+                    // BUG FIX: Na tela do COLABORADOR (escola), 'us' = nós (escola) = bolão direito/roxo
+                    // 'them' = família/aluno = balão esquerdo/cinza
+                    const isMe = msg.sender === 'us'
                    return (
                      <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
                        <div className="ad-chat-bubble-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
