@@ -23,6 +23,14 @@ export async function GET(request: Request) {
     const sortField = url.searchParams.get('sortField') || 'nome'
     const sortOrder = url.searchParams.get('sortOrder') || 'asc'
 
+    // Filtros Avançados
+    const dataCadastroInicio = url.searchParams.get('dataCadastroInicio') || ''
+    const dataCadastroFim = url.searchParams.get('dataCadastroFim') || ''
+    const inadimplente = url.searchParams.get('inadimplente') // 'true' | 'false' | null
+    const riscoEvasao = url.searchParams.get('riscoEvasao') || ''
+    const turno = url.searchParams.get('turno') || ''
+    const autorizadoSairSozinho = url.searchParams.get('autorizadoSairSozinho') // 'true' | 'false' | null
+
     const from = (page - 1) * limit
     const to = from + limit - 1
 
@@ -41,6 +49,31 @@ export async function GET(request: Request) {
 
     if (turma) {
       query = query.eq('turma', turma)
+    }
+
+    // Aplicação de Filtros Avançados
+    if (dataCadastroInicio) {
+      query = query.gte('created_at', dataCadastroInicio + 'T00:00:00.000Z')
+    }
+    if (dataCadastroFim) {
+      query = query.lte('created_at', dataCadastroFim + 'T23:59:59.999Z')
+    }
+    if (inadimplente === 'true') {
+      query = query.eq('inadimplente', true)
+    } else if (inadimplente === 'false') {
+      query = query.eq('inadimplente', false)
+    }
+    if (riscoEvasao && riscoEvasao !== 'todos') {
+      query = query.eq('risco_evasao', riscoEvasao)
+    }
+    if (turno && turno !== 'todos') {
+      query = query.ilike('turno', `%${turno}%`)
+    }
+    if (autorizadoSairSozinho === 'true') {
+      query = query.filter('dados->autorizadoSairSozinho', 'eq', 'true')
+    } else if (autorizadoSairSozinho === 'false') {
+      // Filtrar quando for explicitamente falso, nulo ou ausente
+      query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
     }
 
     // Determine ordering column

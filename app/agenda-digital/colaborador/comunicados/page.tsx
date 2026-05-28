@@ -21,16 +21,20 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 
 // Helper parsers for attachments formatted as "name|url|mime"
-const parseAnexo = (anexoStr: string) => {
+const parseAnexo = (anexoStr: any) => {
   if (!anexoStr) return null;
-  const parts = anexoStr.split('|');
+  if (typeof anexoStr === 'object') {
+    return { name: anexoStr.name || '', url: anexoStr.url || '', mime: anexoStr.mime || '' };
+  }
+  const str = String(anexoStr);
+  const parts = str.split('|');
   const name = parts[0] || '';
   const url = parts[1] || '';
   const mime = parts[2] || '';
   return { name, url, mime };
 };
 
-const getAnexoType = (anexoStr: string) => {
+const getAnexoType = (anexoStr: any) => {
   if (!anexoStr) return null;
   const parsed = parseAnexo(anexoStr);
   if (!parsed) return null;

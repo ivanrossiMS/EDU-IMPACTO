@@ -7,7 +7,7 @@ import {
   UserPlus, SearchIcon, CreditCard, Calendar, Phone, Mail,
   MapPin, Shield, DoorOpen, HardHat, Briefcase, Tag, Sparkles,
   Loader2, Lock, AlertTriangle, CheckCircle2, Info,
-  ChevronUp, ChevronDown, ArrowUpDown, FileText
+  ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
@@ -55,6 +55,17 @@ export default function AlunosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
+  
+  // Advanced Filters State
+  const [isFiltrosAvancadosModalOpen, setIsFiltrosAvancadosModalOpen] = useState(false)
+  const [filtrosAvancados, setFiltrosAvancados] = useState({
+    dataCadastroInicio: '',
+    dataCadastroFim: '',
+    inadimplente: 'todos',
+    riscoEvasao: 'todos',
+    turno: 'todos',
+    autorizadoSairSozinho: 'todos'
+  })
   
   // Sorting State
   const [sortField, setSortField] = useState('nome')
@@ -140,12 +151,20 @@ export default function AlunosPage() {
   const handleExportData = async () => {
     setIsExporting(true)
     try {
-      const params = new URLSearchParams({
+      const activeFilters: Record<string, string> = {
         all: 'true',
         sortField,
         sortOrder,
         _t: Date.now().toString()
-      })
+      }
+      if (filtrosAvancados.dataCadastroInicio) activeFilters.dataCadastroInicio = filtrosAvancados.dataCadastroInicio
+      if (filtrosAvancados.dataCadastroFim) activeFilters.dataCadastroFim = filtrosAvancados.dataCadastroFim
+      if (filtrosAvancados.inadimplente !== 'todos') activeFilters.inadimplente = filtrosAvancados.inadimplente
+      if (filtrosAvancados.riscoEvasao !== 'todos') activeFilters.riscoEvasao = filtrosAvancados.riscoEvasao
+      if (filtrosAvancados.turno !== 'todos') activeFilters.turno = filtrosAvancados.turno
+      if (filtrosAvancados.autorizadoSairSozinho !== 'todos') activeFilters.autorizadoSairSozinho = filtrosAvancados.autorizadoSairSozinho
+
+      const params = new URLSearchParams(activeFilters)
       
       const res = await fetch(`/api/alunos?${params.toString()}`, {
         cache: 'no-store'
@@ -654,7 +673,13 @@ export default function AlunosPage() {
       search: busca, 
       status: statusFiltro,
       sortField,
-      sortOrder
+      sortOrder,
+      ...(filtrosAvancados.dataCadastroInicio ? { dataCadastroInicio: filtrosAvancados.dataCadastroInicio } : {}),
+      ...(filtrosAvancados.dataCadastroFim ? { dataCadastroFim: filtrosAvancados.dataCadastroFim } : {}),
+      ...(filtrosAvancados.inadimplente !== 'todos' ? { inadimplente: filtrosAvancados.inadimplente } : {}),
+      ...(filtrosAvancados.riscoEvasao !== 'todos' ? { riscoEvasao: filtrosAvancados.riscoEvasao } : {}),
+      ...(filtrosAvancados.turno !== 'todos' ? { turno: filtrosAvancados.turno } : {}),
+      ...(filtrosAvancados.autorizadoSairSozinho !== 'todos' ? { autorizadoSairSozinho: filtrosAvancados.autorizadoSairSozinho } : {})
     }
   )
 
@@ -1213,6 +1238,94 @@ export default function AlunosPage() {
         .pulse-warning {
           animation: pulseWarning 2s infinite;
         }
+
+        /* Modern Filter Modal styles */
+        .filter-group {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 6px;
+        }
+
+        .filter-pill {
+          padding: 8px 14px;
+          border-radius: 12px;
+          font-size: 13px;
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: rgba(241, 245, 249, 0.8);
+          border: 1px solid rgba(226, 232, 240, 0.8);
+          color: #475569;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .dark .filter-pill {
+          background: rgba(30, 41, 59, 0.5);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          color: #94a3b8;
+        }
+
+        .filter-pill:hover {
+          background: rgba(226, 232, 240, 0.9);
+          transform: translateY(-1px);
+        }
+
+        .dark .filter-pill:hover {
+          background: rgba(51, 65, 85, 0.5);
+          color: #cbd5e1;
+        }
+
+        .filter-pill.active-primary {
+          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+          border-color: #3b82f6 !important;
+          color: white !important;
+          box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+        }
+
+        .filter-pill.active-success {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+          border-color: #10b981 !important;
+          color: white !important;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+        }
+
+        .filter-pill.active-danger {
+          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+          border-color: #ef4444 !important;
+          color: white !important;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+        }
+
+        .filter-pill.active-warning {
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important;
+          border-color: #f59e0b !important;
+          color: white !important;
+          box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
+        }
+
+        .modal-backdrop-blur {
+          background: rgba(8, 10, 24, 0.6) !important;
+          backdrop-filter: blur(12px) !important;
+          animation: fadeInBackdrop 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeInBackdrop {
+          from { opacity: 0; backdrop-filter: blur(0px); }
+          to { opacity: 1; backdrop-filter: blur(12px); }
+        }
+
+        .modal-enter-spring {
+          animation: modalSpring 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes modalSpring {
+          from { opacity: 0; transform: scale(0.92) translateY(20px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
         
         /* Custom Table */
         .modern-table {
@@ -1400,7 +1513,7 @@ export default function AlunosPage() {
                 <option value="inativo">Inativos</option>
               </select>
               
-              <button onClick={() => alert('Filtros avançados serão implementados em breve.')} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
+              <button onClick={() => setIsFiltrosAvancadosModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
                 <Filter size={16} /> Filtros Avançados
               </button>
               
@@ -2820,6 +2933,233 @@ export default function AlunosPage() {
               Entendi, fechar ajuda
             </button>
           </div>
+        </div>
+      )}
+
+      {/* FILTROS AVANÇADOS MODAL */}
+      {isFiltrosAvancadosModalOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }}>
+          <div 
+            className="w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden shadow-2xl rounded-3xl"
+            style={{ 
+              background: 'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(250,250,250,0.9) 100%)', 
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
+              animation: 'fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+            }}
+          >
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-slate-200/60 bg-white/50 backdrop-blur-md flex items-center justify-between relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+              <div className="relative z-10">
+                <h3 className="text-xl font-black flex items-center gap-3 tracking-tight text-slate-800">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                    <Filter size={18} />
+                  </div>
+                  Filtros Avançados
+                </h3>
+                <p className="text-sm text-slate-500 mt-1.5 font-medium ml-14">
+                  Refine a busca de alunos utilizando critérios específicos
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
+                className="relative z-10 w-10 h-10 rounded-2xl flex items-center justify-center bg-slate-100/80 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-all hover:scale-105 active:scale-95"
+              >
+                <X size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto custom-scrollbar flex flex-col gap-5 bg-slate-50/30">
+              
+              {/* Data de Cadastro */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-blue-200 group">
+                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:scale-110 group-hover:bg-indigo-100 transition-all">
+                    <Calendar size={16} strokeWidth={2.5} />
+                  </div>
+                  Período de Cadastro
+                </h4>
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">A partir de</label>
+                    <div className="relative">
+                      <input 
+                        type="date" 
+                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-semibold outline-none transition-all"
+                        value={filtrosAvancados.dataCadastroInicio}
+                        onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroInicio: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Até</label>
+                    <div className="relative">
+                      <input 
+                        type="date" 
+                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-semibold outline-none transition-all"
+                        value={filtrosAvancados.dataCadastroFim}
+                        onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroFim: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Turno */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-amber-200 group">
+                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 group-hover:scale-110 group-hover:bg-amber-100 transition-all">
+                    <Sun size={16} strokeWidth={2.5} />
+                  </div>
+                  Turno
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { val: 'todos', label: 'Todos' },
+                    { val: 'matutino', label: '🌅 Matutino' },
+                    { val: 'vespertino', label: '🌇 Vespertino' },
+                    { val: 'integral', label: '⚡ Integral' },
+                    { val: 'noturno', label: '🌙 Noturno' },
+                  ].map(item => {
+                    const isActive = filtrosAvancados.turno === item.val;
+                    return (
+                      <button
+                        key={item.val}
+                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
+                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30 scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'}`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Saída Sozinho */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-emerald-200 group">
+                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:scale-110 group-hover:bg-emerald-100 transition-all">
+                    <DoorOpen size={16} strokeWidth={2.5} />
+                  </div>
+                  Saída Sozinho (Portaria)
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { val: 'todos', label: 'Todos' },
+                    { val: 'true', label: '✅ Autorizado' },
+                    { val: 'false', label: '❌ Não Autorizado' },
+                  ].map(item => {
+                    const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
+                    return (
+                      <button
+                        key={item.val}
+                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
+                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'}`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Financeiro & Evasão (Grid 2 colunas) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Financeiro */}
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-rose-200 group">
+                  <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 group-hover:scale-110 group-hover:bg-rose-100 transition-all">
+                      <CreditCard size={16} strokeWidth={2.5} />
+                    </div>
+                    Situação Financeira
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { val: 'todos', label: 'Todos' },
+                      { val: 'false', label: '🛡️ Adimplente' },
+                      { val: 'true', label: '⚠️ Inadimplente' },
+                    ].map(item => {
+                      const isActive = filtrosAvancados.inadimplente === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, inadimplente: item.val }))}
+                          className={`w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30 scale-[1.02]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-[1.02]'}`}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Risco de Evasão */}
+                <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-teal-200 group">
+                  <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-500 group-hover:scale-110 group-hover:bg-teal-100 transition-all">
+                      <AlertTriangle size={16} strokeWidth={2.5} />
+                    </div>
+                    Risco de Evasão
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { val: 'todos', label: 'Todos' },
+                      { val: 'baixo', label: '🟢 Baixo' },
+                      { val: 'medio', label: '🟡 Médio' },
+                      { val: 'alto', label: '🔴 Alto' },
+                    ].map(item => {
+                      const isActive = filtrosAvancados.riscoEvasao === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
+                          className={`w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/30 scale-[1.02]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-[1.02]'}`}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-5 border-t border-slate-200/60 bg-white/80 backdrop-blur-md flex items-center justify-between">
+              <button 
+                onClick={() => setFiltrosAvancados({
+                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos'
+                })}
+                className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all active:scale-95"
+              >
+                Limpar Filtros
+              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 shadow-sm"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => setIsFiltrosAvancadosModalOpen(false)}
+                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all active:scale-95 shadow-lg shadow-blue-500/30 flex items-center gap-2"
+                >
+                  <Check size={16} strokeWidth={3} />
+                  Aplicar Filtros
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes fadeSlideIn {
+              from { opacity: 0; transform: translateY(20px) scale(0.96); }
+              to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+          `}} />
         </div>
       )}
 
