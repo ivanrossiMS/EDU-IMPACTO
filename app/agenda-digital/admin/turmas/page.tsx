@@ -481,9 +481,26 @@ export default function ADAdminTurmas() {
             {/* Vincular rápido em outras turmas */}
             {gruposNaoVinculadosFiltrados.length > 0 && (
               <div style={{ padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
-                <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 800, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {anoFiltroEquipe ? `Vincular em ${anoFiltroEquipe}:` : 'Vincular também em:'}
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 800, margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {anoFiltroEquipe ? `Vincular em ${anoFiltroEquipe}:` : 'Vincular também em:'}
+                  </p>
+                  {gruposNaoVinculadosFiltrados.length > 1 && (
+                    <button
+                      onClick={() => {
+                        const idsParaVincular = gruposNaoVinculadosFiltrados.map(g => g.id);
+                        setGrupos((grupos || []).map(gg => 
+                          idsParaVincular.includes(gg.id) ? { ...gg, equipesIds: [...(gg.equipesIds || []), activeEquipe.id] } : gg
+                        ));
+                      }}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#6366f1', background: 'rgba(99,102,241,0.1)', border: 'none', padding: '4px 10px', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.15)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,102,241,0.1)'}
+                    >
+                      <Link2 size={12} /> Vincular Todos ({gruposNaoVinculadosFiltrados.length})
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
                   {gruposNaoVinculadosFiltrados.map(g => (
                     <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 10, border: '1px dashed hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
