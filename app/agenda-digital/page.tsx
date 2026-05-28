@@ -1,9 +1,9 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
+import { supabase } from '@/lib/supabase'
 import { BookOpen, Sparkles } from 'lucide-react'
 
 const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
@@ -11,32 +11,60 @@ const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
 export default function AgendaDigitalIndex() {
   const router = useRouter()
   const { currentUserPerfil, currentUser } = useApp()
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
 
   useEffect(() => {
+    // Prevent execution if user is not loaded
+    if (!currentUserPerfil || !currentUser) return;
+
     const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
+    
     if (isAdmin) {
       router.replace('/agenda-digital/admin')
     } else {
       if (currentUser?.cargo === 'Aluno') {
         const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
+        
+        // Fast path: if we already have the ID, redirect immediately!
         if (directAlunoId) {
           router.replace(`/agenda-digital/${directAlunoId}/comunicados`)
           return
         }
-        const nomeLower = (currentUser.nome || '').toLowerCase().trim()
-        const myAluno = (alunos || []).find(a => 
-          (a.nome || '').toLowerCase().trim() === nomeLower || 
-          (currentUser.id && currentUser.id.includes(String(a.id)))
-        )
-        if (myAluno) {
-          router.replace(`/agenda-digital/${myAluno.id}/comunicados`)
-          return
+
+        // Slow path: Only fetch from DB if we don't have the ID, and ONLY fetch one specific record
+        const fetchAlunoId = async () => {
+          try {
+            const nomeLower = (currentUser.nome || '').trim()
+            if (!nomeLower) {
+              router.replace('/agenda-digital/selecionar-aluno')
+              return
+            }
+            
+            const { data, error } = await supabase
+              .from('alunos')
+              .select('id')
+              .ilike('nome', nomeLower)
+              .limit(1)
+              .single()
+              
+            if (data && data.id) {
+              router.replace(`/agenda-digital/${data.id}/comunicados`)
+            } else {
+              router.replace('/agenda-digital/selecionar-aluno')
+            }
+          } catch (e) {
+            console.error('Error fetching aluno ID', e)
+            router.replace('/agenda-digital/selecionar-aluno')
+          }
         }
+        
+        fetchAlunoId()
+        return
       }
+      
+      // Default fallback for other roles
       router.replace('/agenda-digital/selecionar-aluno')
     }
-  }, [currentUserPerfil, currentUser, alunos, router])
+  }, [currentUserPerfil, currentUser, router])
 
   return (
     <div style={{

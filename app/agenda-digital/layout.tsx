@@ -185,7 +185,14 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="ad-main-scroll no-scrollbar">
           {bannerUrl && (
             <div className="ad-banner-global">
-              <Image src={bannerUrl} alt="Cover Banner" fill style={{ objectFit: 'cover', objectPosition: 'center' }} />
+              <Image 
+                src={bannerUrl} 
+                alt="Cover Banner" 
+                fill 
+                priority={true} 
+                quality={90} 
+                style={{ objectFit: 'cover', objectPosition: 'center' }} 
+              />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
             </div>
           )}
