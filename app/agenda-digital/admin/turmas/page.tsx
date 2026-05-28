@@ -428,23 +428,19 @@ export default function ADAdminTurmas() {
 
               {/* ── Filtro de Ano Letivo ── */}
               {anosDisponiveis.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Ano letivo:</span>
-                  <button
-                    onClick={() => setAnoFiltroEquipe('')}
-                    style={{ padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${anoFiltroEquipe === '' ? activeEquipe.cor : 'hsl(var(--border-subtle))'}`, background: anoFiltroEquipe === '' ? `${activeEquipe.cor}12` : 'transparent', color: anoFiltroEquipe === '' ? activeEquipe.cor : 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
+                  <select
+                    className="form-input"
+                    value={anoFiltroEquipe}
+                    onChange={(e) => setAnoFiltroEquipe(e.target.value)}
+                    style={{ padding: '6px 12px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'white', fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-main))', minWidth: 100, cursor: 'pointer', outline: 'none' }}
                   >
-                    Todos
-                  </button>
-                  {anosDisponiveis.map(ano => (
-                    <button
-                      key={ano}
-                      onClick={() => setAnoFiltroEquipe(ano)}
-                      style={{ padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${anoFiltroEquipe === ano ? activeEquipe.cor : 'hsl(var(--border-subtle))'}`, background: anoFiltroEquipe === ano ? `${activeEquipe.cor}12` : 'transparent', color: anoFiltroEquipe === ano ? activeEquipe.cor : 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
-                    >
-                      {ano}
-                    </button>
-                  ))}
+                    <option value="">Todos</option>
+                    {anosDisponiveis.map(ano => (
+                      <option key={ano} value={ano}>{ano}</option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
