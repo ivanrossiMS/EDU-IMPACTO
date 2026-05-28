@@ -16,13 +16,23 @@ import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
 
 // Helper parsers for attachments formatted as "name|url|mime"
-const parseAnexo = (anexoStr: string) => {
-  if (!anexoStr) return null;
-  const parts = anexoStr.split('|');
-  const name = parts[0] || '';
-  const url = parts[1] || '';
-  const mime = parts[2] || '';
-  return { name, url, mime };
+const parseAnexo = (anexoData: any) => {
+  if (!anexoData) return null;
+  if (typeof anexoData === 'object') {
+    return {
+      name: anexoData.nome || anexoData.name || '',
+      url: anexoData.url || '',
+      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : '')
+    };
+  }
+  if (typeof anexoData === 'string') {
+    const parts = anexoData.split('|');
+    const name = parts[0] || '';
+    const url = parts[1] || '';
+    const mime = parts[2] || '';
+    return { name, url, mime };
+  }
+  return null;
 };
 
 const getAnexoType = (anexoStr: string) => {

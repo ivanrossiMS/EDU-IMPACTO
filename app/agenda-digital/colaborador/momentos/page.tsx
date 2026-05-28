@@ -130,7 +130,6 @@ export default function ADMomentosPage() {
     }}>
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Outfit:wght@300;400;600;800&display=swap');
-import { TurmaDropdown } from '../components/TurmaDropdown'
 
         
         @keyframes floatRandom {
@@ -179,7 +178,7 @@ import { TurmaDropdown } from '../components/TurmaDropdown'
 
         @media (max-width: 768px) {
           .ad-momentos-header {
-            margin: -48px 16px 16px 16px !important;
+            margin: 16px 16px 16px 16px !important;
             padding: 12px 16px !important;
             gap: 12px !important;
           }

@@ -148,13 +148,14 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd }: 
 
   return (
     <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div className="ad-reports-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         
         {step === 1 ? (
           /* ========================================================================= */
           /* ── STEP 1: Tipo de Relatório e Seleção de Template ────────────────────── */
           /* ========================================================================= */
           <motion.div 
+            className="ad-reports-modal-card"
             initial={{ scale: 0.95, opacity: 0, y: 30 }} 
             animate={{ scale: 1, opacity: 1, y: 0 }} 
             exit={{ scale: 0.95, opacity: 0, y: 30 }}
@@ -283,6 +284,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd }: 
           /* ── STEP 2: Preenchimento de Campos Específicos por Aluno ──────────────── */
           /* ========================================================================= */
           <motion.div 
+            className="ad-reports-modal-card"
             initial={{ scale: 0.96, opacity: 0, y: 30 }} 
             animate={{ scale: 1, opacity: 1, y: 0 }} 
             exit={{ scale: 0.96, opacity: 0, y: 30 }}

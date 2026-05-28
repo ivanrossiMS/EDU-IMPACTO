@@ -108,7 +108,8 @@ export function ADSidebar() {
   if (isMobile) {
     let mobileTabs: any[] = []
     
-    if (!isFamily && alunoId !== "colaborador" && !alunoId) {
+    // On student/family slug paths, always show only family tabs — never admin tabs
+    if (!isFamily && !isSlugPath && alunoId !== "colaborador" && !alunoId) {
       mobileTabs = [
         { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
@@ -134,7 +135,7 @@ export function ADSidebar() {
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'mensagens', 'fotos/vídeos', 'Frequência', 'Ocorrências', 'Notas', 'Agenda', 'Perfil'].includes(item.label)
+          return ['comunicados', 'mensagens', 'fotos/vídeos', 'Agenda', 'Perfil'].includes(item.label)
         }
         return true
       })
@@ -302,8 +303,8 @@ export function ADSidebar() {
           {/* Navigation */}
           <div style={{ flex: 1, padding: '0 16px', overflowY: 'auto', overflowX: 'hidden' }} className="no-scrollbar">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {/* Seção ERP/Admin (oculta para perfil Família pura) */}
-              {!isFamily && alunoId !== "colaborador" && menuItems.map((item) => {
+              {/* Seção ERP/Admin — hidden on student slug paths; only shown on /agenda-digital/admin/* */}
+              {!isFamily && !isSlugPath && alunoId !== "colaborador" && menuItems.map((item) => {
                 const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
                 return (
                   <Link key={item.id} href={item.href} style={{ textDecoration: 'none' }}>
@@ -437,7 +438,7 @@ export function ADSidebar() {
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
-                      return ['Comunicados', 'Mensagens', 'Fotos/Vídeos', 'Frequência', 'Ocorrências', 'Notas', 'Calendário', 'Meu Perfil'].includes(item.label)
+                      return ['Comunicados', 'Mensagens', 'Fotos/Vídeos', 'Calendário', 'Meu Perfil'].includes(item.label)
                     }
                     return true
                   }).map((item, idx) => {
@@ -544,7 +545,7 @@ export function ADSidebar() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (
                     <button 
-                      onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                      onClick={() => router.push(currentUser?.perfil !== 'Família' && currentUser?.perfil !== 'Responsável' && currentUser?.cargo !== 'Responsável' ? '/login?step=choose_agenda_role' : '/agenda-digital/selecionar-aluno')}
                       style={{
                         flex: 1, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
                         color: 'white', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
@@ -556,7 +557,12 @@ export function ADSidebar() {
                     </button>
                   )}
                   <button 
-                    onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login'; }}
+                    onClick={async () => { 
+                      localStorage.removeItem('edu-current-user');
+                      localStorage.removeItem('edu-current-perfil');
+                      await fetch('/api/auth/logout', { method: 'POST' }); 
+                      window.location.href = '/login'; 
+                    }}
                     style={{
                       flex: 1, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
                       color: '#fca5a5', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
@@ -581,14 +587,19 @@ export function ADSidebar() {
                 </div>
                 {currentUser?.cargo !== 'Aluno' && (
                   <button 
-                    onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                    onClick={() => router.push(currentUser?.perfil !== 'Família' && currentUser?.perfil !== 'Responsável' && currentUser?.cargo !== 'Responsável' ? '/login?step=choose_agenda_role' : '/agenda-digital/selecionar-aluno')}
                     style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}
                   >
                     <Users size={18} />
                   </button>
                 )}
                 <button 
-                  onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login'; }}
+                  onClick={async () => { 
+                    localStorage.removeItem('edu-current-user');
+                    localStorage.removeItem('edu-current-perfil');
+                    await fetch('/api/auth/logout', { method: 'POST' }); 
+                    window.location.href = '/login'; 
+                  }}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}
                 >
                   <LogOut size={18} />

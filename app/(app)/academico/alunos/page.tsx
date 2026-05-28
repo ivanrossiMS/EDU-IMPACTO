@@ -6,13 +6,15 @@ import {
   Trash2, Edit, Eye, Check, X, Camera, Upload, 
   UserPlus, SearchIcon, CreditCard, Calendar, Phone, Mail,
   MapPin, Shield, DoorOpen, HardHat, Briefcase, Tag, Sparkles,
-  Loader2, Lock, AlertTriangle, CheckCircle2, Info
+  Loader2, Lock, AlertTriangle, CheckCircle2, Info,
+  ChevronUp, ChevronDown, ArrowUpDown, FileText
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
+import * as XLSX from 'xlsx'
 function formatName(fullName: string) {
   if (!fullName) return ''
   const parts = fullName.trim().split(/\s+/)
@@ -53,6 +55,556 @@ export default function AlunosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
+  
+  // Sorting State
+  const [sortField, setSortField] = useState('nome')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+
+  // Export State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'csv' | 'tsv' | 'json' | 'xlsx'>('xlsx')
+  const [exportFields, setExportFields] = useState<Record<string, boolean>>({
+    // Aluno
+    id: true,
+    nome: true,
+    email: true,
+    telefone: true,
+    dataNasc: true,
+    status: true,
+    sairSozinho: true,
+    unidade: false,
+    turno: false,
+    serie: false,
+    turma_anoLetivo: true,
+    turma_segmento: true,
+    turma_nome: true,
+    inadimplente: false,
+    risco_evasao: false,
+    media: false,
+    frequencia: false,
+    obs: false,
+    dataCadastro: true,
+    
+    // Turma
+    historicoTurmas: false,
+
+    // Responsável Financeiro
+    respFin_id: true,
+    respFin_nome: true,
+    respFin_rfid: true,
+    respFin_email: true,
+    respFin_telefone: true,
+    respFin_cpf: true,
+    respFin_rg: true,
+    respFin_parentesco: true,
+    respFin_profissao: true,
+    respFin_vinculo: true,
+    respFin_tipo: true,
+    respFin_diasAcesso: true,
+    respFin_proibido: true,
+
+    // Responsável Pedagógico
+    respPed_id: true,
+    respPed_nome: true,
+    respPed_rfid: true,
+    respPed_email: true,
+    respPed_telefone: true,
+    respPed_cpf: true,
+    respPed_rg: true,
+    respPed_parentesco: true,
+    respPed_profissao: true,
+    respPed_vinculo: true,
+    respPed_tipo: true,
+    respPed_diasAcesso: true,
+    respPed_proibido: true,
+
+    // Outros
+    responsaveisOutros: true
+  })
+  const [exportFilters, setExportFilters] = useState({
+    dateStart: '',
+    dateEnd: '',
+  })
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortOrder('asc')
+    }
+    setPaginaAtual(1)
+  }
+
+  const handleExportData = async () => {
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams({
+        all: 'true',
+        sortField,
+        sortOrder,
+        _t: Date.now().toString()
+      })
+      
+      const res = await fetch(`/api/alunos?${params.toString()}`, {
+        cache: 'no-store'
+      })
+      const json = await res.json()
+      let data = json.data || []
+      
+      const getLocalDateStr = (dateVal: string | Date) => {
+        if (!dateVal) return ''
+        try {
+          const d = new Date(dateVal)
+          if (isNaN(d.getTime())) return ''
+          const y = d.getFullYear()
+          const m = String(d.getMonth() + 1).padStart(2, '0')
+          const day = String(d.getDate()).padStart(2, '0')
+          return `${y}-${m}-${day}`
+        } catch (e) {
+          return ''
+        }
+      }
+
+      // Filter by registration date if selected
+      if (exportFilters.dateStart) {
+        data = data.filter((item: any) => {
+          const localDate = getLocalDateStr(item.created_at)
+          return localDate && localDate >= exportFilters.dateStart
+        })
+      }
+      if (exportFilters.dateEnd) {
+        data = data.filter((item: any) => {
+          const localDate = getLocalDateStr(item.created_at)
+          return localDate && localDate <= exportFilters.dateEnd
+        })
+      }
+      
+      if (data.length === 0) {
+        alert('Nenhum aluno encontrado para os critérios selecionados.')
+        setIsExporting(false)
+        return
+      }
+      
+      const formatDateStr = (dateStr: string) => {
+        if (!dateStr) return ''
+        try {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            const [y, m, d] = dateStr.split('-')
+            return `${d}/${m}/${y}`
+          }
+          const d = new Date(dateStr)
+          if (isNaN(d.getTime())) return dateStr
+          const day = String(d.getDate()).padStart(2, '0')
+          const month = String(d.getMonth() + 1).padStart(2, '0')
+          const year = d.getFullYear()
+          return `${day}/${month}/${year}`
+        } catch (e) {
+          return dateStr
+        }
+      }
+
+      const formatDiasAcesso = (diasVal: any) => {
+        if (!diasVal) return ''
+        if (Array.isArray(diasVal)) {
+          return diasVal.join(', ')
+        }
+        if (typeof diasVal === 'string') {
+          if (diasVal.startsWith('[') && diasVal.endsWith(']')) {
+            try {
+              const parsed = JSON.parse(diasVal)
+              if (Array.isArray(parsed)) {
+                return parsed.join(', ')
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+          return diasVal
+        }
+        return String(diasVal)
+      }
+
+      const formatParentesco = (p: any) => {
+        if (!p) return ''
+        const lower = String(p).trim().toLowerCase()
+        if (lower === 'mae' || lower === 'mãe') return 'Mãe'
+        if (lower === 'pai') return 'Pai'
+        if (lower === 'outro') return 'Outro'
+        return String(p).charAt(0).toUpperCase() + String(p).slice(1)
+      }
+      
+      const getFinResp = (item: any) => {
+        return item.responsaveis?.find((r: any) => r.isFinanceiro || r.respFinanceiro)
+      }
+      const getPedResp = (item: any) => {
+        return item.responsaveis?.find((r: any) => r.isPedagogico || r.respPedagogico)
+      }
+      const getOtherRespsStr = (item: any) => {
+        const fin = getFinResp(item)
+        const ped = getPedResp(item)
+        const others = item.responsaveis?.filter((r: any) => r.id !== fin?.id && r.id !== ped?.id) || []
+        if (others.length === 0) return ''
+        return others.map((r: any) => {
+          const typeParts: string[] = []
+          if (r.isFinanceiro || r.respFinanceiro) typeParts.push('Financeiro')
+          if (r.isPedagogico || r.respPedagogico) typeParts.push('Pedagógico')
+          if (r.isOutro) typeParts.push('Outro')
+          const tipoStr = typeParts.length > 0 ? typeParts.join('/') : 'Outro'
+          
+          const formatDays = formatDiasAcesso(r.diasAcesso)
+          
+          return `ID: ${r.id || 'N/A'}, Nome: ${r.nome || 'N/A'}, Parentesco: ${formatParentesco(r.parentesco) || 'N/A'}, Tipo: ${tipoStr}, RFID: ${r.rfid || 'N/A'}, E-mail: ${r.email || 'N/A'}, Tel: ${r.telefone || r.celular || 'N/A'}, Profissão: ${r.profissao || 'N/A'}, Dias: ${formatDays || 'N/A'}, Proibido: ${r.proibido ? 'Sim' : 'Não'}`
+        }).join('; ')
+      }
+      
+      const headers: string[] = []
+      const rowMapper: ((item: any) => string)[] = []
+      
+      // --- ALUNO ---
+      if (exportFields.id) {
+        headers.push('ID/Matrícula')
+        rowMapper.push(item => item.matricula || item.codigo || item.id || '')
+      }
+      if (exportFields.nome) {
+        headers.push('Nome Completo')
+        rowMapper.push(item => item.nome || '')
+      }
+      if (exportFields.email) {
+        headers.push('E-mail')
+        rowMapper.push(item => item.email || '')
+      }
+      if (exportFields.telefone) {
+        headers.push('Telefone')
+        rowMapper.push(item => item.telefone || '')
+      }
+      if (exportFields.dataNasc) {
+        headers.push('Data de Nascimento')
+        rowMapper.push(item => formatDateStr(item.data_nascimento))
+      }
+      if (exportFields.status) {
+        headers.push('Status')
+        rowMapper.push(item => item.status || '')
+      }
+      if (exportFields.sairSozinho) {
+        headers.push('Autorizado Sair Sozinho')
+        rowMapper.push(item => {
+          const val = item.autorizadoSairSozinho !== undefined ? item.autorizadoSairSozinho : item.dados?.autorizadoSairSozinho
+          return val ? 'Sim' : 'Não'
+        })
+      }
+      if (exportFields.unidade) {
+        headers.push('Unidade Escolar')
+        rowMapper.push(item => item.unidade || '')
+      }
+      if (exportFields.turno) {
+        headers.push('Turno')
+        rowMapper.push(item => item.turno || '')
+      }
+      if (exportFields.serie) {
+        headers.push('Série')
+        rowMapper.push(item => item.serie || '')
+      }
+
+      const getTurmaObj = (item: any) => {
+        if (!item.turma) return null
+        return todasTurmas.find((t: any) => 
+          String(t.id) === String(item.turma) || 
+          String(t.codigo) === String(item.turma) ||
+          String(t.nome).toLowerCase() === String(item.turma).toLowerCase()
+        )
+      }
+      
+      if (exportFields.turma_anoLetivo) {
+        headers.push('Ano Letivo')
+        rowMapper.push(item => {
+          if (item.turma_anoLetivo) return String(item.turma_anoLetivo)
+          const tObj = getTurmaObj(item)
+          return tObj?.ano !== undefined ? String(tObj.ano) : (item.anoLetivo || item.ano_letivo || item.dados?.anoLetivo || '')
+        })
+      }
+      if (exportFields.turma_segmento) {
+        headers.push('Segmento')
+        rowMapper.push(item => {
+          if (item.turma_segmento) return item.turma_segmento
+          const tObj = getTurmaObj(item)
+          return tObj?.dados?.segmento || item.segmento || item.dados?.segmento || ''
+        })
+      }
+      if (exportFields.turma_nome) {
+        headers.push('Nome da Turma')
+        rowMapper.push(item => {
+          if (item.turma_nome) return item.turma_nome
+          return getTurmaObj(item)?.nome || item.turma || ''
+        })
+      }
+
+      if (exportFields.inadimplente) {
+        headers.push('Inadimplente')
+        rowMapper.push(item => item.inadimplente ? 'Sim' : 'Não')
+      }
+      if (exportFields.risco_evasao) {
+        headers.push('Risco de Evasão')
+        rowMapper.push(item => {
+          const val = item.risco_evasao || 'baixo'
+          return val.charAt(0).toUpperCase() + val.slice(1)
+        })
+      }
+      if (exportFields.media) {
+        headers.push('Média')
+        rowMapper.push(item => (item.media !== undefined && item.media !== null) ? String(item.media) : '')
+      }
+      if (exportFields.frequencia) {
+        headers.push('Frequência (%)')
+        rowMapper.push(item => (item.frequencia !== undefined && item.frequencia !== null) ? `${item.frequencia}%` : '')
+      }
+      if (exportFields.obs) {
+        headers.push('Observações')
+        rowMapper.push(item => item.obs || '')
+      }
+      if (exportFields.dataCadastro) {
+        headers.push('Data de Cadastro')
+        rowMapper.push(item => formatDateStr(item.created_at))
+      }
+      
+      // --- TURMA ---
+      if (exportFields.historicoTurmas) {
+        headers.push('Histórico de Turmas')
+        rowMapper.push(item => {
+          const hList = item.historicoTurmas || item.dados?.historicoTurmas || []
+          if (hList.length === 0) return ''
+          return hList.map((h: any) => `${h.anoLetivo}: ${todasTurmas.find((t: any) => String(t.id) === String(h.serieTurma))?.nome || h.serieTurma} (${h.status || 'N/A'})`).join('; ')
+        })
+      }
+      
+      // --- RESP FINANCEIRO ---
+      if (exportFields.respFin_id) {
+        headers.push('Fin: ID')
+        rowMapper.push(item => getFinResp(item)?.id || '')
+      }
+      if (exportFields.respFin_nome) {
+        headers.push('Fin: Nome')
+        rowMapper.push(item => getFinResp(item)?.nome || item.responsavel_financeiro || item.responsavelFinanceiro || '')
+      }
+      if (exportFields.respFin_rfid) {
+        headers.push('Fin: RFID')
+        rowMapper.push(item => getFinResp(item)?.rfid || '')
+      }
+      if (exportFields.respFin_email) {
+        headers.push('Fin: E-mail')
+        rowMapper.push(item => getFinResp(item)?.email || item.emailResponsavelFinanceiro || item.email_responsavel_financeiro || '')
+      }
+      if (exportFields.respFin_telefone) {
+        headers.push('Fin: Telefone')
+        rowMapper.push(item => {
+          const resp = getFinResp(item)
+          return resp?.telefone || resp?.celular || resp?.dados?.celular || item.telResponsavelFinanceiro || item.tel_responsavel_financeiro || ''
+        })
+      }
+      if (exportFields.respFin_cpf) {
+        headers.push('Fin: CPF')
+        rowMapper.push(item => getFinResp(item)?.dados?.cpf || getFinResp(item)?.cpf || item.cpfResponsavelFinanceiro || '')
+      }
+      if (exportFields.respFin_rg) {
+        headers.push('Fin: RG')
+        rowMapper.push(item => getFinResp(item)?.dados?.rg || getFinResp(item)?.rg || item.rgResponsavelFinanceiro || '')
+      }
+      if (exportFields.respFin_parentesco) {
+        headers.push('Fin: Parentesco')
+        rowMapper.push(item => formatParentesco(getFinResp(item)?.parentesco || item.parentescoResponsavelFinanceiro))
+      }
+      if (exportFields.respFin_profissao) {
+        headers.push('Fin: Profissão')
+        rowMapper.push(item => getFinResp(item)?.profissao || '')
+      }
+      if (exportFields.respFin_vinculo) {
+        headers.push('Fin: Vínculo')
+        rowMapper.push(item => item.matricula || item.codigo || item.id || '')
+      }
+      if (exportFields.respFin_tipo) {
+        headers.push('Fin: Tipo de Responsável')
+        rowMapper.push(item => {
+          const resp = getFinResp(item)
+          if (!resp) {
+            return (item.responsavel_financeiro || item.responsavelFinanceiro) ? 'Financeiro' : ''
+          }
+          const parts = ['Financeiro']
+          if (resp.isPedagogico || resp.respPedagogico) parts.push('Pedagógico')
+          return parts.join('/')
+        })
+      }
+      if (exportFields.respFin_diasAcesso) {
+        headers.push('Fin: Dias Permitidos Retirada')
+        rowMapper.push(item => formatDiasAcesso(getFinResp(item)?.diasAcesso || getFinResp(item)?.dias_acesso))
+      }
+      if (exportFields.respFin_proibido) {
+        headers.push('Fin: Acesso Restrito')
+        rowMapper.push(item => {
+          const resp = getFinResp(item)
+          if (!resp) return 'Não'
+          return resp.proibido ? 'Sim' : 'Não'
+        })
+      }
+      
+      // --- RESP PEDAGÓGICO ---
+      if (exportFields.respPed_id) {
+        headers.push('Ped: ID')
+        rowMapper.push(item => getPedResp(item)?.id || '')
+      }
+      if (exportFields.respPed_nome) {
+        headers.push('Ped: Nome')
+        rowMapper.push(item => getPedResp(item)?.nome || item.responsavel_pedagogico || item.responsavelPedagogico || '')
+      }
+      if (exportFields.respPed_rfid) {
+        headers.push('Ped: RFID')
+        rowMapper.push(item => getPedResp(item)?.rfid || '')
+      }
+      if (exportFields.respPed_email) {
+        headers.push('Ped: E-mail')
+        rowMapper.push(item => getPedResp(item)?.email || item.emailResponsavelPedagogico || item.email_responsavel_pedagogico || '')
+      }
+      if (exportFields.respPed_telefone) {
+        headers.push('Ped: Telefone')
+        rowMapper.push(item => {
+          const resp = getPedResp(item)
+          return resp?.telefone || resp?.celular || resp?.dados?.celular || item.telResponsavelPedagogico || item.tel_responsavel_pedagogico || ''
+        })
+      }
+      if (exportFields.respPed_cpf) {
+        headers.push('Ped: CPF')
+        rowMapper.push(item => getPedResp(item)?.dados?.cpf || getPedResp(item)?.cpf || item.cpfResponsavelPedagogico || '')
+      }
+      if (exportFields.respPed_rg) {
+        headers.push('Ped: RG')
+        rowMapper.push(item => getPedResp(item)?.dados?.rg || getPedResp(item)?.rg || item.rgResponsavelPedagogico || '')
+      }
+      if (exportFields.respPed_parentesco) {
+        headers.push('Ped: Parentesco')
+        rowMapper.push(item => formatParentesco(getPedResp(item)?.parentesco || item.parentescoResponsavelPedagogico))
+      }
+      if (exportFields.respPed_profissao) {
+        headers.push('Ped: Profissão')
+        rowMapper.push(item => getPedResp(item)?.profissao || '')
+      }
+      if (exportFields.respPed_vinculo) {
+        headers.push('Ped: Vínculo')
+        rowMapper.push(item => item.matricula || item.codigo || item.id || '')
+      }
+      if (exportFields.respPed_tipo) {
+        headers.push('Ped: Tipo de Responsável')
+        rowMapper.push(item => {
+          const resp = getPedResp(item)
+          if (!resp) {
+            return (item.responsavel_pedagogico || item.responsavelPedagogico) ? 'Pedagógico' : ''
+          }
+          const parts = []
+          if (resp.isFinanceiro || resp.respFinanceiro) parts.push('Financeiro')
+          parts.push('Pedagógico')
+          return parts.join('/')
+        })
+      }
+      if (exportFields.respPed_diasAcesso) {
+        headers.push('Ped: Dias Permitidos Retirada')
+        rowMapper.push(item => formatDiasAcesso(getPedResp(item)?.diasAcesso || getPedResp(item)?.dias_acesso))
+      }
+      if (exportFields.respPed_proibido) {
+        headers.push('Ped: Acesso Restrito')
+        rowMapper.push(item => {
+          const resp = getPedResp(item)
+          if (!resp) return 'Não'
+          return resp.proibido ? 'Sim' : 'Não'
+        })
+      }
+      
+      // --- OUTROS ---
+      if (exportFields.responsaveisOutros) {
+        headers.push('Outros Responsáveis')
+        rowMapper.push(item => getOtherRespsStr(item))
+      }
+      
+      let fileContent: any = ''
+      let fileExtension = 'csv'
+      let mimeType = 'text/csv;charset=utf-8;'
+      
+      if (exportFormat === 'xlsx') {
+        const tableData = data.map((item: any) => {
+          const row: Record<string, string> = {}
+          headers.forEach((h, i) => {
+            row[h] = rowMapper[i](item)
+          })
+          return row
+        })
+        const wb = XLSX.utils.book_new()
+        const ws = XLSX.utils.json_to_sheet(tableData)
+        XLSX.utils.book_append_sheet(wb, ws, 'Alunos')
+        XLSX.writeFile(wb, `relatorio_alunos_${Date.now()}.xlsx`)
+      } else if (exportFormat === 'csv') {
+        const csvRows = [
+          headers.join(';'),
+          ...data.map((item: any) => 
+            rowMapper.map(fn => {
+              const val = fn(item)
+              const escaped = String(val).replace(/"/g, '""')
+              return `"${escaped}"`
+            }).join(';')
+          )
+        ]
+        fileContent = '\uFEFF' + csvRows.join('\n')
+      } else if (exportFormat === 'tsv') {
+        const tsvRows = [
+          headers.join('\t'),
+          ...data.map((item: any) => 
+            rowMapper.map(fn => {
+              const val = fn(item)
+              const escaped = String(val).replace(/"/g, '""')
+              return `"${escaped}"`
+            }).join('\t')
+          )
+        ]
+        fileContent = '\uFEFF' + tsvRows.join('\n')
+        fileExtension = 'txt'
+        mimeType = 'text/tab-separated-values;charset=utf-8;'
+      } else if (exportFormat === 'json') {
+        const jsonObjects = data.map((item: any) => {
+          const obj: any = {}
+          headers.forEach((h, i) => {
+            obj[h] = rowMapper[i](item)
+          })
+          return obj
+        })
+        fileContent = JSON.stringify(jsonObjects, null, 2)
+        fileExtension = 'json'
+        mimeType = 'application/json;charset=utf-8;'
+      }
+      
+      if (exportFormat !== 'xlsx') {
+        const blob = new Blob([fileContent], { type: mimeType })
+        const downloadLink = document.createElement('a')
+        const downloadUrl = URL.createObjectURL(blob)
+        downloadLink.setAttribute('href', downloadUrl)
+        downloadLink.setAttribute('download', `relatorio_alunos_${Date.now()}.${fileExtension}`)
+        downloadLink.style.visibility = 'hidden'
+        document.body.appendChild(downloadLink)
+        downloadLink.click()
+        document.body.removeChild(downloadLink)
+      }
+      
+      logSystemAction(
+        'Acadêmico (Alunos)',
+        'Exportação',
+        `Exportado relatório de alunos contendo ${data.length} registros no formato ${exportFormat.toUpperCase()}`
+      )
+      
+      setIsExportModalOpen(false)
+    } catch (err: any) {
+      console.error('Error exporting data:', err)
+      alert(`Erro ao exportar dados: ${err.message}`)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     step: 'password' | 'deleting' | 'success' | 'error';
@@ -96,7 +648,14 @@ export default function AlunosPage() {
   const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ data: any[], total: number }>(
     ['alunos'],
     '/api/alunos',
-    { page: paginaAtual, limit: itensPorPagina, search: busca, status: statusFiltro }
+    { 
+      page: paginaAtual, 
+      limit: itensPorPagina, 
+      search: busca, 
+      status: statusFiltro,
+      sortField,
+      sortOrder
+    }
   )
 
   const alunos = apiResponse?.data || []
@@ -849,7 +1408,7 @@ export default function AlunosPage() {
                 <Upload size={16} /> Importar
               </button>
               
-              <button onClick={() => alert('Exportação de dados será implementada em breve.')} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
+              <button onClick={() => setIsExportModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
                 <Download size={16} /> Exportar
               </button>
             </div>
@@ -861,23 +1420,50 @@ export default function AlunosPage() {
           <table className="modern-table">
             <thead>
               <tr>
-                <th>Foto</th>
-                <th>ID</th>
-                <th>Nome Completo</th>
-                <th>Responsáveis</th>
-                <th>Contato</th>
-                <th>Turma</th>
-                <th>Sair Sozinho</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'center' }}>Ações</th>
+                <th onClick={() => handleSort('foto')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Foto {sortField === 'foto' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    ID {sortField === 'id' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('nome')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Nome Completo {sortField === 'nome' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('responsavel')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Responsáveis {sortField === 'responsavel' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('turma')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Turma {sortField === 'turma' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('autorizadoSairSozinho')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Sair Sozinho {sortField === 'autorizadoSairSozinho' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none', padding: '10px 12px' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    Status {sortField === 'status' ? (sortOrder === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />) : <ArrowUpDown size={12} style={{ opacity: 0.4 }} />}
+                  </div>
+                </th>
+                <th style={{ textAlign: 'center', padding: '10px 12px' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <TableSkeleton rows={5} cols={9} />
+                <TableSkeleton rows={5} cols={8} />
               ) : alunosPaginados.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                  <td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                       <Users size={32} style={{ color: '#94a3b8' }} />
                       <span style={{ fontSize: '14px', fontWeight: 600 }}>Nenhum aluno encontrado</span>
@@ -984,9 +1570,8 @@ export default function AlunosPage() {
                       }
                     </div>
                   </td>
-                  <td style={{ color: '#475569', fontSize: 12, whiteSpace: 'nowrap' }}>{aluno.telefone}</td>
                   <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
-                    {todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
+                    {aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <span style={{ 
@@ -2234,6 +2819,252 @@ export default function AlunosPage() {
             <button onClick={() => setIsHelpModalOpen(false)} className="neo-btn neo-btn-primary" style={{ width: '100%', marginTop: 24, padding: '14px 0', fontSize: 15 }}>
               Entendi, fechar ajuda
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT MODAL */}
+      {isExportModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div 
+            className="glass-card ultra-modal modal-enter-active" 
+            style={{ width: '100%', maxWidth: 640, maxHeight: '95vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '24px 32px', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileText size={20} color="#fff" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Exportar Relatório de Alunos</h2>
+                  <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>Escolha os campos e formato para exportação</p>
+                </div>
+              </div>
+              <button onClick={() => setIsExportModalOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ padding: '24px 32px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 20 }}>
+              
+              {/* Fields Checklist */}
+              <div>
+                {/* DADOS DO ALUNO */}
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Users size={14} /> 1. Dados do Aluno
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+                  {[
+                    { key: 'id', label: 'ID / Matrícula' },
+                    { key: 'nome', label: 'Nome Completo' },
+                    { key: 'email', label: 'E-mail' },
+                    { key: 'telefone', label: 'Telefone' },
+                    { key: 'dataNasc', label: 'Data de Nascimento' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'sairSozinho', label: 'Autorização Saída' },
+                    { key: 'unidade', label: 'Unidade Escolar' },
+                    { key: 'turno', label: 'Turno' },
+                    { key: 'serie', label: 'Série' },
+                    { key: 'turma_anoLetivo', label: 'Ano Letivo da Turma' },
+                    { key: 'turma_segmento', label: 'Segmento da Turma' },
+                    { key: 'turma_nome', label: 'Nome da Turma' },
+                    { key: 'inadimplente', label: 'Inadimplente (Financeiro)' },
+                    { key: 'risco_evasao', label: 'Risco de Evasão' },
+                    { key: 'media', label: 'Média' },
+                    { key: 'frequencia', label: 'Frequência (%)' },
+                    { key: 'obs', label: 'Observações' },
+                    { key: 'dataCadastro', label: 'Data de Cadastro' },
+                  ].map((field) => (
+                    <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={exportFields[field.key]}
+                        onChange={(e) => setExportFields(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                        style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#2563eb' }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+
+                {/* VÍNCULO DA TURMA */}
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                  <Tag size={14} /> 2. Vínculos e Histórico
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={exportFields.historicoTurmas}
+                      onChange={(e) => setExportFields(prev => ({ ...prev, historicoTurmas: e.target.checked }))}
+                      style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#10b981' }}
+                    />
+                    Histórico Completo de Turmas
+                  </label>
+                </div>
+
+                {/* RESPONSÁVEL FINANCEIRO */}
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                  <Shield size={14} /> 3. Responsável Financeiro
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+                  {[
+                    { key: 'respFin_id', label: 'ID do Responsável' },
+                    { key: 'respFin_nome', label: 'Nome Completo' },
+                    { key: 'respFin_rfid', label: 'Cartão RFID' },
+                    { key: 'respFin_email', label: 'E-mail' },
+                    { key: 'respFin_telefone', label: 'Telefone' },
+                    { key: 'respFin_cpf', label: 'CPF' },
+                    { key: 'respFin_rg', label: 'RG' },
+                    { key: 'respFin_parentesco', label: 'Parentesco' },
+                    { key: 'respFin_profissao', label: 'Profissão' },
+                    { key: 'respFin_vinculo', label: 'Vínculo (Matrícula Aluno)' },
+                    { key: 'respFin_tipo', label: 'Tipo de Responsável' },
+                    { key: 'respFin_diasAcesso', label: 'Dias Permitidos Retirada' },
+                    { key: 'respFin_proibido', label: 'Acesso Restrito/Proibido' },
+                  ].map((field) => (
+                    <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={exportFields[field.key]}
+                        onChange={(e) => setExportFields(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                        style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#8b5cf6' }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+
+                {/* RESPONSÁVEL PEDAGÓGICO */}
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#ec4899', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                  <Shield size={14} /> 4. Responsável Pedagógico
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+                  {[
+                    { key: 'respPed_id', label: 'ID do Responsável' },
+                    { key: 'respPed_nome', label: 'Nome Completo' },
+                    { key: 'respPed_rfid', label: 'Cartão RFID' },
+                    { key: 'respPed_email', label: 'E-mail' },
+                    { key: 'respPed_telefone', label: 'Telefone' },
+                    { key: 'respPed_cpf', label: 'CPF' },
+                    { key: 'respPed_rg', label: 'RG' },
+                    { key: 'respPed_parentesco', label: 'Parentesco' },
+                    { key: 'respPed_profissao', label: 'Profissão' },
+                    { key: 'respPed_vinculo', label: 'Vínculo (Matrícula Aluno)' },
+                    { key: 'respPed_tipo', label: 'Tipo de Responsável' },
+                    { key: 'respPed_diasAcesso', label: 'Dias Permitidos Retirada' },
+                    { key: 'respPed_proibido', label: 'Acesso Restrito/Proibido' },
+                  ].map((field) => (
+                    <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={exportFields[field.key]}
+                        onChange={(e) => setExportFields(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                        style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#ec4899' }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+
+                {/* OUTROS RESPONSÁVEIS */}
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                  <Users size={14} /> 5. Outros Responsáveis
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={exportFields.responsaveisOutros}
+                      onChange={(e) => setExportFields(prev => ({ ...prev, responsaveisOutros: e.target.checked }))}
+                      style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#f59e0b' }}
+                    />
+                    Lista de Outros Responsáveis
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ height: '1px', background: '#e2e8f0' }} />
+
+              {/* Filters */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Filtrar por Data de Cadastro</h3>
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>De</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={exportFilters.dateStart}
+                      onChange={(e) => setExportFilters(prev => ({ ...prev, dateStart: e.target.value }))}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Até</label>
+                    <input
+                      type="date"
+                      className="form-input"
+                      value={exportFilters.dateEnd}
+                      onChange={(e) => setExportFilters(prev => ({ ...prev, dateEnd: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ height: '1px', background: '#e2e8f0' }} />
+
+              {/* Format */}
+              <div>
+                <h3 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Formato de Exportação</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+                  {[
+                    { key: 'xlsx', label: 'Excel (.xlsx)' },
+                    { key: 'csv', label: 'CSV (Excel)' },
+                    { key: 'tsv', label: 'TSV (Tabulado)' },
+                    { key: 'json', label: 'JSON' },
+                  ].map((format) => (
+                    <label key={format.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', border: `1.5px solid ${exportFormat === format.key ? '#2563eb' : '#e2e8f0'}`, borderRadius: 12, background: exportFormat === format.key ? 'rgba(37, 99, 235, 0.05)' : '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: exportFormat === format.key ? '#2563eb' : '#475569', transition: 'all 0.2s' }}>
+                      <input
+                        type="radio"
+                        name="exportFormat"
+                        value={format.key}
+                        checked={exportFormat === format.key}
+                        onChange={() => setExportFormat(format.key as any)}
+                        style={{ display: 'none' }}
+                      />
+                      {format.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '20px 32px', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'transparent', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button onClick={() => setIsExportModalOpen(false)} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px', fontSize: 13 }} disabled={isExporting}>
+                Cancelar
+              </button>
+              <button 
+                onClick={handleExportData} 
+                className="neo-btn neo-btn-primary" 
+                style={{ padding: '10px 24px', fontSize: 13, background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', minWidth: 140 }}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" style={{ marginRight: 6 }} /> Exportando...
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} /> Gerar Arquivo
+                  </>
+                )}
+              </button>
+            </div>
+
           </div>
         </div>
       )}

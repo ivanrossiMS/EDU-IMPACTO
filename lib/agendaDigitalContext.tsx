@@ -59,6 +59,12 @@ export interface ADConfig {
     pushRelatorios?: boolean
     pushAlteracaoCalendario?: boolean
   }
+  saudacao?: {
+    ativa: boolean
+    titulo: string
+    mensagem: string
+    imagemUrl?: string
+  }
 }
 
 interface ADContextState {
@@ -98,7 +104,8 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adConfig: {
     permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true }
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true },
+    saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   },
   setAdConfig: () => {},
   adAlert: () => {},
@@ -130,7 +137,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
     const record: Record<string, ADMessage[]> = {}
     if (messagesArray) {
       messagesArray.forEach((item: any) => {
-        record[item.id] = item.messages || []
+        if (item && item.id) {
+          record[item.id] = item.messages || []
+        }
       })
     }
     return record
@@ -141,7 +150,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       const record: Record<string, ADMessage[]> = {}
       if (prev) {
         prev.forEach((item: any) => {
-          record[item.id] = item.messages || []
+          if (item && item.id) {
+            record[item.id] = item.messages || []
+          }
         })
       }
       const nextRecord = typeof updater === 'function' ? updater(record) : updater
@@ -157,7 +168,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const [adConfig, setAdConfig] = useState<ADConfig>({
     permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: false, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true }
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: false, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true },
+    saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   })
 
   useEffect(() => {

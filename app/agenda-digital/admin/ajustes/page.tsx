@@ -8,6 +8,7 @@ export default function ADAdminAjustes() {
   const { bannerUrl, setBannerUrl, adConfig, setAdConfig, adAlert } = useAgendaDigital()
   const [activeTab, setActiveTab] = useState('permissoes')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const saudacaoFileInputRef = useRef<HTMLInputElement>(null)
 
   const [localConfig, setLocalConfig] = useState(adConfig)
   const [localBanner, setLocalBanner] = useState(bannerUrl)
@@ -27,6 +28,25 @@ export default function ADAdminAjustes() {
       reader.onload = (event) => {
         if (event.target?.result) {
           setLocalBanner(event.target.result as string)
+        }
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleSaudacaoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setLocalConfig(p => ({
+            ...p, 
+            saudacao: {
+              ...(p.saudacao || {ativa:true, titulo:'', mensagem:''}), 
+              imagemUrl: event.target.result as string
+            }
+          }))
         }
       }
       reader.readAsDataURL(file)
@@ -108,6 +128,13 @@ export default function ADAdminAjustes() {
               style={{ justifyContent: 'flex-start', background: activeTab === 'personalizacao' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'personalizacao' ? '#4f46e5' : 'inherit' }}
             >
               <Palette size={18} style={{ marginRight: 8 }}/> Personalização (Cores)
+            </button>
+            <button 
+              onClick={() => setActiveTab('saudacao')}
+              className={activeTab === 'saudacao' ? 'btn' : 'btn btn-ghost'} 
+              style={{ justifyContent: 'flex-start', background: activeTab === 'saudacao' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'saudacao' ? '#4f46e5' : 'inherit' }}
+            >
+              <Smartphone size={18} style={{ marginRight: 8 }}/> Mensagem de Saudação
             </button>
          </div>
 
@@ -431,6 +458,73 @@ export default function ADAdminAjustes() {
                       </div>
                     )}
                   </div>
+                </div>
+             </div>
+           )}
+
+           {activeTab === 'saudacao' && (
+             <div>
+                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Mensagem de Saudação</h3>
+                  <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Configure o comunicado de boas-vindas automático ao cadastrar um novo aluno.</p>
+                </div>
+
+                <div style={{ padding: 32 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 16 }}>Ativar Mensagem de Saudação</div>
+                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Quando ativado, um comunicado será gerado automaticamente. O autor será o "Diretor Geral".</div>
+                    </div>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.saudacao?.ativa || false} onChange={e => setLocalConfig(p => ({...p, saudacao: {...(p.saudacao || {titulo:'', mensagem:'', imagemUrl:''}), ativa: e.target.checked}}))} />
+                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.saudacao?.ativa ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.saudacao?.ativa ? 'translateX(20px)' : 'none' }}></span>
+                       </span>
+                    </label>
+                  </div>
+
+                  {localConfig.saudacao?.ativa && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div>
+                        <label className="form-label">Título do Comunicado</label>
+                        <input type="text" className="form-input" value={localConfig.saudacao?.titulo || ''} onChange={e => setLocalConfig(p => ({...p, saudacao: {...(p.saudacao || {ativa:true, mensagem:'', imagemUrl:''}), titulo: e.target.value}}))} />
+                      </div>
+                      <div>
+                        <label className="form-label">Corpo da Mensagem</label>
+                        <div style={{ fontSize: 12, color: '#3b82f6', marginBottom: 8 }}>Variáveis permitidas: {"{nome_aluno}"}, {"{nome_responsavel}"}</div>
+                        <textarea className="form-input" rows={6} value={localConfig.saudacao?.mensagem || ''} onChange={e => setLocalConfig(p => ({...p, saudacao: {...(p.saudacao || {ativa:true, titulo:'', imagemUrl:''}), mensagem: e.target.value}}))}></textarea>
+                      </div>
+                      <div>
+                        <label className="form-label">Imagem / Anexo (Opcional)</label>
+                        <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 12 }}>Insira a URL direta da imagem ou faça upload de uma imagem do seu computador.</p>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <input 
+                            type="text" 
+                            className="form-input" 
+                            style={{ flex: 1 }}
+                            placeholder="https://suaescola.com/upload/boas-vindas.jpg" 
+                            value={localConfig.saudacao?.imagemUrl || ''}
+                            onChange={e => setLocalConfig(p => ({...p, saudacao: {...(p.saudacao || {ativa:true, titulo:'', mensagem:''}), imagemUrl: e.target.value}}))}
+                          />
+                          <input 
+                            type="file" 
+                            accept="image/*"
+                            ref={saudacaoFileInputRef}
+                            style={{ display: 'none' }}
+                            onChange={handleSaudacaoFileUpload}
+                          />
+                          <button className="btn btn-secondary" onClick={() => saudacaoFileInputRef.current?.click()}>
+                            <Upload size={16} /> Fazer Upload
+                          </button>
+                        </div>
+                        {localConfig.saudacao?.imagemUrl && (
+                          <div style={{ marginTop: 16, height: 200, borderRadius: 12, overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
+                            <img src={localConfig.saudacao.imagemUrl} alt="Preview Saudação" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
              </div>
            )}

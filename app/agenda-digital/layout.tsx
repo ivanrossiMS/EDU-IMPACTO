@@ -55,7 +55,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const { bannerUrl, adLoading } = useAgendaDigital()
   const { currentUser, hydrated } = useApp()
-  const { perfis } = useData()
+  const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
@@ -68,11 +68,11 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  // Block access if profile doesn't have '/agenda-digital' permission
-  if (hydrated && currentUser && !isFamily) {
+  // Block access if profile doesn't have '/agenda-digital' permission (only on collaborator routes)
+  if (hydrated && currentUser && !isFamily && !perfisLoading && pathname?.includes('/agenda-digital/colaborador')) {
     const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
     const userPerms = userPerfilObj?.permissoes || []
-    if (!userPerms.includes('/agenda-digital') && !userPerms.includes('agenda-digital') && !pathname?.includes('/agenda-digital/colaborador')) {
+    if (!userPerms.includes('/agenda-digital') && !userPerms.includes('agenda-digital')) {
       return (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
@@ -110,6 +110,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           .ad-main-scroll {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             position: relative;
             background: #f8fafc;
           }
@@ -144,7 +145,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           @media (max-width: 768px) {
             .ad-banner-global {
               position: relative !important;
-              width: 100vw !important;
+              width: 100% !important;
               height: auto !important;
               background: transparent;
               margin: 0 !important;
@@ -152,7 +153,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             }
             .ad-banner-global img {
               display: block !important;
-              width: 100vw !important;
+              width: 100% !important;
               height: auto !important;
               max-height: 350px !important;
               object-fit: contain !important;
@@ -190,7 +191,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
-          <FloatingChat />
+          {!isSelectStudent && <FloatingChat />}
         </div>
     </div>
   )

@@ -783,6 +783,16 @@ export default function AgendaDigitalFamilyLayout({
             font-size: 7px !important;
             padding: 1px 4px !important;
           }
+          .ad-family-mini-btn {
+            height: 22px !important;
+            border-radius: 6px !important;
+            font-size: 8.5px !important;
+            padding: 0 8px !important;
+          }
+          .ad-family-mini-btn svg {
+            width: 9px !important;
+            height: 9px !important;
+          }
         }
         .ad-student-banner {
           background: hsl(var(--bg-surface));
@@ -1544,7 +1554,8 @@ export default function AgendaDigitalFamilyLayout({
               overflow: 'hidden'
             }}>
               {aluno?.foto ? (
-                 <Image src={aluno.foto} alt={aluno.nome} width={96} height={96} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                 // eslint-disable-next-line @next/next/no-img-element
+                 <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                  getInitials(aluno.nome)
               )}
@@ -1624,10 +1635,106 @@ export default function AgendaDigitalFamilyLayout({
           </div>
 
           {/* AREA 3: AÇÕES LATERAIS (À direita) - Botão Portaria */}
-          <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
-            {currentUser && currentUser.cargo !== 'Aluno' && adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
-              <div style={{ width: '100%' }}>
-                <StudentCallButton aluno={aluno} currentUser={currentUser} />
+          <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '240px' }}>
+            {currentUser && currentUser.cargo !== 'Aluno' && (
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', width: '100%' }}>
+                {adConfig?.permissoes?.chamadaAlunoPortaria !== false ? (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <StudentCallButton aluno={aluno} currentUser={currentUser} />
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, background: 'rgba(0,0,0,0.02)', borderRadius: 16, border: '1px dashed rgba(0,0,0,0.05)' }}>
+                    <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Chamada Indisponível</span>
+                  </div>
+                )}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                  <button 
+                    onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                    title="Trocar de Aluno"
+                    className="ad-family-mini-btn ad-switch-student-btn"
+                    style={{
+                      height: 26,
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(99, 102, 241, 0.15)',
+                      background: 'rgba(99, 102, 241, 0.06)',
+                      color: 'hsl(var(--primary))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out',
+                      boxShadow: '0 2px 8px rgba(99, 102, 241, 0.04)',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      fontFamily: 'Outfit, sans-serif',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
+                      e.currentTarget.style.color = 'white'
+                      e.currentTarget.style.transform = 'scale(1.03)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.2)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(99, 102, 241, 0.06)'
+                      e.currentTarget.style.color = 'hsl(var(--primary))'
+                      e.currentTarget.style.transform = 'scale(1)'
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.04)'
+                    }}
+                  >
+                    <Users size={11} strokeWidth={2.5} />
+                    <span>Trocar aluno</span>
+                  </button>
+
+                  <button 
+                    onClick={async () => {
+                      localStorage.removeItem('edu-current-user');
+                      localStorage.removeItem('edu-current-perfil');
+                      setCurrentUser(null);
+                      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+                      window.location.href = '/login';
+                    }}
+                    title="Sair da Conta"
+                    className="ad-family-mini-btn ad-logout-btn"
+                    style={{
+                      height: 26,
+                      padding: '0 10px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(239, 68, 68, 0.15)',
+                      background: 'rgba(239, 68, 68, 0.06)',
+                      color: '#ef4444',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out',
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.04)',
+                      fontSize: 10,
+                      fontWeight: 800,
+                      fontFamily: 'Outfit, sans-serif',
+                      whiteSpace: 'nowrap'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                      e.currentTarget.style.color = 'white'
+                      e.currentTarget.style.transform = 'scale(1.03)'
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.2)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.06)'
+                      e.currentTarget.style.color = '#ef4444'
+                      e.currentTarget.style.transform = 'scale(1)'
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.04)'
+                    }}
+                  >
+                    <LogOut size={11} strokeWidth={2.5} />
+                    <span>Sair</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -20,13 +20,15 @@ export async function GET(request: Request) {
     const search = url.searchParams.get('search') || ''
     const status = url.searchParams.get('status') || 'todos'
     const turma = url.searchParams.get('turma') || ''
+    const sortField = url.searchParams.get('sortField') || 'nome'
+    const sortOrder = url.searchParams.get('sortOrder') || 'asc'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
 
     let query = supabase
       .from('alunos')
-      .select('id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at', { count: 'exact' })
+      .select('id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at', { count: 'exact' })
 
     if (search) {
       // Busca por nome, cpf ou ID
@@ -41,7 +43,27 @@ export async function GET(request: Request) {
       query = query.eq('turma', turma)
     }
 
-    let queryExec = query.order('nome')
+    // Determine ordering column
+    let dbSortField = 'nome'
+    if (sortField === 'id') {
+      dbSortField = 'matricula'
+    } else if (sortField === 'nome') {
+      dbSortField = 'nome'
+    } else if (sortField === 'responsavel') {
+      dbSortField = 'responsavel'
+    } else if (sortField === 'turma') {
+      dbSortField = 'turma'
+    } else if (sortField === 'status') {
+      dbSortField = 'status'
+    } else if (sortField === 'sairSozinho' || sortField === 'autorizadoSairSozinho') {
+      dbSortField = 'autorizadoSairSozinho'
+    } else if (sortField === 'foto') {
+      dbSortField = 'foto'
+    } else if (sortField === 'created_at' || sortField === 'data_cadastro' || sortField === 'dataCadastro') {
+      dbSortField = 'created_at'
+    }
+
+    let queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' })
     if (!all) {
       queryExec = queryExec.range(from, to)
     }
@@ -70,6 +92,7 @@ export async function GET(request: Request) {
       .from('aluno_responsavel')
       .select('*')
       .in('aluno_id', allStudentRefs)
+      .limit(20000)
 
     if (linksError) {
       console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
@@ -84,12 +107,23 @@ export async function GET(request: Request) {
         .from('responsaveis')
         .select('*')
         .in('id', respIds)
+        .limit(20000)
         
       if (respError) {
         console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
       } else {
         responsaveis = respData || []
       }
+    }
+
+    // 2.7 Busca todas as turmas para resolver nomes e segmentos no servidor
+    const { data: turmasData, error: turmasError } = await supabase
+      .from('turmas')
+      .select('id, codigo, nome, ano, dados')
+      .limit(10000)
+
+    if (turmasError) {
+      console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Turmas): ${turmasError.message}\n`)
     }
 
     // 3. Monta o resultado final
@@ -122,10 +156,21 @@ export async function GET(request: Request) {
 
       const fallbackResponsaveis = student.dados?.responsaveis || []
 
+      const studentTurma = student.turma
+      const tObj = turmasData?.find((t: any) =>
+        String(t.id) === String(studentTurma) ||
+        String(t.codigo) === String(studentTurma) ||
+        String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
+      )
+
       return {
         ...student,
         ...(student.dados || {}), // Spread JSONB data
-        responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+        created_at: student.created_at, // Restore to ensure it's not overwritten
+        responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis,
+        turma_nome: tObj?.nome || student.turma || '',
+        turma_segmento: tObj?.dados?.segmento || student.segmento || student.dados?.segmento || '',
+        turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || '')
       }
     })
 
@@ -296,6 +341,47 @@ export async function POST(request: Request) {
         })
         
       if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
+    }
+
+    // Dispara Saudação Automática se estiver configurada e ativa
+    try {
+      const { data: configData } = await supabase.from('configuracoes').select('valor').eq('chave', 'ad_config').maybeSingle()
+      if (configData && configData.valor?.saudacao?.ativa) {
+        const saudacao = configData.valor.saudacao;
+        const msg = (saudacao.mensagem || '')
+          .replace(/{nome_aluno}/g, savedStudent.nome)
+          .replace(/{nome_responsavel}/g, responsaveis[0]?.nome || 'Família')
+        
+        const anexos = saudacao.imagemUrl ? [{ type: 'image', url: saudacao.imagemUrl, nome: 'boas-vindas.jpg' }] : [];
+        const novoId = `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+
+        await supabase.from('comunicados').insert({
+          id: novoId,
+          titulo: saudacao.titulo || 'Mensagem de Boas-vindas',
+          texto: msg,
+          autor: 'Ivan Rossi',
+          data: new Date().toISOString(),
+          destino: 'selecionados',
+          fixado: true,
+          dados: {
+            autorCargo: 'Diretor Geral',
+            tipo: saudacao.imagemUrl ? 'arquivo' : 'texto',
+            status: 'enviado',
+            prioridade: 'normal',
+            permiteResposta: false,
+            exigeCiencia: false,
+            alunosIds: [savedStudent.id],
+            turmas: [],
+            leituras: {},
+            ciencias: {},
+            anexos: anexos,
+            conteudo: msg,
+            dataEnvio: new Date().toISOString()
+          }
+        })
+      }
+    } catch(err: any) {
+      console.error('[Saudacao Error]', err.message)
     }
 
     // Sincroniza em segundo plano com a portaria

@@ -1,40 +1,103 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
-
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
-import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight, LayoutDashboard } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles } from 'lucide-react'
+
+// Helper function to abbreviate Portuguese surnames to fit single line
+function formatShortName(name: string): string {
+  if (!name) return '';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 2) return name;
+  
+  const connectors = ['de', 'da', 'do', 'dos', 'das', 'e'];
+  
+  let firstName = parts[0];
+  let startIndex = 1;
+  
+  if (parts[1] && !connectors.includes(parts[1].toLowerCase()) && parts[1][0] === parts[1][0].toUpperCase()) {
+    firstName = `${parts[0]} ${parts[1]}`;
+    startIndex = 2;
+  }
+  
+  const lastName = parts[parts.length - 1];
+  
+  const middleInitials: string[] = [];
+  for (let i = startIndex; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (connectors.includes(part.toLowerCase())) {
+      continue;
+    }
+    if (part.length > 0) {
+      middleInitials.push(`${part[0].toUpperCase()}.`);
+    }
+  }
+  
+  if (middleInitials.length > 0) {
+    return `${firstName} ${middleInitials.join(' ')} ${lastName}`;
+  }
+  return `${firstName} ${lastName}`;
+}
 
 export default function SelecionarAluno() {
   const { turmas = [] } = useData();
   const { currentUser, hydrated } = useApp()
   const router = useRouter()
 
+  // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
+  const [meusAlunos, setMeusAlunos] = useState<any[]>([])
+  // Track whether we've completed at least one successful fetch
+  const [hasFetched, setHasFetched] = useState(false)
+  // Prevents showing the "no students" empty state before the first real API response
+  const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
+
   // 1. Obter metadados do responsável autenticado
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
-  // 2. Usar a nova API otimizada Ultra-Rápida
-  const meusAlunosQuery = `agenda/meus-alunos?respId=${respId}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
 
-  const [meusAlunosRaw, , meusAlunosStatus] = useSupabaseArray<any>(meusAlunosQuery, [], { refreshIntervalMs: 0 });
-  const meusAlunos: any[] = Array.isArray(meusAlunosRaw) ? meusAlunosRaw : [];
+  useEffect(() => {
+    if (!hydrated || !currentUser) return;
 
-  const isDataLoading = meusAlunosStatus.loading;
-  
-  // O carregamento inicial pode demorar frações de segundo, aguarde a hidratação e o loading da API
-  const isStillLoading = !hydrated || isDataLoading || (currentUser === undefined);
+    const cacheKey = `edu-meus-alunos-${respId || emailBusca}`;
 
-  // Effect responsavel pelo redirecionamento automatico
+    // Step 1: Serve from localStorage cache INSTANTLY (zero latency)
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached);
+        if (Array.isArray(data) && data.length > 0) {
+          setMeusAlunos(data);
+          setHasFetched(true); // Show data immediately, no spinner
+        }
+      }
+    } catch (_) {}
+
+    // Step 2: Always fire a fresh network request in background
+    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}&_t=${Date.now()}`;
+
+    fetch(url, { credentials: 'include', cache: 'no-store' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        setMeusAlunos(data);
+        setHasFetched(true);
+        // Update localStorage cache with fresh data
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+        } catch (_) {}
+      })
+      .catch(() => {
+        setHasFetched(true); // Even on error, stop the spinner
+      });
+  }, [hydrated, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redirecionamento de alunos normais
   useEffect(() => {
     if (currentUser && currentUser.perfil === 'Aluno') {
-      // Se for um aluno normal, pode redirecionar para a interface restrita, se quiser.
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('edu-current-user')
         if (stored) {
@@ -45,372 +108,705 @@ export default function SelecionarAluno() {
           }
         }
       }
-      const nomeLower = (currentUser.nome || '').toLowerCase().trim()
-      // Se for aluno, não temos os dados carregados nesta tela focada em responsáveis.
-      // O redirecionamento direto (acima) já resolve 99% dos casos.
       if (currentUser.id) {
-        // Redireciona diretamente se houver fallback necessário (pouco provável para aluno)
         setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
       }
-    } else if (currentUser) {
-      if (meusAlunos.length === 1) {
-        setTimeout(() => {
-          window.location.href = `/agenda-digital/${meusAlunos[0].id}/comunicados`
-        }, 50)
-      }
     }
-  }, [isStillLoading, meusAlunos.length, isDataLoading, currentUser])
+  }, [isStillLoading, currentUser])
+
+  const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', paddingTop: '8vh', paddingBottom: 60, animation: 'fadeUp 0.8s ease-out forwards', opacity: 0 }}>
-      {isStillLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '20vh' }}>
-          <div className="skeleton-loader" style={{ width: 64, height: 64, borderRadius: 16, marginBottom: 24 }}></div>
-          <div className="skeleton-loader" style={{ width: 240, height: 28, borderRadius: 8, marginBottom: 12 }}></div>
-          <div className="skeleton-loader" style={{ width: 180, height: 20, borderRadius: 8 }}></div>
-        </div>
-      ) : (
-        <>
-          <div style={{ textAlign: 'center', marginBottom: 40, animation: 'fadeUp 0.6s ease-out forwards', opacity: 0 }}>
-            {currentUser?.foto ? (
-              <img src={currentUser.foto} alt="Avatar" style={{ width: 88, height: 88, borderRadius: 28, objectFit: 'cover', marginBottom: 20, border: '4px solid hsl(var(--bg-surface))', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }} />
-            ) : (
-              <div style={{ width: 88, height: 88, borderRadius: 28, background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: 'white', fontSize: 32, fontWeight: 700, border: '4px solid hsl(var(--bg-surface))', boxShadow: '0 8px 24px rgba(var(--primary-rgb),0.2)' }}>
-                {(currentUser?.nome || 'F').charAt(0).toUpperCase()}
-              </div>
-            )}
-            <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', letterSpacing: '-0.02em', color: 'hsl(var(--text-primary))' }}>
-              Bem-vindo(a),
-            </h1>
-            <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0, color: 'hsl(var(--text-secondary))' }}>
-              {currentUser?.nome || 'Responsável'}
-            </h2>
-          </div>
-
-          {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
-            <div style={{ marginBottom: 40, animation: 'fadeUp 0.6s ease-out 0.1s forwards', opacity: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Acesso Funcional
-                </h3>
-              </div>
-              <Link href="/dashboard" style={{ textDecoration: 'none' }}>
-                <div className="premium-card interactive-card" style={{ display: 'flex', alignItems: 'center', padding: 24, borderRadius: 24, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border))', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', gap: 20 }}>
-                  <div className="premium-card-icon" style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <LayoutDashboard size={28} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px', color: 'hsl(var(--text-primary))' }}>
-                      Gestão Escolar (ERP)
-                    </h4>
-                    <p style={{ fontSize: 14, margin: 0, color: 'hsl(var(--text-secondary))', lineHeight: 1.5 }}>
-                      Acessar o painel administrativo com perfil de {currentUser.perfil}
-                    </p>
-                  </div>
-                  <div style={{ color: 'hsl(var(--text-muted))' }}>
-                    <ChevronRight size={24} />
-                  </div>
-                </div>
-              </Link>
-            </div>
-          )}
-
-          {meusAlunos.length > 0 && (
-            <div style={{ animation: 'fadeUp 0.6s ease-out 0.2s forwards', opacity: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Acesso Familiar
-                </h3>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-elevated))', padding: '4px 12px', borderRadius: 20 }}>
-                  {meusAlunos.length} aluno{meusAlunos.length !== 1 && 's'}
-                </span>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
+    <div className="premium-selector-container">
+      {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: `
-        @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
+        .premium-selector-container {
+          max-width: 800px;
+          width: 100%;
+          box-sizing: border-box;
+          margin: 0 auto;
+          padding: 40px 24px 80px 24px;
+          font-family: 'Outfit', 'Inter', sans-serif;
+          min-height: 90vh;
+          display: flex;
+          flex-direction: column;
+          gap: 36px;
+          position: relative;
+          z-index: 1;
         }
-        @keyframes pulseGlow {
-          0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
-          70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+
+        /* Ambient Glowing Backgrounds */
+        .premium-selector-container::before {
+          content: '';
+          position: absolute;
+          width: 500px;
+          height: 500px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
+          top: -100px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: -1;
+          pointer-events: none;
+          filter: blur(40px);
         }
-        @keyframes floatAvatar {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-3px); }
+
+        /* Animations */
+        @keyframes revealUp {
+          0% { opacity: 0; transform: translateY(20px); }
+          100% { opacity: 1; transform: translateY(0); }
         }
-        .premium-card {
-          padding: 28px 32px;
+        @keyframes orbRotate {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes avatarPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+          50% { transform: scale(1.02); box-shadow: 0 0 20px 4px rgba(99, 102, 241, 0.15); }
+        }
+
+        .animate-reveal {
+          animation: revealUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          opacity: 0;
+        }
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+
+        /* Premium Welcome Header Card */
+        .premium-welcome-card {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.4) 100%);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 255, 255, 0.5);
+          border-radius: 32px;
+          padding: 32px;
           display: flex;
           align-items: center;
-          gap: 24px;
-          cursor: pointer;
-          transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-          border: 1px solid rgba(255,255,255,0.06);
-          background: linear-gradient(145deg, hsl(var(--bg-surface)), rgba(139,92,246,0.04));
-          border-radius: 24px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.04);
+          gap: 28px;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8);
           position: relative;
           overflow: hidden;
+          margin-top: 24px;
         }
-        .premium-card::before {
+
+        .dark .premium-welcome-card {
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.5) 100%);
+          border-color: rgba(255, 255, 255, 0.08);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .welcome-avatar-wrapper {
+          position: relative;
+          width: 96px;
+          height: 96px;
+          flex-shrink: 0;
+          animation: avatarPulse 4s ease-in-out infinite;
+        }
+
+        .welcome-avatar-glow {
+          position: absolute;
+          inset: -4px;
+          border-radius: 28px;
+          background: linear-gradient(135deg, #6366f1, #a855f7);
+          padding: 2px;
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0.85;
+        }
+
+        .welcome-avatar-img {
+          width: 100%;
+          height: 100%;
+          border-radius: 26px;
+          object-fit: cover;
+          border: 2px solid white;
+          background: white;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+        .dark .welcome-avatar-img {
+          border-color: #1e293b;
+          background: #1e293b;
+        }
+
+        .welcome-initials {
+          width: 100%;
+          height: 100%;
+          border-radius: 26px;
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          color: white;
+          font-size: 32px;
+          font-weight: 800;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid white;
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+        }
+        .dark .welcome-initials {
+          border-color: #1e293b;
+        }
+
+        .welcome-content {
+          flex: 1;
+        }
+
+        .welcome-greeting {
+          font-size: 32px;
+          fontWeight: 900;
+          margin: 0 0 6px;
+          letter-spacing: -0.03em;
+          line-height: 1.1;
+          color: #0f172a;
+        }
+        .dark .welcome-greeting {
+          color: #f8fafc;
+        }
+
+        .welcome-tagline {
+          font-size: 15px;
+          color: #64748b;
+          margin: 0;
+          line-height: 1.5;
+          font-weight: 500;
+        }
+        .dark .welcome-tagline {
+          color: #94a3b8;
+        }
+
+        .welcome-sparkle {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          color: rgba(99, 102, 241, 0.35);
+          animation: orbRotate 6s linear infinite;
+        }
+
+        /* Portal Sections Grid Layout */
+        .portal-sections-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 36px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .portal-section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 20px;
+          padding: 0 8px;
+        }
+
+        .portal-section-title {
+          font-size: 15px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: #64748b;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .dark .portal-section-title {
+          color: #94a3b8;
+        }
+
+        .portal-section-badge {
+          font-size: 12px;
+          font-weight: 700;
+          color: #6366f1;
+          background: rgba(99, 102, 241, 0.08);
+          padding: 4px 12px;
+          border-radius: 20px;
+          border: 1px solid rgba(99, 102, 241, 0.12);
+        }
+
+        .cards-column {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        /* Glassmorphic Interactive Cards */
+        .portal-modern-card {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.6);
+          border-radius: 24px;
+          padding: 20px 24px;
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          cursor: pointer;
+          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+          text-decoration: none !important;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .dark .portal-modern-card {
+          background: rgba(30, 41, 59, 0.45);
+          border-color: rgba(255, 255, 255, 0.05);
+          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+        }
+
+        .portal-modern-card::before {
           content: '';
           position: absolute;
           inset: 0;
-          background: linear-gradient(120deg, transparent, rgba(255,255,255,0.08), transparent);
+          background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
           transform: translateX(-100%);
-          transition: transform 0.7s;
+          transition: transform 0.6s ease;
+          pointer-events: none;
         }
-        .premium-card:hover {
-          transform: translateY(-8px) scale(1.015);
-          border-color: rgba(99, 102, 241, 0.3);
-          box-shadow: 0 24px 48px rgba(99, 102, 241, 0.12), inset 0 1px 0 rgba(255,255,255,0.15);
-          background: linear-gradient(145deg, hsl(var(--bg-surface)), rgba(99,102,241,0.06));
+
+        .portal-modern-card:hover {
+          transform: translateY(-4px) scale(1.01);
+          border-color: rgba(99, 102, 241, 0.35);
+          box-shadow: 0 16px 36px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         }
-        .premium-card:hover::before {
+        .dark .portal-modern-card:hover {
+          border-color: rgba(139, 92, 246, 0.3);
+          box-shadow: 0 16px 36px rgba(139, 92, 246, 0.15);
+        }
+
+        .portal-modern-card:hover::before {
           transform: translateX(100%);
         }
-        .premium-card:hover .chevron-icon {
-          transform: translateX(6px);
-          color: hsl(var(--primary));
+
+        /* Avatar styling inside card */
+        .card-avatar-container {
+          position: relative;
+          width: 60px;
+          height: 60px;
+          border-radius: 18px;
+          overflow: hidden;
+          background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+          font-weight: 800;
+          fontSize: 22px;
+          flex-shrink: 0;
+          box-shadow: 0 6px 16px rgba(168, 85, 247, 0.2);
+          transition: transform 0.3s;
         }
-        .premium-card:hover .avatar-glow {
-          box-shadow: 0 8px 24px rgba(139,92,246,0.3);
+        .portal-modern-card:hover .card-avatar-container {
+          transform: scale(1.05);
         }
-        .gradient-text {
-          background: linear-gradient(135deg, hsl(var(--text-main)) 20%, hsl(var(--primary)) 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+
+        .card-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
-        .premium-card-avatar {
-          animation: floatAvatar 3s ease-in-out infinite;
+
+        /* Collaborator Card Specifics */
+        .portal-modern-card.collaborator-theme {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 246, 255, 0.7) 100%);
+          border-color: rgba(59, 130, 246, 0.25);
         }
-        
-        /* Mobile Optimizaton */
+        .dark .portal-modern-card.collaborator-theme {
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.4) 100%);
+          border-color: rgba(59, 130, 246, 0.12);
+        }
+        .portal-modern-card.collaborator-theme:hover {
+          border-color: rgba(59, 130, 246, 0.6);
+          box-shadow: 0 16px 36px rgba(59, 130, 246, 0.12);
+        }
+
+        .card-avatar-container.collaborator-avatar {
+          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+          box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Card Content layout */
+        .card-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .card-title {
+          font-size: 18px;
+          font-weight: 800;
+          color: #0f172a;
+          margin: 0 0 4px;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .dark .card-title {
+          color: #f8fafc;
+        }
+
+        .card-subtitle {
+          font-size: 13px;
+          color: #64748b;
+          margin: 0;
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .dark .card-subtitle {
+          color: #94a3b8;
+        }
+
+        .card-dot-separator {
+          width: 3px;
+          height: 3px;
+          border-radius: 50%;
+          background: #cbd5e1;
+          display: inline-block;
+        }
+        .dark .card-dot-separator {
+          background: #475569;
+        }
+
+        /* Badges & Indicators */
+        .card-actions-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-shrink: 0;
+        }
+
+        .unread-indicator-badge {
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          background: rgba(99, 102, 241, 0.08);
+          color: #6366f1;
+          border: 1px solid rgba(99, 102, 241, 0.15);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+          transition: all 0.3s;
+        }
+        .portal-modern-card:hover .unread-indicator-badge {
+          background: #6366f1;
+          color: white;
+          transform: scale(1.05);
+        }
+
+        .badge-count-bubble {
+          position: absolute;
+          top: -5px;
+          right: -5px;
+          background: linear-gradient(135deg, #f43f5e, #e11d48);
+          color: white;
+          font-size: 10px;
+          font-weight: 900;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid white;
+          box-shadow: 0 4px 10px rgba(225, 29, 72, 0.3);
+        }
+        .dark .badge-count-bubble {
+          border-color: #1e293b;
+        }
+
+        .pending-warning-badge {
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          background: rgba(239, 68, 68, 0.06);
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.15);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s;
+        }
+        .portal-modern-card:hover .pending-warning-badge {
+          background: #ef4444;
+          color: white;
+          transform: scale(1.05);
+        }
+
+        .chevron-circle-btn {
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          border: 1px solid rgba(0, 0, 0, 0.05);
+          background: rgba(0, 0, 0, 0.02);
+          color: #94a3b8;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.35s;
+        }
+        .dark .chevron-circle-btn {
+          border-color: rgba(255, 255, 255, 0.05);
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .portal-modern-card:hover .chevron-circle-btn {
+          transform: translateX(4px);
+          color: #6366f1;
+          background: rgba(99, 102, 241, 0.05);
+          border-color: rgba(99, 102, 241, 0.2);
+        }
+        .portal-modern-card.collaborator-theme:hover .chevron-circle-btn {
+          color: #3b82f6;
+          background: rgba(59, 130, 246, 0.05);
+          border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        /* Empty state styling */
+        .empty-results-card {
+          padding: 48px 32px;
+          text-align: center;
+          background: rgba(255, 255, 255, 0.45);
+          border: 1px dashed rgba(0, 0, 0, 0.1);
+          border-radius: 28px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+        .dark .empty-results-card {
+          background: rgba(30, 41, 59, 0.2);
+          border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .empty-icon-circle {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: rgba(239, 68, 68, 0.04);
+          border: 1px solid rgba(239, 68, 68, 0.15);
+          color: #f43f5e;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 10px 25px rgba(244, 63, 94, 0.05);
+        }
+
+        /* Mobile Adjustments */
         @media (max-width: 768px) {
-          .header-card {
-            padding: 20px 24px !important;
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 16px !important;
-            margin-bottom: 24px !important;
+          .premium-selector-container {
+            padding: 24px 12px 64px 12px;
+            gap: 28px;
+            width: 100%;
+            box-sizing: border-box;
           }
-          .header-card h1 {
-            font-size: 22px !important;
+          .premium-welcome-card {
+            padding: 20px;
+            gap: 18px;
+            border-radius: 24px;
+            margin-top: 48px;
           }
-          .header-card p {
-            font-size: 14px !important;
-            min-width: 100% !important;
+          .welcome-avatar-wrapper {
+            width: 72px;
+            height: 72px;
           }
-          
-          .premium-card {
-            padding: 20px 16px !important;
-            gap: 12px !important;
+          .welcome-greeting {
+            font-size: 24px;
           }
-          .premium-card-avatar {
-            width: 56px !important;
-            height: 56px !important;
+          .welcome-tagline {
+            font-size: 13px;
           }
-          .premium-card-content {
-            min-width: 0 !important;
+          .portal-sections-grid {
+            gap: 28px;
+            width: 100%;
+            box-sizing: border-box;
           }
-          .premium-card-name {
-            font-size: 16px !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+          .portal-modern-card {
+            padding: 12px 14px;
+            gap: 12px;
+            border-radius: 20px;
+            width: 100%;
+            box-sizing: border-box;
           }
-          .premium-card-meta {
-            font-size: 12px !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+          .card-avatar-container {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
           }
-          .premium-card-icons {
-            gap: 6px !important;
+          .card-title {
+            font-size: 16px;
           }
-          .premium-card-icon-btn {
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 12px !important;
+          .card-subtitle {
+            font-size: 12px;
           }
-          .premium-card-icon-btn > svg {
-            width: 18px !important;
-            height: 18px !important;
+          .card-actions-wrapper {
+            gap: 8px !important;
           }
-          .badge-counter {
-            width: 18px !important;
-            height: 18px !important;
-            font-size: 10px !important;
-            top: -4px !important;
-            right: -4px !important;
+          .unread-indicator-badge, .pending-warning-badge, .chevron-circle-btn {
+            width: 28px !important;
+            height: 28px !important;
+            border-radius: 8px !important;
+          }
+          .unread-indicator-badge svg, .pending-warning-badge svg, .chevron-circle-btn svg {
+            width: 14px !important;
+            height: 14px !important;
           }
         }
       `}} />
 
-      {/* Header Card */}
-      <div className="header-card" style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 24,
-        padding: '24px 32px',
-        background: 'linear-gradient(145deg, hsl(var(--bg-surface)), rgba(139,92,246,0.03))',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 24,
-        boxShadow: '0 12px 32px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.08)',
-        marginBottom: 48,
-        flexWrap: 'wrap'
-      }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12))', color: 'hsl(var(--primary))', boxShadow: '0 8px 24px rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)', position: 'relative', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 20, boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
-          <Calendar size={32} strokeWidth={1.5} />
+      {/* Header section */}
+      <header className="premium-welcome-card animate-reveal">
+        <Sparkles className="welcome-sparkle" size={24} />
+        <div className="welcome-avatar-wrapper">
+          <div className="welcome-avatar-glow" />
+          {currentUser?.foto ? (
+            <img src={currentUser.foto} alt="Mascot Avatar" className="welcome-avatar-img" />
+          ) : (
+            <div className="welcome-initials">
+              {getInitials(currentUser?.nome || 'User')}
+            </div>
+          )}
         </div>
-        
-        <div style={{ display: 'flex', flex: 1, alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: 26, fontWeight: 900, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em', margin: 0, whiteSpace: 'nowrap', color: 'hsl(var(--text-main))' }}>
-            Acesso da Família
+        <div className="welcome-content">
+          <h1 className="welcome-greeting">
+            Olá, {firstName}!
           </h1>
-          
-          <div style={{ width: 1, height: 28, background: 'rgba(255,255,255,0.12)', display: 'block' }} className="desktop-divider" />
-          
-          <p style={{ fontSize: 16, color: 'hsl(var(--text-secondary))', margin: 0, lineHeight: 1.5, fontWeight: 500, flex: 1, minWidth: 280 }}>
-            Selecione o aluno abaixo para acessar a agenda individual digital do aluno
+          <p className="welcome-tagline">
+            Seja bem-vindo(a) à Agenda Digital do Impacto. Selecione um perfil para gerenciar comunicados e relatórios.
           </p>
         </div>
-        
-        {/* Adiciona media query via style global só pra esconder a linha vertical no mobile */}
-        <style dangerouslySetInnerHTML={{__html: `
-          @media (max-width: 640px) {
-            .desktop-divider { display: none !important; }
-          }
-        `}} />
-      </div>
+      </header>
 
-      {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
-        <div style={{ marginBottom: 32, animation: 'fadeUp 0.6s ease-out 0.1s forwards', opacity: 0 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 16 }}>Acesso Funcional</h2>
-          <Link href={`/agenda-digital/colaborador/comunicados`} style={{ textDecoration: 'none' }}>
-            <div className="premium-card">
-              <div className="premium-card-avatar avatar-glow" style={{ position: 'relative', width: 72, height: 72, borderRadius: 20, fontSize: 26, fontWeight: 800, background: 'linear-gradient(135deg, hsl(var(--primary)), #3b82f6)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', overflow: 'hidden', boxShadow: '0 8px 24px rgba(59,130,246,0.15)' }}>
-                {getInitials(currentUser.nome || 'Colaborador')}
-                <div style={{ position: 'absolute', inset: 0, borderRadius: 20, boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
+      {/* Main content Area */}
+      <main className="portal-sections-grid">
+        {/* SECTION 1: ESTUDANTES / FAMÍLIA */}
+        <section className="animate-reveal delay-1">
+          <div className="portal-section-header">
+            <h2 className="portal-section-title">
+              <Users size={16} strokeWidth={2.5} style={{ color: 'hsl(var(--primary))' }} />
+              Acesso Familiar
+            </h2>
+            {meusAlunos.length > 0 && (
+              <span className="portal-section-badge">
+                {meusAlunos.length} Aluno{meusAlunos.length !== 1 && 's'}
+              </span>
+            )}
+          </div>
+
+          <div className="cards-column">
+            {isStillLoading ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.15)', borderTopColor: '#6366f1', animation: 'orbRotate 1s linear infinite', margin: '0 auto 16px' }} />
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, fontWeight: 500, margin: 0 }}>Procurando alunos vinculados...</p>
               </div>
-              
-              <div className="premium-card-content" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                <div className="premium-card-name" style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 6, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {currentUser.nome || 'Seu Perfil Colaborador'}
+            ) : meusAlunos.length === 0 ? (
+              <div className="empty-results-card">
+                <div className="empty-icon-circle">
+                  <AlertTriangle size={32} />
                 </div>
-                <div className="premium-card-meta" style={{ fontSize: 14, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
-                  <span style={{ color: 'hsl(var(--primary))' }}>Acesso Institucional</span> • {currentUser.cargo || currentUser.perfil || 'Membro da Equipe'}
-                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: '8px 0 4px', color: 'hsl(var(--text-main))' }}>Nenhum aluno encontrado</h3>
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, maxWidth: 360, margin: '0 auto', lineHeight: 1.5 }}>
+                  Certifique-se de que sua conta de e-mail ou CPF esteja corretamente associada ao cadastro de seus filhos na secretaria da escola.
+                </p>
               </div>
-
-              <div className="premium-card-icons" style={{ display: 'flex', gap: 14, alignItems: 'center', flexShrink: 0 }}>
-                <div className="premium-card-icon-btn chevron-icon" style={{ width: 48, height: 48, borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
-                  <ChevronRight size={22} strokeWidth={2.5} />
-                </div>
-              </div>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      {(!currentUser || currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família') && (
-        <>
-          {(meusAlunos.length > 0 || (currentUser && (currentUser.perfil === 'Responsável' || currentUser.perfil === 'Família'))) && (
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 16, opacity: 0, animation: 'fadeUp 0.6s ease-out 0.2s forwards' }}>Acesso Familiar</h2>
-          )}
-
-          {isStillLoading && meusAlunos.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center', animation: 'fadeUp 0.6s ease-out forwards' }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.2)', borderTopColor: 'hsl(var(--primary))', animation: 'spin 1s linear infinite', margin: '0 auto 20px' }} />
-              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Procurando vínculos do responsável...</p>
-              <style dangerouslySetInnerHTML={{__html: `
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-              `}} />
-            </div>
-          ) : meusAlunos.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center', background: 'linear-gradient(145deg, hsl(var(--bg-surface)), transparent)', borderRadius: 32, border: '1px dashed hsl(var(--border-subtle))' }}>
-              <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                <AlertTriangle size={40} color="hsl(var(--text-muted))" opacity={0.5} />
-              </div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 12 }}>Nenhum aluno encontrado</h2>
-              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, maxWidth: 360, margin: '0 auto' }}>
-                Verifique se sua conta foi corretamente vinculada aos seus filhos na Secretaria. <br /><br />
-                Responsável autenticado:<br /> <strong style={{ color: 'hsl(var(--text-main))' }}>{currentUser?.nome}</strong>
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              {meusAlunos.map((a, index) => {
-                const pendenciasCount = a.pendenciasAtrasadas || 0;
-
+            ) : (
+              meusAlunos.map((student) => {
+                const pendingAlerts = student.pendenciasAtrasadas || 0;
                 return (
-                  <Link key={a.id} href={`/agenda-digital/${a.id}/comunicados`} style={{ textDecoration: 'none', animation: 'fadeUp 0.6s ease-out ' + (0.1 + index * 0.15) + 's forwards', opacity: 0 }}>
-                    <div className="premium-card">
-                      <div className="premium-card-avatar avatar-glow" style={{ position: 'relative', width: 72, height: 72, borderRadius: 20, fontSize: 26, fontWeight: 800, background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.3s', overflow: 'hidden', boxShadow: '0 8px 24px rgba(139,92,246,0.15)' }}>
-                        {a.foto ? (
-                          <Image src={a.foto} alt={a.nome} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          getInitials(a.nome)
-                        )}
-                        <div style={{ position: 'absolute', inset: 0, borderRadius: 20, boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
+                  <Link key={student.id} href={`/agenda-digital/${student.id}/comunicados`} className="portal-modern-card">
+                    <div className="card-avatar-container">
+                      {student.foto ? (
+                        <img src={student.foto} alt={student.nome} className="card-avatar-img" />
+                      ) : (
+                        getInitials(student.nome)
+                      )}
+                    </div>
+
+                    <div className="card-info">
+                      <h3 className="card-title">{formatShortName(student.nome)}</h3>
+                      <div className="card-subtitle">
+                        {(() => {
+                          const turmaObj = turmas.find(t => String(t.id) === String(student.turma) || String(t.codigo) === String(student.turma) || String(t.nome) === String(student.turma))
+                          const nomeTurma = turmaObj?.nome || student.turma || 'S/T'
+                          return (
+                            <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma.split('-')[0].trim()}</span>
+                          )
+                        })()}
                       </div>
-                      
-                      <div className="premium-card-content" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
-                        <div className="premium-card-name" style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-main))', marginBottom: 6, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {a.nome}
-                        </div>
-                        <div className="premium-card-meta" style={{ fontSize: 14, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
-                          {(() => {
-                            const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
-                            const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
-                            const unidadeAluno = turmaObj?.unidade || (a as any).unidade
-                            return (
-                              <>
-                                <span style={{ color: 'hsl(var(--primary))' }}>Turma {nomeTurma}</span> {(a as any).serie ? `• ${(a as any).serie}` : ''} {unidadeAluno && unidadeAluno.trim() ? `• ${unidadeAluno}` : ''}
-                              </>
-                            )
-                          })()}
-                        </div>
+                    </div>
+
+                    <div className="card-actions-wrapper">
+                      {/* Notifications/Inbox quick alert */}
+                      <div className="unread-indicator-badge">
+                        <Bell size={18} />
+                        <span className="badge-count-bubble">2</span>
                       </div>
 
-                      <div className="premium-card-icons" style={{ display: 'flex', gap: 14, alignItems: 'center', flexShrink: 0 }}>
-                        <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(99,102,241,0.08)', color: 'hsl(var(--primary))', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative', border: '1px solid rgba(99,102,241,0.1)' }}>
-                          <Bell size={20} />
-                          <span className="badge-counter" style={{ position: 'absolute', top: -6, right: -6, background: 'linear-gradient(135deg, #f43f5e, #e11d48)', color: 'white', fontSize: 11, fontWeight: 900, width: 22, height: 22, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid hsl(var(--bg-surface))', boxShadow: '0 4px 12px rgba(225,29,72,0.4)', animation: 'pulseGlow 2s infinite' }}>
-                            2
-                          </span>
+                      {/* Warnings alert (if any) */}
+                      {pendingAlerts > 0 && (
+                        <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
+                          <AlertTriangle size={18} />
                         </div>
-                        
-                        {pendenciasCount > 0 && (
-                          <div className="premium-card-icon-btn" style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(239,68,68,0.08)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.15)', position: 'relative' }}>
-                            <AlertTriangle size={20} />
-                            {pendenciasCount > 1 && (
-                              <span className="badge-counter" style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', color: 'white', fontSize: 11, fontWeight: 900, width: 20, height: 20, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid hsl(var(--bg-surface))' }}>
-                                {pendenciasCount}
-                              </span>
-                            )}
-                          </div>
-                        )}
+                      )}
 
-                        <div className="premium-card-icon-btn chevron-icon" style={{ width: 48, height: 48, borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
-                          <ChevronRight size={22} strokeWidth={2.5} />
-                        </div>
+                      <div className="chevron-circle-btn">
+                        <ChevronRight size={18} strokeWidth={2.5} />
                       </div>
                     </div>
                   </Link>
                 )
-              })}
+              })
+            )}
+          </div>
+        </section>
+
+        {/* SECTION 2: COLABORADOR / STAFF (Somente visível se o usuário for colaborador) */}
+        {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
+          <section className="animate-reveal delay-2">
+            <div className="portal-section-header">
+              <h2 className="portal-section-title">
+                <Briefcase size={16} strokeWidth={2.5} style={{ color: 'hsl(var(--primary))' }} />
+                Acesso Institucional
+              </h2>
+              <span className="portal-section-badge" style={{ color: '#3b82f6', background: 'rgba(59, 130, 246, 0.08)', borderColor: 'rgba(59, 130, 246, 0.15)' }}>
+                Colaborador
+              </span>
             </div>
-          )}
-        </>
-      )}
+
+            <div className="cards-column">
+              <Link href="/agenda-digital/colaborador/comunicados" className="portal-modern-card collaborator-theme">
+                <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
+                  {currentUser.foto ? (
+                    <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
+                  ) : (
+                    getInitials(currentUser.nome || 'Colaborador')
+                  )}
+                </div>
+
+                <div className="card-info">
+                  <h3 className="card-title">{formatShortName(currentUser.nome)}</h3>
+                  <div className="card-subtitle">
+                    <span style={{ color: '#3b82f6', fontWeight: 800 }}>Acesso da Equipe</span>
+                    <span className="card-dot-separator" />
+                    <span>{currentUser.cargo || currentUser.perfil}</span>
+                  </div>
+                </div>
+
+                <div className="card-actions-wrapper">
+                  <div className="chevron-circle-btn">
+                    <ChevronRight size={18} strokeWidth={2.5} />
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </section>
+        )}
+      </main>
     </div>
   )
 }

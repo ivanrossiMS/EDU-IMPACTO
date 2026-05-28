@@ -224,12 +224,12 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }
 
   return (
-    <div style={{
+    <div className="ad-destinatarios-modal-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 9999, 
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)'
     }}>
-      <div style={{
+      <div className="ad-destinatarios-modal-card" style={{
         background: '#fff', 
         width: 480, 
         height: '90vh', 

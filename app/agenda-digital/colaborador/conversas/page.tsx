@@ -30,25 +30,25 @@ export default function ADConversasPage() {
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
 
   const turmaOptions = React.useMemo(() => {
-    const userGroups = (chatGroups || []).filter(g => g.colaboradoresIds?.includes(currentUser?.id || ''))
+    const userGroups = (chatGroups || []).filter(g => g && g.colaboradoresIds?.includes(currentUser?.id || ''))
     const accessibleTurmas = turmas.filter(t => {
-       return userGroups.some(g => String(g.id) === `sync-${t.id}` || g.nome === t.nome)
+       return t && userGroups.some(g => g && (String(g.id) === `sync-${t.id}` || g.nome === t.nome))
     })
     return [{ id: 'all', nome: 'Minhas Turmas' }, ...accessibleTurmas]
   }, [turmas, chatGroups, currentUser])
 
   const selectedTurmaName = React.useMemo(() => {
     if (selectedTurmaId === 'all') return 'Minhas Turmas'
-    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
+    const t = turmas.find(x => x && (String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId)))
     return t ? t.nome : 'Turma Selecionada'
   }, [selectedTurmaId, turmas])
 
   const alunosDaTurma = React.useMemo(() => {
     if (selectedTurmaId === 'all') {
-      const accessibleTurmaIds = turmaOptions.filter(t => t.id !== 'all').map(t => String(t.id))
-      return alunos.filter(a => accessibleTurmaIds.includes(String(a.turma)) || accessibleTurmaIds.includes(String(a.turmaId)))
+      const accessibleTurmaIds = turmaOptions.filter(t => t && t.id !== 'all').map(t => String(t.id))
+      return (alunos || []).filter(a => a && (accessibleTurmaIds.includes(String(a.turma)) || accessibleTurmaIds.includes(String(a.turmaId))))
     }
-    return alunos.filter(a => String(a.turma) === String(selectedTurmaId) || String(a.turmaId) === String(selectedTurmaId))
+    return (alunos || []).filter(a => a && (String(a.turma) === String(selectedTurmaId) || String(a.turmaId) === String(selectedTurmaId)))
   }, [alunos, selectedTurmaId, turmaOptions])
 
   const [chats, setChats] = useState<any[]>([])
@@ -70,10 +70,11 @@ export default function ADConversasPage() {
   useEffect(() => {
     // Para o Colaborador, queremos ver todas as conversas relacionadas aos alunos das turmas que ele tem acesso.
     // O ID do chat segue o formato: `${studentId}-${grupoId}-${colaboradorId}-${timestamp}`
-    const allowedStudentIds = new Set(alunosDaTurma.map(a => String(a.id)))
-    const myGroupIds = new Set((chatGroups || []).filter(g => g.colaboradoresIds?.includes(currentUser?.id || '')).map(g => String(g.id)))
+    const allowedStudentIds = new Set((alunosDaTurma || []).filter(Boolean).map(a => String(a.id)))
+    const myGroupIds = new Set((chatGroups || []).filter(g => g && g.colaboradoresIds?.includes(currentUser?.id || '')).map(g => String(g.id)))
 
-    const filteredChats = chatsList.filter(c => {
+    const filteredChats = (chatsList || []).filter(c => {
+      if (!c || !c.id) return false
       const parts = String(c.id).split('-')
       const chatStudentId = parts[0]
       const chatGroupId = parts[1]
@@ -91,7 +92,7 @@ export default function ADConversasPage() {
     const uniqueChats = []
     const seenIds = new Set()
     for (const chat of filteredChats) {
-      if (!seenIds.has(chat.id)) {
+      if (chat && chat.id && !seenIds.has(chat.id)) {
         seenIds.add(chat.id)
         uniqueChats.push(chat)
       }
@@ -100,17 +101,17 @@ export default function ADConversasPage() {
     uniqueChats.sort((a, b) => {
       const parseDate = (d: string | undefined, t: string | undefined) => {
         if (!d || !t) return 0;
-        const parts = d.split('/');
+        const parts = String(d).split('/');
         if (parts.length !== 3) return 0;
         const [day, month, year] = parts;
-        const [hour, min] = t.split(':');
+        const [hour, min] = String(t).split(':');
         return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min)).getTime();
       }
       return parseDate(b.date, b.time) - parseDate(a.date, a.time);
     })
     
     setChats(uniqueChats)
-    if (activeChat && !filteredChats.some(c => c.id === activeChat.id)) {
+    if (activeChat && !filteredChats.some(c => c && c.id === activeChat.id)) {
       setActiveChat(null)
     }
   }, [chatsList, alunosDaTurma, currentUser])
@@ -218,8 +219,8 @@ export default function ADConversasPage() {
   }
 
   // Get matching icon/color based on group name
-  const getGroupStyles = (name: string) => {
-    const lowercase = name.toLowerCase()
+  const getGroupStyles = (name: string | undefined) => {
+    const lowercase = String(name || '').toLowerCase()
     if (lowercase.includes('finance')) {
       return { icon: <DollarSign size={22} color="#10b981" />, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' }
     }
@@ -235,8 +236,8 @@ export default function ADConversasPage() {
     return { icon: <BookOpen size={22} color="#f59e0b" />, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' }
   }
 
-  const getTagStyles = (tag: string) => {
-    const text = tag.toLowerCase()
+  const getTagStyles = (tag: string | undefined) => {
+    const text = String(tag || '').toLowerCase()
     if (text.includes('finance') || text.includes('pagament') || text.includes('boleto')) {
       return { bg: 'rgba(16, 185, 129, 0.08)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.15)' }
     }
@@ -253,12 +254,104 @@ export default function ADConversasPage() {
   }
 
   const filteredChats = chats.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (c.tag && c.tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    c && (
+      String(c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (c.tag && String(c.tag).toLowerCase().includes(searchQuery.toLowerCase()))
+    )
   )
 
   return (
-    <div className="ad-chat-container" style={{ display: 'flex', height: 'calc(100vh - 140px)', background: 'hsl(var(--bg-main))', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.03)' }}>
+    <>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-chat-container {
+            height: calc(100vh - 280px) !important;
+            min-height: 520px !important;
+            flex-direction: column !important;
+            position: relative !important;
+            border-radius: 16px !important;
+          }
+          .ad-chat-sidebar {
+            width: 100% !important;
+            border-right: none !important;
+            padding: 0 !important;
+            display: flex !important;
+          }
+          .ad-chat-main {
+            width: 100% !important;
+            border-right: none !important;
+            display: flex !important;
+          }
+          .ad-chat-sidebar.mobile-hidden, 
+          .ad-chat-main.mobile-hidden {
+            display: none !important;
+          }
+          .mobile-back-btn {
+            display: flex !important;
+          }
+          .ad-chat-sidebar > div:first-child {
+            padding: 16px !important;
+          }
+          .ad-chat-sidebar h2 {
+            font-size: 20px !important;
+          }
+          .ad-chat-sidebar .form-input {
+            height: 36px !important;
+          }
+          .ad-nova-conversa-wrapper {
+            padding: 20px !important;
+          }
+          .ad-nova-conversa-header {
+            padding: 0px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-nova-conversa-titlebox h2 {
+            font-size: 20px !important;
+          }
+          .ad-nova-conversa-form {
+            padding: 20px !important;
+            border-radius: 16px !important;
+          }
+          .ad-chat-header {
+            padding: 12px 16px !important;
+          }
+          .ad-chat-header .ad-chat-header-avatar {
+            width: 40px !important;
+            height: 40px !important;
+            font-size: 16px !important;
+          }
+          .ad-chat-header h2, 
+          .ad-chat-header div[style*="fontWeight: 800"] {
+            font-size: 16px !important;
+          }
+          .ad-chat-messages-area {
+            padding: 16px 12px !important;
+            gap: 12px !important;
+          }
+          .ad-chat-bubble-wrapper {
+            max-width: 85% !important;
+          }
+          .ad-chat-bubble {
+            padding: 12px 16px !important;
+            border-radius: 16px !important;
+          }
+          .ad-chat-bubble p {
+            font-size: 13.5px !important;
+          }
+          .ad-chat-input-area {
+            padding: 12px 16px !important;
+          }
+          .ad-chat-input-area input {
+            height: 44px !important;
+            font-size: 13px !important;
+          }
+          .ad-chat-input-area button {
+            width: 44px !important;
+            height: 44px !important;
+          }
+        }
+      `}} />
+      <div className="ad-chat-container" style={{ display: 'flex', height: 'calc(100vh - 140px)', background: 'hsl(var(--bg-main))', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 12px 40px rgba(0,0,0,0.03)' }}>
       
       {/* Sidebar (List of Chats) */}
       <div className={`ad-chat-sidebar ${(activeChat || showNovaConversa) ? 'mobile-hidden' : ''}`} style={{ width: 360, background: 'hsl(var(--bg-surface))', borderRight: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
@@ -367,7 +460,7 @@ export default function ADConversasPage() {
                      boxShadow: isActive ? `0 0 0 3px ${styles.color}20, 0 8px 20px ${styles.color}40` : 'none', 
                      transition: 'all 0.3s' 
                    }}>
-                     {getInitials(chat.name.split(' (')[0])}
+                     {getInitials(String(chat?.name || 'Sem Nome').split(' (')[0])}
                    </div>
                    <div style={{ 
                      width: 12, 
@@ -435,7 +528,7 @@ export default function ADConversasPage() {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
                       }}>
-                        {chat.name}
+                        {chat.name || 'Sem nome'}
                       </div>
                     )
                   })()}
@@ -495,9 +588,9 @@ export default function ADConversasPage() {
               {/* Step 1: Select Turma */}
               {!selectedGroup && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                  {turmaOptions.filter(t => t.id !== 'all').map(grupo => {
+                  {turmaOptions.filter(t => t && t.id !== 'all').map(grupo => {
                     const styles = { bg: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', icon: <Users size={24} color="#6366f1" /> }
-                    const totalAlunos = alunos.filter(a => String(a.turma) === String(grupo.id) || String(a.turmaId) === String(grupo.id)).length
+                    const totalAlunos = (alunos || []).filter(a => a && (String(a.turma) === String(grupo.id) || String(a.turmaId) === String(grupo.id))).length
                     return (
                       <div 
                         key={grupo.id} 
@@ -550,7 +643,7 @@ export default function ADConversasPage() {
               {selectedGroup && !selectedColaborador && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
                   {(() => {
-                    const alunosDaTurmaSelecionada = alunosDaTurma.filter(a => String(a.turma) === String(selectedGroup.id) || String(a.turmaId) === String(selectedGroup.id))
+                    const alunosDaTurmaSelecionada = (alunosDaTurma || []).filter(a => a && (String(a.turma) === String(selectedGroup.id) || String(a.turmaId) === String(selectedGroup.id)))
                     if (alunosDaTurmaSelecionada.length === 0) {
                       return (
                         <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px dashed hsl(var(--border-subtle))' }}>
@@ -588,10 +681,10 @@ export default function ADConversasPage() {
                           }}
                         >
                           <div style={{ width: 44, height: 44, borderRadius: 12, background: styles.color, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 16 }}>
-                            {getInitials(aluno.nome)}
+                            {getInitials(aluno.nome || '')}
                           </div>
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{aluno.nome}</div>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{aluno.nome || ''}</div>
                             <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Aluno / Família</div>
                           </div>
                           <ArrowRight size={16} color={styles.color} />
@@ -604,14 +697,14 @@ export default function ADConversasPage() {
 
               {/* Step 3: Write Subject and Body (Email style) */}
               {selectedGroup && selectedColaborador && (
-                <div style={{ maxWidth: 600, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
+                <div className="ad-nova-conversa-form" style={{ maxWidth: 600, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: 32, boxShadow: '0 10px 30px rgba(0,0,0,0.02)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'rgba(0,0,0,0.02)', borderRadius: 16, marginBottom: 24 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 8, background: '#6366f1', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800 }}>
-                      {getInitials(selectedColaborador.nome)}
+                      {getInitials(selectedColaborador.nome || '')}
                     </div>
                     <div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Para:</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{selectedColaborador.nome} ({selectedGroup.nome})</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{selectedColaborador.nome || ''} ({selectedGroup.nome || ''})</div>
                     </div>
                   </div>
 
@@ -692,7 +785,7 @@ export default function ADConversasPage() {
                </div>
 
                {/* Messages Area */}
-               <div style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+               <div className="ad-chat-messages-area" style={{ flex: 1, padding: '32px 40px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
                  <div style={{ textAlign: 'center', margin: '10px 0 20px' }}>
                    <span style={{ background: 'hsl(var(--bg-surface))', padding: '6px 16px', borderRadius: 20, fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', border: '1px solid hsl(var(--border-subtle))' }}>
                      Histórico de e-mails oficiais e respostas do atendimento
@@ -703,7 +796,7 @@ export default function ADConversasPage() {
                    const isMe = msg.sender === 'them'
                    return (
                      <div key={msg.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
-                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
+                       <div className="ad-chat-bubble-wrapper" style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
                          
                          <div className="ad-chat-bubble" style={{ 
                            background: isMe ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : 'hsl(var(--bg-surface))',
@@ -806,5 +899,6 @@ export default function ADConversasPage() {
           )}
       </div>
     </div>
+    </>
   )
 }

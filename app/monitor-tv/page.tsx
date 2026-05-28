@@ -69,9 +69,11 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
       {call.studentPhoto ? (
         <>
           {/* Blurred Background Backdrop for premium ambient fill */}
-          <Image src={call.studentPhoto} alt="" width={300} height={300} className="tv-card-photo-blur-backdrop" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={call.studentPhoto} alt="" className="tv-card-photo-blur-backdrop" />
           {/* Crisp, uncropped centered foreground photo */}
-          <Image src={call.studentPhoto} alt={call.studentName} width={400} height={400} className="tv-card-photo-bg" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={call.studentPhoto} alt={call.studentName} className="tv-card-photo-bg" />
         </>
       ) : (
         <div className="tv-card-photo-bg-initials" style={{ background: `linear-gradient(135deg, ${accentColor} 0%, #171717 100%)` }}>
@@ -158,7 +160,8 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
       {/* Mini Photo/Initials */}
       <div className="tv-secondary-card-avatar">
         {call.studentPhoto ? (
-          <Image src={call.studentPhoto} alt={call.studentName} width={100} height={100} className="tv-secondary-card-photo" />
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={call.studentPhoto} alt={call.studentName} className="tv-secondary-card-photo" />
         ) : (
           <div className="tv-secondary-card-initials" style={{ background: `linear-gradient(135deg, ${accentColor}, #4f46e5)` }}>
             {initials}

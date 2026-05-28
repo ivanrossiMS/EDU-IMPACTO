@@ -24,7 +24,7 @@ const securityHeaders = [
         : "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in",
+      "img-src 'self' data: blob: https:",
       "media-src 'self' blob: https://*.supabase.co https://*.supabase.in",
       process.env.NODE_ENV === 'development'
         ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:*"
@@ -55,6 +55,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co' },
       { protocol: 'https', hostname: '*.supabase.in' },
+      { protocol: 'https', hostname: 'picsum.photos' },
+      { protocol: 'https', hostname: '*.picsum.photos' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: '*.unsplash.com' },
+      { protocol: 'https', hostname: '*.googleusercontent.com' },
     ],
     // Enable modern image formats
     formats: ['image/avif', 'image/webp'],

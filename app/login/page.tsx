@@ -117,6 +117,33 @@ export default function LoginPage() {
     return () => window.removeEventListener('mousemove', h)
   }, [])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const stepParam = params.get('step') as Step
+      
+      if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
+        const storedUser = localStorage.getItem('edu-current-user')
+        if (storedUser) {
+          try {
+            const user = JSON.parse(storedUser)
+            const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
+            
+            setPendingAuth({
+              cargo: user.cargo,
+              perfil: user.perfil
+            })
+            setHasDualRole(isAlsoFamily)
+            setStep(stepParam)
+          } catch (e) {
+            console.error("Error restoring user for step:", e)
+          }
+        }
+      }
+    }
+  }, [])
+
+
   const orbitX = (mousePos.x - 0.5) * 30
   const orbitY = (mousePos.y - 0.5) * 30
 
@@ -725,15 +752,12 @@ export default function LoginPage() {
 
         <button type="button" 
           onClick={() => {
-             if (hasDualRole) {
-                 setStep('choose_agenda_role')
+             // Go directly to the unified selector page — it shows both family & collaborator cards
+             const p = pendingAuth?.perfil;
+             if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
+                 window.location.href = '/agenda-digital/admin/comunicados';
              } else {
-                 const p = pendingAuth?.perfil;
-                 if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                     window.location.href = '/agenda-digital/admin/comunicados';
-                 } else {
-                     window.location.href = '/agenda-digital/colaborador/comunicados';
-                 }
+                 window.location.href = '/agenda-digital/selecionar-aluno';
              }
           }}
           style={{ flex:1, padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}

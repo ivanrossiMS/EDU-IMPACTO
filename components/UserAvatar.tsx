@@ -139,11 +139,10 @@ export function UserAvatar({
 
   if (foto && foto !== 'undefined') {
     return (
-      <Image 
+      // eslint-disable-next-line @next/next/no-img-element
+      <img 
         src={foto} 
         alt={name} 
-        width={size}
-        height={size}
         loading="lazy"
         className={className}
         style={{ 

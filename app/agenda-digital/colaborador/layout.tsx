@@ -47,9 +47,6 @@ export default function AgendaDigitalColaboradorLayout({
     { label: 'Comunicados', href: '/agenda-digital/colaborador/comunicados', icon: <Bell size={18} /> },
     { label: 'Mensagens', href: '/agenda-digital/colaborador/conversas', icon: <MessageSquare size={18} /> },
     { label: 'Fotos/Vídeos', href: '/agenda-digital/colaborador/momentos', icon: <ImageIcon size={18} /> },
-    { label: 'Frequência', href: '/agenda-digital/colaborador/frequencia', icon: <Calendar size={18} /> },
-    { label: 'Ocorrências', href: '/agenda-digital/colaborador/ocorrencias', icon: <ShieldCheck size={18} /> },
-    { label: 'Notas', href: '/agenda-digital/colaborador/notas', icon: <FileText size={18} /> },
     { label: 'Calendário', href: '/agenda-digital/colaborador/calendario', icon: <Calendar size={18} /> },
     { label: 'Meu Perfil', href: '/agenda-digital/colaborador/perfil', icon: <UserCog size={18} /> },
   ]
@@ -275,7 +272,7 @@ export default function AgendaDigitalColaboradorLayout({
             right: auto !important;
             min-width: 0 !important;
             width: 100% !important;
-            margin-top: 12px !important;
+            margin-top: 4px !important;
             z-index: 1 !important;
             height: auto !important;
             flex-direction: row !important;
@@ -430,7 +427,7 @@ export default function AgendaDigitalColaboradorLayout({
           <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
               <button 
-                onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                onClick={() => router.push('/login?step=choose_agenda_role')}
                 className="ad-btn-side" 
                 style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
               >
@@ -438,6 +435,8 @@ export default function AgendaDigitalColaboradorLayout({
               </button>
               <button 
                 onClick={() => { 
+                  localStorage.removeItem('edu-current-user');
+                  localStorage.removeItem('edu-current-perfil');
                   setCurrentUser(null); 
                   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                   window.location.href = '/login'; 

@@ -909,8 +909,8 @@ export default function ColaboradorComunicadosPage() {
 {/* Modal do Comunicado Expandido */}
       {selectedComunicado && (
         <Portal>
-        <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }} onClick={() => setSelectedComunicado(null)}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: '#f8fafc', borderRadius: 28, width: '100%', maxWidth: 740, minHeight: 'fit-content', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)', position: 'relative', marginBottom: '5vh' }} onClick={e => e.stopPropagation()}>
+        <motion.div className="ad-expanded-comunicado-overlay" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }} onClick={() => setSelectedComunicado(null)}>
+          <motion.div className="ad-modal-container ad-expanded-comunicado-card" initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: '#f8fafc', borderRadius: 28, width: '100%', maxWidth: 740, minHeight: 'fit-content', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)', position: 'relative', marginBottom: '5vh' }} onClick={e => e.stopPropagation()}>
             
             <div style={{ flexShrink: 0, background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', padding: '32px 24px 24px 24px', position: 'relative', overflow: 'hidden', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, boxShadow: '0 4px 16px rgba(99,102,241,0.1)' }}>
               
@@ -1293,11 +1293,11 @@ export default function ColaboradorComunicadosPage() {
 
 {/* Modal Composer */}
       {showComposer && (
-        <div style={{
+        <div className="ad-composer-overlay" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
           zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          <div className="card" style={{ width: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+          <div className="card ad-composer-card" style={{ width: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: 18, fontWeight: 700 }}>{editComId ? 'Editar Comunicado' : 'Escrever Novo Comunicado'}</h3>
               <button className="btn btn-ghost btn-sm" onClick={() => { setShowComposer(false); setAnexos([]); }}><X size={18} /></button>
@@ -1539,8 +1539,11 @@ export default function ColaboradorComunicadosPage() {
                </div>
             </div>
 
-            <div style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '0 0 24px 24px' }}>
-              <button className="btn btn-ghost" onClick={() => handleEnviar(true)} style={{ fontWeight: 700, color: '#64748b' }}>Salvar Rascunho</button>
+            <div className="ad-composer-footer" style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '0 0 24px 24px' }}>
+              <button className="btn btn-ghost" onClick={() => handleEnviar(true)} style={{ fontWeight: 700, color: '#64748b' }}>
+                <span className="desktop-text">Salvar Rascunho</span>
+                <span className="mobile-text">Rascunho</span>
+              </button>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <button 
                   type="button"
@@ -1576,16 +1579,21 @@ export default function ColaboradorComunicadosPage() {
                   }}
                 >
                   <Clock size={16} /> 
-                  {dataAgendamento ? (
-                    (() => {
-                      try {
-                        const d = new Date(dataAgendamento);
-                        return `Agendado: ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-                      } catch (e) {
-                        return 'Agendado';
-                      }
-                    })()
-                  ) : 'Agendar Envio'}
+                  <span className="desktop-text">
+                    {dataAgendamento ? (
+                      (() => {
+                        try {
+                          const d = new Date(dataAgendamento);
+                          return `Agendado: ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+                        } catch (e) {
+                          return 'Agendado';
+                        }
+                      })()
+                    ) : 'Agendar Envio'}
+                  </span>
+                  <span className="mobile-text">
+                    {dataAgendamento ? 'Agendado' : 'Agendar'}
+                  </span>
                 </button>
                 <button 
                   className="btn btn-primary" 
@@ -1605,7 +1613,12 @@ export default function ColaboradorComunicadosPage() {
                    {isUploading ? (
                      <div style={{ width: 16, height: 16, borderRadius: 8, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
                    ) : <SendIcon size={16} />}
-                   {isUploading ? 'Processando...' : dataAgendamento ? 'Agendar' : editComId ? 'Salvar Alterações' : 'Enviar Comunicado'}
+                   <span className="desktop-text">
+                     {isUploading ? 'Processando...' : dataAgendamento ? 'Agendar' : editComId ? 'Salvar Alterações' : 'Enviar Comunicado'}
+                   </span>
+                   <span className="mobile-text">
+                     {isUploading ? '...' : dataAgendamento ? 'Agendar' : editComId ? 'Salvar' : 'Enviar'}
+                   </span>
                 </button>
               </div>
             </div>
@@ -1623,8 +1636,8 @@ export default function ColaboradorComunicadosPage() {
       <AnimatePresence>
         {/* Cobranca Modal */}
         {showCobrancaModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
+          <motion.div className="ad-cobranca-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div className="card ad-cobranca-modal-card" initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <h3 style={{ fontSize: 18, fontWeight: 800 }}>Criar Nova Cobrança</h3>
@@ -1695,8 +1708,8 @@ export default function ColaboradorComunicadosPage() {
       <AnimatePresence>
         {/* Forms Selection Modal */}
         {showFormsModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="card" style={{ width: '100%', maxWidth: 550, padding: 40, borderRadius: 40, boxShadow: '0 50px 100px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
+          <motion.div className="ad-forms-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div className="card ad-forms-modal-card" initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} style={{ width: '100%', maxWidth: 550, padding: 40, borderRadius: 40, boxShadow: '0 50px 100px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
                 <div>
                   <h3 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', marginBottom: 8 }}>📝 Anexar Formulário</h3>
@@ -1738,8 +1751,94 @@ export default function ColaboradorComunicadosPage() {
                   </div>
                 )}
               </div>
-
               <button className="btn" style={{ width: '100%', marginTop: 32, height: 56, borderRadius: 20, fontWeight: 900, background: '#0f172a', border: 'none', color: '#fff', fontSize: 15, boxShadow: '0 10px 20px rgba(15, 23, 42, 0.2)' }} onClick={() => setShowFormsModal(false)}>Fechar</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {/* Modal de Agendamento */}
+        {showScheduleModal && (
+          <motion.div 
+            className="ad-schedule-modal-overlay"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            style={{ position: 'fixed', inset: 0, zIndex: 10003, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          >
+            <motion.div 
+              className="card ad-schedule-modal-card"
+              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.95, opacity: 0, y: 20 }} 
+              transition={{ type: "spring", stiffness: 300, damping: 25 }} 
+              style={{ width: 420, padding: 28, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 24, background: '#fff' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>📅 Agendar Envio</h3>
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Escolha a data e hora para disparo automático.</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setShowScheduleModal(false)}><X size={18} /></button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 24 }}>
+                <div>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, display: 'block' }}>Data e Hora de Disparo</label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <Clock size={16} style={{ position: 'absolute', left: 16, color: '#64748b' }} />
+                    <input 
+                      type="datetime-local" 
+                      className="form-input" 
+                      style={{ width: '100%', fontSize: 14, paddingLeft: 44, height: 48, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }} 
+                      value={tempDataAgendamento} 
+                      onChange={e => setTempDataAgendamento(e.target.value)} 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 800, background: '#4f46e5', borderColor: '#4f46e5' }}
+                  onClick={() => {
+                    if (!tempDataAgendamento) {
+                      adAlert('Selecione uma data e hora válidas.', 'Aviso');
+                      return;
+                    }
+                    setDataAgendamento(tempDataAgendamento);
+                    setShowScheduleModal(false);
+                    adAlert(`Envio agendado com sucesso para ${new Date(tempDataAgendamento).toLocaleDateString('pt-BR')} às ${new Date(tempDataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Clique em "Agendar" para salvar o comunicado.`, 'Sucesso');
+                  }}
+                >
+                  Confirmar Agendamento
+                </button>
+                
+                {dataAgendamento && (
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
+                    onClick={() => {
+                      setDataAgendamento('');
+                      setTempDataAgendamento('');
+                      setShowScheduleModal(false);
+                      adAlert('Agendamento removido. O comunicado será enviado imediatamente ao salvar.', 'Informação');
+                    }}
+                  >
+                    Remover Agendamento
+                  </button>
+                )}
+
+                <button 
+                  className="btn btn-ghost" 
+                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))' }}
+                  onClick={() => setShowScheduleModal(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -1748,8 +1847,89 @@ export default function ColaboradorComunicadosPage() {
       
       </div>
       <style jsx global>{`
-        @media (max-width: 640px) {
+        .mobile-text {
+          display: none;
+        }
+        .desktop-text {
+          display: inline;
+        }
+
+        @media (max-width: 768px) {
           .mobile-content-wrapper { padding-left: 0 !important; padding-right: 0 !important; }
+          
+          .mobile-text {
+            display: inline !important;
+          }
+          .desktop-text {
+            display: none !important;
+          }
+
+          /* Composer Fullscreen Mobile Styles */
+          .ad-composer-overlay {
+            background: #fff !important;
+            z-index: 100100 !important;
+            position: fixed !important;
+            inset: 0 !important;
+            display: block !important;
+            overflow-y: auto !important;
+          }
+          
+          .ad-composer-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          .ad-composer-header {
+            padding: 16px 20px !important;
+            border-bottom: 1px solid hsl(var(--border-subtle)) !important;
+          }
+
+          .ad-composer-body {
+            padding: 16px 20px !important;
+            flex: 1 !important;
+            overflow-y: auto !important;
+          }
+
+          .ad-composer-footer {
+            padding: 16px 20px !important;
+            border-radius: 0 !important;
+            border-top: 1px solid hsl(var(--border-subtle)) !important;
+            flex-wrap: wrap !important;
+            gap: 12px !important;
+            justify-content: space-between !important;
+            background: hsl(var(--bg-overlay)) !important;
+          }
+
+          /* Elevate child modals z-indexes so they render on top of fullscreen composer and bottom nav */
+          .ad-destinatarios-modal-overlay,
+          .ad-cobranca-modal-overlay,
+          .ad-reports-modal-overlay,
+          .ad-forms-modal-overlay,
+          .ad-schedule-modal-overlay,
+          .ad-expanded-comunicado-overlay {
+            z-index: 100200 !important;
+          }
+          
+          /* Mobile modal card adjustments */
+          .ad-destinatarios-modal-card,
+          .ad-cobranca-modal-card,
+          .ad-reports-modal-card,
+          .ad-forms-modal-card,
+          .ad-schedule-modal-card,
+          .ad-expanded-comunicado-card {
+            width: 95% !important;
+            max-width: 550px !important;
+            max-height: 90vh !important;
+            border-radius: 24px !important;
+            overflow-y: auto !important;
+          }
         }
       `}</style>
     </div>

@@ -561,6 +561,19 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   width: calc(100% - var(--sidebar-collapsed));
 }
 
+/* Agenda Digital: no ERP sidebar — full width, no offset */
+.main-content.agenda-digital-no-sidebar {
+  margin-left: 0 !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+/* Strip page-content padding inside agenda-digital (agenda-digital sets its own) */
+.main-content.agenda-digital-no-sidebar .page-content {
+  padding: 0 !important;
+  overflow: unset !important;
+}
+
 .page-content {
   flex: 1;
   padding: 24px;
