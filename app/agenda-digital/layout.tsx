@@ -183,14 +183,14 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         )}
 
         <div className="ad-main-scroll no-scrollbar">
-          {bannerUrl && !isRouterPage && (
+          {bannerUrl && (
             <div className="ad-banner-global">
               <Image src={bannerUrl} alt="Cover Banner" fill style={{ objectFit: 'cover', objectPosition: 'center' }} />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
             </div>
           )}
 
-          <main className={`ad-content-inner ${bannerUrl && !isRouterPage ? 'ad-has-banner' : ''}`}>
+          <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
           {!isRouterPage && <FloatingChat />}
