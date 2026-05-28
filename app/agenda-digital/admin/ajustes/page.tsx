@@ -44,7 +44,7 @@ export default function ADAdminAjustes() {
             ...p, 
             saudacao: {
               ...(p.saudacao || {ativa:true, titulo:'', mensagem:''}), 
-              imagemUrl: event.target.result as string
+              imagemUrl: event.target?.result as string
             }
           }))
         }
