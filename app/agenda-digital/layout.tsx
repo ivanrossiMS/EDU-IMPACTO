@@ -61,6 +61,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = React.useState(false)
   
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno')
+  const isIndexPage = pathname === '/agenda-digital'
+  const isRouterPage = isSelectStudent || isIndexPage
   
   React.useEffect(() => {
     setMounted(true)
@@ -174,24 +176,24 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
         `}} />
         
-        {!isSelectStudent && !adLoading && (
+        {!isRouterPage && !adLoading && (
           <div className="ad-sidebar-container">
             <ADSidebar />
           </div>
         )}
 
         <div className="ad-main-scroll no-scrollbar">
-          {bannerUrl && (
+          {bannerUrl && !isRouterPage && (
             <div className="ad-banner-global">
               <Image src={bannerUrl} alt="Cover Banner" fill style={{ objectFit: 'cover', objectPosition: 'center' }} />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
             </div>
           )}
 
-          <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
+          <main className={`ad-content-inner ${bannerUrl && !isRouterPage ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
-          {!isSelectStudent && <FloatingChat />}
+          {!isRouterPage && <FloatingChat />}
         </div>
     </div>
   )
