@@ -2938,154 +2938,151 @@ export default function AlunosPage() {
 
       {/* FILTROS AVANÇADOS MODAL */}
       {isFiltrosAvancadosModalOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
           <div 
-            className="w-full max-w-2xl max-h-[95vh] flex flex-col overflow-hidden shadow-2xl rounded-3xl"
+            className="w-full max-w-4xl max-h-[95vh] flex flex-col overflow-hidden shadow-2xl rounded-[32px] relative"
             style={{ 
-              background: 'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(250,250,250,0.9) 100%)', 
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.4)',
-              animation: 'fadeSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+              background: '#ffffff', 
+              boxShadow: '0 40px 80px -20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,1)',
+              animation: 'zoomFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
             }}
           >
+            {/* Decorative Glow */}
+            <div className="absolute top-0 left-0 right-0 h-[200px] bg-gradient-to-b from-indigo-50/80 to-transparent pointer-events-none" />
+            <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
             {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-slate-200/60 bg-white/50 backdrop-blur-md flex items-center justify-between relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              <div className="relative z-10">
-                <h3 className="text-xl font-black flex items-center gap-3 tracking-tight text-slate-800">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-                    <Filter size={18} />
-                  </div>
-                  Filtros Avançados
-                </h3>
-                <p className="text-sm text-slate-500 mt-1.5 font-medium ml-14">
-                  Refine a busca de alunos utilizando critérios específicos
-                </p>
+            <div className="px-8 pt-8 pb-6 relative z-10 flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 shrink-0">
+                  <Filter size={24} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold tracking-tight text-slate-900">
+                    Filtros Avançados
+                  </h3>
+                  <p className="text-sm text-slate-500 font-medium mt-0.5">
+                    Refine sua busca para encontrar exatamente quem você procura
+                  </p>
+                </div>
               </div>
               <button 
                 onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                className="relative z-10 w-10 h-10 rounded-2xl flex items-center justify-center bg-slate-100/80 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-all hover:scale-105 active:scale-95"
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-all active:scale-95 shrink-0 absolute sm:relative top-8 sm:top-0 right-8 sm:right-0"
               >
                 <X size={20} strokeWidth={2.5} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto custom-scrollbar flex flex-col gap-5 bg-slate-50/30">
+            <div className="px-8 pb-8 overflow-y-auto custom-scrollbar flex flex-col gap-8 relative z-10">
               
-              {/* Data de Cadastro */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-blue-200 group">
-                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-500 group-hover:scale-110 group-hover:bg-indigo-100 transition-all">
-                    <Calendar size={16} strokeWidth={2.5} />
-                  </div>
-                  Período de Cadastro
+              {/* Section: Período de Cadastro */}
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                  <Calendar size={16} className="text-indigo-500" strokeWidth={2.5} /> Período de Cadastro
                 </h4>
-                <div className="grid grid-cols-2 gap-5">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">A partir de</label>
-                    <div className="relative">
-                      <input 
-                        type="date" 
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-semibold outline-none transition-all"
-                        value={filtrosAvancados.dataCadastroInicio}
-                        onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroInicio: e.target.value }))}
-                      />
-                    </div>
+                <div className="flex items-center gap-4 flex-col sm:flex-row">
+                  <div className="flex-1 w-full relative group">
+                    <label className="absolute left-4 top-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest transition-colors group-focus-within:text-indigo-500">Início</label>
+                    <input 
+                      type="date" 
+                      className="w-full pl-4 pr-4 pt-7 pb-2 rounded-2xl bg-slate-50 border border-slate-200/80 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 text-slate-800 font-semibold outline-none transition-all"
+                      value={filtrosAvancados.dataCadastroInicio}
+                      onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroInicio: e.target.value }))}
+                    />
                   </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Até</label>
-                    <div className="relative">
-                      <input 
-                        type="date" 
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-slate-700 font-semibold outline-none transition-all"
-                        value={filtrosAvancados.dataCadastroFim}
-                        onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroFim: e.target.value }))}
-                      />
-                    </div>
+                  <div className="text-slate-300 font-medium hidden sm:block">até</div>
+                  <div className="flex-1 w-full relative group">
+                    <label className="absolute left-4 top-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest transition-colors group-focus-within:text-indigo-500">Fim</label>
+                    <input 
+                      type="date" 
+                      className="w-full pl-4 pr-4 pt-7 pb-2 rounded-2xl bg-slate-50 border border-slate-200/80 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 text-slate-800 font-semibold outline-none transition-all"
+                      value={filtrosAvancados.dataCadastroFim}
+                      onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroFim: e.target.value }))}
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Turno */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-amber-200 group">
-                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 group-hover:scale-110 group-hover:bg-amber-100 transition-all">
-                    <Sun size={16} strokeWidth={2.5} />
-                  </div>
-                  Turno
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'matutino', label: '🌅 Matutino' },
-                    { val: 'vespertino', label: '🌇 Vespertino' },
-                    { val: 'integral', label: '⚡ Integral' },
-                    { val: 'noturno', label: '🌙 Noturno' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.turno === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
-                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30 scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              <div className="w-full h-px bg-slate-100" />
 
-              {/* Saída Sozinho */}
-              <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-emerald-200 group">
-                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:scale-110 group-hover:bg-emerald-100 transition-all">
-                    <DoorOpen size={16} strokeWidth={2.5} />
-                  </div>
-                  Saída Sozinho (Portaria)
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'true', label: '✅ Autorizado' },
-                    { val: 'false', label: '❌ Não Autorizado' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
-                        className={`px-4 py-2.5 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-105' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Financeiro & Evasão (Grid 2 colunas) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Financeiro */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-rose-200 group">
-                  <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 group-hover:scale-110 group-hover:bg-rose-100 transition-all">
-                      <CreditCard size={16} strokeWidth={2.5} />
-                    </div>
-                    Situação Financeira
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Turno */}
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <Sun size={16} className="text-amber-500" strokeWidth={2.5} /> Turno de Estudo
                   </h4>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {[
                       { val: 'todos', label: 'Todos' },
-                      { val: 'false', label: '🛡️ Adimplente' },
-                      { val: 'true', label: '⚠️ Inadimplente' },
+                      { val: 'matutino', label: '🌅 Matutino' },
+                      { val: 'vespertino', label: '🌇 Vespertino' },
+                      { val: 'integral', label: '⚡ Integral' },
+                      { val: 'noturno', label: '🌙 Noturno' },
+                    ].map(item => {
+                      const isActive = filtrosAvancados.turno === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
+                          className={`px-4 py-2.5 rounded-2xl font-semibold text-sm transition-all flex items-center gap-2 ${isActive ? 'bg-slate-900 text-white shadow-md shadow-slate-900/20 scale-[1.02]' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-95'}`}
+                        >
+                          {isActive && <Check size={14} strokeWidth={3} className="text-amber-400" />}
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Saída Sozinho */}
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <DoorOpen size={16} className="text-emerald-500" strokeWidth={2.5} /> Saída na Portaria
+                  </h4>
+                  <div className="flex p-1.5 bg-slate-100/80 rounded-2xl">
+                    {[
+                      { val: 'todos', label: 'Todos' },
+                      { val: 'true', label: '✅ Autorizado' },
+                      { val: 'false', label: '❌ Não Aut.' },
+                    ].map(item => {
+                      const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
+                      return (
+                        <button
+                          key={item.val}
+                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
+                          className={`flex-1 py-2.5 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                          {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Financeiro */}
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <CreditCard size={16} className="text-rose-500" strokeWidth={2.5} /> Financeiro
+                  </h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { val: 'todos', label: 'Todos' },
+                      { val: 'false', label: 'Em Dia' },
+                      { val: 'true', label: 'Inadimplente' },
                     ].map(item => {
                       const isActive = filtrosAvancados.inadimplente === item.val;
+                      let activeColor = 'bg-slate-900 text-white shadow-md shadow-slate-900/20';
+                      if (isActive && item.val === 'false') activeColor = 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20';
+                      if (isActive && item.val === 'true') activeColor = 'bg-rose-500 text-white shadow-md shadow-rose-500/20';
+
                       return (
                         <button
                           key={item.val}
                           onClick={() => setFiltrosAvancados(prev => ({ ...prev, inadimplente: item.val }))}
-                          className={`w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/30 scale-[1.02]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-[1.02]'}`}
+                          className={`py-3 px-2 rounded-2xl font-semibold text-sm transition-all flex flex-col items-center justify-center gap-1 ${isActive ? activeColor : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-95'}`}
                         >
                           {item.label}
                         </button>
@@ -3095,26 +3092,28 @@ export default function AlunosPage() {
                 </div>
 
                 {/* Risco de Evasão */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/60 shadow-sm transition-all hover:shadow-md hover:border-teal-200 group">
-                  <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center text-teal-500 group-hover:scale-110 group-hover:bg-teal-100 transition-all">
-                      <AlertTriangle size={16} strokeWidth={2.5} />
-                    </div>
-                    Risco de Evasão
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                    <AlertTriangle size={16} className="text-orange-500" strokeWidth={2.5} /> Risco de Evasão
                   </h4>
-                  <div className="flex flex-col gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     {[
                       { val: 'todos', label: 'Todos' },
-                      { val: 'baixo', label: '🟢 Baixo' },
-                      { val: 'medio', label: '🟡 Médio' },
-                      { val: 'alto', label: '🔴 Alto' },
+                      { val: 'baixo', label: 'Baixo' },
+                      { val: 'medio', label: 'Médio' },
+                      { val: 'alto', label: 'Alto' },
                     ].map(item => {
                       const isActive = filtrosAvancados.riscoEvasao === item.val;
+                      let activeColor = 'bg-slate-900 text-white shadow-md shadow-slate-900/20';
+                      if (isActive && item.val === 'baixo') activeColor = 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20';
+                      if (isActive && item.val === 'medio') activeColor = 'bg-amber-500 text-white shadow-md shadow-amber-500/20';
+                      if (isActive && item.val === 'alto') activeColor = 'bg-rose-500 text-white shadow-md shadow-rose-500/20';
+
                       return (
                         <button
                           key={item.val}
                           onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
-                          className={`w-full text-left px-4 py-3 rounded-xl font-semibold text-sm transition-all ${isActive ? 'bg-teal-500 text-white shadow-lg shadow-teal-500/30 scale-[1.02]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-[1.02]'}`}
+                          className={`py-3 px-1 rounded-2xl font-semibold text-sm transition-all flex items-center justify-center ${isActive ? activeColor : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:scale-95'}`}
                         >
                           {item.label}
                         </button>
@@ -3123,41 +3122,42 @@ export default function AlunosPage() {
                   </div>
                 </div>
               </div>
-
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-5 border-t border-slate-200/60 bg-white/80 backdrop-blur-md flex items-center justify-between">
+            <div className="px-8 py-5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
               <button 
                 onClick={() => setFiltrosAvancados({
                   dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos'
                 })}
-                className="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-all active:scale-95"
+                className="font-bold text-sm text-slate-500 hover:text-indigo-600 transition-colors"
               >
-                Limpar Filtros
+                Restaurar padrões
               </button>
-              <div className="flex items-center gap-3">
+              <div className="flex w-full sm:w-auto items-center gap-3">
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all active:scale-95 shadow-sm"
+                  className="flex-1 sm:flex-none px-6 py-3.5 rounded-2xl font-bold text-sm bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 transition-all active:scale-95 shadow-sm"
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)}
-                  className="px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white transition-all active:scale-95 shadow-lg shadow-blue-500/30 flex items-center gap-2"
+                  className="flex-1 sm:flex-none px-8 py-3.5 rounded-2xl font-bold text-sm bg-slate-900 hover:bg-black text-white transition-all active:scale-95 shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 group"
                 >
-                  <Check size={16} strokeWidth={3} />
                   Aplicar Filtros
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                    <Check size={14} strokeWidth={3} />
+                  </div>
                 </button>
               </div>
             </div>
           </div>
           
           <style dangerouslySetInnerHTML={{__html: `
-            @keyframes fadeSlideIn {
-              from { opacity: 0; transform: translateY(20px) scale(0.96); }
-              to { opacity: 1; transform: translateY(0) scale(1); }
+            @keyframes zoomFadeIn {
+              0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+              100% { opacity: 1; transform: scale(1) translateY(0); }
             }
           `}} />
         </div>
