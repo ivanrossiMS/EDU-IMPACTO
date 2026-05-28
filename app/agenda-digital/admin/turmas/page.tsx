@@ -91,6 +91,8 @@ export default function ADAdminTurmas() {
   const [buscaColab, setBuscaColab] = useState('')
   const [buscaMembroEquipe, setBuscaMembroEquipe] = useState('')
   const [isLoaded, setIsLoaded] = useState(false)
+  // Filtro de ano letivo na tela de detalhe da equipe
+  const [anoFiltroEquipe, setAnoFiltroEquipe] = useState<string>('')
 
   // ── Dados derivados ──────────────────────────────────────────────────────────
   const activeGrupo = useMemo(() => (grupos || []).find(g => g.id === activeGrupoId), [grupos, activeGrupoId])
@@ -257,6 +259,38 @@ export default function ADAdminTurmas() {
     const gruposVinculados = (grupos || []).filter(g => (g.equipesIds || []).includes(activeEquipe.id))
     const IconComp = getIconComponent(activeEquipe.icone)
 
+    // Anos letivos disponíveis (extraídos das turmas ERP)
+    const anosDisponiveis = [...new Set(
+      turmas.map(t => String(t.ano)).filter(Boolean).sort().reverse()
+    )]
+
+    // Grupos filtrados pelo ano selecionado (para "Vincular também em")
+    const gruposNaoVinculados = (grupos || []).filter(g => !(g.equipesIds || []).includes(activeEquipe.id))
+    const gruposNaoVinculadosFiltrados = anoFiltroEquipe
+      ? gruposNaoVinculados.filter(g => {
+          // Tenta mapear o grupo de volta à turma ERP pelo id (sync-turmaId)
+          const turmaId = g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null
+          if (turmaId) {
+            const turmaERP = turmas.find(t => String(t.id) === turmaId)
+            return turmaERP && String(turmaERP.ano) === anoFiltroEquipe
+          }
+          // Grupo manual: sem ano → inclui se não houver filtro restritivo
+          return true
+        })
+      : gruposNaoVinculados
+
+    // Grupos já vinculados filtrados pelo ano
+    const gruposVinculadosFiltrados = anoFiltroEquipe
+      ? gruposVinculados.filter(g => {
+          const turmaId = g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null
+          if (turmaId) {
+            const turmaERP = turmas.find(t => String(t.id) === turmaId)
+            return turmaERP && String(turmaERP.ano) === anoFiltroEquipe
+          }
+          return true
+        })
+      : gruposVinculados
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
@@ -355,45 +389,79 @@ export default function ADAdminTurmas() {
           </div>
 
           {/* Coluna Turmas Vinculadas */}
-          <div style={{ background: 'white', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, overflow: 'hidden' }}>
+          <div style={{ background: 'white', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '24px 24px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 <Link2 size={18} color={activeEquipe.cor} />
                 <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Turmas Vinculadas</h3>
               </div>
-              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 13, marginBottom: 16 }}>Grupos de turma que utilizam esta equipe como responsável.</p>
+              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 13, marginBottom: 14 }}>Grupos de turma que utilizam esta equipe como responsável.</p>
+
+              {/* ── Filtro de Ano Letivo ── */}
+              {anosDisponiveis.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>Ano letivo:</span>
+                  <button
+                    onClick={() => setAnoFiltroEquipe('')}
+                    style={{ padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${anoFiltroEquipe === '' ? activeEquipe.cor : 'hsl(var(--border-subtle))'}`, background: anoFiltroEquipe === '' ? `${activeEquipe.cor}12` : 'transparent', color: anoFiltroEquipe === '' ? activeEquipe.cor : 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
+                  >
+                    Todos
+                  </button>
+                  {anosDisponiveis.map(ano => (
+                    <button
+                      key={ano}
+                      onClick={() => setAnoFiltroEquipe(ano)}
+                      style={{ padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${anoFiltroEquipe === ano ? activeEquipe.cor : 'hsl(var(--border-subtle))'}`, background: anoFiltroEquipe === ano ? `${activeEquipe.cor}12` : 'transparent', color: anoFiltroEquipe === ano ? activeEquipe.cor : 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s' }}
+                    >
+                      {ano}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {gruposVinculados.length === 0 ? (
+
+            <div style={{ padding: '0 24px', flex: 1, overflowY: 'auto' }}>
+              {/* Turmas já vinculadas */}
+              {gruposVinculadosFiltrados.length === 0 && gruposVinculados.length === 0 ? (
                 <div style={{ padding: '32px 0', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
                   <Link2 size={32} style={{ opacity: 0.2, marginBottom: 12 }} />
-                  <p style={{ fontSize: 13 }}>Nenhuma turma vinculada.<br />Acesse uma turma e vincule esta equipe.</p>
+                  <p style={{ fontSize: 13 }}>Nenhuma turma vinculada.<br />Use a seção abaixo para vincular.</p>
                 </div>
-              ) : gruposVinculados.map(g => (
-                <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'rgba(0,0,0,0.02)', borderRadius: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: g.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-                      <BookOpen size={16} />
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{g.nome}</div>
-                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(g.alunosIds || []).length} alunos</div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 700 }}>
-                    <CheckCircle2 size={11} /> Vinculada
-                  </div>
+              ) : gruposVinculadosFiltrados.length === 0 && anoFiltroEquipe ? (
+                <div style={{ padding: '20px 0', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
+                  <p style={{ fontSize: 13 }}>Nenhuma turma vinculada em {anoFiltroEquipe}.</p>
                 </div>
-              ))}
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+                  {gruposVinculadosFiltrados.map(g => (
+                    <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: 'rgba(0,0,0,0.02)', borderRadius: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: g.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                          <BookOpen size={16} />
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{g.nome}</div>
+                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{(g.alunosIds || []).length} alunos</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 700 }}>
+                        <CheckCircle2 size={11} /> Vinculada
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Vincular rápido em outras turmas */}
-            {(grupos || []).filter(g => !(g.equipesIds || []).includes(activeEquipe.id)).length > 0 && (
+            {gruposNaoVinculadosFiltrados.length > 0 && (
               <div style={{ padding: '16px 24px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
-                <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 700, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Vincular também em:</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(grupos || []).filter(g => !(g.equipesIds || []).includes(activeEquipe.id)).map(g => (
-                    <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 10, border: '1px dashed hsl(var(--border-subtle))', cursor: 'pointer' }}
+                <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 800, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {anoFiltroEquipe ? `Vincular em ${anoFiltroEquipe}:` : 'Vincular também em:'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+                  {gruposNaoVinculadosFiltrados.map(g => (
+                    <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 10, border: '1px dashed hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.04)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       onClick={() => setGrupos((grupos || []).map(gg => gg.id === g.id ? { ...gg, equipesIds: [...(gg.equipesIds || []), activeEquipe.id] } : gg))}>
