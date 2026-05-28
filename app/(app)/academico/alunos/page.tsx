@@ -7,7 +7,8 @@ import {
   UserPlus, SearchIcon, CreditCard, Calendar, Phone, Mail,
   MapPin, Shield, DoorOpen, HardHat, Briefcase, Tag, Sparkles,
   Loader2, Lock, AlertTriangle, CheckCircle2, Info,
-  ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck
+  ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck,
+  Lightbulb, CloudSun, CircleDot, Clock, CheckCircle, GraduationCap
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
@@ -2938,53 +2939,53 @@ export default function AlunosPage() {
 
       {/* FILTROS AVANÇADOS MODAL */}
       {isFiltrosAvancadosModalOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
           <div 
-            className="w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded-2xl relative bg-white"
+            className="w-full max-w-[800px] flex flex-col overflow-hidden shadow-2xl rounded-[24px] relative bg-[#f8fafc]"
             style={{ animation: 'zoomFadeIn 0.2s ease-out' }}
           >
             {/* Modal Header */}
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white z-10">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <Filter size={18} strokeWidth={2.5} />
+            <div className="px-6 py-5 border-b border-slate-200/60 bg-white z-10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <Lightbulb size={24} strokeWidth={2} className="text-indigo-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Filtros Avançados</h3>
-                  <p className="text-xs font-medium text-slate-500">Refine a busca de alunos</p>
+                  <h3 className="text-xl font-bold text-slate-800">Filtros Avançados</h3>
+                  <p className="text-[13px] font-medium text-slate-500 mt-0.5">Refine sua busca para encontrar exatamente quem você procura</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors"
               >
-                <X size={18} strokeWidth={2.5} />
+                <X size={16} strokeWidth={2.5} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 overflow-y-auto flex flex-col gap-6 bg-slate-50/50">
+            <div className="p-6 overflow-y-auto flex flex-col gap-5">
               
               {/* Período de Cadastro */}
-              <div>
-                <label className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
-                  <Calendar size={16} className="text-indigo-500" /> Período de Cadastro
-                </label>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+                <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                  <Calendar size={16} className="text-slate-400" /> Período de Cadastro
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">A Partir De</span>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">A Partir De</label>
                     <input 
                       type="date" 
-                      className="mt-1 w-full h-10 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
+                      className="w-full h-11 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
                       value={filtrosAvancados.dataCadastroInicio}
                       onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroInicio: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase ml-1">Até</span>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Até</label>
                     <input 
                       type="date" 
-                      className="mt-1 w-full h-10 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
+                      className="w-full h-11 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
                       value={filtrosAvancados.dataCadastroFim}
                       onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroFim: e.target.value }))}
                     />
@@ -2992,134 +2993,168 @@ export default function AlunosPage() {
                 </div>
               </div>
 
-              {/* Turno */}
-              <div>
-                <label className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <Sun size={16} className="text-amber-500" /> Turno de Estudo
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'matutino', label: 'Matutino' },
-                    { val: 'vespertino', label: 'Vespertino' },
-                    { val: 'integral', label: 'Integral' },
-                    { val: 'noturno', label: 'Noturno' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.turno === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${isActive ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
+              {/* Grid Layout: Turno vs Rest */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                
+                {/* Turno */}
+                <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)] flex flex-col">
+                  <h4 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <GraduationCap size={16} className="text-indigo-500" /> Turno de Estudo
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 flex-1 content-start">
+                    {[
+                      { val: 'todos', label: 'Todos os turnos', icon: CircleDot },
+                      { val: 'matutino', label: 'Matutino', icon: Sun },
+                      { val: 'vespertino', label: 'Vespertino', icon: CloudSun },
+                      { val: 'integral', label: 'Integral', icon: Clock },
+                      { val: 'noturno', label: 'Noturno', icon: Moon },
+                    ].map(item => {
+                      const isActive = filtrosAvancados.turno === item.val;
+                      const Icon = item.icon;
+                      
+                      if (isActive) {
+                        return (
+                          <button
+                            key={item.val}
+                            onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
+                            className="flex items-center gap-2 p-3 h-[46px] rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold text-[13px] transition-all"
+                          >
+                            <Icon size={16} className="text-indigo-600" />
+                            {item.label}
+                          </button>
+                        );
+                      }
+                      
+                      return (
+                        <button
+                          key={item.val}
+                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
+                          className="flex items-center gap-2 p-3 h-[46px] rounded-xl border border-slate-200 bg-white text-slate-600 font-medium text-[13px] hover:border-slate-300 hover:bg-slate-50 transition-all"
+                        >
+                          <Icon size={16} className="text-slate-400" />
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
-              {/* Saída Sozinho */}
-              <div>
-                <label className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <DoorOpen size={16} className="text-emerald-500" /> Saída na Portaria
-                </label>
-                <div className="flex p-1 bg-slate-100/80 border border-slate-200/50 rounded-xl">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'true', label: 'Autorizado' },
-                    { val: 'false', label: 'Não Aut.' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
-                        className={`flex-1 h-8 rounded-lg font-medium text-xs transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/30'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+                <div className="flex flex-col gap-5">
+                  {/* Saída Sozinho */}
+                  <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+                    <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <DoorOpen size={16} className="text-emerald-500" /> Saída na Portaria
+                    </h4>
+                    <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px]">
+                      {[
+                        { val: 'todos', label: 'Todos' },
+                        { val: 'true', label: 'Autorizado' },
+                        { val: 'false', label: 'Não Aut.' },
+                      ].map(item => {
+                        const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
+                        return (
+                          <button
+                            key={item.val}
+                            onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
+                            className={`flex-1 h-[34px] rounded-[8px] font-medium text-[13px] transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+                          >
+                            {item.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-              {/* Financeiro */}
-              <div>
-                <label className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <CreditCard size={16} className="text-rose-500" /> Situação Financeira
-                </label>
-                <div className="flex p-1 bg-slate-100/80 border border-slate-200/50 rounded-xl">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'false', label: 'Em Dia' },
-                    { val: 'true', label: 'Inadimplente' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.inadimplente === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, inadimplente: item.val }))}
-                        className={`flex-1 h-8 rounded-lg font-medium text-xs transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/30'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+                  {/* Financeiro */}
+                  <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+                    <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <CreditCard size={16} className="text-rose-500" /> Situação Financeira
+                    </h4>
+                    <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px]">
+                      {[
+                        { val: 'todos', label: 'Todos' },
+                        { val: 'false', label: 'Em Dia' },
+                        { val: 'true', label: 'Inadimplente' },
+                      ].map(item => {
+                        const isActive = filtrosAvancados.inadimplente === item.val;
+                        return (
+                          <button
+                            key={item.val}
+                            onClick={() => setFiltrosAvancados(prev => ({ ...prev, inadimplente: item.val }))}
+                            className={`flex-1 h-[34px] rounded-[8px] font-medium text-[13px] transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+                          >
+                            {item.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-              {/* Risco de Evasão */}
-              <div>
-                <label className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                  <AlertTriangle size={16} className="text-orange-500" /> Risco de Evasão
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { val: 'todos', label: 'Todos', color: 'bg-slate-100 text-slate-600 border-slate-200', active: 'bg-slate-800 text-white border-slate-800' },
-                    { val: 'baixo', label: 'Baixo', color: 'bg-emerald-50 text-emerald-600 border-emerald-100', active: 'bg-emerald-500 text-white border-emerald-500' },
-                    { val: 'medio', label: 'Médio', color: 'bg-amber-50 text-amber-600 border-amber-100', active: 'bg-amber-500 text-white border-amber-500' },
-                    { val: 'alto', label: 'Alto', color: 'bg-rose-50 text-rose-600 border-rose-100', active: 'bg-rose-500 text-white border-rose-500' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.riscoEvasao === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
-                        className={`h-9 rounded-xl font-semibold text-[11px] uppercase tracking-wide transition-all border flex items-center justify-center ${isActive ? item.active + ' shadow-sm' : item.color + ' hover:opacity-80'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
+                  {/* Risco de Evasão */}
+                  <div className="bg-white border border-slate-200/60 rounded-2xl p-5 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
+                    <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-orange-500" /> Risco de Evasão
+                    </h4>
+                    <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px] gap-1">
+                      {[
+                        { val: 'todos', label: 'Todos', bg: 'bg-[#1e293b]', text: 'text-white' },
+                        { val: 'baixo', label: 'Baixo', bg: 'bg-emerald-50 border border-emerald-100', text: 'text-emerald-600' },
+                        { val: 'medio', label: 'Médio', bg: 'bg-amber-50 border border-amber-100', text: 'text-amber-600' },
+                        { val: 'alto', label: 'Alto', bg: 'bg-rose-50 border border-rose-100', text: 'text-rose-600' },
+                      ].map(item => {
+                        const isActive = filtrosAvancados.riscoEvasao === item.val;
+                        if (isActive) {
+                           return (
+                             <button
+                               key={item.val}
+                               onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
+                               className={`flex-1 h-[34px] rounded-[8px] font-semibold text-[13px] transition-all shadow-sm ${item.bg} ${item.text}`}
+                             >
+                               {item.label}
+                             </button>
+                           )
+                        }
+                        return (
+                           <button
+                             key={item.val}
+                             onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
+                             className={`flex-1 h-[34px] rounded-[8px] font-medium text-[13px] transition-all bg-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100`}
+                           >
+                             {item.label}
+                           </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
             </div>
 
             {/* Modal Footer */}
-            <div className="px-5 py-4 border-t border-slate-100 bg-white flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-slate-200/60 bg-white flex items-center justify-between">
               <button 
                 onClick={() => setFiltrosAvancados({
                   dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos'
                 })}
-                className="text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors uppercase tracking-wider"
+                className="flex items-center gap-2 text-[13px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
               >
-                Limpar
+                <Trash2 size={16} />
+                Limpar filtros
               </button>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                  className="px-4 h-10 rounded-xl font-semibold text-sm text-slate-600 hover:bg-slate-100 transition-colors"
+                  className="px-5 h-10 rounded-[10px] border border-slate-200 font-semibold text-[13px] text-slate-600 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)}
-                  className="px-5 h-10 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-600/20 transition-all active:scale-95 flex items-center gap-2"
+                  className="px-5 h-10 rounded-[10px] font-semibold text-[13px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_2px_8px_-2px_rgba(79,70,229,0.5)] transition-all flex items-center gap-2"
                 >
                   <Check size={16} strokeWidth={2.5} />
-                  Aplicar
+                  Aplicar Filtros
                 </button>
               </div>
             </div>
