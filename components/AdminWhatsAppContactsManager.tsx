@@ -6,7 +6,7 @@ import { Plus, Trash2, GripVertical, Edit2, Check, X } from 'lucide-react'
 export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig }: any) {
   const contatos = localConfig.contatosWhatsapp || []
   const [isEditing, setIsEditing] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ id: '', nome: '', telefone: '', descricao: '', ativo: true, ordem: 0 })
+  const [editForm, setEditForm] = useState({ id: '', nome: '', setor: '', telefone: '', descricao: '', ativo: true, ordem: 0 })
 
   const handleAdd = () => {
     const newId = Date.now().toString()
@@ -14,11 +14,11 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig }: an
       ...p,
       contatosWhatsapp: [
         ...(p.contatosWhatsapp || []),
-        { id: newId, nome: 'Novo Contato', telefone: '', descricao: '', ativo: true, ordem: (p.contatosWhatsapp?.length || 0) }
+        { id: newId, nome: 'Novo Contato', setor: '', telefone: '', descricao: '', ativo: true, ordem: (p.contatosWhatsapp?.length || 0) }
       ]
     }))
     setIsEditing(newId)
-    setEditForm({ id: newId, nome: 'Novo Contato', telefone: '', descricao: '', ativo: true, ordem: (contatos.length || 0) })
+    setEditForm({ id: newId, nome: 'Novo Contato', setor: '', telefone: '', descricao: '', ativo: true, ordem: (contatos.length || 0) })
   }
 
   const handleSave = () => {
@@ -99,8 +99,12 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig }: an
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       <div style={{ display: 'flex', gap: 16 }}>
                         <div style={{ flex: 1 }}>
-                          <label className="form-label" style={{ fontSize: 12, marginBottom: 4, display: 'block', fontWeight: 600, color: '#4b5563' }}>Setor / Nome</label>
-                          <input type="text" className="form-input" value={editForm.nome} onChange={e => setEditForm({ ...editForm, nome: e.target.value })} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }} placeholder="Ex: Secretaria" />
+                          <label className="form-label" style={{ fontSize: 12, marginBottom: 4, display: 'block', fontWeight: 600, color: '#4b5563' }}>Setor</label>
+                          <input type="text" className="form-input" value={editForm.setor || ''} onChange={e => setEditForm({ ...editForm, setor: e.target.value })} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }} placeholder="Ex: Coordenação" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label className="form-label" style={{ fontSize: 12, marginBottom: 4, display: 'block', fontWeight: 600, color: '#4b5563' }}>Nome do Contato</label>
+                          <input type="text" className="form-input" value={editForm.nome} onChange={e => setEditForm({ ...editForm, nome: e.target.value })} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }} placeholder="Ex: Laura" />
                         </div>
                         <div style={{ flex: 1 }}>
                           <label className="form-label" style={{ fontSize: 12, marginBottom: 4, display: 'block', fontWeight: 600, color: '#4b5563' }}>Telefone (WhatsApp)</label>
@@ -125,6 +129,11 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig }: an
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
                           <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#111827' }}>{contato.nome}</h4>
+                          {contato.setor && (
+                            <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12, background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                              {contato.setor}
+                            </span>
+                          )}
                           <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12, background: contato.ativo ? '#dcfce7' : '#f1f5f9', color: contato.ativo ? '#166534' : '#64748b', fontWeight: 500 }}>
                             {contato.ativo ? 'Ativo' : 'Inativo'}
                           </span>

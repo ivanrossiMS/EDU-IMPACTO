@@ -102,7 +102,14 @@ export function FloatingWhatsApp() {
                     <Phone size={20} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b', marginBottom: 2 }}>{contato.nome}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>{contato.nome}</div>
+                      {contato.setor && (
+                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: '#e0e7ff', color: '#4338ca', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {contato.setor}
+                        </span>
+                      )}
+                    </div>
                     {contato.descricao ? (
                       <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contato.descricao}</div>
                     ) : (

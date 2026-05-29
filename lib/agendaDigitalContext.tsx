@@ -68,6 +68,7 @@ export interface ADConfig {
   contatosWhatsapp?: Array<{
     id: string
     nome: string
+    setor?: string
     telefone: string
     descricao: string
     ativo: boolean
