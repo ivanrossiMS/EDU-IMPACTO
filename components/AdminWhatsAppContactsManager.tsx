@@ -3,62 +3,55 @@
 import React, { useState } from 'react'
 import { Plus, Trash2, GripVertical, Edit2, Check, X } from 'lucide-react'
 
-export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig }: any) {
+export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSave }: any) {
   const contatos = localConfig.contatosWhatsapp || []
   const [isEditing, setIsEditing] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ id: '', nome: '', setor: '', telefone: '', descricao: '', ativo: true, ordem: 0 })
 
+  const updateContacts = (newContacts: any[]) => {
+    const newConfig = { ...localConfig, contatosWhatsapp: newContacts }
+    setLocalConfig(newConfig)
+    if (onSave) onSave(newConfig)
+  }
+
   const handleAdd = () => {
     const newId = Date.now().toString()
-    setLocalConfig((p: any) => ({
-      ...p,
-      contatosWhatsapp: [
-        ...(p.contatosWhatsapp || []),
-        { id: newId, nome: 'Novo Contato', setor: '', telefone: '', descricao: '', ativo: true, ordem: (p.contatosWhatsapp?.length || 0) }
-      ]
-    }))
+    const newContacts = [
+      ...(localConfig.contatosWhatsapp || []),
+      { id: newId, nome: 'Novo Contato', setor: '', telefone: '', descricao: '', ativo: true, ordem: (contatos.length || 0) }
+    ]
+    updateContacts(newContacts)
     setIsEditing(newId)
     setEditForm({ id: newId, nome: 'Novo Contato', setor: '', telefone: '', descricao: '', ativo: true, ordem: (contatos.length || 0) })
   }
 
   const handleSave = () => {
-    setLocalConfig((p: any) => ({
-      ...p,
-      contatosWhatsapp: p.contatosWhatsapp.map((c: any) => c.id === editForm.id ? editForm : c)
-    }))
+    const newContacts = contatos.map((c: any) => c.id === editForm.id ? editForm : c)
+    updateContacts(newContacts)
     setIsEditing(null)
   }
 
   const handleDelete = (id: string) => {
-    setLocalConfig((p: any) => ({
-      ...p,
-      contatosWhatsapp: p.contatosWhatsapp.filter((c: any) => c.id !== id)
-    }))
+    const newContacts = contatos.filter((c: any) => c.id !== id)
+    updateContacts(newContacts)
   }
 
   const handleToggle = (id: string, currentStatus: boolean) => {
-    setLocalConfig((p: any) => ({
-      ...p,
-      contatosWhatsapp: p.contatosWhatsapp.map((c: any) => c.id === id ? { ...c, ativo: !currentStatus } : c)
-    }))
+    const newContacts = contatos.map((c: any) => c.id === id ? { ...c, ativo: !currentStatus } : c)
+    updateContacts(newContacts)
   }
 
   const moveItem = (index: number, direction: 'up' | 'down') => {
     if ((direction === 'up' && index === 0) || (direction === 'down' && index === contatos.length - 1)) return
     
-    const newIndex = direction === 'up' ? index - 1 : index + 1
     const newArray = [...contatos]
     const temp = newArray[index]
-    newArray[index] = newArray[newIndex]
-    newArray[newIndex] = temp
+    newArray[index] = newArray[direction === 'up' ? index - 1 : index + 1]
+    newArray[direction === 'up' ? index - 1 : index + 1] = temp
 
     // Update ordem property based on array position
     const reordered = newArray.map((c, i) => ({ ...c, ordem: i }))
-    
-    setLocalConfig((p: any) => ({
-      ...p,
-      contatosWhatsapp: reordered
-    }))
+    updateContacts(reordered)
   }
 
   return (

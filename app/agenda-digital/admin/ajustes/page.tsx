@@ -540,6 +540,12 @@ export default function ADAdminAjustes() {
              <AdminWhatsAppContactsManager 
                localConfig={localConfig} 
                setLocalConfig={setLocalConfig} 
+               onSave={(newConfig: any) => {
+                 setAdConfig(newConfig)
+                 fetch('/api/configuracoes', {
+                   method: 'POST', body: JSON.stringify({ chave: 'ad_config', valor: newConfig })
+                 }).catch(console.error)
+               }}
              />
            )}
          </div>
