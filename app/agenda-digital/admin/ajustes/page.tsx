@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload } from 'lucide-react'
+import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle } from 'lucide-react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { AdminWhatsAppContactsManager } from '@/components/AdminWhatsAppContactsManager'
 
 export default function ADAdminAjustes() {
   const { bannerUrl, setBannerUrl, adConfig, setAdConfig, adAlert } = useAgendaDigital()
@@ -135,6 +136,13 @@ export default function ADAdminAjustes() {
               style={{ justifyContent: 'flex-start', background: activeTab === 'saudacao' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'saudacao' ? '#4f46e5' : 'inherit' }}
             >
               <Smartphone size={18} style={{ marginRight: 8 }}/> Mensagem de Saudação
+            </button>
+            <button 
+              onClick={() => setActiveTab('whatsapp')}
+              className={activeTab === 'whatsapp' ? 'btn' : 'btn btn-ghost'} 
+              style={{ justifyContent: 'flex-start', background: activeTab === 'whatsapp' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'whatsapp' ? '#4f46e5' : 'inherit' }}
+            >
+              <MessageCircle size={18} style={{ marginRight: 8 }}/> Contatos WhatsApp
             </button>
          </div>
 
@@ -527,6 +535,12 @@ export default function ADAdminAjustes() {
                   )}
                 </div>
              </div>
+           )}
+           {activeTab === 'whatsapp' && (
+             <AdminWhatsAppContactsManager 
+               localConfig={localConfig} 
+               setLocalConfig={setLocalConfig} 
+             />
            )}
          </div>
       </div>

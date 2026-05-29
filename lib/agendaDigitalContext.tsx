@@ -65,6 +65,14 @@ export interface ADConfig {
     mensagem: string
     imagemUrl?: string
   }
+  contatosWhatsapp?: Array<{
+    id: string
+    nome: string
+    telefone: string
+    descricao: string
+    ativo: boolean
+    ordem: number
+  }>
 }
 
 interface ADContextState {

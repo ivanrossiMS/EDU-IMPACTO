@@ -12,6 +12,7 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
+import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
@@ -231,6 +232,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           </main>
 
         </div>
+        
+        <FloatingWhatsApp />
     </div>
   )
 }
