@@ -110,10 +110,8 @@ export function FloatingWhatsApp() {
                         </span>
                       )}
                     </div>
-                    {contato.descricao ? (
+                    {contato.descricao && (
                       <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contato.descricao}</div>
-                    ) : (
-                      <div style={{ fontSize: 13, color: '#64748b' }}>{contato.telefone}</div>
                     )}
                   </div>
                   <ChevronRight size={18} color="#cbd5e1" />
