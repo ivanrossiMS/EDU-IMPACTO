@@ -6,7 +6,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
-import { ComunicadoChat } from '@/components/ComunicadoChat'
+
 import { use, useState, useEffect, useRef } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -974,15 +974,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
-              {/* Chat Section */}
-              <div style={{ marginTop: 24 }}>
-                <ComunicadoChat 
-                  comunicadoId={selectedComunicado.id} 
-                  remetenteId={resolvedParams.slug} 
-                  remetenteNome={aluno?.nome || 'Familiar / Aluno'} 
-                  remetenteAvatar={aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
-                />
-              </div>
+
             </div>
           </motion.div>
         </motion.div>

@@ -41,7 +41,7 @@ const menuItems = [
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-  { id: 'mensagens', label: 'Mensagens', icon: Inbox, href: '/agenda-digital/admin/conversas' },
+
   { id: 'momentos', label: 'Fotos/Vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -88,24 +88,7 @@ export function ADSidebar() {
     if (id === 'comunicados') {
       return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
     }
-    if (id === 'mensagens') {
-      // Chats de famílias com mensagens não lidas
-      const familyUnread = (chatsList || []).filter((c: any) => {
-        const msgs = messages[c.id] || []
-        if (msgs.length === 0) return (c.unread || 0) > 0
-        const lastMsg = msgs[msgs.length - 1]
-        // Para admin/colaboradores, as mensagens da família chegam como 'them'
-        return lastMsg.sender === 'them' && (c.unread || 0) > 0
-      }).length
-      // Canais de equipes com mensagens não lidas
-      const equipeUnread = (equipes || []).filter((eq: any) => {
-        const msgs = messages[`equipe-${eq.id}`] || []
-        if (msgs.length === 0) return false
-        const lastMsg = msgs[msgs.length - 1]
-        return String(lastMsg.authorId || '') !== String(currentUser?.id || '')
-      }).length
-      return (familyUnread + equipeUnread) || undefined
-    }
+
     if (id === 'momentos') {
       return (momentosFeed || []).filter(m => m.status === 'pending').length || undefined
     }
@@ -124,7 +107,7 @@ export function ADSidebar() {
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/admin/conversas' },
+
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -134,7 +117,7 @@ export function ADSidebar() {
     } else if (alunoId) {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/${alunoId}/conversas`, badgeVal: unreadStats.unreadChat || undefined },
+
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
@@ -144,7 +127,7 @@ export function ADSidebar() {
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'mensagens', 'fotos/vídeos', 'Agenda', 'Perfil'].includes(item.label)
+          return ['comunicados', 'fotos/vídeos', 'Agenda', 'Perfil'].includes(item.label)
         }
         return true
       })
@@ -345,8 +328,6 @@ export function ADSidebar() {
                         {/* Dot badge when collapsed */}
                         {getBadgeValue(item.id) && isCollapsed && (
                           <motion.div 
-                            animate={item.id === 'mensagens' ? { scale: [1, 1.3, 1] } : {}}
-                            transition={{ repeat: Infinity, duration: 1.5 }}
                             style={{
                             position: 'absolute',
                             top: -4,
@@ -354,9 +335,9 @@ export function ADSidebar() {
                             width: 10,
                             height: 10,
                             borderRadius: '50%',
-                            background: item.id === 'mensagens' ? '#ef4444' : 'linear-gradient(135deg, #FF0080, #7928ca)',
+                            background: 'linear-gradient(135deg, #FF0080, #7928ca)',
                             border: '1.5px solid #0f1129',
-                            boxShadow: item.id === 'mensagens' ? '0 0 8px rgba(239, 68, 68, 0.9)' : '0 0 6px rgba(255,0,128,0.7)'
+                            boxShadow: '0 0 6px rgba(255,0,128,0.7)'
                           }} />
                         )}
                       </div>
@@ -375,17 +356,15 @@ export function ADSidebar() {
                       {getBadgeValue(item.id) && !isCollapsed && (
                         <motion.div 
                           initial={{ scale: 1 }}
-                          animate={item.id === 'mensagens' ? { scale: [1, 1.1, 1] } : {}}
-                          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
                           style={{ 
                           marginLeft: 'auto', 
-                          background: item.id === 'mensagens' ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #7928ca, #FF0080)', 
+                          background: 'linear-gradient(135deg, #7928ca, #FF0080)', 
                           color: 'white', 
                           padding: '2px 10px', 
                           borderRadius: 12, 
                           fontSize: 12, 
                           fontWeight: 800,
-                          boxShadow: item.id === 'mensagens' ? '0 0 12px rgba(239, 68, 68, 0.8)' : '0 0 12px rgba(255, 0, 128, 0.5)'
+                          boxShadow: '0 0 12px rgba(255, 0, 128, 0.5)'
                         }}>
                           {getBadgeValue(item.id)}
                         </motion.div>
@@ -427,24 +406,7 @@ export function ADSidebar() {
                       icon: Bell,
                       badge: (comunicados || []).filter(c => c.status === 'enviado' && (!c.leituras || !c.leituras[alunoId])).length || undefined
                     },
-                    { 
-                      label: 'Mensagens', 
-                      href: `/agenda-digital/${alunoId}/conversas`, 
-                      icon: MessageSquare,
-                      badge: ((chatsList || []).filter((c: any) => {
-                        const msgs = messages[c.id] || []
-                        if (msgs.length === 0) return (c.unread || 0) > 0
-                        const lastMsg = msgs[msgs.length - 1]
-                        const isStaff = currentUser?.cargo !== 'Aluno' && currentUser?.cargo !== 'Responsável' && currentUser?.perfil !== 'Família'
-                        const otherSender = isStaff ? 'them' : 'us'
-                        return lastMsg.sender === otherSender && (c.unread || 0) > 0
-                      }).length + (alunoId === 'colaborador' ? (equipes || []).filter((eq: any) => {
-                        const msgs = messages[`equipe-${eq.id}`] || []
-                        if (msgs.length === 0) return false
-                        const lastMsg = msgs[msgs.length - 1]
-                        return String(lastMsg.authorId || '') !== String(currentUser?.id || '')
-                      }).length : 0)) || undefined
-                    },
+
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
                     { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
@@ -454,7 +416,7 @@ export function ADSidebar() {
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
-                      return ['Comunicados', 'Mensagens', 'Fotos/Vídeos', 'Calendário', 'Meu Perfil'].includes(item.label)
+                      return ['Comunicados', 'Fotos/Vídeos', 'Calendário', 'Meu Perfil'].includes(item.label)
                     }
                     return true
                   }).map((item, idx) => {
@@ -488,8 +450,6 @@ export function ADSidebar() {
                             <item.icon size={18} strokeWidth={2} />
                             {item.badge && isCollapsed && (
                               <motion.div 
-                                animate={item.label === 'Mensagens' ? { scale: [1, 1.3, 1] } : {}}
-                                transition={{ repeat: Infinity, duration: 1.5 }}
                                 style={{
                                 position: 'absolute',
                                 top: -4,
@@ -497,9 +457,9 @@ export function ADSidebar() {
                                 width: 10,
                                 height: 10,
                                 borderRadius: '50%',
-                                background: item.label === 'Mensagens' ? '#ef4444' : 'linear-gradient(135deg, #FF0080, #7928ca)',
+                                background: 'linear-gradient(135deg, #FF0080, #7928ca)',
                                 border: '1.5px solid #0f1129',
-                                boxShadow: item.label === 'Mensagens' ? '0 0 8px rgba(239, 68, 68, 0.9)' : '0 0 6px rgba(255,0,128,0.7)'
+                                boxShadow: '0 0 6px rgba(255,0,128,0.7)'
                               }} />
                             )}
                           </div>
@@ -517,16 +477,15 @@ export function ADSidebar() {
 
                           {item.badge && !isCollapsed && (
                             <div 
-                              className={item.label === 'Mensagens' ? "badge-pulse-modern" : ""}
                               style={{ 
                               marginLeft: 'auto', 
-                              background: item.label === 'Mensagens' ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #7928ca, #00D2FF)', 
+                              background: 'linear-gradient(135deg, #7928ca, #00D2FF)', 
                               color: 'white', 
                               padding: '2px 10px', 
                               borderRadius: 12, 
                               fontSize: 12, 
                               fontWeight: 800,
-                              boxShadow: item.label === 'Mensagens' ? '0 0 12px rgba(239, 68, 68, 0.8)' : '0 0 12px rgba(0, 210, 255, 0.5)'
+                              boxShadow: '0 0 12px rgba(0, 210, 255, 0.5)'
                             }}>
                               {item.badge}
                             </div>

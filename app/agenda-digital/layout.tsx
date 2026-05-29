@@ -12,7 +12,7 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
-import FloatingChat from '@/components/FloatingChat'
+
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()
@@ -229,7 +229,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
-          {!isRouterPage && <FloatingChat />}
+
         </div>
     </div>
   )

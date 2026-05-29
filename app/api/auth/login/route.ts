@@ -129,8 +129,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
 
+    console.log('[login debug] env vars:', { url: process.env.NEXT_PUBLIC_SUPABASE_URL, keyLen: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length })
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -150,7 +151,9 @@ export async function POST(request: NextRequest) {
       }
     )
 
+    console.log('[login debug] Attempting sign in for resolvedEmail:', resolvedEmail, 'userType:', userType)
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
+    console.log('[login debug] signIn result:', { error: signInError?.message, user: signInData?.user?.id })
     
     let user = signInData?.user
     let session = signInData?.session
@@ -161,8 +164,10 @@ export async function POST(request: NextRequest) {
       const matricula = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       
+      console.log('[login debug] Falling back to virtualEmail:', virtualEmail)
       if (resolvedEmail !== virtualEmail) {
         const fallbackAttempt = await supabase.auth.signInWithPassword({ email: virtualEmail, password })
+        console.log('[login debug] Fallback signIn result:', { error: fallbackAttempt.error?.message, user: fallbackAttempt.data?.user?.id })
         if (!fallbackAttempt.error && fallbackAttempt.data?.user) {
           user = fallbackAttempt.data.user
           session = fallbackAttempt.data.session
@@ -173,6 +178,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (error || !user) {
+      console.log('[login debug] Final auth error:', error?.message)
       // Friendly messages per user type
       if (userType === 'aluno') {
         return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 401 })

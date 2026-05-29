@@ -50,36 +50,6 @@ export async function GET(request: Request) {
     }
 
     let unreadChat = 0;
-    const { data: chatsData } = await supabase.from('agenda_chats')
-      .select('id, dados')
-      .like('id', `${alunoId}-%`);
-
-    if (chatsData) {
-      for (const chat of chatsData) {
-        if (chat.dados && chat.dados.unread > 0) {
-          // Precisamos descobrir se a última mensagem foi enviada pela escola ('us')
-          // Porque se foi enviada pela família ('them'), o unread é para a escola, não para a família.
-          const { data: msgs } = await supabase.from('agenda_mensagens')
-            .select('dados')
-            .eq('dados->>chatId', chat.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (msgs) {
-             const sender = msgs.dados?.sender;
-             // Na visão da família, se a escola enviou ('us' no mockup original ou 'school'), é unread.
-             // Se o backend salva as mensagens da escola como 'us' (pois admin envia como 'us' na sua view):
-             if (sender === 'us' || sender === 'school') {
-                unreadChat++;
-             }
-          } else {
-             // Caso não haja fallback fácil, assumimos unread apenas para simplificar se o banco estiver instável
-             unreadChat++;
-          }
-        }
-      }
-    }
 
     return NextResponse.json({
       unreadMural,

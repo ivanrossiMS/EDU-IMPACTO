@@ -86,11 +86,7 @@ export default function ADAdminDashboard() {
     }
   }, [comunicados, alunosAtivos])
 
-  // Conversas com mensagens não lidas
-  const conversasPendentes = useMemo(() =>
-    (chatsList || []).filter((c: any) => (c.unread || 0) > 0).length,
-    [chatsList]
-  )
+
 
   // Momentos pendentes de aprovação
   const momentosPendentes = useMemo(() =>
@@ -158,11 +154,7 @@ export default function ADAdminDashboard() {
   ]
 
   const alertas = [
-    conversasPendentes > 0 && {
-      icon: <MessageCircle size={16} />, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)',
-      text: `${conversasPendentes} conversa${conversasPendentes > 1 ? 's' : ''} não respondida${conversasPendentes > 1 ? 's' : ''}`,
-      href: '/agenda-digital/admin/conversas'
-    },
+
     momentosPendentes > 0 && {
       icon: <ImageIcon size={16} />, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)',
       text: `${momentosPendentes} momento${momentosPendentes > 1 ? 's' : ''} aguardando aprovação`,
@@ -182,7 +174,7 @@ export default function ADAdminDashboard() {
 
   const quickActions = [
     { icon: '📣', label: 'Novo Comunicado', desc: 'Enviar para turmas ou famílias', href: '/agenda-digital/admin/comunicados', color: '#8b5cf6' },
-    { icon: '💬', label: 'Ver Conversas', desc: `${conversasPendentes > 0 ? conversasPendentes + ' não respondidas' : 'Tudo em dia'}`, href: '/agenda-digital/admin/conversas', color: '#3b82f6' },
+
     { icon: '📸', label: 'Aprovar Momentos', desc: `${momentosPendentes > 0 ? momentosPendentes + ' pendentes' : 'Sem pendências'}`, href: '/agenda-digital/admin/momentos', color: '#ec4899' },
     { icon: '📅', label: 'Criar Evento', desc: 'Calendário escolar', href: '/agenda-digital/admin/calendario', color: '#10b981' },
   ]

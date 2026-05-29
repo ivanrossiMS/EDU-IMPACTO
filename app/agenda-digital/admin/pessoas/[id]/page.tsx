@@ -103,7 +103,7 @@ export default function ADAdminPessoaDetail() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <Link href={`/agenda-digital/admin/conversas?newChatId=${aluno.id}&newChatName=${encodeURIComponent(aluno.nome)}`} className="btn btn-secondary"><MessageSquare size={16}/> Enviar Mensagem Direta</Link>
+
           <button className="btn btn-ghost"><MoreHorizontal size={16}/></button>
         </div>
       </div>

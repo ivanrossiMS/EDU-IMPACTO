@@ -2,9 +2,6 @@
 // Last Update: 2026-05-16T16:08:00Z - Forced Rebuild
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { AdminComunicadoChatManager } from '@/components/AdminComunicadoChatManager'
-
-
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
@@ -1175,13 +1172,7 @@ export default function ADAdminComunicados() {
                   </div>
                 )}
 
-                {/* Respostas/Chat Section */}
-                <div style={{ marginTop: 32, borderTop: '1px solid #e2e8f0', paddingTop: 24 }}>
-                  <AdminComunicadoChatManager 
-                    comunicadoId={viewingCom.id} 
-                    comunicadoTitulo={viewingCom.titulo} 
-                  />
-                </div>
+
               </div>
 
               {/* Footer Actions */}

@@ -65,7 +65,7 @@ export default function ADAdminTurmaDetail() {
           <p style={{ color: 'hsl(var(--text-muted))', margin: '4px 0 0 0' }}>Unidade: {turma.unidade}</p>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn btn-secondary" onClick={() => router.push(`/agenda-digital/admin/conversas?newChatId=turma-${turma.id}&newChatName=${encodeURIComponent('Turma ' + turma.nome)}`)}><MessageSquare size={16}/> Chat Geral</button>
+
           <button className="btn btn-primary" onClick={() => router.push('/agenda-digital/admin/comunicados')}><Megaphone size={16}/> Enviar Comunicado</button>
         </div>
       </div>
@@ -98,9 +98,7 @@ export default function ADAdminTurmaDetail() {
                     </td>
                     <td style={{ padding: '16px 24px', textAlign: 'right' }}>
                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                         <Link href={`/agenda-digital/admin/conversas?newChatId=${a.id}&newChatName=${encodeURIComponent(a.nome)}`} className="btn btn-ghost btn-sm" title="Chat Direto">
-                           <MessageSquare size={16} />
-                         </Link>
+
                          <button className="btn btn-ghost btn-sm" title="Bloquear App" style={{ color: '#ef4444' }} onClick={() => { adConfirm('Suspender acesso desta família?', 'Bloquear o App', () => adAlert('Conta Suspensa.', 'Ação Concluída')) }}><Lock size={14} /></button>
                        </div>
                     </td>

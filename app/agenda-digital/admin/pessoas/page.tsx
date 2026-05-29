@@ -228,9 +228,7 @@ export default function ADAdminPessoas() {
                   </td>
                   <td style={{ padding: '16px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                      <Link href={`/agenda-digital/admin/conversas?newChatId=${a.id}&newChatName=${encodeURIComponent(a.nome)}`} className="btn btn-ghost btn-sm" title="Mensagem Direta">
-                        <MessageSquare size={16} />
-                      </Link>
+
                       <Link href={`/agenda-digital/admin/pessoas/${a.id}`} className="btn btn-secondary btn-sm" title="Visitar Perfil do Aluno/Familia" style={{ background: 'hsl(var(--bg-main))', borderColor: 'hsl(var(--border-subtle))', textDecoration: 'none', color: 'inherit' }}>
                         <User size={14} /> Visitar Perfil
                       </Link>

@@ -792,20 +792,7 @@ export async function DELETE(request: Request) {
       await supabaseAdmin.from('saida_student_guardians').delete().filter('dados->>alunoId', 'eq', studentId)
       await supabaseAdmin.from('saida_student_guardians').delete().ilike('id', `${studentId}%`)
 
-      // 6. Delete Digital Agenda Chats and Messages
-      const { data: chatsToDelete } = await supabaseAdmin.from('agenda_chats').select('id').ilike('id', `${studentId}%`)
-      const chatIdsToDelete = (chatsToDelete || []).map(c => c.id)
-      if (chatIdsToDelete.length > 0) {
-        await supabaseAdmin.from('agenda_mensagens').delete().in('id', chatIdsToDelete)
-        await supabaseAdmin.from('agenda_chats').delete().in('id', chatIdsToDelete)
-      }
 
-      const { data: otherChats } = await supabaseAdmin.from('agenda_chats').select('id').filter('dados->>alunoId', 'eq', studentId)
-      const otherChatIds = (otherChats || []).map(c => c.id)
-      if (otherChatIds.length > 0) {
-        await supabaseAdmin.from('agenda_mensagens').delete().in('id', otherChatIds)
-        await supabaseAdmin.from('agenda_chats').delete().in('id', otherChatIds)
-      }
 
       // 7. Remove student from Digital Agenda Groups
       const { data: groups } = await supabaseAdmin.from('agenda_grupos').select('*')
