@@ -731,10 +731,17 @@ export default function SelecionarAluno() {
                       <h3 className="card-title">{formatShortName(student.nome)}</h3>
                       <div className="card-subtitle">
                         {(() => {
-                          const turmaObj = turmas.find(t => String(t.id) === String(student.turma) || String(t.codigo) === String(student.turma) || String(t.nome) === String(student.turma))
-                          const nomeTurma = turmaObj?.nome || student.turma || 'S/T'
+                          // Extract class name
+                          let rawName = student.turmaNome || student.turma || 'S/T'
+                          const nomeTurma = rawName.split('-')[0].trim()
+                          const anoLetivo = student.anoLetivo || new Date().getFullYear()
+
                           return (
-                            <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma.split('-')[0].trim()}</span>
+                            <>
+                              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
+                              <span className="card-dot-separator" />
+                              <span>{anoLetivo}</span>
+                            </>
                           )
                         })()}
                       </div>

@@ -121,12 +121,38 @@ export async function GET(request: Request) {
       // Titulos fetch is non-critical — proceed without pendência counts
     }
 
+    // ─── Step 4.5: Fetch Turma details to get Nome and Ano ────────────────
+    const turmaIds = [...new Set(alunosAtivos.map(a => a.turma).filter(Boolean))]
+    let turmasMap: Record<string, { nome: string, ano: number }> = {}
+    
+    if (turmaIds.length > 0) {
+      // Sometimes a.turma could be ID or codigo
+      const { data: turmasData } = await supabase
+        .from('turmas')
+        .select('id,nome,ano,codigo')
+        .in('id', turmaIds)
+      
+      if (turmasData) {
+        turmasData.forEach((t: any) => {
+          turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+        })
+      }
+    }
+
     // ─── Step 5: Build result ─────────────────────────────────────────────────
     const result = alunosAtivos.map(a => {
       const pendentesAluno = pendingTitulos.filter((t: any) =>
         t.alunoId === a.id || t.aluno === a.nome || (a.matricula && (t.alunoId === a.matricula || t.aluno === a.matricula))
       )
-      return { ...a, pendenciasAtrasadas: pendentesAluno.length }
+      
+      const turmaInfo = turmasMap[a.turma] || { nome: a.turma || 'S/T', ano: new Date().getFullYear() }
+
+      return { 
+        ...a, 
+        pendenciasAtrasadas: pendentesAluno.length,
+        turmaNome: turmaInfo.nome,
+        anoLetivo: turmaInfo.ano
+      }
     })
 
     // Short cache: 30s browser cache to prevent redundant requests on back-navigation
