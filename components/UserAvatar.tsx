@@ -24,30 +24,58 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
 
   const promise = (async () => {
     try {
-      let query = supabase.from('system_users').select('dados');
-      
-      if (userId) {
-        if (isValidUuid(userId)) {
-          query = query.or(`id.eq."${userId}",auth_id.eq."${userId}"`);
-        } else {
-          query = query.eq('id', userId);
-        }
-      } else if (name) {
-        query = query.eq('nome', name);
-      } else {
-        return null;
-      }
-
-      const { data, error } = await query.maybeSingle();
-
       let foto = null;
+      
+      // Check system_users table first
+      try {
+        let query = supabase.from('system_users').select('foto, foto_url, dados');
 
-      if (data && data.dados && typeof data.dados === 'object') {
-        foto = (data.dados as any).foto || (data.dados as any).fotoUrl;
+        let shouldQuerySystemUsers = true;
+        if (userId) {
+          if (isValidUuid(userId)) {
+            query = query.or(`id.eq."${userId}",auth_id.eq."${userId}"`);
+          } else {
+            // system_users id is UUID. If userId is not UUID, do not query it by id.
+            shouldQuerySystemUsers = false;
+          }
+        } else if (name) {
+          query = query.eq('nome', name);
+        } else {
+          shouldQuerySystemUsers = false;
+        }
+
+        if (shouldQuerySystemUsers) {
+          const { data, error } = await query.maybeSingle();
+          if (data) {
+            foto = data.foto_url || data.foto || (data.dados as any)?.foto || (data.dados as any)?.fotoUrl || (data.dados as any)?.foto_url;
+          }
+        }
+      } catch (e) {
+        // Ignore system_users query error
       }
 
-      // API Fallback for users not in system_users (e.g. Master Admin)
-      if (!foto && userId && isValidUuid(userId)) {
+      // Check alunos table if not found
+      if (!foto && userId) {
+        try {
+          const { data: alunoData } = await supabase.from('alunos').select('foto, foto_url, dados').eq('id', userId).maybeSingle();
+          if (alunoData) {
+            foto = alunoData.foto_url || alunoData.foto || (alunoData.dados as any)?.foto || (alunoData.dados as any)?.fotoUrl || (alunoData.dados as any)?.foto_url;
+          }
+        } catch (e) {}
+      }
+
+      // Check responsaveis table if not found
+      if (!foto && userId) {
+        try {
+          const { data: respData } = await supabase.from('responsaveis').select('foto, foto_url, dados').eq('id', userId).maybeSingle();
+          if (respData) {
+            foto = respData.foto_url || respData.foto || (respData.dados as any)?.foto || (respData.dados as any)?.fotoUrl || (respData.dados as any)?.foto_url;
+          }
+        } catch (e) {}
+      }
+
+      // API Fallback for users not in system_users, alunos, or responsaveis (e.g. Master Admin or missing RLS)
+      if (!foto && userId) {
         try {
           const res = await fetch(`/api/user-photo?id=${userId}`);
           if (res.ok) {
@@ -56,6 +84,9 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
           }
         } catch (e) {}
       }
+
+      // URL Optimization removed: Supabase Free tier doesn't support width/height query params
+      // and it causes a 400 Bad Request error.
 
       if (foto) {
         photoCache[cacheKey] = foto;
@@ -112,18 +143,33 @@ export function UserAvatar({
     let foundLocal = false;
     const cacheKey = userId || `name:${name}`;
     
+    // Helper to sanitize broken Supabase URLs from cache
+    const sanitizeUrl = (url: string) => {
+      if (!url) return url;
+      if (url.includes('/storage/v1/object/public/')) {
+        try {
+          const urlObj = new URL(url);
+          urlObj.searchParams.delete('width');
+          urlObj.searchParams.delete('height');
+          return urlObj.toString();
+        } catch (e) { return url; }
+      }
+      return url;
+    };
+    
     if (photoCache[cacheKey]) {
-      setFoto(photoCache[cacheKey]!);
+      setFoto(sanitizeUrl(photoCache[cacheKey]!));
       foundLocal = true;
     } else {
       try {
         const storageKey = userId ? `edu-profile-extra-${userId}` : `edu-profile-extra-name-${name}`;
         const data = JSON.parse(localStorage.getItem(storageKey) || 'null');
         if (data && data.foto) {
-          setFoto(data.foto);
-          photoCache[cacheKey] = data.foto;
-          if (userId) photoCache[userId] = data.foto;
-          if (name) photoCache[`name:${name}`] = data.foto;
+          const safeFoto = sanitizeUrl(data.foto);
+          setFoto(safeFoto);
+          photoCache[cacheKey] = safeFoto;
+          if (userId) photoCache[userId] = safeFoto;
+          if (name) photoCache[`name:${name}`] = safeFoto;
           foundLocal = true;
         }
       } catch (e) {}
@@ -132,7 +178,7 @@ export function UserAvatar({
     // Call fallback db fetch
     fetchUserPhoto(userId, name).then((resolvedFoto) => {
       if (resolvedFoto) {
-        setFoto(resolvedFoto);
+        setFoto(sanitizeUrl(resolvedFoto));
       }
     });
   }, [userId, name, fotoUrl]);

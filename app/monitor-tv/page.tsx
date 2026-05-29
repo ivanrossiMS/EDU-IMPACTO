@@ -935,6 +935,7 @@ function MonitorContent() {
           object-fit: contain;
           z-index: 1;
           transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
+          filter: brightness(1.15) contrast(1.2) saturate(1.25);
         }
 
         .tv-card-photo-bg-initials {
@@ -1012,12 +1013,14 @@ function MonitorContent() {
         /* Dense Black Linear Gradient Overlay */
         .tv-card-gradient-overlay {
           position: absolute;
-          inset: 0;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 60%;
           background: linear-gradient(
             to top,
             rgba(2, 6, 23, 0.98) 0%,
-            rgba(2, 6, 23, 0.8) 40%,
-            rgba(2, 6, 23, 0.35) 70%,
+            rgba(2, 6, 23, 0.85) 45%,
             transparent 100%
           );
           z-index: 2;

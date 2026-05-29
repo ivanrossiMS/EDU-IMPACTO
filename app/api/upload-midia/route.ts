@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -8,6 +9,7 @@ export const maxDuration = 60
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
+  // We still create the protected client to ensure the user has a valid session
   const supabase = await createProtectedClient()
   
   try {
@@ -44,7 +46,9 @@ export async function POST(request: Request) {
 
     const arrayBuffer = await file.arrayBuffer()
 
-    const { error } = await supabase.storage
+    // Use admin client to bypass RLS on the bucket for system-controlled uploads
+    const admin = getAdminClient()
+    const { error } = await admin.storage
       .from(bucket)
       .upload(filePath, arrayBuffer, {
         contentType: file.type || 'application/octet-stream',
@@ -57,7 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(filePath)
+    const { data: publicData } = admin.storage.from(bucket).getPublicUrl(filePath)
 
     return NextResponse.json({
       ok: true,

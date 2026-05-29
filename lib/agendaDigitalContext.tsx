@@ -30,7 +30,7 @@ export interface ADComunicado {
 }
 
 export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
-export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string }
+export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string, authorId?: string }
 export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
 export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[] }

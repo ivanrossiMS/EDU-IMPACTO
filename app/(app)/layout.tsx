@@ -9,7 +9,7 @@ import { AgendaDigitalProvider } from '@/lib/agendaDigitalContext'
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { WebVitalsReporter } from '@/lib/webVitals'
-import FloatingChat from '@/components/FloatingChat'
+import { FloatingChatButton } from '@/components/chat/floating'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { Menu } from 'lucide-react'
 
@@ -152,7 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <main className="page-content">
                   {children}
                 </main>
-                <FloatingChat />
+                <FloatingChatButton />
               </AgendaDigitalProvider>
             </RouteGuard>
           </div>

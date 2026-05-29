@@ -120,12 +120,22 @@ export async function GET(request: Request) {
       s.dados?.codigo ? String(s.dados?.codigo) : null
     ]).filter(Boolean)
 
-    // 2. Busca os vínculos apenas para os alunos da página
-    const { data: links, error: linksError } = await supabase
-      .from('aluno_responsavel')
-      .select('*')
-      .in('aluno_id', allStudentRefs)
-      .limit(20000)
+    // 2. Busca os vínculos apenas para os alunos da página (chunked para evitar limite de 1000 rows do Supabase)
+    let links: any[] = []
+    let linksError = null
+    const chunkSize = 200
+    for (let i = 0; i < allStudentRefs.length; i += chunkSize) {
+      const chunk = allStudentRefs.slice(i, i + chunkSize)
+      const { data, error } = await supabase
+        .from('aluno_responsavel')
+        .select('*')
+        .in('aluno_id', chunk)
+      if (error) {
+        linksError = error
+        break
+      }
+      if (data) links.push(...data)
+    }
 
     if (linksError) {
       console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
@@ -136,16 +146,20 @@ export async function GET(request: Request) {
     let responsaveis: any[] = []
     
     if (respIds.length > 0) {
-      const { data: respData, error: respError } = await supabase
-        .from('responsaveis')
-        .select('*')
-        .in('id', respIds)
-        .limit(20000)
-        
-      if (respError) {
-        console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
-      } else {
-        responsaveis = respData || []
+      const uniqueRespIds = Array.from(new Set(respIds))
+      const respChunkSize = 200
+      for (let i = 0; i < uniqueRespIds.length; i += respChunkSize) {
+        const chunk = uniqueRespIds.slice(i, i + respChunkSize)
+        const { data: respData, error: respError } = await supabase
+          .from('responsaveis')
+          .select('*')
+          .in('id', chunk)
+          
+        if (respError) {
+          console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
+        } else if (respData) {
+          responsaveis.push(...respData)
+        }
       }
     }
 
@@ -171,7 +185,7 @@ export async function GET(request: Request) {
       
       const linkedResponsaveis = links?.filter((l: any) => studentRefs.includes(l.aluno_id))
         .map((l: any) => {
-          const resp = responsaveis.find((r: any) => r.id === l.responsavel_id) || {}
+          const resp = responsaveis.find((r: any) => String(r.id) === String(l.responsavel_id)) || {}
           return {
             ...resp,
             parentesco: l.parentesco,

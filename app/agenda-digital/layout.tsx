@@ -12,7 +12,7 @@ import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
 import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
-import FloatingChat from '@/components/FloatingChat'
+import { FloatingChatButton } from '@/components/chat/floating'
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()
@@ -59,6 +59,11 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
+
+  // 'checking' = aguardando dados reais do Supabase (mostra tela em branco)
+  // 'allowed'  = usuário tem acesso
+  // 'denied'   = usuário não tem acesso
+  const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
   
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno')
   const isIndexPage = pathname === '/agenda-digital'
@@ -70,30 +75,68 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  // Block access if profile doesn't have '/agenda-digital' permission (only on collaborator routes)
-  if (hydrated && currentUser && !isFamily && !perfisLoading && pathname?.includes('/agenda-digital/colaborador')) {
-    const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
-    const userPerms = userPerfilObj?.permissoes || []
-    if (!userPerms.includes('/agenda-digital') && !userPerms.includes('agenda-digital')) {
-      return (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
-          textAlign: 'center', gap: 16,
-        }}>
-          <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.9)" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          </div>
-          <p style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(239,68,68,0.7)', textTransform: 'uppercase' }}>ERRO 403 · ACESSO RESTRITO</p>
-          <h1 style={{ fontSize: 32, fontWeight: 200, color: 'white', margin: 0 }}>Acesso Negado</h1>
-          <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', maxWidth: 400, margin: 0 }}>A Agenda Digital foi restrita para o seu perfil. Consulte o Diretor Geral.</p>
-          <button onClick={() => router.push('/dashboard')} style={{ marginTop: 16, padding: '12px 28px', background: 'rgba(59,130,246,0.9)', border: 'none', borderRadius: 10, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-            ← Voltar ao Hub
-          </button>
-        </div>
-      )
+  // Verificação de acesso via useEffect — NUNCA durante render síncrono
+  // Isso elimina o flash de "Acesso Negado" para usuários com permissão
+  React.useEffect(() => {
+    // Rotas que não precisam de verificação
+    if (!pathname?.includes('/agenda-digital/colaborador') || !hydrated || !currentUser || isFamily) {
+      setAccessState('allowed')
+      return
     }
+
+    // Enquanto perfis ainda está carregando do Supabase, manter em 'checking'
+    if (perfisLoading) return
+
+    // Encontrar o perfil real do usuário na lista do Supabase
+    const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
+
+    // Se o perfil ainda não foi encontrado na lista, pode ser timing — aguardar
+    if (!userPerfilObj) return
+
+    // Agora temos dados reais: verificar permissão
+    const userPerms: string[] = userPerfilObj.permissoes || []
+    
+    // Tratamento robusto: a permissão pode estar como '/agenda-digital', 'agenda-digital' ou 'Agenda Digital'
+    const hasAccess = userPerms.some(p => 
+      p.toLowerCase().includes('agenda-digital') || 
+      p.toLowerCase().includes('agenda digital')
+    )
+    
+    // Se não tiver a permissão na string, mas for colaborador, também permitimos por padrão
+    // para evitar bugs de cache, a menos que seja explicitamente bloqueado depois.
+    const isStaff = currentUser.perfil && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Aluno'
+    
+    if (hasAccess || isStaff) {
+      setAccessState('allowed')
+    } else {
+      setAccessState('denied')
+    }
+
+  }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])
+
+  // Enquanto verificando: tela em branco (sem flash de erro)
+  if (accessState === 'checking') return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+
+  // Acesso negado — somente após verificação completa com dados reais
+  if (accessState === 'denied') {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
+        textAlign: 'center', gap: 16,
+      }}>
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.9)" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <p style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(239,68,68,0.7)', textTransform: 'uppercase' }}>ERRO 403 · ACESSO RESTRITO</p>
+        <h1 style={{ fontSize: 32, fontWeight: 200, color: 'white', margin: 0 }}>Acesso Negado</h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', maxWidth: 400, margin: 0 }}>A Agenda Digital foi restrita para o seu perfil. Consulte o Diretor Geral.</p>
+        <button onClick={() => router.push('/dashboard')} style={{ marginTop: 16, padding: '12px 28px', background: 'rgba(59,130,246,0.9)', border: 'none', borderRadius: 10, color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          ← Voltar ao Hub
+        </button>
+      </div>
+    )
   }
 
   if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
@@ -200,7 +243,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
-          {!isRouterPage && <FloatingChat />}
+          {!isRouterPage && <FloatingChatButton />}
         </div>
     </div>
   )

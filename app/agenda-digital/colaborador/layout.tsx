@@ -427,7 +427,7 @@ export default function AgendaDigitalColaboradorLayout({
           <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '180px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
               <button 
-                onClick={() => router.push('/login?step=choose_agenda_role')}
+                onClick={() => router.push('/agenda-digital/selecionar-aluno')}
                 className="ad-btn-side" 
                 style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}
               >

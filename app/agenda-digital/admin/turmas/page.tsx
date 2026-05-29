@@ -952,11 +952,15 @@ export default function ADAdminTurmas() {
         })
 
         // Ordenar anos em ordem decrescente (2025, 2024, etc.), deixando "Outros" pro final
-        const anosOrdenados = Object.keys(gruposPorAno).sort((a, b) => {
+        let anosOrdenados = Object.keys(gruposPorAno).sort((a, b) => {
           if (a === 'Outros / Sem Ano Letivo') return 1;
           if (b === 'Outros / Sem Ano Letivo') return -1;
           return b.localeCompare(a);
         })
+
+        if (anoParaImportar) {
+          anosOrdenados = anosOrdenados.filter(ano => ano === String(anoParaImportar))
+        }
 
         if ((grupos || []).length === 0) {
           return (
@@ -990,7 +994,7 @@ export default function ADAdminTurmas() {
                     <tbody>
                       {gruposPorAno[ano].map(g => {
                         const equipesDoGrupo = (equipes || []).filter(e => (g.equipesIds || []).includes(e.id))
-                        const todosColabs = resolveColaboradoresGrupo(g)
+                        const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (funcionarios || []).some((f: any) => f.id === colId))
                         return (
                           <tr key={g.id} onClick={() => { setActiveGrupoId(g.id); setTelaAtual('detalhe-grupo'); setTabDetalheGrupo('alunos') }} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.02)'}

@@ -68,10 +68,13 @@ export default function SelecionarAluno() {
     try {
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
-        const { data, ts } = JSON.parse(cached);
-        if (Array.isArray(data) && data.length > 0) {
-          setMeusAlunos(data);
-          setHasFetched(true); // Show data immediately, no spinner
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.data) {
+          const { data } = parsed;
+          if (Array.isArray(data) && data.length > 0) {
+            setMeusAlunos(data);
+            setHasFetched(true); // Show data immediately, no spinner
+          }
         }
       }
     } catch (_) {}
@@ -101,11 +104,13 @@ export default function SelecionarAluno() {
       if (typeof window !== 'undefined') {
         const stored = localStorage.getItem('edu-current-user')
         if (stored) {
-          const u = JSON.parse(stored)
-          if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-            setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
-            return
-          }
+          try {
+            const u = JSON.parse(stored)
+            if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
+              setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
+              return
+            }
+          } catch(e) {}
         }
       }
       if (currentUser.id) {

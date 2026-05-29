@@ -241,6 +241,9 @@ export default function AgendaDigitalFamilyLayout({
               setProfileData(data)
            } else {
               console.error(data.error)
+              if (res.status === 404 || data.error?.includes('Aluno não encontrado')) {
+                router.replace('/agenda-digital/selecionar-aluno')
+              }
            }
         } catch(e) {
            console.error(e)

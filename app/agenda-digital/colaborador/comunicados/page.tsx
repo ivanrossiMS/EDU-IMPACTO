@@ -6,7 +6,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
-import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { MessageCircle } from 'lucide-react'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -18,6 +18,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { createPortal } from 'react-dom'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 
 // Helper parsers for attachments formatted as "name|url|mime"
@@ -26,12 +27,16 @@ const parseAnexo = (anexoStr: any) => {
   if (typeof anexoStr === 'object') {
     return { name: anexoStr.name || '', url: anexoStr.url || '', mime: anexoStr.mime || '' };
   }
-  const str = String(anexoStr);
-  const parts = str.split('|');
-  const name = parts[0] || '';
-  const url = parts[1] || '';
-  const mime = parts[2] || '';
-  return { name, url, mime };
+  try {
+    const str = typeof anexoStr === 'string' ? anexoStr : String(anexoStr);
+    const parts = (str && typeof str.split === 'function') ? str.split('|') : [str];
+    const name = parts[0] || '';
+    const url = parts[1] || '';
+    const mime = parts[2] || '';
+    return { name, url, mime };
+  } catch(e) {
+    return null;
+  }
 };
 
 const getAnexoType = (anexoStr: any) => {
@@ -1105,13 +1110,10 @@ export default function ColaboradorComunicadosPage() {
               )}
 
               {/* Chat Section */}
-              <div style={{ marginTop: 24 }}>
-                <ComunicadoChat 
-                  comunicadoId={selectedComunicado.id} 
-                  remetenteId={userSlug} 
-                  remetenteNome={currentUser?.nome || 'Familiar / Aluno'} 
-                  remetenteAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
-                />
+              <div style={{ marginTop: 24, padding: 24, background: 'rgba(255,255,255,0.5)', borderRadius: 16, border: '1px solid rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                  <MessageCircle size={24} color="#cbd5e1" style={{ margin: '0 auto 8px auto' }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>O sistema de mensagens foi atualizado</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Dúvidas sobre comunicados agora devem ser enviadas diretamente na aba Mensagens.</div>
               </div>
             </div>
           </motion.div>
@@ -1296,10 +1298,10 @@ export default function ColaboradorComunicadosPage() {
       </AnimatePresence>
 
 {/* Modal Composer */}
-      {showComposer && (
+      {showComposer && typeof document !== 'undefined' && createPortal(
         <div className="ad-composer-overlay" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-          zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center'
+          zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           <div className="card ad-composer-card" style={{ width: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1628,7 +1630,7 @@ export default function ColaboradorComunicadosPage() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
       {/* Destinatarios Universal Modal */}
       <DestinatariosModal 
         isOpen={showDestModal}

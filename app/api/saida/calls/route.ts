@@ -38,11 +38,14 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        // Se o array estiver vazio, deletamos TODAS as chamadas para zerar o sistema
+        // Se o array estiver vazio, limpamos apenas as chamadas do dia atual para não causar table lock/timeout
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+
         const { error } = await supabase
           .from('saida_calls')
           .delete()
-          .not('id', 'is', null) // Filtro genérico para deletar tudo
+          .gte('created_at', today.toISOString())
           
         if (error) throw new Error(error.message)
         return NextResponse.json({ ok: true, count: 0 })

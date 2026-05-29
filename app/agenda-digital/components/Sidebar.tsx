@@ -40,7 +40,7 @@ const menuItems = [
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-  { id: 'mensagens', label: 'Mensagens', icon: Inbox, href: '/agenda-digital/admin/conversas' },
+  { id: 'mensagens', label: 'Mensagens', icon: Inbox, href: '/agenda-digital/mensagens' },
   { id: 'momentos', label: 'Fotos/Vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -53,7 +53,31 @@ export function ADSidebar() {
   const router = useRouter()
   const { currentUser, theme, setTheme } = useApp()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
+  const { comunicados = [], momentosFeed = [] } = useAgendaDigital()
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
+
+  // Buscar badge de não lidas do novo sistema de chat
+  useEffect(() => {
+    if (!currentUser?.id) return
+    let mounted = true
+    const fetchChatBadge = async () => {
+      try {
+        const { supabase: sb } = await import('@/lib/supabase')
+        const { data } = await sb
+          .from('chat_participants')
+          .select('unread_count')
+          .eq('user_id', currentUser.id)
+          .is('left_at', null)
+        if (mounted && data) {
+          const total = data.reduce((acc, p) => acc + (p.unread_count || 0), 0)
+          setChatUnreadCount(total)
+        }
+      } catch {}
+    }
+    fetchChatBadge()
+    const interval = setInterval(fetchChatBadge, 15000)
+    return () => { mounted = false; clearInterval(interval) }
+  }, [currentUser?.id])
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
@@ -84,20 +108,12 @@ export function ADSidebar() {
 
   const getBadgeValue = (id: string) => {
     if (id === 'comunicados') {
-      // Para admin: número de rascunhos e agendados
       return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
     }
     if (id === 'mensagens') {
-      return (chatsList || []).filter((c: any) => {
-        const msgs = messages[c.id] || []
-        if (msgs.length === 0) return (c.unread || 0) > 0
-        const lastMsg = msgs[msgs.length - 1]
-        // Admin views 'them' as the other sender (Student)
-        return lastMsg.sender === 'them' && (c.unread || 0) > 0
-      }).length || undefined
+      return chatUnreadCount || undefined
     }
     if (id === 'momentos') {
-      // Para admin: momentos pendentes de aprovação
       return (momentosFeed || []).filter(m => m.status === 'pending').length || undefined
     }
     return undefined
@@ -115,7 +131,7 @@ export function ADSidebar() {
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/admin/conversas' },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/mensagens' },
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -125,7 +141,7 @@ export function ADSidebar() {
     } else if (alunoId) {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/${alunoId}/conversas`, badgeVal: unreadStats.unreadChat || undefined },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/mensagens`, badgeVal: chatUnreadCount || undefined },
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
@@ -420,14 +436,9 @@ export function ADSidebar() {
                     },
                     { 
                       label: 'Mensagens', 
-                      href: `/agenda-digital/${alunoId}/conversas`, 
+                      href: `/agenda-digital/mensagens`, 
                       icon: MessageSquare,
-                      badge: (chatsList || []).filter((c: any) => {
-                        const msgs = messages[c.id] || []
-                        if (msgs.length === 0) return (c.unread || 0) > 0
-                        const lastMsg = msgs[msgs.length - 1]
-                        return lastMsg.sender === 'us' && (c.unread || 0) > 0
-                      }).length || undefined
+                      badge: chatUnreadCount || undefined
                     },
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
@@ -466,9 +477,26 @@ export function ADSidebar() {
                           <div style={{ 
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             color: isActive ? '#00D2FF' : 'inherit',
-                            filter: isActive ? 'drop-shadow(0 0 10px #00D2FF)' : 'none'
+                            filter: isActive ? 'drop-shadow(0 0 10px #00D2FF)' : 'none',
+                            position: 'relative'
                           }}>
                             <item.icon size={18} strokeWidth={2} />
+                            {item.badge && isCollapsed && (
+                              <motion.div 
+                                animate={item.label === 'Mensagens' ? { scale: [1, 1.3, 1] } : {}}
+                                transition={{ repeat: Infinity, duration: 1.5 }}
+                                style={{
+                                position: 'absolute',
+                                top: -4,
+                                right: -4,
+                                width: 10,
+                                height: 10,
+                                borderRadius: '50%',
+                                background: item.label === 'Mensagens' ? '#ef4444' : 'linear-gradient(135deg, #FF0080, #7928ca)',
+                                border: '1.5px solid #0f1129',
+                                boxShadow: item.label === 'Mensagens' ? '0 0 8px rgba(239, 68, 68, 0.9)' : '0 0 6px rgba(255,0,128,0.7)'
+                              }} />
+                            )}
                           </div>
                           
                           {!isCollapsed && (

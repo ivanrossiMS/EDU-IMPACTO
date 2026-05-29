@@ -67,13 +67,14 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Verifica sessão — getUser() é a chamada segura (valida JWT no servidor)
+  // Verifica sessão — getSession() não bloqueia o tempo de execução do Edge
+  // Lendo os cookies sem validar ativamente (evita timeout de 50ms do Netlify)
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    data: { session },
+  } = await supabase.auth.getSession()
 
   // ── Sem sessão → redireciona para login ───────────────────────────────────
-  if (!user) {
+  if (!session) {
     const loginUrl = new URL('/login', request.url)
     // Guarda a URL que o usuário tentou acessar para redirecionar após login
     loginUrl.searchParams.set('next', pathname)

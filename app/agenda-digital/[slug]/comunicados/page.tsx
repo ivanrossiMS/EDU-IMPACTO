@@ -6,7 +6,8 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
-import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { MessageCircle, ArrowRight } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { use, useState, useEffect, useRef } from 'react'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -25,14 +26,16 @@ const parseAnexo = (anexoData: any) => {
       mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : '')
     };
   }
-  if (typeof anexoData === 'string') {
-    const parts = anexoData.split('|');
+  try {
+    const str = typeof anexoData === 'string' ? anexoData : String(anexoData);
+    const parts = (str && typeof str.split === 'function') ? str.split('|') : [str];
     const name = parts[0] || '';
     const url = parts[1] || '';
     const mime = parts[2] || '';
     return { name, url, mime };
+  } catch (e) {
+    return null;
   }
-  return null;
 };
 
 const getAnexoType = (anexoStr: string) => {
@@ -974,12 +977,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
               {/* Chat Section */}
               <div style={{ marginTop: 24 }}>
-                <ComunicadoChat 
-                  comunicadoId={selectedComunicado.id} 
-                  remetenteId={resolvedParams.slug} 
-                  remetenteNome={aluno?.nome || 'Familiar / Aluno'} 
-                  remetenteAvatar={aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
-                />
+                <div style={{ marginTop: 24, padding: 24, background: 'rgba(255,255,255,0.5)', borderRadius: 16, border: '1px solid rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                  <MessageCircle size={24} color="#cbd5e1" style={{ margin: '0 auto 8px auto' }} />
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>O sistema de mensagens foi atualizado</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Dúvidas sobre comunicados agora devem ser enviadas diretamente na aba Mensagens.</div>
+                </div>
               </div>
             </div>
           </motion.div>

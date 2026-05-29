@@ -79,10 +79,14 @@ export default function HorarioAulasPage() {
   const [grade, setGrade] = useState<Record<string, TimeSlot[]>>({})
   
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('edu-horarios-grade')
-      if (stored) setGrade(JSON.parse(stored))
-    } catch(e) {}
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('edu-horario-grade')
+      if (stored) {
+        try {
+          setGrade(JSON.parse(stored))
+        } catch(e) {}
+      }
+    }
   }, [])
 
   const saveGrade = (newGrade: Record<string, TimeSlot[]>) => {
