@@ -161,31 +161,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [])
   const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [])
   const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
-  
-  const [activeCalls, setActiveCalls] = useState<PickupCall[]>([])
-  const [isLoadingCalls, setIsLoadingCalls] = useState(true)
-  
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls }] = useSupabaseArray<PickupCall>('saida/calls', [])
   const [logs, setLogs] = useSupabaseArray<SaidaLog>('saida/logs', [])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
-
-  useEffect(() => {
-    fetch('/api/saida/calls')
-      .then(r => r.json())
-      .then(data => {
-        const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-        setActiveCalls(arr)
-        setIsLoadingCalls(false)
-      })
-      .catch(() => setIsLoadingCalls(false))
-  }, [])
-
-  const saveCall = useCallback((call: PickupCall | PickupCall[]) => {
-    fetch('/api/saida/calls', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(call)
-    }).catch(err => console.error('Error saving call:', err))
-  }, [])
 
   const { emit, on } = useBroadcastRealtime()
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
@@ -367,12 +345,11 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       calledAt: now(), status: 'waiting', source,
     }
     setActiveCalls(prev => [call, ...prev])
-    saveCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
     addLog('CALL', `Chamada: ${studentName} (${studentClass}) — por ${guardianName}`)
     return call
-  }, [activeCalls, emit, addLog, sendBroadcast, saveCall])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── blockAttempt ──────────────────────────────────────────────────
   // Logs a BLOCKED access attempt (proibido or wrong day) without creating an
@@ -393,62 +370,59 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       blockType, blockReason,
     }
     setActiveCalls(prev => [call, ...prev])
-    saveCall(call)
     addLog('BLOCKED', `Acesso bloqueado (${blockType}): ${guardianName} tentou retirar ${studentName} — ${blockReason}`)
     return call
-  }, [addLog, saveCall])
+  }, [addLog])
 
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
+    setActiveCalls(prev => prev.map(c =>
+      c.id === callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c
+    ))
     const call = activeCalls.find(c => c.id === callId)
-    if (!call) return
-    const updatedCall = { ...call, status: 'confirmed', confirmedAt: now() } as PickupCall
-    setActiveCalls(prev => prev.map(c => c.id === callId ? updatedCall : c))
-    saveCall(updatedCall)
     emit('CONFIRM_PICKUP', { callId, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: updatedCall.confirmedAt })
+    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: now() })
     addLog('CONFIRM', `Saída confirmada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog, sendBroadcast, saveCall])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
+    setActiveCalls(prev => prev.map(c =>
+      c.id === callId ? { ...c, status: 'cancelled' } : c
+    ))
     const call = activeCalls.find(c => c.id === callId)
-    if (!call) return
-    const updatedCall = { ...call, status: 'cancelled' } as PickupCall
-    setActiveCalls(prev => prev.map(c => c.id === callId ? updatedCall : c))
-    saveCall(updatedCall)
     emit('CANCEL_CALL', { callId, _remote: false })
     sendBroadcast('CANCEL_CALL', { callId })
     addLog('CANCEL', `Chamada cancelada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog, sendBroadcast, saveCall])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── recallStudent ────────────────────────────────────────────────────────
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
     const call = activeCalls.find(c => c.id === callId)
     if (!call) return
-    const updatedCall = { ...call, status: 'waiting', calledAt: now() } as PickupCall
-    setActiveCalls(prev => prev.map(c => c.id === callId ? updatedCall : c))
-    saveCall(updatedCall)
+    setActiveCalls(prev => prev.map(c =>
+      c.id === callId ? { ...c, status: 'waiting', calledAt: now() } : c
+    ))
     emit('RECALL_STUDENT', { callId, _remote: false })
-    sendBroadcast('RECALL_STUDENT', { callId, calledAt: updatedCall.calledAt })
+    sendBroadcast('RECALL_STUDENT', { callId, calledAt: now() })
     const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
       ? call.studentClass.split(config.voiceTruncateChar)[0].trim() 
       : call.studentClass
     speakFn(`${call.studentName}, turma ${cName}`)
     addLog('RECALL', `Rechamada: ${call.studentName}`)
-  }, [activeCalls, emit, addLog, config, sendBroadcast, saveCall])
+  }, [activeCalls, emit, addLog, config, sendBroadcast])
 
   // ─── revertCall ───────────────────────────────────────────────────────────
   const revertCall = useCallback((callId: string) => {
     const call = activeCalls.find(c => c.id === callId)
     if (!call) return
-    const updatedCall = { ...call, status: 'waiting', calledAt: now(), confirmedAt: undefined } as PickupCall
-    setActiveCalls(prev => prev.map(c => c.id === callId ? updatedCall : c))
-    saveCall(updatedCall)
+    setActiveCalls(prev => prev.map(c =>
+      c.id === callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c
+    ))
     emit('REVERT_CALL', { callId, _remote: false })
-    sendBroadcast('REVERT_CALL', { callId, calledAt: updatedCall.calledAt })
+    sendBroadcast('REVERT_CALL', { callId, calledAt: now() })
     addLog('REVERT', `Chamada revertida: ${call.studentName}`)
-  }, [activeCalls, emit, addLog, sendBroadcast, saveCall])
+  }, [activeCalls, emit, addLog, sendBroadcast])
 
   // ─── addSpecialAuth ───────────────────────────────────────────────────────
   const addSpecialAuth = useCallback((
@@ -463,12 +437,11 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       calledAt: now(), status: 'special_auth', source: 'manual',
     }
     setActiveCalls(prev => [call, ...prev])
-    saveCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
     addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}`)
     return call
-  }, [emit, addLog, sendBroadcast, saveCall])
+  }, [emit, addLog, sendBroadcast])
 
   // ─── Guardian CRUD ────────────────────────────────────────────────────────
   const addGuardian = useCallback((g: Omit<Guardian, 'id'>): Guardian => {
@@ -533,11 +506,10 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
 
   const clearCalls = useCallback(() => {
     setActiveCalls([])
-    saveCall([])
     emit('CLEAR_ALL_CALLS', { _remote: false })
     sendBroadcast('CLEAR_ALL_CALLS', {})
     addLog('CLEAR_CALLS', `Todas as chamadas foram zeradas.`)
-  }, [emit, addLog, sendBroadcast, saveCall])
+  }, [emit, addLog, sendBroadcast])
 
   // ── Zerar lista diariamente às 23:59 ────────────────────────────────────────
   useEffect(() => {

@@ -34,13 +34,14 @@ import { useApp } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-  { id: 'mensagens', label: 'Mensagens', icon: Inbox, href: '/agenda-digital/mensagens' },
+  { id: 'mensagens', label: 'Mensagens', icon: Inbox, href: '/agenda-digital/admin/conversas' },
   { id: 'momentos', label: 'Fotos/Vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -53,31 +54,8 @@ export function ADSidebar() {
   const router = useRouter()
   const { currentUser, theme, setTheme } = useApp()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { comunicados = [], momentosFeed = [] } = useAgendaDigital()
-  const [chatUnreadCount, setChatUnreadCount] = useState(0)
-
-  // Buscar badge de não lidas do novo sistema de chat
-  useEffect(() => {
-    if (!currentUser?.id) return
-    let mounted = true
-    const fetchChatBadge = async () => {
-      try {
-        const { supabase: sb } = await import('@/lib/supabase')
-        const { data } = await sb
-          .from('chat_participants')
-          .select('unread_count')
-          .eq('user_id', currentUser.id)
-          .is('left_at', null)
-        if (mounted && data) {
-          const total = data.reduce((acc, p) => acc + (p.unread_count || 0), 0)
-          setChatUnreadCount(total)
-        }
-      } catch {}
-    }
-    fetchChatBadge()
-    const interval = setInterval(fetchChatBadge, 15000)
-    return () => { mounted = false; clearInterval(interval) }
-  }, [currentUser?.id])
+  const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
+  const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
@@ -111,7 +89,22 @@ export function ADSidebar() {
       return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
     }
     if (id === 'mensagens') {
-      return chatUnreadCount || undefined
+      // Chats de famílias com mensagens não lidas
+      const familyUnread = (chatsList || []).filter((c: any) => {
+        const msgs = messages[c.id] || []
+        if (msgs.length === 0) return (c.unread || 0) > 0
+        const lastMsg = msgs[msgs.length - 1]
+        // Para admin/colaboradores, as mensagens da família chegam como 'them'
+        return lastMsg.sender === 'them' && (c.unread || 0) > 0
+      }).length
+      // Canais de equipes com mensagens não lidas
+      const equipeUnread = (equipes || []).filter((eq: any) => {
+        const msgs = messages[`equipe-${eq.id}`] || []
+        if (msgs.length === 0) return false
+        const lastMsg = msgs[msgs.length - 1]
+        return String(lastMsg.authorId || '') !== String(currentUser?.id || '')
+      }).length
+      return (familyUnread + equipeUnread) || undefined
     }
     if (id === 'momentos') {
       return (momentosFeed || []).filter(m => m.status === 'pending').length || undefined
@@ -131,7 +124,7 @@ export function ADSidebar() {
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/mensagens' },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: '/agenda-digital/admin/conversas' },
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
@@ -141,7 +134,7 @@ export function ADSidebar() {
     } else if (alunoId) {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
-        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/mensagens`, badgeVal: chatUnreadCount || undefined },
+        { id: 'mensagens', label: 'mensagens', icon: MessageSquare, href: `/agenda-digital/${alunoId}/conversas`, badgeVal: unreadStats.unreadChat || undefined },
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
@@ -436,9 +429,21 @@ export function ADSidebar() {
                     },
                     { 
                       label: 'Mensagens', 
-                      href: `/agenda-digital/mensagens`, 
+                      href: `/agenda-digital/${alunoId}/conversas`, 
                       icon: MessageSquare,
-                      badge: chatUnreadCount || undefined
+                      badge: ((chatsList || []).filter((c: any) => {
+                        const msgs = messages[c.id] || []
+                        if (msgs.length === 0) return (c.unread || 0) > 0
+                        const lastMsg = msgs[msgs.length - 1]
+                        const isStaff = currentUser?.cargo !== 'Aluno' && currentUser?.cargo !== 'Responsável' && currentUser?.perfil !== 'Família'
+                        const otherSender = isStaff ? 'them' : 'us'
+                        return lastMsg.sender === otherSender && (c.unread || 0) > 0
+                      }).length + (alunoId === 'colaborador' ? (equipes || []).filter((eq: any) => {
+                        const msgs = messages[`equipe-${eq.id}`] || []
+                        if (msgs.length === 0) return false
+                        const lastMsg = msgs[msgs.length - 1]
+                        return String(lastMsg.authorId || '') !== String(currentUser?.id || '')
+                      }).length : 0)) || undefined
                     },
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },

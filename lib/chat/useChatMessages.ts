@@ -73,6 +73,14 @@ export function useChatMessages(conversationId: string | null, currentUserId: st
           setMessages(prev => prev.map(m => m.id === updatedMessage.id ? updatedMessage : m))
         }
       })
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${conversationId}`
+      }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id))
+      })
       .subscribe()
 
     return () => {

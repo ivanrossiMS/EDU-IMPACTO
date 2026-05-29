@@ -448,9 +448,16 @@ export default function ADConversasPage({ params }: { params: Promise<{ slug: st
                       </div>
                     </div>
                     {(() => {
-                      if (chat.unread > 0) {
+                      const msgs = messages[chat.id] || []
+                      if (msgs.length === 0) return chat.unread > 0 ? (
+                        <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
+                          {chat.unread}
+                        </div>
+                      ) : null
+                      const lastMsg = msgs[msgs.length - 1]
+                      if (lastMsg.sender === 'us' && chat.unread > 0) {
                         return (
-                          <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#ef4444', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>
+                          <div className="badge-pulse-modern" style={{ background: '#ef4444', color: 'white', fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)' }}>
                             {chat.unread}
                           </div>
                         )

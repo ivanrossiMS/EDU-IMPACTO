@@ -12,7 +12,6 @@ import { useAgendaDigital, ADChat } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
 
 export default function ADAdminConversas() {
   const { chatsList, setChatsList, messages, setMessages, adAlert, adConfirm, chatGroups } = useAgendaDigital()
@@ -20,8 +19,6 @@ export default function ADAdminConversas() {
   const isDiretorGeral = currentUserPerfil === 'Diretor Geral'
   const { turmas = [] } = useData()
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [equipes] = useSupabaseArray<any>('agenda/equipes');
-  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios');
   const [activeChat, setActiveChat] = useState<number | string | null>(null)
   const [inputMsg, setInputMsg] = useState('')
   const [showNewChatModal, setShowNewChatModal] = useState(false)
@@ -29,12 +26,10 @@ export default function ADAdminConversas() {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [filterMode, setFilterMode] = useState<'abertos' | 'resolvidos'>('abertos')
-  const [selectedRecipients, setSelectedRecipients] = useState<{id: string, nome: string}[]>([])
-  const [composeMode, setComposeMode] = useState(false)
+  const [selectedRecipient, setSelectedRecipient] = useState<{id: string, nome: string} | null>(null)
   const [composeSubject, setComposeSubject] = useState('')
   const [composeBody, setComposeBody] = useState('')
   const [showEmojiTarget, setShowEmojiTarget] = useState<string | null>(null) // 'compose' | 'reply' | null
-  const [modalTab, setModalTab] = useState<'familias' | 'equipes'>('familias')
   const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️', '🙌', '🎉', '💡', '🚀']
 
   const insertText = (target: 'compose' | 'reply', text: string) => {
@@ -91,63 +86,46 @@ export default function ADAdminConversas() {
     setInputMsg('')
   }
 
-  const toggleRecipient = (id: string, name: string) => {
-    setSelectedRecipients(prev => {
-       const exists = prev.find(r => r.id === id)
-       if (exists) return prev.filter(r => r.id !== id)
-       return [...prev, { id, nome: name }]
-    })
-  }
-
   const startNewChat = (id: string, name: string) => {
-    setSelectedRecipients([{ id, nome: name }])
-    setComposeMode(true)
+    setSelectedRecipient({ id, nome: name })
     setComposeSubject('')
     setComposeBody('')
   }
 
   const finalSendAdminTicket = () => {
-    if (!composeSubject.trim() || !composeBody.trim() || selectedRecipients.length === 0) return
+    if (!composeSubject.trim() || !composeBody.trim() || !selectedRecipient) return
 
-    setMessages(prev => {
-      const next = { ...prev }
-      selectedRecipients.forEach(recip => {
-         const newChatId = `TKT-${currentUser?.id}-${recip.id}-${Date.now()}`
-         next[newChatId] = [{
-           id: Date.now(),
-           text: composeBody,
-           sender: 'us',
-           time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-           date: new Date().toLocaleDateString('pt-BR'),
-           author: currentUser?.nome || 'Administrativo',
-           authorRole: 'Equipe Escolar'
-         }]
-      })
-      return next
-    })
-
-    setChatsList(prev => {
-      const newChats = selectedRecipients.map(recip => ({
-        id: `TKT-${currentUser?.id}-${recip.id}-${Date.now()}`, 
-        name: recip.nome, 
-        status: 'active', 
-        preview: composeBody.substring(0, 30) + '...', 
+    const newChatId = `${selectedRecipient.id}-TKT-${Date.now()}`
+    const novo: ADChat = { 
+      id: newChatId, 
+      name: selectedRecipient.nome, 
+      status: 'active', 
+      preview: composeBody.substring(0, 30) + '...', 
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      date: new Date().toLocaleDateString('pt-BR'),
+      unread: 1, 
+      tag: composeSubject,
+      startDate: new Date().toLocaleDateString('pt-BR'),
+      startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+    }
+    
+    setMessages(prev => ({
+      ...prev,
+      [newChatId]: [{
+        id: Date.now(),
+        text: composeBody,
+        sender: 'us',
         time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         date: new Date().toLocaleDateString('pt-BR'),
-        unread: 1, 
-        tag: composeSubject,
-        startDate: new Date().toLocaleDateString('pt-BR'),
-        startTime: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
-      }))
-      return [...newChats, ...prev]
-    })
+        author: currentUser?.nome || 'Administrativo',
+        authorRole: 'Equipe Escolar'
+      }]
+    }))
 
+    setChatsList(prev => [novo, ...prev])
+    setActiveChat(newChatId)
     setShowNewChatModal(false)
-    setComposeMode(false)
-    setSelectedRecipients([])
-    setComposeSubject('')
-    setComposeBody('')
-    adAlert(`Mensagem enviada para ${selectedRecipients.length} destinatário(s)!`, 'Sucesso')
+    setSelectedRecipient(null)
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -411,19 +389,12 @@ export default function ADAdminConversas() {
               .map(chat => (
               <div 
                 key={chat.id}
-                  onClick={async () => { 
-                    setActiveChat(chat.id); 
-                    if (chat.unread > 0) {
-                      setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c))
-                      try {
-                        const { data: dbChat } = await supabase.from('agenda_chats').select('dados').eq('id', chat.id).single();
-                        if (dbChat) {
-                          const newDados = { ...(dbChat.dados || {}), unread: 0 };
-                          await supabase.from('agenda_chats').update({ dados: newDados }).eq('id', chat.id);
-                        }
-                      } catch(e) {}
-                    } 
-                  }}
+                onClick={() => {
+                  setActiveChat(chat.id)
+                  if (chat.unread > 0) {
+                    setChatsList(prev => prev.map(c => c.id === chat.id ? { ...c, unread: 0 } : c))
+                  }
+                }}
                 className="ad-chat-list-item"
                 style={{ 
                   padding: '16px', display: 'flex', gap: 12, borderBottom: '1px solid hsl(var(--border-subtle))',
@@ -439,7 +410,10 @@ export default function ADAdminConversas() {
                       {chat.tag || 'Conversa sem assunto'}
                     </h4>
                     {(() => {
-                      if (chat.unread > 0) {
+                      const msgs = messages[chat.id] || []
+                      if (msgs.length === 0) return chat.unread > 0 ? <span className="ad-chat-badge badge-pulse-modern" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span> : null
+                      const lastMsg = msgs[msgs.length - 1]
+                      if (lastMsg.sender === 'them' && chat.unread > 0) {
                         return <span className="ad-chat-badge badge-pulse-modern" style={{ background: '#4f46e5', color: 'white', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{chat.unread}</span>
                       }
                       return null
@@ -645,7 +619,7 @@ export default function ADAdminConversas() {
       </div>
       <AnimatePresence>
 {showNewChatModal && (
-<motion.div key="new-chat-modal" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: '#fff', borderRadius: 16, width: '90%', maxWidth: 500, padding: 24, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                <h3 style={{ fontSize: 18, fontWeight: 700 }}>Iniciar Nova Conversa</h3>
@@ -663,113 +637,41 @@ export default function ADAdminConversas() {
               />
             </div>
 
-            <div style={{ display: 'flex', gap: 12, marginBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-              <button 
-                onClick={() => setModalTab('familias')} 
-                style={{ padding: '8px 16px', background: 'transparent', border: 'none', borderBottom: modalTab === 'familias' ? '2px solid #4f46e5' : '2px solid transparent', color: modalTab === 'familias' ? '#4f46e5' : 'hsl(var(--text-muted))', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Famílias / Turmas
-              </button>
-              <button 
-                onClick={() => setModalTab('equipes')} 
-                style={{ padding: '8px 16px', background: 'transparent', border: 'none', borderBottom: modalTab === 'equipes' ? '2px solid #4f46e5' : '2px solid transparent', color: modalTab === 'equipes' ? '#4f46e5' : 'hsl(var(--text-muted))', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Equipe (Interno)
-              </button>
-            </div>
-
             <div style={{ flex: 1, overflowY: 'auto' }}>
-               {!composeMode ? (
+               {!selectedRecipient ? (
                  <>
                    {newChatSearch === '' ? (
                      <>
-                        {modalTab === 'familias' && (
-                          <>
-                            <h4 style={{ fontSize: 13, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', fontWeight: 800, marginBottom: 12, letterSpacing: 1 }}>Selecione por Turma / Grupo</h4>
-                            {chatGroups?.map(grupo => {
-                               const isExpanded = expandedGroup === grupo.id
-                               let totalAlunos = (alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).length
-                               
-                               return (
-                                 <div key={grupo.id} style={{ marginBottom: 12, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden' }}>
-                                    <div 
-                                       onClick={() => setExpandedGroup(isExpanded ? null : grupo.id)}
-                                       style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(99,102,241,0.05)' : 'transparent' }}
-                                    >
-                                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                          <div style={{ width: 32, height: 32, borderRadius: 8, background: grupo.cor || '#4338ca', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={16} /></div>
-                                          <div style={{ fontWeight: 700 }}>{grupo.nome}</div>
-                                       </div>
-                                       <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{totalAlunos} Alunos</span>
-                                    </div>
-                                    {isExpanded && (
-                                      <div style={{ padding: '8px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: '#f8fafc' }}>
-                                         {(alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).map((a: any) => (
-                                           <div key={a.id} onClick={() => startNewChat(a.id, a.nome)} style={{ padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                              <span style={{ fontWeight: 600, fontSize: 13 }}>{a.nome}</span>
-                                              <Plus size={14} color="#4f46e5" />
-                                           </div>
-                                         ))}
-                                      </div>
-                                    )}
-                                 </div>
-                               )
-                            })}
-                          </>
-                        )}
-
-                        {modalTab === 'equipes' && equipes && equipes.length > 0 && (
-                          <>
-                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                               <h4 style={{ fontSize: 13, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', fontWeight: 800, letterSpacing: 1, margin: 0 }}>Selecione Membros da Equipe</h4>
-                               {selectedRecipients.length > 0 && (
-                                 <button onClick={() => setComposeMode(true)} className="btn btn-primary btn-sm" style={{ borderRadius: 20 }}>Continuar ({selectedRecipients.length}) <Plus size={14} style={{ marginLeft: 4 }} /></button>
-                               )}
-                             </div>
-                             {equipes.map((equipe: any) => {
-                               const isExpanded = expandedGroup === equipe.id
-                               const membros = (sysUsers || []).filter((u: any) => (equipe.membrosIds || []).includes(u.id))
-                               return (
-                                 <div key={equipe.id} style={{ marginBottom: 12, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden' }}>
-                                   <div 
-                                      onClick={() => setExpandedGroup(isExpanded ? null : equipe.id)}
-                                      style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(99,102,241,0.05)' : 'transparent' }}
-                                   >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                         <div style={{ width: 32, height: 32, borderRadius: 8, background: '#10b981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={16} /></div>
-                                         <div style={{ fontWeight: 700 }}>{equipe.nome}</div>
-                                      </div>
-                                      <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{membros.length} Membros</span>
+                        <h4 style={{ fontSize: 13, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', fontWeight: 800, marginBottom: 12, letterSpacing: 1 }}>Selecione por Turma / Grupo</h4>
+                        {chatGroups?.map(grupo => {
+                           const isExpanded = expandedGroup === grupo.id
+                           let totalAlunos = (alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).length
+                           
+                           return (
+                             <div key={grupo.id} style={{ marginBottom: 12, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden' }}>
+                                <div 
+                                   onClick={() => setExpandedGroup(isExpanded ? null : grupo.id)}
+                                   style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(99,102,241,0.05)' : 'transparent' }}
+                                >
+                                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                      <div style={{ width: 32, height: 32, borderRadius: 8, background: grupo.cor || '#4338ca', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Users size={16} /></div>
+                                      <div style={{ fontWeight: 700 }}>{grupo.nome}</div>
                                    </div>
-                                   {isExpanded && (
-                                      <div style={{ padding: '8px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: '#f8fafc' }}>
-                                         {membros.map((m: any) => {
-                                            const isSelected = selectedRecipients.some(r => r.id === m.id)
-                                            return (
-                                              <div key={m.id} onClick={() => toggleRecipient(m.id, m.nome)} style={{ padding: '10px', borderRadius: 8, border: isSelected ? '1px solid #4f46e5' : '1px solid #e2e8f0', background: isSelected ? 'rgba(79,70,229,0.05)' : 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                   <div style={{ width: 18, height: 18, borderRadius: 4, border: isSelected ? 'none' : '1px solid #cbd5e1', background: isSelected ? '#4f46e5' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                     {isSelected && <CheckCircle2 size={14} color="white" />}
-                                                   </div>
-                                                   <span style={{ fontWeight: 600, fontSize: 13, color: isSelected ? '#4f46e5' : '#1e293b' }}>{m.nome}</span>
-                                                 </div>
-                                              </div>
-                                            )
-                                         })}
-                                      </div>
-                                   )}
-                                 </div>
-                               )
-                             })}
-                          </>
-                        )}
-                        
-                        {modalTab === 'equipes' && (!equipes || equipes.length === 0) && (
-                          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--text-muted))' }}>
-                             <Users size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
-                             <p>Nenhuma equipe cadastrada no sistema.</p>
-                          </div>
-                        )}
+                                   <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{totalAlunos} Alunos</span>
+                                </div>
+                                {isExpanded && (
+                                  <div style={{ padding: '8px 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: '#f8fafc' }}>
+                                     {(alunos || []).filter((a: any) => (grupo.alunosIds || []).includes(a.id)).map((a: any) => (
+                                       <div key={a.id} onClick={() => startNewChat(a.id, a.nome)} style={{ padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ fontWeight: 600, fontSize: 13 }}>{a.nome}</span>
+                                          <Plus size={14} color="#4f46e5" />
+                                       </div>
+                                     ))}
+                                  </div>
+                                )}
+                             </div>
+                           )
+                        })}
                      </>
                    ) : newChatSearch.length >= 3 ? (
                      <>
@@ -805,11 +707,9 @@ export default function ADAdminConversas() {
                        <div className="avatar" style={{ width: 32, height: 32, background: '#4f46e5', color: 'white' }}><User size={14} /></div>
                        <div style={{ flex: 1 }}>
                           <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Enviando para:</div>
-                          <div style={{ fontWeight: 700 }}>
-                            {selectedRecipients.length === 1 ? selectedRecipients[0].nome : `${selectedRecipients.length} destinatários (Equipe)`}
-                          </div>
+                          <div style={{ fontWeight: 700 }}>{selectedRecipient.nome}</div>
                        </div>
-                       <button className="btn btn-ghost btn-sm" onClick={() => setComposeMode(false)}>Alterar</button>
+                       <button className="btn btn-ghost btn-sm" onClick={() => setSelectedRecipient(null)}>Alterar</button>
                     </div>
                     
                     <div className="form-group">
@@ -847,7 +747,7 @@ export default function ADAdminConversas() {
                     <button 
                        className="btn btn-primary" 
                        style={{ height: 48, borderRadius: 12 }}
-                       disabled={!composeSubject.trim() || !composeBody.trim() || selectedRecipients.length === 0}
+                       disabled={!composeSubject.trim() || !composeBody.trim()}
                        onClick={finalSendAdminTicket}
                     >
                        <Send size={18} /> Enviar Mensagem Oficial
