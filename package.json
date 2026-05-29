@@ -37,6 +37,7 @@
     "date-fns": "^4.1.0",
     "docxtemplater": "^3.68.3",
     "dotenv": "^17.4.2",
+    "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.38.0",
     "jose": "^6.2.2",
     "jszip": "^3.10.1",
