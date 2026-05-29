@@ -133,26 +133,41 @@ export function FloatingWhatsApp() {
           width: 60,
           height: 60,
           borderRadius: '50%',
-          background: '#25D366',
+          background: 'linear-gradient(135deg, #20B038 0%, #075E54 100%)',
           color: 'white',
-          border: 'none',
-          boxShadow: '0 4px 14px rgba(37, 211, 102, 0.4)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 8px 32px rgba(7, 94, 84, 0.5), inset 0 2px 4px rgba(255,255,255,0.2)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
           pointerEvents: 'auto',
-          transition: 'transform 0.2s, background-color 0.2s',
-          transform: isOpen ? 'scale(0.9)' : 'scale(1)',
+          transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          transform: isOpen ? 'scale(0.9) rotate(90deg)' : 'scale(1) rotate(0deg)',
+          opacity: 0.95,
         }}
-        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1ebc5b'}
-        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#25D366'}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = isOpen ? 'scale(0.95) rotate(90deg)' : 'scale(1.08) rotate(0deg)';
+          e.currentTarget.style.boxShadow = '0 12px 40px rgba(7, 94, 84, 0.7), inset 0 2px 4px rgba(255,255,255,0.3)';
+          e.currentTarget.style.opacity = '1';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = isOpen ? 'scale(0.9) rotate(90deg)' : 'scale(1) rotate(0deg)';
+          e.currentTarget.style.boxShadow = '0 8px 32px rgba(7, 94, 84, 0.5), inset 0 2px 4px rgba(255,255,255,0.2)';
+          e.currentTarget.style.opacity = '0.95';
+        }}
       >
-        {isOpen ? <X size={28} /> : (
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-message-circle">
+        {isOpen ? <X size={28} style={{ transform: 'rotate(-90deg)', transition: 'transform 0.3s' }} /> : (
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}>
             <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" fill="currentColor" stroke="none" />
-            <path d="M22 12A10.002 10.002 0 0 0 12 2C6.5 2 2 6.5 2 12c0 1.7.4 3.4 1.2 4.9L2 22l5.1-1.2C8.6 21.6 10.3 22 12 22c5.5 0 10-4.5 10-10Z" fill="#25D366" stroke="white" strokeWidth="1.5" />
+            <path d="M22 12A10.002 10.002 0 0 0 12 2C6.5 2 2 6.5 2 12c0 1.7.4 3.4 1.2 4.9L2 22l5.1-1.2C8.6 21.6 10.3 22 12 22c5.5 0 10-4.5 10-10Z" fill="url(#whatsapp-grad)" stroke="rgba(255,255,255,0.8)" strokeWidth="1" />
             <path d="M16.5 14.5c-.3.8-1.5 1.5-2.2 1.6-.6.1-1.3.2-3.8-1-3-1.4-4.9-4.5-5-4.7-.2-.2-1.2-1.6-1.2-3 0-1.4.7-2.1 1-2.4.3-.3.6-.4.9-.4.2 0 .5 0 .7.1.3.1.6.8.8 1.4.1.3.2.7.1 1-.1.3-.2.5-.4.7-.2.2-.4.5-.6.7-.1.1-.3.3-.1.6.2.3.8 1.4 1.8 2.3.1 0 .2.1.2.1 1.2.9 2.2 1.2 2.6 1.4.3.1.6.1.8-.1.2-.2.9-1.1 1.2-1.4.2-.4.5-.3.8-.2.3.1 2.1 1 2.5 1.2.3.2.5.3.6.5.1.4.1 1.1-.2 1.9Z" fill="white" stroke="none" />
+            <defs>
+              <linearGradient id="whatsapp-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#1ebd56" />
+                <stop offset="1" stopColor="#0f8e42" />
+              </linearGradient>
+            </defs>
           </svg>
         )}
       </button>
