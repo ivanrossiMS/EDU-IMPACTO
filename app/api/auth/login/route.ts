@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -128,22 +129,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Sign in with resolved email ─────────────────────────────────
-    const response = NextResponse.next()
+    const cookieStore = cookies()
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll() { return request.cookies.getAll() },
+          getAll() { return cookieStore.getAll() },
           setAll(cookiesToSet) {
             cookiesToSet.forEach(({ name, value, options }) => {
               if (value !== '') {
                 delete options.maxAge
                 delete options.expires
               }
-              response.cookies.set(name, value, options)
+              cookieStore.set({ name, value, ...options })
             })
           },
         },
@@ -206,10 +206,10 @@ export async function POST(request: NextRequest) {
             process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
             {
               cookies: {
-                getAll() { return request.cookies.getAll() },
+                getAll() { return cookieStore.getAll() },
                 setAll(cookiesToSet) {
                   cookiesToSet.forEach(({ name, value, options }) => {
-                    response.cookies.set(name, value, { ...options, maxAge: 0 })
+                    cookieStore.set({ name, value, ...options, maxAge: 0 })
                   })
                 },
               },
@@ -251,10 +251,10 @@ export async function POST(request: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
           cookies: {
-            getAll() { return request.cookies.getAll() },
+            getAll() { return cookieStore.getAll() },
             setAll(cookiesToSet) {
               cookiesToSet.forEach(({ name, value, options }) => {
-                response.cookies.set(name, value, { ...options, maxAge: 0 })
+                cookieStore.set({ name, value, ...options, maxAge: 0 })
               })
             },
           },
@@ -290,15 +290,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = JSON.stringify({ user: enrichedUser, session: session })
-    const finalResponse = new NextResponse(body, {
+    return new NextResponse(body, {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
-    response.cookies.getAll().forEach(cookie => {
-      finalResponse.cookies.set(cookie.name, cookie.value, cookie)
-    })
-    
-    return finalResponse
   } catch (err: any) {
     console.error('[API login]', err)
     return NextResponse.json({ error: 'Erro interno de autenticação' }, { status: 500 })
