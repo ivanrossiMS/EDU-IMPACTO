@@ -28,11 +28,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
     }
 
-    // Fetch the target rows first to update their JSONB "dados" / "leituras" depending on the table
-    const { data: rows, error: selectError } = await supabase.from(table).select('id, dados, leituras').in('id', ids)
-    if (selectError) {
-      throw new Error(`Select error: ${selectError.message}`)
+    // Fetch the target rows. Since some tables might not have the "leituras" column, we try with it first,
+    // and if it fails due to column not existing (PostgreSQL code 42703), we fall back to just 'id, dados'.
+    let selectRes = await supabase.from(table).select('id, dados, leituras').in('id', ids)
+    if (selectRes.error && (selectRes.error.code === '42703' || selectRes.error.message?.includes('does not exist'))) {
+      selectRes = await supabase.from(table).select('id, dados').in('id', ids)
     }
+
+    if (selectRes.error) {
+      throw new Error(`Select error: ${selectRes.error.message}`)
+    }
+    const rows = selectRes.data || []
 
     const now = new Date().toISOString()
     const updates = rows.map((row: any) => {

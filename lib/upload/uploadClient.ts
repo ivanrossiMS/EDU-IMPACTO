@@ -1,3 +1,5 @@
+'use client'
+
 import { generateSignedUploadUrl } from './uploadActions'
 
 export interface UploadOptions {
