@@ -608,6 +608,26 @@ export function ADSidebar() {
                   </div>
                 </div>
 
+                {!isCollapsed && (
+                  <button 
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && (window as any).OneSignal) {
+                        (window as any).OneSignal.Slidedown.promptPush({ force: true })
+                      } else {
+                        alert('Sistema de notificações está carregando ou bloqueado. Aguarde um instante.')
+                      }
+                    }}
+                    style={{
+                      width: '100%', height: 32, borderRadius: 8, background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)',
+                      color: '#60a5fa', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s', marginBottom: 8
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)' }}
+                  >
+                    <Bell size={14} /> Ativar Notificações
+                  </button>
+                )}
+
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (
                     <button 
