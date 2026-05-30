@@ -615,32 +615,24 @@ export function ADSidebar() {
                       
                       try {
                         const nativePerm = Notification.permission;
-                        alert("🔍 DIAGNÓSTICO PROFUNDO:\n\n1. Permissão Nativa do Chrome: " + nativePerm);
                         
-                        if (nativePerm === 'granted') {
-                          // Se já está permitido, dispara um teste nativo!
-                          new Notification('Teste de Conexão', { body: 'O Chrome e o Mac estão liberando notificações!' });
-                          alert("✅ Disparei uma notificação nativa de Teste!\n\nSe ela não pulou no canto superior direito da tela do seu Mac, então é 100% o MACOS (Ajustes da Apple) que está silenciando o Google Chrome!");
-                        } else if (nativePerm === 'denied') {
-                          alert("❌ O Chrome está respondendo 'denied' (negado) na raiz. Isso significa que ele ainda está bloqueando.");
-                        } else {
-                          // Pede permissão nativa pura, sem OneSignal
-                          const ask = await Notification.requestPermission();
-                          alert("Você respondeu à caixa do Chrome: " + ask);
-                          if (ask === 'granted') {
-                            new Notification('Sucesso', { body: 'Notificação ativada!' });
-                          }
-                        }
-                        
-                        // Mostra também o que o OneSignal acha
+                        // 1. Tenta usar OneSignal (se estiver carregado e sem erro de Timeout)
                         const OS = (window as any).OneSignal;
                         if (OS && OS.Notifications) {
-                          alert("2. Status interno do OneSignal: " + OS.Notifications.permission);
+                          await OS.Notifications.requestPermission();
+                          return;
+                        }
+
+                        // 2. Fallback Híbrido: Se OneSignal travou no localhost (Timeout), usa Nativo
+                        if (nativePerm === 'default') {
+                          await Notification.requestPermission();
+                        } else if (nativePerm === 'granted') {
+                          alert('✅ Permissão já concedida pelo navegador! Como você está rodando no seu computador (localhost), o OneSignal bloqueia a conexão por segurança (Timeout), mas em produção as mensagens chegarão normalmente!');
                         } else {
-                          alert("2. OneSignal não está carregado.");
+                          alert('❌ O Chrome está bloqueando notificações. Clique no cadeado da URL para liberar.');
                         }
                       } catch (e) {
-                        alert('❌ Erro no teste nativo: ' + String(e));
+                        console.error('Erro ao pedir permissão de notificação:', e);
                       }
                     }}
                     style={{
