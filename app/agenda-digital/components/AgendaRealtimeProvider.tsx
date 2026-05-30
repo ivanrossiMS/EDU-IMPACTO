@@ -149,8 +149,18 @@ export function AgendaRealtimeProvider({
       const turmaNomeStr = String(turmaNome)
       const rawTurmaStr = String(rawTurma)
 
+      console.log('--- DEBUG TARGETING ---')
+      console.log('alvoTurmas:', alvoTurmas)
+      console.log('alvoAlunos:', alvoAlunos)
+      console.log('alunoStr (eu):', alunoStr)
+      console.log('turmaNomeStr (eu):', turmaNomeStr)
+      console.log('rawTurmaStr (eu):', rawTurmaStr)
+      console.log('-----------------------')
+
       // Todos / Toda a Escola
       if (
+        dados.destino === 'todos' ||
+        dados.destino === 'Todos' ||
         alvoTurmas.includes('Todos') || 
         alvoTurmas.includes('Toda a Escola') || 
         alvoTurmas.includes('TODOS') || 
@@ -178,6 +188,8 @@ export function AgendaRealtimeProvider({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
         const row = payload.new
         console.log('📡 REALTIME COMUNICADO RECEBIDO:', row.id, row.titulo)
+        console.log('📦 DADOS DO COMUNICADO:', JSON.stringify(row, null, 2))
+        
         if (row.status !== 'enviado' && row.dados?.status !== 'enviado') {
            console.log('📡 REALTIME IGNORADO: status nao é enviado')
            return
