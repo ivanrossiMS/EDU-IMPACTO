@@ -95,42 +95,74 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
     comunicadosRef.current = localComunicados
   }, [localComunicados])
 
-  // --- REALTIME SUBSCRIPTION ---
+  // --- EVENT BUS SUBSCRIPTION (From AgendaRealtimeProvider) ---
+  useEffect(() => {
+    const handleNewComunicado = (e: any) => {
+      const newCom = { ...e.detail, _isNew: true };
+      setLocalComunicados(prev => {
+        if (prev.some((c: any) => c.id === newCom.id)) return prev;
+        const newFeed = [newCom, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+        return newFeed;
+      });
+      
+      // Remove _isNew after 5 seconds to stop glowing
+      setTimeout(() => {
+        setLocalComunicados(curr => curr.map(c => c.id === newCom.id ? { ...c, _isNew: false } : c));
+      }, 5000);
+
+      window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
+    };
+
+    window.addEventListener('ad:comunicado-inserted', handleNewComunicado);
+    return () => {
+      window.removeEventListener('ad:comunicado-inserted', handleNewComunicado);
+    };
+  }, []);
+
+  // --- FALLBACK POLLING (Segurança Extra) ---
   useEffect(() => {
     if (!aluno?.id) return;
-    const channel = supabase.channel('comunicados-channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
-        try {
-          const row = payload.new;
-          if (row.status !== 'enviado' && row.dados?.status !== 'enviado') return;
-          
-          const newCom = { ...row, ...(row.dados || {}) };
-          
-          const alvoTurmas = newCom.turmas || [];
-          const alvoAlunos = newCom.alunosIds || [];
-          const isTodos = alvoTurmas.includes('Todos') || alvoTurmas.includes('Toda a Escola') || alvoTurmas.includes('TODOS') || newCom.destino === 'todos';
-          const isMinhaTurma = (turmaNome && alvoTurmas.includes(turmaNome)) || (rawTurma && alvoTurmas.includes(rawTurma));
-          const isMeuId = alvoAlunos.includes(aluno.id) || alvoAlunos.includes(`a_${aluno.id}`) || alvoAlunos.includes(`_ALU${aluno.id}`);
-          
-          if (isTodos || isMinhaTurma || isMeuId) {
+    
+    const fetchLatest = async () => {
+      if (isPollingRef.current) return;
+      
+      const latestCom = comunicadosRef.current[0];
+      if (!latestCom) return; // Se não tem nenhum, espera o SWR
+      
+      isPollingRef.current = true;
+      try {
+        const latestDate = new Date(latestCom.created_at || latestCom.data).toISOString();
+        const res = await fetch(`/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&since=${latestDate}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.length > 0) {
             setLocalComunicados(prev => {
-              if (prev.some((c: any) => c.id === newCom.id)) return prev;
-              const newFeed = [newCom, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+              const newItems = json.filter((j: any) => !prev.some((p: any) => p.id === j.id));
+              if (newItems.length === 0) return prev;
+              const newFeed = [...newItems, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
               return newFeed;
             });
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
           }
-        } catch (e) {
-          console.error("Realtime parsing error:", e);
         }
-      })
-      .subscribe()
+      } catch (e) {
+        console.error("Polling error:", e);
+      } finally {
+        isPollingRef.current = false;
+      }
+    };
 
-    return () => { supabase.removeChannel(channel) }
-  }, [aluno?.id, turmaNome])
-
-  // --- POLLING FALLBACK ---
-  // Removido para evitar N+1 excessivo no Egress, e já temos o canal Realtime ativo acima!
+    // Poll a cada 60 segundos
+    const intervalId = setInterval(fetchLatest, 60000);
+    
+    // Poll ao focar na janela (usuário voltou pro app)
+    window.addEventListener('focus', fetchLatest);
+    
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', fetchLatest);
+    };
+  }, [aluno?.id, turmaNome]);
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -589,26 +621,26 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   }} />
                 </div>
 
-                {/* Right side: Modern Glassmorphic Card */}
                 <div 
                   className="card ad-feed-card" 
                   style={{ 
-                    flex: 1,
-                    cursor: 'pointer', 
-                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)', 
+                    flex: 1, 
+                    background: c._isNew ? 'rgba(255, 255, 255, 0.95)' : (isRead ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.85)'), 
+                    backdropFilter: 'blur(20px)',
+                    borderRadius: 24, 
+                    padding: '24px 28px',
+                    cursor: 'pointer',
+                    border: c._isNew ? '2px solid #4f46e5' : (isRead ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid rgba(99, 102, 241, 0.15)'),
+                    boxShadow: c._isNew ? '0 10px 40px -5px rgba(99, 102, 241, 0.4)' : (isRead ? 'none' : '0 12px 32px -8px rgba(99,102,241,0.08)'),
+                    transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                     position: 'relative',
-                    background: isRead ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.85)',
-                    border: '1px solid',
-                    borderColor: isRead ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.18)',
-                    boxShadow: isRead 
-                      ? '0 2px 10px -4px rgba(0,0,0,0.04)' 
-                      : '0 12px 32px -8px rgba(99,102,241,0.08), inset 0 0 0 1px rgba(255,255,255,0.8)',
+                    overflow: 'hidden',
+                    animation: c._isNew ? 'pulseGlow 2s infinite' : undefined,
+                    transform: isRead ? 'scale(0.99)' : 'scale(1)',
+                    transformOrigin: 'left center',
                     display: 'flex', 
                     flexDirection: 'column', 
-                    padding: '24px 28px',
-                    borderRadius: 24,
-                    gap: 16,
-                    overflow: 'hidden'
+                    gap: 16
                   }}
                   onClick={() => {
                     const isRead = !!(c.leituras || {})[resolvedParams.slug];

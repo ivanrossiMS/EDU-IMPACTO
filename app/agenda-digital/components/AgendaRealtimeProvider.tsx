@@ -156,12 +156,47 @@ export function AgendaRealtimeProvider({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
         const row = payload.new
         if (row.status !== 'enviado' && row.dados?.status !== 'enviado') return
-        if (isTargetingAluno(row.dados)) {
-          toast('Novo Comunicado', {
-            description: row.titulo,
-            icon: <BellRing size={20} className="text-blue-500" />,
-            action: { label: 'Ler', onClick: () => router.push(`/agenda-digital/${alunoId}/comunicados`) }
-          })
+        
+        const newCom = { ...row, ...(row.dados || {}) }
+        
+        if (isTargetingAluno(newCom)) {
+          // 1. Emit Event for page.tsx to pick up and auto-append
+          window.dispatchEvent(new CustomEvent('ad:comunicado-inserted', { detail: newCom }));
+          
+          // 2. Show Custom Modern Toast
+          toast.custom((t) => (
+            <div 
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                padding: '16px 20px',
+                borderRadius: 20,
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.5)',
+                width: 350,
+                maxWidth: '100vw',
+                animation: 'pulseGlow 2s infinite',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                toast.dismiss(t);
+                router.push(`/agenda-digital/${alunoId}/comunicados`);
+              }}
+            >
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 14, display: 'flex' }}>
+                <BellRing size={24} color="#fff" style={{ animation: 'bounce 2s infinite' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Novo comunicado!</div>
+                <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{newCom.titulo}</div>
+              </div>
+              <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800 }}>
+                Ler
+              </div>
+            </div>
+          ), { duration: 6000, position: 'bottom-center' });
         }
       })
       // --- MOMENTOS ---
