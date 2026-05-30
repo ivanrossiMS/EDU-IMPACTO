@@ -114,16 +114,17 @@ export async function POST(request: Request) {
       console.log("==> UPSERT SUCCESS");
       
       // Disparar Pushes para cada comunicado (em background)
-      rows.forEach(async (row: any) => {
+      // Disparar Pushes para cada comunicado
+      for (const row of rows) {
         const targetIds = await getResponsavelIdsForTargets(row.dados)
         if (targetIds.length > 0) {
-          sendPushNotification({
+          await sendPushNotification({
             title: `Novo Comunicado: ${row.titulo}`,
             body: `Um novo comunicado foi enviado por ${row.autor}.`,
             targetUserIds: targetIds,
           }).catch(err => console.error("Push Error:", err))
         }
-      })
+      }
       
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -135,15 +136,15 @@ export async function POST(request: Request) {
     }
     
     // Disparar Push (em background)
-    getResponsavelIdsForTargets(data.dados).then(targetIds => {
-      if (targetIds.length > 0) {
-        sendPushNotification({
-          title: `Novo Comunicado: ${data.titulo}`,
-          body: `Um novo comunicado foi enviado por ${data.autor}.`,
-          targetUserIds: targetIds,
-        }).catch(err => console.error("Push Error:", err))
-      }
-    })
+    // Disparar Push
+    const targetIds = await getResponsavelIdsForTargets(data.dados);
+    if (targetIds.length > 0) {
+      await sendPushNotification({
+        title: `Novo Comunicado: ${data.titulo}`,
+        body: `Um novo comunicado foi enviado por ${data.autor}.`,
+        targetUserIds: targetIds,
+      }).catch(err => console.error("Push Error:", err))
+    }
 
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {

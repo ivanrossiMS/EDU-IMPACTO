@@ -107,11 +107,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           const json = await res.json();
           if (json && json.length > 0) {
             const newCom = json[0];
-            setNewComunicadosBuffer(prev => {
-              if (prev.some(c => c.id === newCom.id)) return prev;
-              if (comunicadosRef.current.some((c: any) => c.id === newCom.id)) return prev;
-              return [newCom, ...prev];
-            })
+            setLocalComunicados(prev => {
+              if (prev.some((c: any) => c.id === newCom.id)) return prev;
+              const newFeed = [newCom, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+              return newFeed;
+            });
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
           }
         } catch (e) {
@@ -390,48 +390,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <AnimatePresence>
-          {newComunicadosBuffer.length > 0 && !selectedComunicado && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              style={{
-                marginBottom: 24,
-                padding: '16px 24px',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                borderRadius: 20,
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.4)',
-                cursor: 'pointer'
-              }}
-              onClick={() => {
-                setLocalComunicados(prev => {
-                  const toAdd = newComunicadosBuffer.filter(n => !prev.some((p: any) => p.id === n.id));
-                  return [...toAdd, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
-                });
-                setNewComunicadosBuffer([]);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 12, display: 'flex' }}>
-                  <Bell size={20} color="#fff" style={{ animation: 'pulseGlowAmbient 2s infinite' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{newComunicadosBuffer.length === 1 ? 'Novo comunicado disponível' : `${newComunicadosBuffer.length} novos comunicados`}</div>
-                  <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500 }}>Clique para atualizar a lista</div>
-                </div>
-              </div>
-              <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800 }}>
-                Ver agora
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
 
         <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
