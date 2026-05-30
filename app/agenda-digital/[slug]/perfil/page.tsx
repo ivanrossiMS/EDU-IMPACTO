@@ -27,6 +27,33 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
     </div>
   )
 
+  const [isEditingEmail, setIsEditingEmail] = useState(false)
+  const [emailInput, setEmailInput] = useState(aluno.email || '')
+  const [isEditingPhone, setIsEditingPhone] = useState(false)
+  const [phoneInput, setPhoneInput] = useState(aluno.telefone || '')
+  const [isSaving, setIsSaving] = useState(false)
+
+  const handleSaveField = async (field: 'email' | 'telefone', value: string) => {
+    try {
+      setIsSaving(true)
+      const res = await fetch(`/api/alunos/${aluno.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value })
+      })
+      if (!res.ok) throw new Error('Falha ao salvar')
+      
+      setAlunos(alunosList.map(a => a.id === aluno.id ? { ...a, [field]: value } : a))
+      
+      if (field === 'email') setIsEditingEmail(false)
+      if (field === 'telefone') setIsEditingPhone(false)
+    } catch (err) {
+      alert('Erro ao atualizar: ' + (err as Error).message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const responsaveisList = (aluno as any).responsaveis || (aluno as any)._responsaveis || [
     { nome: aluno.responsavel || 'Responsável Financeiro', parentesco: 'Responsável', telefone: aluno.telefone, email: aluno.email, tipo: 'Ambos' }
   ]
@@ -96,9 +123,53 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
                         <CalendarDays size={16} color="#94a3b8" /> {(aluno.dataNascimento || aluno.data_nascimento) ? formatDate(aluno.dataNascimento || aluno.data_nascimento) : 'Não informado'}
                       </div>
                     </div>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', letterSpacing: 0.5, marginBottom: 4 }}>CPF</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{aluno.cpf || 'Não cadastrado'}</div>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                    <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>E-mail do Aluno</div>
+                        {!isEditingEmail && <button onClick={() => { setIsEditingEmail(true); setEmailInput(aluno.email || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
+                      </div>
+                      {isEditingEmail ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input 
+                            value={emailInput} 
+                            onChange={e => setEmailInput(e.target.value)} 
+                            placeholder="aluno@email.com"
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, outline: 'none' }}
+                          />
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => handleSaveField('email', emailInput)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{isSaving ? '...' : 'Salvar'}</button>
+                            <button onClick={() => setIsEditingEmail(false)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', wordBreak: 'break-all' }}>{aluno.email || 'Não cadastrado'}</div>
+                      )}
+                    </div>
+
+                    <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>Telefone / Celular</div>
+                        {!isEditingPhone && <button onClick={() => { setIsEditingPhone(true); setPhoneInput(aluno.telefone || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
+                      </div>
+                      {isEditingPhone ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input 
+                            value={phoneInput} 
+                            onChange={e => setPhoneInput(e.target.value)} 
+                            placeholder="(00) 00000-0000"
+                            style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 14, outline: 'none' }}
+                          />
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => handleSaveField('telefone', phoneInput)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#4f46e5', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>{isSaving ? '...' : 'Salvar'}</button>
+                            <button onClick={() => setIsEditingPhone(false)} disabled={isSaving} style={{ flex: 1, padding: '8px', background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>{aluno.telefone || 'Não cadastrado'}</div>
+                      )}
                     </div>
                   </div>
                   <div>

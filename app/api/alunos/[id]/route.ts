@@ -79,3 +79,33 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params
+    const body = await request.json()
+    
+    const { email, telefone } = body
+
+    const updates: any = {}
+    if (email !== undefined) updates.email = email
+    if (telefone !== undefined) updates.telefone = telefone
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nenhum dado para atualizar' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('alunos')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return NextResponse.json({ data })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
