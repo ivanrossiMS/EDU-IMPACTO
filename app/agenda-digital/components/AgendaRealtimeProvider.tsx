@@ -166,11 +166,16 @@ export function AgendaRealtimeProvider({
       // --- COMUNICADOS ---
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
         const row = payload.new
-        if (row.status !== 'enviado' && row.dados?.status !== 'enviado') return
+        console.log('📡 REALTIME COMUNICADO RECEBIDO:', row.id, row.titulo)
+        if (row.status !== 'enviado' && row.dados?.status !== 'enviado') {
+           console.log('📡 REALTIME IGNORADO: status nao é enviado')
+           return
+        }
         
         const newCom = { ...row, ...(row.dados || {}) }
         
         if (isTargetingAluno(newCom)) {
+          console.log('🎯 TARGETING ALUNO CONFIRMADO! Disparando evento visual...')
           // 1. Emit Event for page.tsx to pick up and auto-append
           window.dispatchEvent(new CustomEvent('ad:comunicado-inserted', { detail: newCom }));
           
