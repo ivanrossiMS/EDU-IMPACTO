@@ -87,9 +87,16 @@ export function AgendaRealtimeProvider({
             }
 
 
-            if (isFamily && responsavelId && isMounted) {
-              await OneSignal.login(String(responsavelId))
-              console.log(`✅ OneSignal logado para o Responsável: ${responsavelId}`)
+            if (isFamily && responsavelId && isMounted && typeof window !== 'undefined' && window.OneSignal) {
+              try {
+                // Em algumas versões do v16 o login pode falhar se o init não terminou 100%
+                if (typeof window.OneSignal.login === 'function') {
+                  await window.OneSignal.login(String(responsavelId))
+                  console.log(`✅ OneSignal logado para o Responsável: ${responsavelId}`)
+                }
+              } catch (loginErr: any) {
+                console.warn('⚠️ OneSignal Login Error (Ignorável):', loginErr?.message || loginErr)
+              }
             }
           } catch (e: any) {
             const msg = e?.message || String(e)
@@ -163,38 +170,16 @@ export function AgendaRealtimeProvider({
           // 1. Emit Event for page.tsx to pick up and auto-append
           window.dispatchEvent(new CustomEvent('ad:comunicado-inserted', { detail: newCom }));
           
-          toast(
-            <div 
-              style={{
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                padding: '16px 20px',
-                borderRadius: 20,
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 16,
-                boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.5)',
-                width: '100%',
-                animation: 'pulseGlow 2s infinite',
-                cursor: 'pointer'
-              }}
-              onClick={() => {
-                router.push(`/agenda-digital/${alunoId}/comunicados`);
-              }}
-            >
-              <div style={{ background: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 14, display: 'flex' }}>
-                <BellRing size={24} color="#fff" style={{ animation: 'bounce 2s infinite' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Novo comunicado!</div>
-                <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{newCom.titulo}</div>
-              </div>
-              <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800 }}>
-                Ver agora
-              </div>
-            </div>,
-            { duration: 6000, position: 'bottom-center' }
-          );
+          // 2. Show Standard Modern Toast (Garante que vai aparecer)
+          toast.success('Novo comunicado recebido!', {
+            description: newCom.titulo,
+            duration: 8000,
+            position: 'top-right',
+            action: {
+              label: 'Ver agora',
+              onClick: () => router.push(`/agenda-digital/${alunoId}/comunicados`)
+            }
+          });
         }
       })
       // --- MOMENTOS ---
@@ -259,7 +244,7 @@ export function AgendaRealtimeProvider({
   return (
     <>
       <Script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" strategy="afterInteractive" />
-      <Toaster position="bottom-center" toastOptions={{ style: { zIndex: 999999, background: 'transparent', border: 'none', boxShadow: 'none' } }} />
+      <Toaster position="top-right" richColors />
       {children}
     </>
   )
