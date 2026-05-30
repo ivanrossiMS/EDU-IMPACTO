@@ -25,7 +25,7 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { forms, setDisparos } = useFormularios()
@@ -126,8 +126,8 @@ export default function ADAdminComunicados() {
     }
     
     if (editComId) {
-      setComunicados(prev => prev.map(c => c.id === editComId ? {
-        ...c,
+      const updatedCom = {
+        ...(comunicados.find(c => c.id === editComId) as ADComunicado),
         titulo: newTitulo,
         conteudo: newConteudo,
         autor: currentUser?.nome || 'Usuário ERP',
@@ -136,11 +136,23 @@ export default function ADAdminComunicados() {
         autorFoto: currentUser?.foto || null,
         anexos: anexos,
         dataAgendamento: dataAgendamento || null,
-        status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
+        status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
-      } : c))
+      }
+
+      fetch('/api/comunicados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCom)
+      }).catch(err => console.error("Erro ao salvar comunicado", err))
+
+      if (setComunicadosLocally) {
+        setComunicadosLocally(prev => prev.map(c => c.id === editComId ? updatedCom : c))
+      } else {
+        setComunicados(prev => prev.map(c => c.id === editComId ? updatedCom : c))
+      }
     } else {
       const newCom: ADComunicado = {
         id: `AD-COM-NEW-${Date.now()}`,
@@ -163,9 +175,20 @@ export default function ADAdminComunicados() {
         anexos: anexos,
         leituras: {},
         ciencias: {},
-        status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado'
+        status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado'
       }
-      setComunicados(prev => [newCom, ...prev])
+
+      fetch('/api/comunicados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCom)
+      }).catch(err => console.error("Erro ao salvar comunicado", err))
+
+      if (setComunicadosLocally) {
+        setComunicadosLocally(prev => [newCom, ...prev])
+      } else {
+        setComunicados(prev => [newCom, ...prev])
+      }
       
       // Auto-register form dispatches if it contains forms
       if (!asRascunho) {
