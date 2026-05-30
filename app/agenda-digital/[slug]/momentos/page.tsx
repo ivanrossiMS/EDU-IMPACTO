@@ -4,23 +4,39 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import { use, useState } from 'react'
+import { use, useState, useEffect } from 'react'
 import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials } from '@/lib/utils'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   // removido const { momentosFeed } = useAgendaDigital()
+  const { aluno: contextAluno } = useSelectedStudent()
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos', []);
+  const [dbTurmas = []] = useSupabaseArray<any>('turmas', [])
+  const { turmas: contextTurmas = [] } = useData()
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
   const { currentUser } = useApp()
-  const aluno = (alunos || []).find(a => a.id === resolvedParams.slug)
-  const { turmas = [] } = useData()
-  const turmaDoAluno = (aluno as any)?.turma || 'Sem Turma'
-  const turmaObj = turmas.find(t => String(t.id) === String(turmaDoAluno) || String(t.codigo) === String(turmaDoAluno))
-  const nomeTurmaDoAluno = turmaObj?.nome || turmaDoAluno
+  const aluno = contextAluno || (alunos || []).find(a => a.id === resolvedParams.slug)
+  
+  const turmas = contextTurmas.length > 0 ? contextTurmas : dbTurmas
+  
+  const nomeTurmaDoAluno = (() => {
+    if (!aluno) return 'Sem Turma'
+    if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
+      return String(aluno.turma_nome).split('-')[0].trim()
+    }
+    const turmaObj = turmas.find(t => 
+      String(t.id) === String(aluno.turma) || 
+      String(t.codigo) === String(aluno.turma) || 
+      String(t.nome) === String(aluno.turma)
+    )
+    const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
+    return String(nomeTurma).split('-')[0].trim()
+  })()
   
   const [momentosFeed, setMomentosFeed] = useSupabaseArray<any>('agenda/momentos', [])
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
@@ -57,19 +73,57 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const meusMomentos = momentosFeed.filter(m => {
     if (m.status !== 'approved') return false // pais só veem aprovados
     if (!m.targetClasses || m.targetClasses.length === 0) return true
-    return m.targetClasses.some((tc: string) => 
-      tc.toLowerCase() === 'todos' || 
-      tc.toLowerCase() === 'toda a escola' || 
-      tc.toLowerCase() === 'toda a escola' || 
-      nomeTurmaDoAluno.toLowerCase().includes(tc.toLowerCase()) ||
-      tc.toLowerCase().includes(nomeTurmaDoAluno.toLowerCase())
-    )
+    
+    const rawTurma = String(aluno?.turma || '').toLowerCase()
+    
+    return m.targetClasses.some((tc: string) => {
+      const tcl = tc.toLowerCase()
+      if (tcl === 'todos' || tcl === 'toda a escola' || tcl === 'toda a escola') return true
+      
+      // Match by class name (resolved)
+      if (nomeTurmaDoAluno.toLowerCase().includes(tcl) || tcl.includes(nomeTurmaDoAluno.toLowerCase())) return true
+      
+      // Match by class ID
+      if (rawTurma && (tcl === rawTurma || tcl.includes(rawTurma) || rawTurma.includes(tcl))) return true
+      
+      return false
+    })
   }).sort((a, b) => {
     // Ordem do mais novo para o mais antigo
     const dateA = new Date((a as any).date || 0).getTime()
     const dateB = new Date((b as any).date || 0).getTime()
     return dateB - dateA
   })
+
+  useEffect(() => {
+    if (!aluno?.id || meusMomentos.length === 0) return;
+    
+    // Check which ones are unread
+    const unreadIds = meusMomentos
+      .filter(m => {
+        const leituras = (m as any).leituras || {};
+        return !leituras[aluno.id];
+      })
+      .map(m => m.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'momento',
+          ids: unreadIds,
+          alunoId: aluno.id
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark momentos as read:', err));
+    }
+  }, [meusMomentos, aluno?.id]);
 
   return (
     <div style={{

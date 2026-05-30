@@ -79,8 +79,20 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   // Verificação de acesso via useEffect — NUNCA durante render síncrono
   // Isso elimina o flash de "Acesso Negado" para usuários com permissão
   React.useEffect(() => {
-    // Rotas que não precisam de verificação
-    if (!pathname?.includes('/agenda-digital/colaborador') || !hydrated || !currentUser || isFamily) {
+    if (!hydrated || !currentUser) return
+
+    // Alunos/familiares só têm acesso a rotas comuns da agenda. Bloqueia se for /colaborador ou /admin.
+    if (isFamily) {
+      if (pathname?.includes('/agenda-digital/colaborador') || pathname?.includes('/agenda-digital/admin')) {
+        setAccessState('denied')
+        return
+      }
+      setAccessState('allowed')
+      return
+    }
+
+    // Rotas que não precisam de verificação para colaboradores/admins
+    if (!pathname?.includes('/agenda-digital/colaborador') && !pathname?.includes('/agenda-digital/admin')) {
       setAccessState('allowed')
       return
     }

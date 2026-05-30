@@ -51,7 +51,9 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
       })
       if (!res.ok) throw new Error('Falha ao salvar')
       
-      setAlunos(alunosList.map(a => a.id === aluno.id ? { ...a, [field]: value } : a))
+      // Atualiza apenas localmente para a UI refletir a mudança,
+      // sem chamar setAlunos (o que dispararia um POST com 10MB de dados da coleção inteira).
+      aluno[field] = value
       
       if (field === 'email') setIsEditingEmail(false)
       if (field === 'telefone') setIsEditingPhone(false)

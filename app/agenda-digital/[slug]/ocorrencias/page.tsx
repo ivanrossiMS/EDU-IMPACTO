@@ -1,21 +1,24 @@
 'use client'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApiQuery } from '@/hooks/useApi'
-import React, { useMemo, useState } from 'react'
-import { AlertTriangle, AlertCircle, CheckCircle, Shield, Heart, School, Calendar, User, Clock, FileText, ImageIcon, Check, Loader2, Info } from 'lucide-react'
-import { EmptyStateCard } from '../../components/EmptyStateCard'
+import React, { useMemo, useState, useEffect } from 'react'
+import { AlertTriangle, AlertCircle, CheckCircle, Shield, Heart, School, Calendar, User, Clock, FileText, Check, Loader2, Info, ChevronDown } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { useData } from '@/lib/dataContext'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital()
   const { currentUser } = useApp()
   const [signingIds, setSigningIds] = useState<Record<string, boolean>>({})
+  const [viewMode, setViewMode] = useState<'timeline' | 'list'>('timeline')
+  const [selectedYear, setSelectedYear] = useState<string>('')
 
   const { aluno } = useSelectedStudent()
+  const { turmas = [] } = useData()
   
-  // Consumindo dados via API usando React Query (mesma da página Admin para garantir os dados mapeados 'dados')
+  // Consumindo dados via API usando React Query
   const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : ''
   const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint, undefined, { enabled: !!endpoint })
   const ocorrencias = rawOcorrencias || []
@@ -24,11 +27,15 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   if (adConfig?.permissoes?.visualizarOcorrencias === false) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <EmptyStateCard 
-          title="Acesso Restrito"
-          description="A visualização de histórico comportamental e ocorrências está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica."
-          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
-        />
+        <div style={{ background: '#fff', padding: 40, borderRadius: 32, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.03)', maxWidth: 500 }}>
+          <div style={{ width: 80, height: 80, borderRadius: 40, background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+            <AlertCircle size={40} />
+          </div>
+          <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Acesso Restrito</h3>
+          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
+            A visualização de histórico comportamental e ocorrências está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica.
+          </p>
+        </div>
       </div>
     )
   }
@@ -40,44 +47,84 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
       .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
   }, [ocorrencias, aluno?.id])
 
-  // Agrupa os itens por Ano Letivo e Turma
-  const groupedOcorrencias = useMemo(() => {
-    const groups: Record<string, { key: string; turma: string; ano: string; items: typeof ocorrenciasDoAluno }> = {}
+  // Extrair anos disponíveis dinamicamente
+  const anosDisponiveis = useMemo(() => {
+    const years = ocorrenciasDoAluno.map(o => o.ano || (o.data ? o.data.substring(0, 4) : new Date().getFullYear().toString()))
+    const uniqueYears = Array.from(new Set(years)).sort((a, b) => b.localeCompare(a))
+    if (uniqueYears.length === 0) {
+      uniqueYears.push(new Date().getFullYear().toString())
+    }
+    return uniqueYears
+  }, [ocorrenciasDoAluno])
 
-    ocorrenciasDoAluno.forEach(o => {
+  // Inicializa o ano selecionado
+  useEffect(() => {
+    if (anosDisponiveis.length > 0 && !selectedYear) {
+      setSelectedYear(anosDisponiveis[0])
+    }
+  }, [anosDisponiveis, selectedYear])
+
+  // Filtra as ocorrências pelo ano selecionado
+  const ocorrenciasFiltradas = useMemo(() => {
+    if (!selectedYear) return []
+    return ocorrenciasDoAluno.filter(o => {
       const ano = o.ano || (o.data ? o.data.substring(0, 4) : new Date().getFullYear().toString())
-      const turmaNome = o.turma || aluno?.turma || 'Sem Turma'
-      const key = `${ano}_${turmaNome}`
-
-      if (!groups[key]) {
-        groups[key] = {
-          key,
-          turma: turmaNome,
-          ano,
-          items: []
-        }
-      }
-      groups[key].items.push(o)
+      return ano === selectedYear
     })
+  }, [ocorrenciasDoAluno, selectedYear])
 
-    // Ano em ordem decrescente, e Turma em alfabética
-    return Object.values(groups).sort((a, b) => {
-      if (b.ano !== a.ano) return b.ano.localeCompare(a.ano)
-      return a.turma.localeCompare(b.turma)
-    })
-  }, [ocorrenciasDoAluno, aluno?.turma])
+  // Resolve a turma do aluno com nome e turno correspondente
+  const turmaDoAluno = useMemo(() => {
+    if (!aluno) return 'SEM TURMA'
+    const rawTurma = aluno.turma
+    const turmaObj = turmas.find(t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma) || String(t.nome) === String(rawTurma))
+    
+    const nome = turmaObj?.nome || aluno.turma_nome || rawTurma || 'Sem Turma'
+    const turno = turmaObj?.turno || aluno.turno || 'Vespertino'
+    
+    return `${nome} - ${turno}`.toUpperCase()
+  }, [aluno, turmas])
 
-  // Estatísticas para o cabeçalho
+  // Estatísticas para os cards superiores
   const stats = useMemo(() => {
-    const totais = ocorrenciasDoAluno.length
-    const pendentes = ocorrenciasDoAluno.filter(o => {
+    const total = ocorrenciasFiltradas.length
+    const pendentes = ocorrenciasFiltradas.filter(o => {
       const lowerTipo = (o.tipo || '').toLowerCase()
       const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
       return !o.ciencia_responsavel && !isElogio
     }).length
-    const graves = ocorrenciasDoAluno.filter(o => o.gravidade === 'grave').length
-    return { pendentes, totais, graves }
-  }, [ocorrenciasDoAluno])
+    return { total, pendentes }
+  }, [ocorrenciasFiltradas])
+
+  // Marca como lido automaticamente as ocorrências não lidas
+  useEffect(() => {
+    if (!aluno?.id || ocorrenciasFiltradas.length === 0) return;
+    
+    const unreadIds = ocorrenciasFiltradas
+      .filter(o => {
+        const leituras = (o as any).dados?.leituras || (o as any).leituras || {};
+        return !leituras[aluno.id];
+      })
+      .map(o => o.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'ocorrencia',
+          ids: unreadIds,
+          alunoId: aluno.id
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark ocorrencias as read:', err));
+    }
+  }, [ocorrenciasFiltradas, aluno?.id]);
 
   const handleAssinar = async (id: string) => {
     const oc = ocorrencias.find(o => o.id === id)
@@ -116,240 +163,679 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
     }
   }
 
+  // Formatador de data e hora para exibição completa
+  const formatDateTime = (dateStr: string, fallbackDate: string) => {
+    try {
+      if (!dateStr) {
+        if (fallbackDate) {
+          const parts = fallbackDate.split('-')
+          if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+        }
+        return ''
+      }
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) {
+        if (fallbackDate) {
+          const parts = fallbackDate.split('-')
+          if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
+        }
+        return ''
+      }
+      const day = String(d.getDate()).padStart(2, '0')
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const year = d.getFullYear()
+      const hours = String(d.getHours()).padStart(2, '0')
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      return `${day}/${month}/${year} às ${hours}:${minutes}`
+    } catch (e) {
+      return ''
+    }
+  }
+
   return (
-    <div style={{ paddingBottom: 60, minHeight: '100vh', background: '#f8fafc' }}>
+    <div style={{ padding: '24px 20px 60px 20px', minHeight: '100vh', background: '#f8fafc', fontFamily: 'Outfit, Inter, sans-serif' }}>
       
-      {/* Dynamic Header Premium */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        style={{ 
-          padding: '32px 24px', 
-          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', 
-          borderRadius: '0 0 32px 32px', 
-          marginBottom: 24, 
-          boxShadow: '0 10px 30px rgba(15, 23, 42, 0.15)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Abstract Background Design */}
-        <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 70%)' }} />
-        
-        <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 10 }}>
-          <Shield size={26} style={{ color: '#38bdf8' }} />
-          Histórico Disciplinar
-        </h2>
-        
-        {!isLoading && aluno && ocorrenciasDoAluno.length > 0 && (
-          <div style={{ display: 'flex', gap: 12, marginTop: 24, position: 'relative', zIndex: 10 }}>
-            <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)' }}>
-              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, marginBottom: 4 }}>Total</div>
-              <div style={{ fontSize: 22, color: '#fff', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{stats.totais}</div>
-            </div>
+      {/* 1. TOP CARDS GRID */}
+      <div className="stats-grid">
+        {/* Left Card: Total Ocorrências */}
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          style={{ 
+            background: 'linear-gradient(135deg, #ffffff 0%, #f5f8ff 100%)', 
+            borderRadius: 24, 
+            padding: '24px 28px', 
+            border: '1px solid #eef2ff',
+            boxShadow: '0 10px 30px rgba(79, 70, 229, 0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20
+          }}
+        >
+          <div style={{
+            width: 76,
+            height: 76,
+            borderRadius: 20,
+            background: '#eff6ff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>Total de ocorrências</div>
+            <div style={{ fontSize: 38, color: '#1e40af', fontWeight: 800, fontFamily: 'Outfit, sans-serif', lineHeight: 1.1 }}>{stats.total}</div>
+            <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>registradas</div>
+          </div>
+        </motion.div>
+
+        {/* Right Card: Situação Geral */}
+        <motion.div 
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          style={{ 
+            background: stats.pendentes > 0 
+              ? 'linear-gradient(135deg, #ffffff 0%, #fffdf5 100%)'
+              : 'linear-gradient(135deg, #ffffff 0%, #fcfefe 100%)', 
+            borderRadius: 24, 
+            padding: '24px 28px', 
+            border: stats.pendentes > 0 ? '1px solid #fef3c7' : '1px solid #e6f4ea',
+            boxShadow: stats.pendentes > 0 
+              ? '0 10px 30px rgba(245, 158, 11, 0.02)'
+              : '0 10px 30px rgba(16, 185, 129, 0.02)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20, zIndex: 2 }}>
             {stats.pendentes > 0 ? (
-              <div style={{ flex: 1, background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(245, 158, 11, 0.3)', backdropFilter: 'blur(10px)' }}>
-                <div style={{ fontSize: 13, color: '#fcd34d', fontWeight: 600, marginBottom: 4 }}>Pendentes</div>
-                <div style={{ fontSize: 22, color: '#fbbf24', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {stats.pendentes}
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fbbf24', boxShadow: '0 0 12px #fbbf24', animation: 'pulse 2s infinite' }} />
-                </div>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: '#fffbeb',
+                border: '1.5px solid #fcd34d',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={24} color="#d97706" />
               </div>
             ) : (
-              <div style={{ flex: 1, background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)', padding: '14px 16px', borderRadius: 20, border: '1px solid rgba(16, 185, 129, 0.3)', backdropFilter: 'blur(10px)' }}>
-                <div style={{ fontSize: 13, color: '#6ee7b7', fontWeight: 600, marginBottom: 4 }}>Tudo certo</div>
-                <div style={{ fontSize: 22, color: '#34d399', fontWeight: 800, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Check size={20} strokeWidth={3} />
-                </div>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: '#e6f4ea',
+                border: '1.5px solid #a7f3d0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Check size={26} color="#059669" strokeWidth={3} />
               </div>
             )}
-          </div>
-        )}
-      </motion.div>
 
-      <div style={{ padding: '0 20px' }}>
-        {isLoading || !aluno ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {[1, 2, 3].map(idx => (
-               <div key={idx} style={{ padding: 24, display: 'flex', gap: 18, background: '#fff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 24, background: '#f1f5f9', animation: 'pulse 1.5s infinite', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                     <div style={{ width: '40%', height: 20, background: '#f1f5f9', borderRadius: 6, marginBottom: 10, animation: 'pulse 1.5s infinite' }} />
-                     <div style={{ width: '80%', height: 14, background: '#f1f5f9', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s infinite' }} />
-                     <div style={{ width: '60%', height: 14, background: '#f1f5f9', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
-                  </div>
-               </div>
-            ))}
-          </div>
-        ) : groupedOcorrencias.length === 0 ? (
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
-            <div style={{ background: '#fff', padding: 40, borderRadius: 32, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.03)' }}>
-               <div style={{ width: 80, height: 80, borderRadius: 40, background: '#f0fdf4', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-                  <Heart size={40} />
-               </div>
-               <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Sem Ocorrências!</h3>
-               <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
-                 Que excelente notícia! O aluno não possui nenhum registro disciplinar ou comportamental.
-               </p>
+            <div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>Situação geral</div>
+              <div style={{ 
+                fontSize: 26, 
+                color: stats.pendentes > 0 ? '#d97706' : '#059669', 
+                fontWeight: 800, 
+                fontFamily: 'Outfit, sans-serif', 
+                margin: '2px 0' 
+              }}>
+                {stats.pendentes > 0 ? 'Atenção' : 'Tudo certo'}
+              </div>
+              <div style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                {stats.pendentes > 0 
+                  ? `Você possui ${stats.pendentes} ocorrência(s) pendente(s) de ciência.`
+                  : 'Não há pendências disciplinares no momento.'}
+              </div>
             </div>
-          </motion.div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-            <AnimatePresence>
-              {groupedOcorrencias.map((group, groupIdx) => (
-                <motion.div 
-                  key={group.key} 
-                  initial={{ opacity: 0, y: 20 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  transition={{ duration: 0.5, delay: groupIdx * 0.1 }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
-                >
-                  {/* Group Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginLeft: 8 }}>
-                    <span style={{ background: '#2563eb', color: '#fff', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 12, letterSpacing: 0.5 }}>
-                      {group.ano}
-                    </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 800, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
-                      <School size={16} style={{ color: '#64748b' }} />
-                      {group.turma}
-                    </div>
-                  </div>
+          </div>
 
-                  {/* Lista de Cards */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {group.items.map((o, idx) => {
-                      const lowerTipo = (o.tipo || '').toLowerCase()
-                      const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
-                      const isAdvertencia = lowerTipo.includes('advertencia') || lowerTipo.includes('advertência') || o.gravidade === 'grave'
-                      
-                      const IconBase = isElogio ? Heart : (isAdvertencia ? AlertTriangle : AlertCircle)
-                      const colorHex = isElogio ? '#10b981' : (isAdvertencia ? '#ef4444' : '#f59e0b')
-                      const gravText = o.gravidade ? (o.gravidade === 'media' ? 'Média' : o.gravidade === 'grave' ? 'Grave' : 'Leve') : 'Comportamental'
+          {/* SVG Shield Decoration (Right side) */}
+          <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 1, pointerEvents: 'none' }}>
+            {stats.pendentes > 0 ? (
+              <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.85 }}>
+                <defs>
+                  <linearGradient id="shieldWarnGrad" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.15" />
+                    <stop offset="100%" stopColor="#D97706" stopOpacity="0.02" />
+                  </linearGradient>
+                  <linearGradient id="borderWarnGrad" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#F59E0B" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#D97706" stopOpacity="0.04" />
+                  </linearGradient>
+                </defs>
+                <circle cx="95" cy="40" r="4" fill="#F59E0B" opacity="0.3" />
+                <circle cx="25" cy="85" r="5" fill="#F59E0B" opacity="0.12" />
+                <circle cx="35" cy="25" r="3" fill="#F59E0B" opacity="0.18" />
+                <path d="M60 20C75 20 85 24 95 32C95 62 82 85 60 98C38 85 25 62 25 32C35 24 45 20 60 20Z" fill="url(#shieldWarnGrad)" stroke="url(#borderWarnGrad)" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M60 45V65" stroke="#F59E0B" strokeWidth="5.5" strokeLinecap="round" opacity="0.8" />
+                <circle cx="60" cy="76" r="3" fill="#F59E0B" opacity="0.8" />
+              </svg>
+            ) : (
+              <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ opacity: 0.85 }}>
+                <defs>
+                  <linearGradient id="shieldGrad" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.12" />
+                    <stop offset="100%" stopColor="#059669" stopOpacity="0.02" />
+                  </linearGradient>
+                  <linearGradient id="borderGrad" x1="20" y1="20" x2="100" y2="100" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#059669" stopOpacity="0.04" />
+                  </linearGradient>
+                </defs>
+                <circle cx="95" cy="40" r="4" fill="#34D399" opacity="0.3" />
+                <circle cx="25" cy="85" r="5" fill="#34D399" opacity="0.12" />
+                <circle cx="35" cy="25" r="3" fill="#34D399" opacity="0.18" />
+                <path d="M60 20C75 20 85 24 95 32C95 62 82 85 60 98C38 85 25 62 25 32C35 24 45 20 60 20Z" fill="url(#shieldGrad)" stroke="url(#borderGrad)" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M48 58L56 66L72 50" stroke="#10B981" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.85" />
+              </svg>
+            )}
+          </div>
+        </motion.div>
+      </div>
 
-                      // Extrair e limpar a assinatura do log no backend
-                      const lines = (o.descricao || '').split('\n')
-                      let lancado = ''
-                      let editado = ''
-                      let confirmado = ''
-                      const descLines: string[] = []
-
-                      lines.forEach((line: string) => {
-                        if (line.startsWith('[Lançado por:')) {
-                          lancado = line.replace('[Lançado por: ', '').replace(']', '')
-                        } else if (line.startsWith('[Editado por:')) {
-                          editado = line.replace('[Editado por: ', '').replace(']', '')
-                        } else if (line.startsWith('[Confirmado por:')) {
-                          confirmado = line.replace('[Confirmado por: ', '').replace(']', '')
-                        } else {
-                          descLines.push(line)
-                        }
-                      })
-                      const cleanedDesc = descLines.join('\n').trim()
-
-                      return (
-                        <motion.div 
-                          key={o.id} 
-                          initial={{ opacity: 0, scale: 0.98 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.4, delay: (groupIdx * 0.1) + (idx * 0.05) }}
-                          style={{ 
-                            background: '#fff', 
-                            borderRadius: 16, 
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)', 
-                            border: '1px solid #f1f5f9', 
-                            overflow: 'hidden',
-                            position: 'relative'
-                          }}
-                        >
-                          <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 3, background: colorHex }} />
-                          
-                          <div style={{ padding: '12px 12px 12px 16px' }}>
-                            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                              {/* Ícone */}
-                              <div style={{ width: 36, height: 36, borderRadius: 10, background: `${colorHex}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2 }}>
-                                <IconBase size={18} color={colorHex} />
-                              </div>
-                              
-                              {/* Conteúdo Principal */}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                                  <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: '#0f172a', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {o.tipo}
-                                  </h3>
-                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
-                                    {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}
-                                  </span>
-                                </div>
-                                
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                                  {!isElogio && o.gravidade && (
-                                    <span style={{ fontSize: 9, background: `${colorHex}15`, color: colorHex, padding: '2px 6px', borderRadius: 4, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
-                                      {gravText}
-                                    </span>
-                                  )}
-                                  <div style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    <User size={10} />
-                                    {lancado || o.responsavel || 'Coordenação'}
-                                  </div>
-                                </div>
-
-                                <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                  {cleanedDesc || o.descricao}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Rodapé Dinâmico (Anexo & Ciência) */}
-                            {(!isElogio || o.anexoUrl) && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
-                                
-                                {o.anexoUrl ? (
-                                  <a href={o.anexoUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#2563eb', textDecoration: 'none', fontWeight: 700, background: '#eff6ff', padding: '6px 10px', borderRadius: 6 }}>
-                                    <FileText size={12} /> Ver Anexo
-                                  </a>
-                                ) : <div />}
-
-                                {!isElogio && (
-                                  !o.ciencia_responsavel ? (
-                                    <button 
-                                      onClick={() => handleAssinar(o.id)} 
-                                      disabled={!!signingIds[o.id]}
-                                      style={{ 
-                                        background: '#f59e0b', border: 'none', color: '#fff', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, display: 'flex', gap: 6, alignItems: 'center', cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', opacity: signingIds[o.id] ? 0.8 : 1, boxShadow: '0 2px 8px rgba(245, 158, 11, 0.2)'
-                                      }}
-                                    >
-                                      {signingIds[o.id] ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Info size={12} />}
-                                      Assinar Ciência
-                                    </button>
-                                  ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#059669', fontWeight: 700, background: '#ecfdf5', padding: '6px 10px', borderRadius: 6, border: '1px solid #a7f3d0' }}>
-                                      <Check size={12} strokeWidth={3} /> Ciência Assinada
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )
-                    })}
-                  </div>
-                </motion.div>
+      {/* 2. FILTER & VIEW SELECTOR ROW */}
+      <div className="filters-row">
+        <div className="filters-left">
+          {/* Calendar Year Pill Dropdown */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <select 
+              value={selectedYear} 
+              onChange={(e) => setSelectedYear(e.target.value)}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: 'pointer',
+                zIndex: 2
+              }}
+            >
+              {anosDisponiveis.map(year => (
+                <option key={year} value={year}>{year}</option>
               ))}
+            </select>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 14,
+              padding: '8px 16px',
+              fontSize: 14,
+              fontWeight: 700,
+              color: '#1e293b',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.01)'
+            }}>
+              <Calendar size={15} style={{ color: '#64748b' }} />
+              <span>{selectedYear}</span>
+              <ChevronDown size={14} style={{ color: '#64748b' }} />
+            </div>
+          </div>
+
+          {/* Class Pill (Turma) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '8px 16px',
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#1e293b',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.01)'
+          }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span>{turmaDoAluno}</span>
+          </div>
+        </div>
+
+        {/* View Switcher Segmented Control */}
+        <div className="segmented-control">
+          <button 
+            onClick={() => setViewMode('timeline')}
+            className={`segment-btn ${viewMode === 'timeline' ? 'active' : 'inactive'}`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            Timeline
+          </button>
+          <button 
+            onClick={() => setViewMode('list')}
+            className={`segment-btn ${viewMode === 'list' ? 'active' : 'inactive'}`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+            Lista
+          </button>
+        </div>
+      </div>
+
+      {/* 3. MAIN CONTENT: OCCURRENCES LIST */}
+      {isLoading || !aluno ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {[1, 2, 3].map(idx => (
+             <div key={idx} style={{ padding: 24, display: 'flex', gap: 18, background: '#fff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.04)', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: 64, height: 64, borderRadius: 18, background: '#f1f5f9', animation: 'pulse-skeleton 1.5s infinite', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                   <div style={{ width: '40%', height: 20, background: '#f1f5f9', borderRadius: 6, marginBottom: 10, animation: 'pulse-skeleton 1.5s infinite' }} />
+                   <div style={{ width: '80%', height: 14, background: '#f1f5f9', borderRadius: 6, marginBottom: 8, animation: 'pulse-skeleton 1.5s infinite' }} />
+                   <div style={{ width: '60%', height: 14, background: '#f1f5f9', borderRadius: 6, animation: 'pulse-skeleton 1.5s infinite' }} />
+                </div>
+             </div>
+          ))}
+        </div>
+      ) : ocorrenciasFiltradas.length === 0 ? (
+        <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+          <div style={{ background: '#fff', padding: '56px 40px', borderRadius: 28, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.01)' }}>
+             <div style={{ width: 80, height: 80, borderRadius: 40, background: '#f0fdf4', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
+                <Heart size={40} />
+             </div>
+             <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: 'Outfit, sans-serif' }}>Sem Ocorrências!</h3>
+             <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 450, marginInline: 'auto' }}>
+               Que excelente notícia! O aluno não possui nenhum registro disciplinar ou comportamental registrado para o ano de {selectedYear}.
+             </p>
+          </div>
+        </motion.div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          {/* Continuous vertical line for timeline */}
+          {viewMode === 'timeline' && ocorrenciasFiltradas.length > 1 && (
+            <div className="timeline-line" />
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <AnimatePresence>
+              {ocorrenciasFiltradas.map((o, idx) => {
+                const lowerTipo = (o.tipo || '').toLowerCase()
+                const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
+                const isAdvertencia = lowerTipo.includes('advertencia') || lowerTipo.includes('advertência') || o.gravidade === 'grave'
+                
+                const gravColor = isElogio ? '#10b981' : (isAdvertencia ? '#dc2626' : '#d97706')
+                const gravBg = isElogio ? '#ecfdf5' : (isAdvertencia ? '#fef2f2' : '#fef3c7')
+                const gravText = o.gravidade ? (o.gravidade === 'media' ? 'Média' : o.gravidade === 'grave' ? 'Grave' : 'Leve') : 'Leve'
+
+                // Parse logged by meta strings
+                const lines = (o.descricao || '').split('\n')
+                let lancado = ''
+                const descLines: string[] = []
+
+                lines.forEach((line: string) => {
+                  if (line.startsWith('[Lançado por:')) {
+                    lancado = line.replace('[Lançado por: ', '').replace(']', '')
+                  } else if (!line.startsWith('[Editado por:') && !line.startsWith('[Confirmado por:')) {
+                    descLines.push(line)
+                  }
+                })
+                const cleanedDesc = descLines.join('\n').trim()
+
+                return (
+                  <motion.div 
+                    key={o.id} 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, delay: idx * 0.05 }}
+                    style={{ display: 'flex', alignItems: 'stretch', gap: 0, position: 'relative' }}
+                  >
+                    {/* Timeline bullet dot */}
+                    {viewMode === 'timeline' && (
+                      <div className="timeline-dot-col">
+                        <div 
+                          className="timeline-dot"
+                          style={{ borderColor: isAdvertencia ? '#fca5a5' : '#fcd34d' }}
+                        >
+                          <div 
+                            className="timeline-dot-inner"
+                            style={{ background: isAdvertencia ? '#ef4444' : '#f59e0b' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Occurrence Card */}
+                    <div className="occurrence-card" style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                        {/* Icon Block */}
+                        {isAdvertencia ? (
+                          <div style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: 18,
+                            background: '#fef2f2',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <AlertTriangle size={28} color="#dc2626" />
+                          </div>
+                        ) : (
+                          <div style={{
+                            width: 64,
+                            height: 64,
+                            borderRadius: 18,
+                            background: '#fff7ed',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <AlertCircle size={28} color="#f97316" />
+                          </div>
+                        )}
+
+                        {/* Occurrence Content */}
+                        <div style={{ flex: 1, minWidth: 260 }}>
+                          <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                            {o.tipo}
+                          </h3>
+
+                          {/* Metadata row with badge and registered by info */}
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                            {!isElogio && (
+                              <span style={{ 
+                                fontSize: 11, 
+                                background: gravBg, 
+                                color: gravColor, 
+                                padding: '2px 8px', 
+                                borderRadius: 6, 
+                                fontWeight: 700, 
+                                textTransform: 'uppercase', 
+                                letterSpacing: 0.5 
+                              }}>
+                                {gravText}
+                              </span>
+                            )}
+                            <span style={{ color: '#94a3b8', fontSize: 12 }}>•</span>
+                            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                              Registrado por <span style={{ color: '#475569', fontWeight: 600 }}>{lancado || o.responsavel || 'Coordenação'}</span>
+                            </div>
+                            <span style={{ color: '#94a3b8', fontSize: 12 }}>|</span>
+                            <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
+                              {formatDateTime(o.created_at, o.data)}
+                            </div>
+                          </div>
+
+                          <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                            {cleanedDesc || o.descricao}
+                          </p>
+                        </div>
+
+                        {/* Date badge on top right */}
+                        <div style={{
+                          background: '#f1f5f9',
+                          color: '#475569',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          alignSelf: 'flex-start',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.01)'
+                        }}>
+                          {o.data ? new Date(o.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : ''}
+                        </div>
+                      </div>
+
+                      {/* Footer Actions (Ver anexo & Ciência Assinada) */}
+                      {(!isElogio || o.anexoUrl) && (
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          marginTop: 20, 
+                          paddingTop: 16, 
+                          borderTop: '1px solid #f1f5f9' 
+                        }}>
+                          {o.anexoUrl ? (
+                            <a 
+                              href={o.anexoUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 6, 
+                                fontSize: 13, 
+                                color: '#2563eb', 
+                                textDecoration: 'none', 
+                                fontWeight: 700, 
+                                background: '#eff6ff', 
+                                padding: '8px 14px', 
+                                borderRadius: 10,
+                                transition: 'all 0.2s'
+                              }}
+                              className="btn-attachment"
+                            >
+                              <FileText size={14} />
+                              Ver anexo
+                            </a>
+                          ) : <div />}
+
+                          {!isElogio && (
+                            !o.ciencia_responsavel ? (
+                              <button 
+                                onClick={() => handleAssinar(o.id)} 
+                                disabled={!!signingIds[o.id]}
+                                style={{ 
+                                  background: '#f59e0b', 
+                                  border: 'none', 
+                                  color: '#fff', 
+                                  fontSize: 13, 
+                                  fontWeight: 700, 
+                                  padding: '8px 16px', 
+                                  borderRadius: 10, 
+                                  display: 'flex', 
+                                  gap: 6, 
+                                  alignItems: 'center', 
+                                  cursor: signingIds[o.id] ? 'not-allowed' : 'pointer', 
+                                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.15)',
+                                  transition: 'all 0.2s'
+                                }}
+                                className="btn-sign"
+                              >
+                                {signingIds[o.id] ? (
+                                  <Loader2 size={14} className="spin-animation" />
+                                ) : (
+                                  <Info size={14} />
+                                )}
+                                Assinar Ciência
+                              </button>
+                            ) : (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 6, 
+                                fontSize: 13, 
+                                color: '#059669', 
+                                fontWeight: 700, 
+                                background: '#ecfdf5', 
+                                padding: '8px 16px', 
+                                borderRadius: 10, 
+                                border: '1.5px solid #a7f3d0' 
+                              }}>
+                                <Check size={14} strokeWidth={3.5} />
+                                Ciência Assinada
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )
+              })}
             </AnimatePresence>
           </div>
-        )}
-      </div>
-      
-      <style jsx global>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        </div>
+      )}
+
+      {/* Global CSS Styles */}
+      <style>{`
+        .stats-grid {
+          display: grid;
+          grid-template-columns: 1fr 2.3fr;
+          gap: 24px;
+          margin-bottom: 32px;
         }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(0.95); }
+        @media (max-width: 900px) {
+          .stats-grid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+          }
+        }
+        .filters-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 28px;
+          flex-wrap: wrap;
+          gap: 16px;
+        }
+        .filters-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .segmented-control {
+          display: flex;
+          background: #f1f5f9;
+          padding: 4px;
+          border-radius: 14px;
+        }
+        .segment-btn {
+          border: none;
+          outline: none;
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 600;
+          padding: 8px 16px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.2s ease;
+        }
+        .segment-btn.active {
+          background: #ffffff;
+          color: #2563eb;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+          font-weight: 700;
+        }
+        .segment-btn.inactive {
+          background: transparent;
+          color: #64748b;
+        }
+        .segment-btn.inactive:hover {
+          color: #334155;
+        }
+        .timeline-line {
+          position: absolute;
+          top: 52px;
+          bottom: 52px;
+          left: 28px;
+          width: 2px;
+          background: linear-gradient(to bottom, #f59e0b 20%, #ef4444 80%);
+          z-index: 1;
+        }
+        .timeline-dot-col {
+          position: absolute;
+          left: 0;
+          width: 58px;
+          top: 0;
+          bottom: 0;
+          display: flex;
+          justify-content: center;
+          pointer-events: none;
+        }
+        .timeline-dot {
+          position: absolute;
+          top: 42px;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #ffffff;
+          border-width: 1.5px;
+          border-style: solid;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 2;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .timeline-dot-inner {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+        }
+        .occurrence-card {
+          background: #ffffff;
+          border: 1px solid #f1f5f9;
+          border-radius: 20px;
+          padding: 24px;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.008);
+        }
+        .occurrence-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.025);
+        }
+        .btn-attachment:hover {
+          background: #dbeafe !important;
+        }
+        .btn-sign:hover {
+          background: #d97706 !important;
+          transform: translateY(-1px);
+        }
+        .spin-animation {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse-skeleton {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
       `}</style>
     </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,6 +41,11 @@ export async function GET(request: Request) {
       
     if (aluno_id) {
         query = query.eq('fin_eventos.aluno_id', aluno_id)
+    }
+    
+    const accessStartDate = await getLoggedUserAccessStartDate()
+    if (accessStartDate) {
+        query = query.gte('criado_em', accessStartDate.toISOString())
     }
     
     if (status) {

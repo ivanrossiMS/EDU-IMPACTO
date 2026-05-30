@@ -1,9 +1,7 @@
-// app/api/titulos/route.ts
-// 🔥 Refatoração Enterprise (Ciclo 1) - Zod + Supabase Cookie Auth + Paginator
-
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { APIListQuerySchema, ZodTituloFinanceiro } from '@/lib/server/zodSchemas'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +23,11 @@ export async function GET(request: Request) {
     const supabase = await createProtectedClient()
 
     let query = supabase.from('titulos').select('*', { count: 'exact' })
+
+    const accessStartDate = await getLoggedUserAccessStartDate()
+    if (accessStartDate) {
+      query = query.gte('created_at', accessStartDate.toISOString())
+    }
 
     if (status && status !== 'todos') query = query.eq('status', status)
     if (aluno) {

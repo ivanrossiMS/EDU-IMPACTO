@@ -79,6 +79,7 @@ export interface ADConfig {
 interface ADContextState {
   comunicados: ADComunicado[]
   setComunicados: (updater: (prev: ADComunicado[]) => ADComunicado[]) => void
+  setComunicadosLocally?: (updater: (prev: ADComunicado[]) => ADComunicado[]) => void
   chatsList: ADChat[]
   setChatsList: React.Dispatch<React.SetStateAction<ADChat[]>>
   chatGroups: ADChatGroup[]
@@ -100,6 +101,7 @@ interface ADContextState {
 const AgendaDigitalContext = createContext<ADContextState>({
   comunicados: [],
   setComunicados: () => {},
+  setComunicadosLocally: () => {},
   chatsList: [],
   setChatsList: () => {},
   chatGroups: [],
@@ -136,7 +138,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   // Se for família, não faz fetch global massivo (Páginas buscam localmente)
   const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
 
-  const [comunicados, setComunicadosState] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
+  const [comunicados, setComunicadosState, { setLocal: setLocalComunicadosState }] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
   const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
   const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], familyOptions)
   const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
@@ -225,6 +227,12 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
     setComunicadosState(updater)
   }, [])
 
+  const setComunicadosLocally = useCallback((updater: (prev: ADComunicado[]) => ADComunicado[]) => {
+    if (setLocalComunicadosState) {
+      setLocalComunicadosState(updater)
+    }
+  }, [setLocalComunicadosState])
+
   const [modalState, setModalState] = useState<{ isOpen: boolean, type: 'alert' | 'confirm', title: string, message: string, onConfirm?: () => void }>({
     isOpen: false,
     type: 'alert',
@@ -244,6 +252,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
     <AgendaDigitalContext.Provider value={{
       comunicados: comunicados || [],
       setComunicados,
+      setComunicadosLocally,
       chatsList: chatsList || [],
       setChatsList,
       chatGroups: chatGroups || [],

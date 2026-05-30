@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +9,14 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const q = searchParams.get('q')
 
-  let query = supabase.from('comunicados').select('*').order('data', { ascending: false })
+  let query = supabase.from('comunicados').select('*')
+  
+  const accessStartDate = await getLoggedUserAccessStartDate();
+  if (accessStartDate) {
+    query = query.gte('data', accessStartDate.toISOString());
+  }
+
+  query = query.order('data', { ascending: false })
   if (q) query = query.or(`titulo.ilike.%${q}%,autor.ilike.%${q}%`)
 
   const { data, error } = await query

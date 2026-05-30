@@ -1,15 +1,8 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
-import { ALL_NAV_GROUPS } from './Sidebar'
 import { useEffect, useState } from 'react'
-
-const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
-
-// Pages that are always accessible (never blocked)
-const ALWAYS_ACCESSIBLE = ['/dashboard', '/alertas', '/tarefas', '/calendario']
 
 function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, isFamilyOrStudent?: boolean }) {
   const router = useRouter()
@@ -54,16 +47,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
         transform: 'translate(-50%, -50%)',
         filter: 'blur(40px)',
       }} />
-      <div style={{
-        position: 'absolute',
-        width: 200,
-        height: 200,
-        borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(239,68,68,0.08) 0%, transparent 70%)',
-        top: '30%',
-        left: '30%',
-        filter: 'blur(60px)',
-      }} />
 
       <div style={{
         position: 'relative',
@@ -79,9 +62,8 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
         transition: 'all 0.6s cubic-bezier(0.4,0,0.2,1)',
       }}>
 
-        {/* Shield icon with animated ring */}
+        {/* Shield icon */}
         <div style={{ position: 'relative', marginBottom: 32 }}>
-          {/* Outer pulse ring */}
           <div style={{
             position: 'absolute',
             inset: -16,
@@ -89,14 +71,12 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
             border: '1px solid rgba(239,68,68,0.2)',
             animation: 'pulse 2s ease-in-out infinite',
           }} />
-          {/* Middle ring */}
           <div style={{
             position: 'absolute',
             inset: -8,
             borderRadius: '50%',
             border: '1px solid rgba(239,68,68,0.3)',
           }} />
-          {/* Icon container */}
           <div style={{
             width: 88,
             height: 88,
@@ -116,7 +96,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           </div>
         </div>
 
-        {/* Error code */}
         <div style={{
           fontSize: 11,
           fontWeight: 700,
@@ -129,7 +108,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           ERRO 403 · ACESSO RESTRITO
         </div>
 
-        {/* Title */}
         <h1 style={{
           fontSize: 36,
           fontWeight: 200,
@@ -141,7 +119,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           Acesso Negado
         </h1>
 
-        {/* Subtitle */}
         <p style={{
           fontSize: 15,
           color: 'rgba(255,255,255,0.45)',
@@ -161,7 +138,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           {pathname}
         </p>
 
-        {/* Divider */}
         <div style={{
           width: '100%',
           height: 1,
@@ -169,7 +145,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           marginBottom: 36,
         }} />
 
-        {/* Info box */}
         <div style={{
           background: 'rgba(239,68,68,0.05)',
           border: '1px solid rgba(239,68,68,0.15)',
@@ -192,7 +167,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           </p>
         </div>
 
-        {/* Back button */}
         <button
           onClick={() => router.push(isFamilyOrStudent ? '/agenda-digital' : '/dashboard')}
           style={{
@@ -210,14 +184,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
             letterSpacing: '0.01em',
             boxShadow: '0 4px 24px rgba(59,130,246,0.3)',
             transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={e => {
-            ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'
-            ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(59,130,246,0.4)'
-          }}
-          onMouseLeave={e => {
-            ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
-            ;(e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(59,130,246,0.3)'
           }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -237,64 +203,19 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
   )
 }
 
-export function RouteGuard({ children }: { children: React.ReactNode }) {
+export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { perfis, perfisLoading } = useData()
-  const { currentUserPerfil, hydrated } = useApp()
+  const { currentUser, hydrated } = useApp()
 
-  // ── Wait for localStorage hydration ───────────────────────────────────────
-  // Before hydration, currentUserPerfil = 'Diretor Geral' (false default).
-  // We MUST wait to avoid incorrectly granting/denying access.
-  // Wait for perfisLoading to ensure custom role definitions are loaded before evaluating access.
-  if (!hydrated || perfisLoading) {
-    return (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 9998,
-        background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: '50%',
-          border: '2px solid rgba(255,255,255,0.08)',
-          borderTopColor: 'rgba(59,130,246,0.7)',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
+  if (!hydrated) return <>{children}</>
 
-  const userPerfilObj = (perfis || []).find(p => p.nome === currentUserPerfil)
-  const userPerms = userPerfilObj?.permissoes || []
+  const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  // ── Step 1: Collect ALL protected hrefs from sidebar definition ────────────
-  const protectedRoutes: string[] = []
-
-  for (const g of ALL_NAV_GROUPS) {
-    if (g.title === 'Principal') continue
-    if (g.href) protectedRoutes.push(g.href)
-    for (const item of g.items) {
-      if (item.children) {
-        for (const child of item.children) {
-          if (child.href) protectedRoutes.push(child.href)
-        }
-      } else if (item.href) {
-        protectedRoutes.push(item.href)
-      }
+  if (isFamilyOrStudent) {
+    const isAllowedPath = pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api')
+    if (!isAllowedPath) {
+      return <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
     }
-  }
-
-  // ── Step 2: Find the BEST (most specific = longest) matching route ─────────
-  const matchedRoute = protectedRoutes
-    .filter(route =>
-      pathname === route ||
-      pathname.startsWith(route + '/')
-    )
-    .sort((a, b) => b.length - a.length)[0]
-
-  // ── Step 3: If route is protected and not in permissions → deny ───────────
-  if (matchedRoute && !userPerms.includes(matchedRoute)) {
-    return <AccessDeniedPage pathname={pathname} />
   }
 
   return <>{children}</>

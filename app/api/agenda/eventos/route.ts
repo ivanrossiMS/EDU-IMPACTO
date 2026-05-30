@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,13 @@ export async function GET(request: Request) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     const supabase = createClient(supabaseUrl, supabaseKey)
     
-    const { data, error } = await supabase.from('eventos_agenda').select('*')
+    const accessStartDate = await getLoggedUserAccessStartDate()
+    let query = supabase.from('eventos_agenda').select('*')
+    if (accessStartDate) {
+      const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)
+      query = query.gte('data', accessStartDateStr)
+    }
+    const { data, error } = await query
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ 
       ...row, 

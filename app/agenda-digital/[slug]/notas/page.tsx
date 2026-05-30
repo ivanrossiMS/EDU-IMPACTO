@@ -61,6 +61,37 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
     }
   }, [bimestresDisponiveis, selectedBimestreId])
 
+  useEffect(() => {
+    if (!aluno?.id || boletins.length === 0) return;
+    
+    // Check which ones are unread
+    const unreadIds = boletins
+      .filter((b: any) => {
+        const dados = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados || {};
+        const leituras = b.leituras || dados.leituras || {};
+        return !leituras[aluno.id];
+      })
+      .map((b: any) => b.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'nota',
+          ids: unreadIds,
+          alunoId: aluno.id
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark notas as read:', err));
+    }
+  }, [boletins, aluno?.id]);
+
   const boletimAtual = useMemo(() => {
     if (!selectedBimestreId) return null
     return bimestresDisponiveis.find((b: any) => b.id === selectedBimestreId)

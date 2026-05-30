@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,11 @@ export async function GET(request: Request) {
     const aluno_id = searchParams.get('aluno_id')
     
     let query = supabase.from('boletins').select('*')
+    
+    const accessStartDate = await getLoggedUserAccessStartDate()
+    if (accessStartDate) {
+      query = query.gte('created_at', accessStartDate.toISOString())
+    }
     
     if (turma_id) {
       query = query.eq('turma_id', turma_id)

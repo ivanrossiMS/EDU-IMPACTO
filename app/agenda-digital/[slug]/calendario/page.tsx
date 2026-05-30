@@ -177,6 +177,36 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, turmaDoAluno])
 
+  useEffect(() => {
+    if (!aluno?.id || eventosFiltrados.length === 0) return;
+    
+    // Check which ones are unread
+    const unreadIds = eventosFiltrados
+      .filter(e => {
+        const leituras = (e as any).dados?.leituras || (e as any).leituras || {};
+        return !leituras[aluno.id];
+      })
+      .map(e => e.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'evento',
+          ids: unreadIds,
+          alunoId: aluno.id
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark eventos as read:', err));
+    }
+  }, [eventosFiltrados, aluno?.id]);
+
   return (
     <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 40 }}>
       <style dangerouslySetInnerHTML={{__html: `

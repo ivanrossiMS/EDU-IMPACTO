@@ -89,7 +89,7 @@ export default function ADAdminAjustes() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Ajustes do Aplicativo</h2>
-          <p style={{ color: 'hsl(var(--text-muted))' }}>Configurações de permissões, horários de atendimento e personalização.</p>
+          <p style={{ color: 'hsl(var(--text-muted))' }}>Configurações de permissões e personalização.</p>
         </div>
         
         <div style={{ display: 'flex', gap: 12 }}>
@@ -116,13 +116,7 @@ export default function ADAdminAjustes() {
             >
               <Bell size={18} style={{ marginRight: 8 }}/> Notificações Push
             </button>
-            <button 
-              onClick={() => setActiveTab('horarios')}
-              className={activeTab === 'horarios' ? 'btn' : 'btn btn-ghost'} 
-              style={{ justifyContent: 'flex-start', background: activeTab === 'horarios' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'horarios' ? '#4f46e5' : 'inherit' }}
-            >
-              <Clock size={18} style={{ marginRight: 8 }}/> Horários de Atendimento
-            </button>
+
             <button 
               onClick={() => setActiveTab('personalizacao')}
               className={activeTab === 'personalizacao' ? 'btn' : 'btn btn-ghost'} 
@@ -397,34 +391,6 @@ export default function ADAdminAjustes() {
                          </span>
                       </label>
                     </div>
-                </div>
-             </div>
-           )}
-
-           {activeTab === 'horarios' && (
-             <div>
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Controle de Horários</h3>
-                  <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Defina o limite de atendimento para garantir o descanso da equipe (LGPD/Direitos Trabalhistas).</p>
-                </div>
-
-                <div style={{ padding: 32 }}>
-                  <div style={{ display: 'flex', gap: 24, marginBottom: 32 }}>
-                    <div style={{ flex: 1 }}>
-                      <label className="form-label">Início Expediente App</label>
-                      <input type="time" className="form-input" value={localConfig.horarios.inicio} onChange={e => setLocalConfig(p => ({...p, horarios: {...p.horarios, inicio: e.target.value}}))} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label className="form-label">Fim Expediente App</label>
-                      <input type="time" className="form-input" value={localConfig.horarios.fim} onChange={e => setLocalConfig(p => ({...p, horarios: {...p.horarios, fim: e.target.value}}))} />
-                    </div>
-                  </div>
-
-                  <div style={{ padding: 20, background: 'rgba(239, 68, 68, 0.05)', borderRadius: 12, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                    <h4 style={{ color: '#ef4444', margin: '0 0 8px 0', fontSize: 16 }}>Mensagem de Ausência (Fora do Horário)</h4>
-                    <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 12 }}>Esta mensagem é enviada automaticamente se a família enviar mensagens fora do horário.</p>
-                    <textarea className="form-input" style={{ minHeight: 100, background: 'hsl(var(--bg-main))' }} value={localConfig.horarios.msgAusencia} onChange={e => setLocalConfig(p => ({...p, horarios: {...p.horarios, msgAusencia: e.target.value}}))}></textarea>
-                  </div>
                 </div>
              </div>
            )}

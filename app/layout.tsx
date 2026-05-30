@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { AppProvider } from '@/lib/context'
 import { ReactQueryProvider } from '@/components/ReactQueryProvider'
+import { GlobalAccessGuard } from '@/components/layout/GlobalAccessGuard'
 
 export const metadata: Metadata = {
   title: 'IMPACTO EDU — Sistema de Gestão Escolar',
@@ -25,7 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ReactQueryProvider>
           <AppProvider>
-            {children}
+            <GlobalAccessGuard>
+              {children}
+            </GlobalAccessGuard>
           </AppProvider>
         </ReactQueryProvider>
       </body>

@@ -14,6 +14,8 @@ import { useApp } from '@/lib/context'
 import { Plus, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
+import { supabase } from '@/lib/supabase'
+import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -115,7 +117,7 @@ export default function ColaboradorComunicadosPage() {
   }, [turmas, chatGroups, currentUser])
   
   
-  const { comunicados, setComunicados } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally } = useAgendaDigital()
   const loading = false;
   
   const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
@@ -251,13 +253,34 @@ export default function ColaboradorComunicadosPage() {
   const hasResponded = !!previousSubmission;
 
   
-  const handleCiencia = (comunicadoId: string) => {
-    setComunicados(prev => prev.map(c => {
+  const handleCiencia = async (comunicadoId: string) => {
+    const nowIso = new Date().toISOString()
+    const updateFn = (prev: any) => prev.map((c: any) => {
       if (c.id === comunicadoId) {
-        return { ...c, ciencias: { ...(c.ciencias || {}), [userSlug]: new Date().toISOString() } }
+        const updated = { ...c, ciencias: { ...(c.ciencias || {}), [userSlug]: nowIso } }
+        if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+          setSelectedComunicado(updated)
+        }
+        return updated
       }
       return c
-    }))
+    })
+    
+    if (setComunicadosLocally) {
+      setComunicadosLocally(updateFn)
+    } else {
+      setComunicados(updateFn)
+    }
+    
+    try {
+      const { data: dbCom } = await supabase.from('comunicados').select('dados').eq('id', comunicadoId).single();
+      if (dbCom) {
+        const dados = dbCom.dados || {};
+        const newCiencias = { ...(dados.ciencias || {}), [userSlug]: nowIso };
+        dados.ciencias = newCiencias;
+        await supabase.from('comunicados').update({ dados }).eq('id', comunicadoId);
+      }
+    } catch (e) { console.error('Failed to save ciencia', e) }
   }
 
   const handleDownload = (filename: string) => {
@@ -774,9 +797,34 @@ export default function ColaboradorComunicadosPage() {
                     overflow: 'hidden'
                   }}
                   onClick={() => {
-                    setSelectedComunicado(c)
+                    const nowIso = new Date().toISOString();
+                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [userSlug]: nowIso } };
+                    
+                    setSelectedComunicado(updatedComunicado)
+                    
                     if (!isRead) {
-                      setComunicados(prev => prev.map(x => x.id === c.id ? { ...x, leituras: { ...(x.leituras || {}), [userSlug]: new Date().toISOString() } } : x))
+                      const updateFn = (prev: any) => prev.map((x: any) => x.id === c.id ? updatedComunicado : x)
+                      if (setComunicadosLocally) {
+                        setComunicadosLocally(updateFn)
+                      } else {
+                        setComunicados(updateFn)
+                      }
+                      
+                      fetch('/api/agenda/notificacoes/marcar-lido', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          tipo: 'comunicado',
+                          ids: [c.id],
+                          alunoId: userSlug
+                        })
+                      })
+                      .then(res => {
+                        if (res.ok) {
+                          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+                        }
+                      })
+                      .catch(err => console.error('Failed to mark comunicado as read:', err))
                     }
                   }}
                   onMouseEnter={e => {
@@ -1108,6 +1156,18 @@ export default function ColaboradorComunicadosPage() {
                 </div>
               )}
 
+              {selectedComunicado.permiteResposta && (
+                <div style={{ marginTop: 24 }}>
+                  <ComunicadoChat 
+                    comunicadoId={selectedComunicado.id} 
+                    remetenteId={userSlug} 
+                    remetenteNome={currentUser?.nome || 'Colaborador'} 
+                    remetenteAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
+                    isAdmin={true}
+                    adminAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
+                  />
+                </div>
+              )}
 
             </div>
           </motion.div>

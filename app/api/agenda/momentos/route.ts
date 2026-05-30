@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
     const supabase = await createProtectedClient()
-    const { data, error } = await supabase.from('momentos').select('*').order('created_at', { ascending: false })
+    const accessStartDate = await getLoggedUserAccessStartDate()
+    let query = supabase.from('momentos').select('*')
+    if (accessStartDate) {
+      query = query.gte('created_at', accessStartDate.toISOString())
+    }
+    const { data, error } = await query.order('created_at', { ascending: false })
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {

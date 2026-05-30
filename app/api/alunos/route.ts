@@ -149,14 +149,32 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2.7 Busca todas as turmas para resolver nomes e segmentos no servidor
-    const { data: turmasData, error: turmasError } = await supabase
-      .from('turmas')
-      .select('id, codigo, nome, ano, dados')
-      .limit(10000)
+    // 2.7 Busca apenas as turmas associadas aos alunos retornados para resolver nomes e segmentos no servidor de forma otimizada
+    let turmasData: any[] = []
+    const uniqueTurmaRefs = Array.from(new Set(students.map((s: any) => s.turma).filter(Boolean)))
+    
+    if (uniqueTurmaRefs.length > 0) {
+      // Formata referências limpando caracteres especiais que quebram cláusula PostgREST IN
+      const cleanRefs = uniqueTurmaRefs.map(r => String(r).trim()).filter(Boolean)
+      if (cleanRefs.length > 0) {
+        const formattedRefs = cleanRefs.map(r => {
+          if (/[ ,()\/]/.test(r)) {
+            return `"${r.replace(/"/g, '\\"')}"`
+          }
+          return r
+        }).join(',')
 
-    if (turmasError) {
-      console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Turmas): ${turmasError.message}\n`)
+        const { data: tData, error: turmasError } = await supabase
+          .from('turmas')
+          .select('id, codigo, nome, ano, dados')
+          .or(`id.in.(${formattedRefs}),codigo.in.(${formattedRefs}),nome.in.(${formattedRefs})`)
+
+        if (turmasError) {
+          console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Turmas): ${turmasError.message}\n`)
+        } else {
+          turmasData = tData || []
+        }
+      }
     }
 
     // 3. Monta o resultado final

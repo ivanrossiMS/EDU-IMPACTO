@@ -57,7 +57,7 @@ const menuItems = [
 export function ADSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { currentUser, theme, setTheme } = useApp()
+  const { currentUser, setCurrentUser, theme, setTheme } = useApp()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
@@ -69,7 +69,7 @@ export function ADSidebar() {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0 })
+  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0 })
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,8 +125,18 @@ export function ADSidebar() {
       } catch (e) {}
     }
     fetchUnread()
+
+    const handleUpdate = () => {
+      fetchUnread()
+    }
+    window.addEventListener('agenda-digital:unread-updated', handleUpdate)
+
     const interval = setInterval(fetchUnread, 30000)
-    return () => { isMounted = false; clearInterval(interval) }
+    return () => { 
+      isMounted = false
+      clearInterval(interval)
+      window.removeEventListener('agenda-digital:unread-updated', handleUpdate)
+    }
   }, [isFamily, alunoId])
 
   const getBadgeValue = (id: string) => {
@@ -163,12 +173,12 @@ export function ADSidebar() {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
 
-        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
-        { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
+        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos`, badgeVal: unreadStats.unreadMomentos || undefined },
+        { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario`, badgeVal: unreadStats.unreadCalendario || undefined },
         { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
-        { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
-        { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
+        { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias`, badgeVal: unreadStats.unreadOcorrencias || undefined },
+        { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas`, badgeVal: unreadStats.unreadNotas || undefined },
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
@@ -449,15 +459,15 @@ export function ADSidebar() {
                       label: 'Comunicados', 
                       href: `/agenda-digital/${alunoId}/comunicados`, 
                       icon: Bell,
-                      badge: (comunicados || []).filter(c => c.status === 'enviado' && (!c.leituras || !c.leituras[alunoId])).length || undefined
+                      badge: unreadStats.unreadMural || undefined
                     },
 
-                    { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
-                    { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
+                    { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon, badge: unreadStats.unreadMomentos || undefined },
+                    { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar, badge: unreadStats.unreadCalendario || undefined },
                     { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
-                    { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
-                    { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
+                    { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle, badge: unreadStats.unreadOcorrencias || undefined },
+                    { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap, badge: unreadStats.unreadNotas || undefined },
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
@@ -562,12 +572,12 @@ export function ADSidebar() {
                 boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                  <div style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
+                  <div style={{ position: 'relative', width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 21 }}>
                     <UserAvatar 
                       userId={currentUser?.id} 
                       name={currentUser?.nome || 'Usuário'} 
                       fotoUrl={currentUser?.foto}
-                      size={36}
+                      size={54}
                       style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
                     />
                     {isUploadingPhoto && (
@@ -622,12 +632,12 @@ export function ADSidebar() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
+                <div style={{ position: 'relative', width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 24 }}>
                   <UserAvatar 
                     userId={currentUser?.id} 
                     name={currentUser?.nome || 'Usuário'} 
                     fotoUrl={currentUser?.foto}
-                    size={40}
+                    size={60}
                     style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
                   />
                   {isUploadingPhoto && (

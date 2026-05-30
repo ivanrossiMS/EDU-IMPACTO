@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,11 @@ export async function GET(request: Request) {
   }
 
   let query = supabase.from('comunicados').select('*');
+  
+  const accessStartDate = await getLoggedUserAccessStartDate();
+  if (accessStartDate) {
+    query = query.gte('data', accessStartDate.toISOString());
+  }
   
   if (turmaId || alunoId) {
     const conditions = [`destino.eq.todos`];

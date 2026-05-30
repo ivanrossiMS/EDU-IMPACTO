@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,14 @@ export async function GET(request: Request) {
   const q = searchParams.get('q')
 
   // Adicionado limite rigoroso para evitar sobrecarga de memória (OOM) no frontend e banco
-  let query = supabase.from('titulos').select('*').order('vencimento').limit(1000)
+  let query = supabase.from('titulos').select('*')
+  
+  const accessStartDate = await getLoggedUserAccessStartDate()
+  if (accessStartDate) {
+    query = query.gte('created_at', accessStartDate.toISOString())
+  }
+
+  query = query.order('vencimento').limit(1000)
 
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (alunoId) query = query.eq('aluno_id', alunoId)

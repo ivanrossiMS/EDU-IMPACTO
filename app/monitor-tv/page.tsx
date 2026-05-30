@@ -861,6 +861,7 @@ function MonitorContent() {
 
       </div>
 
+      {mounted && (
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&display=swap');
         
@@ -1365,6 +1366,7 @@ function MonitorContent() {
           animation: tvSpin 1.2s linear infinite;
         }
       ` }} />
+      )}
     </div>
   )
 }

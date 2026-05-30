@@ -14,6 +14,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
+import { ComunicadoChat } from '@/components/ComunicadoChat'
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoData: any) => {
@@ -77,15 +78,22 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
   const [limit, setLimit] = useState(10)
   const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&limit=${limit}` : 'comunicados?limit=0'
-  const [comunicados, setComunicados, { loading }] = useSupabaseArray<any>(endpoint)
+  const [comunicados, , { loading }] = useSupabaseArray<any>(endpoint)
+  const [localComunicados, setLocalComunicados] = useState<any[]>([])
+
+  useEffect(() => {
+    if (comunicados) {
+      setLocalComunicados(comunicados)
+    }
+  }, [comunicados])
   
   const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
-  const comunicadosRef = useRef(comunicados)
+  const comunicadosRef = useRef(localComunicados)
   const isPollingRef = useRef(false)
   
   useEffect(() => {
-    comunicadosRef.current = comunicados
-  }, [comunicados])
+    comunicadosRef.current = localComunicados
+  }, [localComunicados])
 
   // --- REALTIME SUBSCRIPTION ---
   useEffect(() => {
@@ -133,9 +141,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
   
   const handleCiencia = async (comunicadoId: string) => {
-    setComunicados(prev => prev.map(c => {
+    const nowIso = new Date().toISOString()
+    setLocalComunicados(prev => prev.map(c => {
       if (c.id === comunicadoId) {
-        return { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: new Date().toISOString() } }
+        const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
+        if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+          setSelectedComunicado(updated)
+        }
+        return updated
       }
       return c
     }))
@@ -143,7 +156,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       const { data: dbCom } = await supabase.from('comunicados').select('dados').eq('id', comunicadoId).single();
       if (dbCom) {
         const dados = dbCom.dados || {};
-        const newCiencias = { ...(dados.ciencias || {}), [resolvedParams.slug]: new Date().toISOString() };
+        const newCiencias = { ...(dados.ciencias || {}), [resolvedParams.slug]: nowIso };
         dados.ciencias = newCiencias;
         await supabase.from('comunicados').update({ dados }).eq('id', comunicadoId);
       }
@@ -395,7 +408,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 cursor: 'pointer'
               }}
               onClick={() => {
-                setComunicados(prev => {
+                setLocalComunicados(prev => {
                   const toAdd = newComunicadosBuffer.filter(n => !prev.some((p: any) => p.id === n.id));
                   return [...toAdd, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
                 });
@@ -489,7 +502,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          const filteredComunicados = (comunicados || []).filter((c: any) => {
+          const filteredComunicados = (localComunicados || []).filter((c: any) => {
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';
@@ -632,9 +645,29 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                     overflow: 'hidden'
                   }}
                   onClick={() => {
-                    setSelectedComunicado(c)
+                    const isRead = !!(c.leituras || {})[resolvedParams.slug];
+                    const nowIso = new Date().toISOString();
+                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [resolvedParams.slug]: nowIso } };
+                    
+                    setSelectedComunicado(updatedComunicado)
+                    
                     if (!isRead) {
-                      setComunicados(prev => prev.map(x => x.id === c.id ? { ...x, leituras: { ...(x.leituras || {}), [resolvedParams.slug]: new Date().toISOString() } } : x))
+                      setLocalComunicados(prev => prev.map(x => x.id === c.id ? updatedComunicado : x))
+                      fetch('/api/agenda/notificacoes/marcar-lido', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          tipo: 'comunicado',
+                          ids: [c.id],
+                          alunoId: resolvedParams.slug
+                        })
+                      })
+                      .then(res => {
+                        if (res.ok) {
+                          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+                        }
+                      })
+                      .catch(err => console.error('Failed to mark comunicado as read:', err))
                     }
                   }}
                   onMouseEnter={e => {
@@ -770,7 +803,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           })
         })()}
         
-        {(comunicados || []).length >= limit && (
+        {(localComunicados || []).length >= limit && (
            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
              <button onClick={() => setLimit(l => l + 10)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
                Carregar Mais
@@ -974,6 +1007,16 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 </div>
               )}
 
+              {selectedComunicado.permiteResposta && (
+                <div style={{ marginTop: 24 }}>
+                  <ComunicadoChat 
+                    comunicadoId={selectedComunicado.id} 
+                    remetenteId={resolvedParams.slug} 
+                    remetenteNome={aluno?.nome || 'Familiar / Aluno'} 
+                    remetenteAvatar={aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
+                  />
+                </div>
+              )}
 
             </div>
           </motion.div>
