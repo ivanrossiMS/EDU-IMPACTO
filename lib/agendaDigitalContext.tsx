@@ -35,7 +35,7 @@ export type ADMessage = { id: number | string, text: string, sender: 'them' | 'u
 export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
 export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[] }
-export type ADMomento = { id: number | string, author: string, targetClasses: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[] }
+export type ADMomento = { id: number | string, author: string, targetClasses: string[], targetClassesIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[] }
 
 export interface ADConfig {
   permissoes: { 

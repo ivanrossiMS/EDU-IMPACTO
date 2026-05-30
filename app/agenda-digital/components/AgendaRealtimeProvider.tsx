@@ -143,7 +143,7 @@ export function AgendaRealtimeProvider({
 
       // Converte tudo para string para evitar bug de [4697].includes("4697") === false
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses || turmasStringArray)
-      const alvoTurmasIds = ensureStringArray(dados.turmasIds)
+      const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
 
       const alunoStr = String(alunoId)
@@ -263,19 +263,60 @@ export function AgendaRealtimeProvider({
         const row = payload.new
         if (row.dados?.status !== 'approved') return
         if (isTargetingAluno(row.dados)) {
+          
+          window.dispatchEvent(new CustomEvent('ad:momento-inserted', { detail: row.dados }));
+
           addNotification({
             id: row.id,
             type: 'momento',
-            title: row.titulo,
+            title: row.dados?.author || row.titulo || 'Novo momento',
             createdAt: row.created_at || new Date().toISOString(),
             read: false,
             link: `/agenda-digital/${alunoId}/momentos`
           });
-          toast('Novo Momento Compartilhado', {
-            description: row.titulo,
-            icon: <ImageIcon size={20} className="text-purple-500" />,
-            action: { label: 'Ver Foto/Vídeo', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) }
-          })
+
+          // Ultra Modern Toast UI para Momentos
+          toast.custom((t) => (
+            <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
+              {/* Ícone Container */}
+              <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#FFF0F5] flex items-center justify-center">
+                <ImageIcon size={24} strokeWidth={1.5} className="text-[#F24C9D]" />
+                <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#6C48FA] border-[2px] sm:border-[2.5px] border-white rounded-full"></span>
+              </div>
+
+              {/* Textos */}
+              <div className="flex-1 min-w-0 pr-1 sm:pr-2">
+                <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
+                  Novo momento compartilhado!
+                </h4>
+                <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
+                  Uma nova foto ou vídeo foi adicionada ao mural.
+                </p>
+              </div>
+
+              {/* Botão */}
+              <button 
+                onClick={() => {
+                  toast.dismiss(t);
+                  router.push(`/agenda-digital/${alunoId}/momentos`);
+                }}
+                className="flex-shrink-0 bg-[#F24C9D] hover:bg-[#D93C8A] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(242,76,157,0.3)]"
+              >
+                Ver foto
+              </button>
+
+              {/* Fechar */}
+              <button 
+                onClick={() => toast.dismiss(t)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
+              >
+                <X size={20} strokeWidth={2} />
+              </button>
+            </div>
+          ), {
+            duration: 10000,
+            position: 'top-center'
+          });
         }
       })
       // --- EVENTOS DE AGENDA (CALENDÁRIO) ---

@@ -54,6 +54,19 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return () => { document.body.style.overflow = ''; }
   }, [lightboxOpen]);
 
+  // Listener para realtime (adiciona o momento ao feed automaticamente)
+  useEffect(() => {
+    const handleMomentoInserted = (e: any) => {
+      const newMomento = e.detail
+      setMomentosFeed(prev => {
+        if (prev.some((m: any) => m.id === newMomento.id)) return prev
+        return [newMomento, ...prev]
+      })
+    }
+    window.addEventListener('ad:momento-inserted', handleMomentoInserted)
+    return () => window.removeEventListener('ad:momento-inserted', handleMomentoInserted)
+  }, [setMomentosFeed])
+
   const handleLike = (momentId: number | string) => {
     setMomentosFeed(prev => prev.map(m => {
       if (m.id !== momentId) return m

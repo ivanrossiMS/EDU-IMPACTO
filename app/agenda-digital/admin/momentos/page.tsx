@@ -89,6 +89,7 @@ export default function ADAdminMomentos() {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: currentUser?.nome || 'Administração',
         targetClasses: newPost.targetClasses.length > 0 ? newPost.targetClasses.map(t => t.name) : ['Toda a Escola'],
+        targetClassesIds: newPost.targetClasses.length > 0 ? newPost.targetClasses.map(t => String(t.id).replace(/^t_?/, '')) : [],
         media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
 
