@@ -99,23 +99,29 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   useEffect(() => {
     if (!aluno?.id) return;
     const channel = supabase.channel('comunicados-channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, async (payload) => {
-        const newId = payload.new.id;
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
         try {
-          const res = await fetch(`/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&id=${newId}`);
-          if (!res.ok) return;
-          const json = await res.json();
-          if (json && json.length > 0) {
-            const newCom = json[0];
+          const row = payload.new;
+          if (row.status !== 'enviado' && row.dados?.status !== 'enviado') return;
+          
+          const newCom = { ...row, ...(row.dados || {}) };
+          
+          const alvoTurmas = newCom.turmas || [];
+          const alvoAlunos = newCom.alunosIds || [];
+          const isTodos = alvoTurmas.includes('Todos') || alvoTurmas.includes('Toda a Escola') || alvoTurmas.includes('TODOS') || newCom.destino === 'todos';
+          const isMinhaTurma = (turmaNome && alvoTurmas.includes(turmaNome)) || (rawTurma && alvoTurmas.includes(rawTurma));
+          const isMeuId = alvoAlunos.includes(aluno.id) || alvoAlunos.includes(`a_${aluno.id}`) || alvoAlunos.includes(`_ALU${aluno.id}`);
+          
+          if (isTodos || isMinhaTurma || isMeuId) {
             setLocalComunicados(prev => {
               if (prev.some((c: any) => c.id === newCom.id)) return prev;
               const newFeed = [newCom, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
               return newFeed;
             });
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
           }
         } catch (e) {
-          console.error("Realtime validation error:", e);
+          console.error("Realtime parsing error:", e);
         }
       })
       .subscribe()

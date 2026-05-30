@@ -8,6 +8,8 @@ import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { useData } from '@/lib/dataContext'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -30,6 +32,23 @@ export function AgendaRealtimeProvider({
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
   const responsavelId = currentUser?.id ? String(currentUser.id) : null
   const alunoId = params?.slug ? String(params.slug) : null
+
+  // Tenta puxar o contexto do aluno selecionado se estivermos numa rota de família/aluno
+  let alunoObj: any = null;
+  let turmasArray: any[] = [];
+  try {
+    const selected = useSelectedStudent();
+    if (selected && selected.aluno) alunoObj = selected.aluno;
+  } catch(e) {}
+  
+  try {
+    const dataCtx = useData();
+    if (dataCtx && dataCtx.turmas) turmasArray = dataCtx.turmas;
+  } catch(e) {}
+
+  const rawTurma = alunoObj?.turma;
+  const resolvedTurmaObj = turmasArray.find(t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma));
+  const turmaNome = resolvedTurmaObj?.nome || rawTurma;
 
   useEffect(() => {
     let isMounted = true
@@ -117,7 +136,8 @@ export function AgendaRealtimeProvider({
       ) return true
 
       // Turma Específica
-      // if (turmaNome && alvoTurmas.includes(turmaNome)) return true
+      if (turmaNome && alvoTurmas.includes(turmaNome)) return true
+      if (rawTurma && alvoTurmas.includes(rawTurma)) return true
 
       // Aluno Específico
       if (
