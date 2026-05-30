@@ -21,17 +21,25 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
   const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'saude'>('geral')
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
+  const [isEditingEmail, setIsEditingEmail] = useState(false)
+  const [emailInput, setEmailInput] = useState('')
+  const [isEditingPhone, setIsEditingPhone] = useState(false)
+  const [phoneInput, setPhoneInput] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
   if (!aluno) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 100, color: 'hsl(var(--text-muted))' }}>
       Carregando perfil do aluno...
     </div>
   )
 
-  const [isEditingEmail, setIsEditingEmail] = useState(false)
-  const [emailInput, setEmailInput] = useState(aluno.email || '')
-  const [isEditingPhone, setIsEditingPhone] = useState(false)
-  const [phoneInput, setPhoneInput] = useState(aluno.telefone || '')
-  const [isSaving, setIsSaving] = useState(false)
+  // Atualizar o state do input se o aluno carregar depois do hook inicial
+  React.useEffect(() => {
+    if (aluno) {
+      setEmailInput(aluno.email || '')
+      setPhoneInput(aluno.telefone || '')
+    }
+  }, [aluno?.email, aluno?.telefone])
 
   const handleSaveField = async (field: 'email' | 'telefone', value: string) => {
     try {
