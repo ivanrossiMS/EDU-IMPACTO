@@ -261,6 +261,7 @@ export function AgendaRealtimeProvider({
       // --- MOMENTOS ---
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'momentos' }, (payload) => {
         const row = payload.new
+        console.log('📡 REALTIME MOMENTO RECEBIDO:', row.id, row.dados)
         if (row.dados?.status !== 'approved') return
         if (isTargetingAluno(row.dados)) {
           

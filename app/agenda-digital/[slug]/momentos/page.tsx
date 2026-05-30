@@ -39,7 +39,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return String(nomeTurma).split('-')[0].trim()
   })()
   
-  const [momentosFeed, setMomentosFeed, { loading }] = useSupabaseArray<any>('agenda/momentos', [])
+  const [momentosFeed, setMomentosFeed, { loading, setLocal }] = useSupabaseArray<any>('agenda/momentos', [])
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
 
   // Estado para o Lightbox/Galeria
@@ -58,14 +58,21 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   useEffect(() => {
     const handleMomentoInserted = (e: any) => {
       const newMomento = e.detail
-      setMomentosFeed(prev => {
+      console.log('Recebido momento na UI via evento custom:', newMomento)
+      const updateFeed = (prev: any[]) => {
         if (prev.some((m: any) => m.id === newMomento.id)) return prev
         return [newMomento, ...prev]
-      })
+      }
+      
+      if (setLocal) {
+        setLocal(updateFeed)
+      } else {
+        setMomentosFeed(updateFeed as any)
+      }
     }
     window.addEventListener('ad:momento-inserted', handleMomentoInserted)
     return () => window.removeEventListener('ad:momento-inserted', handleMomentoInserted)
-  }, [setMomentosFeed])
+  }, [setLocal, setMomentosFeed])
 
   const handleLike = (momentId: number | string) => {
     setMomentosFeed(prev => prev.map(m => {
