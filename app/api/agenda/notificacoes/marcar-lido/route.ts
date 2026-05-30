@@ -74,6 +74,21 @@ export async function POST(request: Request) {
       throw new Error(`Upsert error: ${upsertError.message}`)
     }
 
+    // --- NOVA LÓGICA DE NOTIFICATIONS CENTER ---
+    try {
+      const readRecords = ids.map((id: string) => ({
+        usuario_id: alunoId, // Aqui na agenda alunoId é usado como identificador
+        perfil: 'aluno', // Pode ser familia dependendo, mas para simplificar
+        content_type: tipo,
+        content_id: id,
+        read_at: now
+      }));
+      // Ignora erros de unicidade
+      await supabase.from('agenda_notification_reads').insert(readRecords);
+    } catch (e) {
+      console.warn("Erro ao inserir na nova tabela de reads (ignorado):", e);
+    }
+
     return NextResponse.json({ ok: true, count: updates.length })
   } catch (err: any) {
     console.error("Erro em marcar-lido:", err)

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
 import { AgendaRealtimeProvider } from '../components/AgendaRealtimeProvider';
+import { FloatingNotificationBadge } from '../components/notifications/FloatingNotificationBadge';
 
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
@@ -1760,6 +1761,7 @@ export default function AgendaDigitalFamilyLayout({
           <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole }}>
             <AgendaRealtimeProvider>
               {children}
+              <FloatingNotificationBadge />
             </AgendaRealtimeProvider>
           </SelectedStudentProvider>
         </div>

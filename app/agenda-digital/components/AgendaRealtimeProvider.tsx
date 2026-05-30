@@ -10,6 +10,7 @@ import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
+import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -125,6 +126,9 @@ export function AgendaRealtimeProvider({
     if (!isFamily || !alunoId) return
 
     console.log('🎧 Iniciando Supabase Realtime para notificações locais...')
+    
+    // Obtem metodo do store de notificacoes (sem destructuring reativo para evitar loops no useEffect)
+    const addNotification = useAgendaNotifications.getState().addNotification;
 
     // Função auxiliar para verificar se o evento é para este aluno
     const isTargetingAluno = (dados: any, turmasStringArray?: string[]) => {
@@ -170,7 +174,17 @@ export function AgendaRealtimeProvider({
           // 1. Emit Event for page.tsx to pick up and auto-append
           window.dispatchEvent(new CustomEvent('ad:comunicado-inserted', { detail: newCom }));
           
-          // 2. Show Standard Modern Toast (Garante que vai aparecer)
+          // 2. Atualiza o Store Global (Incrementa o Badge vermelho)
+          addNotification({
+            id: newCom.id,
+            type: 'comunicado',
+            title: newCom.titulo,
+            createdAt: newCom.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/comunicados`
+          });
+          
+          // 3. Show Standard Modern Toast (Garante que vai aparecer)
           toast.success('Novo comunicado recebido!', {
             description: newCom.titulo,
             duration: 8000,
@@ -187,6 +201,14 @@ export function AgendaRealtimeProvider({
         const row = payload.new
         if (row.dados?.status !== 'approved') return
         if (isTargetingAluno(row.dados)) {
+          addNotification({
+            id: row.id,
+            type: 'momento',
+            title: row.titulo,
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/momentos`
+          });
           toast('Novo Momento Compartilhado', {
             description: row.titulo,
             icon: <ImageIcon size={20} className="text-purple-500" />,
@@ -199,6 +221,14 @@ export function AgendaRealtimeProvider({
         const row = payload.new
         // eventos_agenda salva 'turmas' na raiz e não no jsonb dados geralmente, ou em dados
         if (isTargetingAluno(row.dados, row.turmas)) {
+          addNotification({
+            id: row.id,
+            type: 'evento',
+            title: row.titulo,
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/calendario`
+          });
           toast('Novo Evento no Calendário', {
             description: row.titulo,
             icon: <Calendar size={20} className="text-emerald-500" />,
@@ -210,6 +240,14 @@ export function AgendaRealtimeProvider({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ocorrencias' }, (payload) => {
         const row = payload.new
         if (String(row.aluno_id) === String(alunoId) || String(row.dados?.aluno_id) === String(alunoId) || String(row.dados?.alunoId) === String(alunoId)) {
+          addNotification({
+            id: row.id,
+            type: 'ocorrencia',
+            title: `Nova ocorrência: ${row.tipo}`,
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/ocorrencias`
+          });
           toast('Nova Ocorrência', {
             description: `Foi registrada uma nova ocorrência: ${row.tipo}`,
             icon: <ShieldAlert size={20} className="text-red-500" />,
@@ -223,6 +261,14 @@ export function AgendaRealtimeProvider({
         const alunoStr = String(alunoId)
         const alunoSemZero = alunoStr.replace(/^0+/, '')
         if (String(row.aluno_id) === alunoStr || String(row.aluno_id) === alunoSemZero) {
+          addNotification({
+            id: row.id,
+            type: 'nota',
+            title: 'Boletim de notas atualizado',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/notas`
+          });
           toast('Novas Notas Lançadas', {
             description: `O boletim de notas foi atualizado.`,
             icon: <FileText size={20} className="text-indigo-500" />,
