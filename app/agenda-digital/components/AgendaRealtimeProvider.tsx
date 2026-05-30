@@ -134,9 +134,20 @@ export function AgendaRealtimeProvider({
     const isTargetingAluno = (dados: any, turmasStringArray?: string[]) => {
       if (!dados) return false
       
-      // Verifica no Array do Supabase ou num objeto JSON (dependendo de como a tabela foi salva)
-      const alvoTurmas = dados.turmas || dados.targetClasses || turmasStringArray || []
-      const alvoAlunos = dados.alunosIds || dados.targetStudents || []
+      // Helper para garantir que é array de strings
+      const ensureStringArray = (val: any) => {
+        if (!val) return []
+        if (Array.isArray(val)) return val.map(String)
+        return [String(val)]
+      }
+
+      // Converte tudo para string para evitar bug de [4697].includes("4697") === false
+      const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses || turmasStringArray)
+      const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
+
+      const alunoStr = String(alunoId)
+      const turmaNomeStr = String(turmaNome)
+      const rawTurmaStr = String(rawTurma)
 
       // Todos / Toda a Escola
       if (
@@ -147,14 +158,14 @@ export function AgendaRealtimeProvider({
       ) return true
 
       // Turma Específica
-      if (turmaNome && alvoTurmas.includes(turmaNome)) return true
-      if (rawTurma && alvoTurmas.includes(rawTurma)) return true
+      if (turmaNome && alvoTurmas.includes(turmaNomeStr)) return true
+      if (rawTurma && alvoTurmas.includes(rawTurmaStr)) return true
 
       // Aluno Específico
       if (
-        alvoAlunos.includes(alunoId) || 
-        alvoAlunos.includes(`a_${alunoId}`) || 
-        alvoAlunos.includes(`_ALU${alunoId}`)
+        alvoAlunos.includes(alunoStr) || 
+        alvoAlunos.includes(`a_${alunoStr}`) || 
+        alvoAlunos.includes(`_ALU${alunoStr}`)
       ) return true
 
       return false
