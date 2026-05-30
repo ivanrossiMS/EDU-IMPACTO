@@ -216,19 +216,19 @@ export function AgendaRealtimeProvider({
           
           // 3. Show Standard Modern Toast (Garante que vai aparecer)
           toast.custom((t) => (
-            <div className="flex items-center w-full sm:w-[400px] bg-white p-3.5 sm:p-4 rounded-[20px] sm:rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto">
-              {/* Ícone */}
-              <div className="relative flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#F3F0FF] flex items-center justify-center">
-                <Megaphone className="w-5 h-5 sm:w-6 sm:h-6 text-[#6C48FA]" />
-                <span className="absolute -top-0.5 -right-0.5 sm:top-0 sm:right-0 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-[#FF4F64] border-2 border-white rounded-full"></span>
+            <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
+              {/* Ícone Container */}
+              <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
+                <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
+                <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full"></span>
               </div>
 
               {/* Textos */}
-              <div className="flex-1 min-w-0">
-                <h4 className="text-gray-900 font-bold text-[14px] sm:text-[15px] leading-snug truncate">
+              <div className="flex-1 min-w-0 pr-1 sm:pr-2">
+                <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
                   Novo comunicado disponível!
                 </h4>
-                <p className="text-gray-500 text-[12px] sm:text-[13px] leading-snug mt-0.5 truncate pr-2">
+                <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
                   Acesse agora para não perder nenhuma novidade.
                 </p>
               </div>
@@ -239,7 +239,7 @@ export function AgendaRealtimeProvider({
                   toast.dismiss(t);
                   router.push(`/agenda-digital/${alunoId}/comunicados`);
                 }}
-                className="flex-shrink-0 bg-[#6C48FA] hover:bg-[#5a38dd] text-white text-[13px] sm:text-sm font-semibold px-3 sm:px-4 py-2 rounded-[10px] sm:rounded-[12px] transition-colors"
+                className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
               >
                 Ver agora
               </button>
@@ -247,13 +247,13 @@ export function AgendaRealtimeProvider({
               {/* Fechar */}
               <button 
                 onClick={() => toast.dismiss(t)}
-                className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors ml-0.5 sm:ml-1 p-1"
+                className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
               >
-                <X size={18} />
+                <X size={20} strokeWidth={2} />
               </button>
             </div>
           ), {
-            duration: 8000,
+            duration: 10000,
             position: 'top-center'
           });
         }
