@@ -264,8 +264,8 @@ export function AgendaRealtimeProvider({
         console.log('📡 REALTIME MOMENTO RECEBIDO:', row.id, row.dados)
         if (row.dados?.status !== 'approved') return
         if (isTargetingAluno(row.dados)) {
-          
-          window.dispatchEvent(new CustomEvent('ad:momento-inserted', { detail: row.dados }));
+          const momentoPayload = { id: row.id, ...(row.dados || {}) };
+          window.dispatchEvent(new CustomEvent('ad:momento-inserted', { detail: momentoPayload }));
 
           addNotification({
             id: row.id,
