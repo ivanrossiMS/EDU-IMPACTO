@@ -610,9 +610,14 @@ export function ADSidebar() {
 
                 {!isCollapsed && (
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                       if (typeof window !== 'undefined' && (window as any).OneSignal) {
-                        (window as any).OneSignal.Slidedown.promptPush({ force: true })
+                        try {
+                          await (window as any).OneSignal.Notifications.requestPermission()
+                        } catch (e) {
+                          console.error(e)
+                          alert('Não foi possível pedir permissão. Verifique as configurações de notificação do seu navegador.')
+                        }
                       } else {
                         alert('Sistema de notificações está carregando ou bloqueado. Aguarde um instante.')
                       }
