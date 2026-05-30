@@ -67,8 +67,6 @@ export function AgendaRealtimeProvider({
               }
             }
 
-            // Força a janela de permissão de Push no centro da tela para garantir
-            await OneSignal.Slidedown.promptPush()
 
             if (isFamily && responsavelId && isMounted) {
               await OneSignal.login(String(responsavelId))

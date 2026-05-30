@@ -608,43 +608,6 @@ export function ADSidebar() {
                   </div>
                 </div>
 
-                {!isCollapsed && (
-                  <button 
-                    onClick={async () => {
-                      if (typeof window === 'undefined') return;
-                      
-                      try {
-                        const nativePerm = Notification.permission;
-                        
-                        // 1. Tenta usar OneSignal (se estiver carregado e sem erro de Timeout)
-                        const OS = (window as any).OneSignal;
-                        if (OS && OS.Notifications) {
-                          await OS.Notifications.requestPermission();
-                          return;
-                        }
-
-                        // 2. Fallback Híbrido: Se OneSignal travou no localhost (Timeout), usa Nativo
-                        if (nativePerm === 'default') {
-                          await Notification.requestPermission();
-                        } else if (nativePerm === 'granted') {
-                          alert('✅ Permissão já concedida pelo navegador! Como você está rodando no seu computador (localhost), o OneSignal bloqueia a conexão por segurança (Timeout), mas em produção as mensagens chegarão normalmente!');
-                        } else {
-                          alert('❌ O Chrome está bloqueando notificações. Clique no cadeado da URL para liberar.');
-                        }
-                      } catch (e) {
-                        console.error('Erro ao pedir permissão de notificação:', e);
-                      }
-                    }}
-                    style={{
-                      width: '100%', height: 32, borderRadius: 8, background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)',
-                      color: '#60a5fa', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s', marginBottom: 8
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)' }}
-                  >
-                    <Bell size={14} /> Ativar Notificações
-                  </button>
-                )}
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (
