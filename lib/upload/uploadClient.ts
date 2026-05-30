@@ -1,6 +1,6 @@
 'use client'
 
-import { generateSignedUploadUrl } from './uploadActions'
+// Retirado o import da Server Action generateSignedUploadUrl para evitar erros de registro no servidor
 
 export interface UploadOptions {
   bucket: string
@@ -27,13 +27,22 @@ export interface UploadResult {
  */
 export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, usageType }: UploadOptions): Promise<UploadResult> {
   try {
-    // 1. Obter URL assinada
-    const signedRes = await generateSignedUploadUrl(bucket, file.name, folder)
+    // 1. Obter URL assinada via API Route (evita UnrecognizedActionError do Next.js)
+    const signRes = await fetch('/api/upload-midia/sign', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ bucket, fileName: file.name, folder })
+    })
 
-    if (signedRes.error || !signedRes.signedUrl) {
-      console.error('[uploadFileToSupabase] Error getting signed URL:', signedRes.error)
-      return { ok: false, error: signedRes.error || 'Erro ao preparar upload.' }
+    if (!signRes.ok) {
+      const errData = await signRes.json().catch(() => ({}))
+      console.error('[uploadFileToSupabase] Error getting signed URL:', errData.error)
+      return { ok: false, error: errData.error || 'Erro ao preparar upload.' }
     }
+
+    const signedRes = await signRes.json()
 
     // 2. Definir Cache-Control com base no uso
     const cacheControl = usageType === 'fixed' 

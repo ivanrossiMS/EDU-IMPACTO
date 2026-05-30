@@ -6,7 +6,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData, EventoAgenda } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, use } from 'react'
-import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2 } from 'lucide-react'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -30,7 +30,7 @@ function todayStr() {
 }
 
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
-  const [eventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [eventosAgenda, , { loading }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const { currentUser } = useApp()
@@ -300,10 +300,17 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
             </div>
 
             {selectedEvents.length === 0 ? (
-              <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>☁️</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>{selectedDay ? 'Nenhum evento para este dia' : 'Selecione um dia no calendário'}</div>
-              </div>
+              loading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                  <Loader2 size={24} className="animate-spin" style={{ color: '#6366f1' }} />
+                  <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>Carregando eventos...</div>
+                </div>
+              ) : (
+                <div style={{ padding: '40px 0', textAlign: 'center' }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>☁️</div>
+                  <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>{selectedDay ? 'Nenhum evento para este dia' : 'Selecione um dia no calendário'}</div>
+                </div>
+              )
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {selectedEvents.map((ev, idx) => (

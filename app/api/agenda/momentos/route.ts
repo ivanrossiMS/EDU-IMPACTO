@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { sendPushNotification } from '@/lib/server/pushService'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +46,21 @@ export async function POST(request: Request) {
         console.error('[API Momentos] Upsert Error:', error)
         throw new Error(error.message)
       }
+
+      // Disparar Push (Background)
+      rows.forEach(async (row: any) => {
+        if (row.dados?.status === 'approved') {
+          const targetIds = await getResponsavelIdsForTargets(row.dados)
+          if (targetIds.length > 0) {
+             sendPushNotification({
+                title: 'Novo Momento Escolar',
+                body: `Foi compartilhado um novo ${row.dados.tipo === 'video' ? 'vídeo' : 'momento'} da escola!`,
+                targetUserIds: targetIds,
+             }).catch(err => console.error('Momento Push Error:', err))
+          }
+        }
+      })
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
@@ -52,6 +69,18 @@ export async function POST(request: Request) {
     if (error) {
        console.error('[API Momentos] Single Upsert Error:', error)
        throw new Error(error.message)
+    }
+
+    if (data.dados?.status === 'approved') {
+       getResponsavelIdsForTargets(data.dados).then(targetIds => {
+         if (targetIds.length > 0) {
+            sendPushNotification({
+               title: 'Novo Momento Escolar',
+               body: `Foi compartilhado um novo ${data.dados.tipo === 'video' ? 'vídeo' : 'momento'} da escola!`,
+               targetUserIds: targetIds,
+            }).catch(err => console.error('Momento Push Error:', err))
+         }
+       })
     }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const tableMap: Record<string, string> = {
       'comunicado': 'comunicados',
       'momento': 'momentos',
-      'evento': 'eventos',
+      'evento': 'eventos_agenda',
       'ocorrencia': 'ocorrencias',
       'nota': 'boletins'
     }
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
     // Fetch the target rows. Since some tables might not have the "leituras" column, we try with it first,
     // and if it fails due to column not existing (PostgreSQL code 42703), we fall back to just 'id, dados'.
-    let selectRes = await supabase.from(table).select('id, dados, leituras').in('id', ids)
+    let selectRes: any = await supabase.from(table).select('id, dados, leituras').in('id', ids)
     if (selectRes.error && (selectRes.error.code === '42703' || selectRes.error.message?.includes('does not exist'))) {
       selectRes = await supabase.from(table).select('id, dados').in('id', ids)
     }

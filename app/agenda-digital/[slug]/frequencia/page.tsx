@@ -141,6 +141,15 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     return historicoReal.filter(h => h.data === selectedDateStr)
   }, [selectedDate, historicoReal])
 
+  if (isLoadingFrequencias) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16 }}>
+        <Loader2 size={40} className="animate-spin" style={{ color: '#2563eb' }} />
+        <span style={{ color: '#64748b', fontSize: 15, fontWeight: 500 }}>Buscando frequências do aluno...</span>
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 100, fontFamily: 'Outfit, Inter, sans-serif' }}>
       

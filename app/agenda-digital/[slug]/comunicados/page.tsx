@@ -112,6 +112,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               if (comunicadosRef.current.some((c: any) => c.id === newCom.id)) return prev;
               return [newCom, ...prev];
             })
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
           }
         } catch (e) {
           console.error("Realtime validation error:", e);

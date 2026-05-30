@@ -162,7 +162,7 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [])
   const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
   const [activeCalls, setActiveCalls, { loading: isLoadingCalls }] = useSupabaseArray<PickupCall>('saida/calls', [])
-  const [logs, setLogs] = useSupabaseArray<SaidaLog>('saida/logs', [])
+  const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
 
   const { emit, on } = useBroadcastRealtime()

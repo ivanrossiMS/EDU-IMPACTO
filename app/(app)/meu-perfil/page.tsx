@@ -6,7 +6,7 @@ import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
   Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock, Loader2
 } from 'lucide-react'
-import { updateProfilePhotoAction, updateProfileExtraAction } from './actions'
+// Retirado imports de Server Actions para evitar erros de registro no servidor (usando endpoints HTTP tradicionais)
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage } from '@/lib/mediaCompressor'
 
@@ -158,13 +158,21 @@ export default function MeuPerfilPage() {
     setCurrentUser({ ...currentUser, foto: form.foto })
     
     try {
-      const res = await updateProfileExtraAction(currentUser.id, {
-        bio: form.bio,
-        telefone: form.telefone,
-        unidade: form.unidade
+      const extraReq = await fetch('/api/user-photo/extra', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          bio: form.bio,
+          telefone: form.telefone,
+          unidade: form.unidade
+        })
       })
-      if (res.error) {
-        console.error('[MeuPerfil] Erro ao salvar dados adicionais:', res.error)
+      if (!extraReq.ok) {
+        const extraErr = await extraReq.json().catch(() => ({}))
+        console.error('[MeuPerfil] Erro ao salvar dados adicionais:', extraErr.error)
       }
     } catch (err) {
       console.error('[MeuPerfil] Erro ao salvar dados adicionais:', err)
@@ -315,9 +323,19 @@ export default function MeuPerfilPage() {
 
                       const fotoUrl = uploadRes.url
                       
-                      // 3. Salvar no banco e Auth
-                      const updateRes = await updateProfilePhotoAction(currentUser.id, fotoUrl)
-                      if (updateRes.error) throw new Error(updateRes.error)
+                      // 3. Salvar no banco e Auth via API
+                      const updateReq = await fetch('/api/user-photo', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ userId: currentUser.id, fotoUrl })
+                      })
+
+                      if (!updateReq.ok) {
+                        const updateErr = await updateReq.json().catch(() => ({}))
+                        throw new Error(updateErr.error || 'Erro ao salvar a foto de perfil.')
+                      }
 
                       // 4. Atualizar UI e isolar foto no localStorage
                       localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)

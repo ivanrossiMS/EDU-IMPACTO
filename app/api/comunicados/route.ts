@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { sendPushNotification } from '@/lib/server/pushService'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,6 +112,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: upsertError.message }, { status: 400 })
       }
       console.log("==> UPSERT SUCCESS");
+      
+      // Disparar Pushes para cada comunicado (em background)
+      rows.forEach(async (row: any) => {
+        const targetIds = await getResponsavelIdsForTargets(row.dados)
+        if (targetIds.length > 0) {
+          sendPushNotification({
+            title: `Novo Comunicado: ${row.titulo}`,
+            body: `Um novo comunicado foi enviado por ${row.autor}.`,
+            targetUserIds: targetIds,
+          }).catch(err => console.error("Push Error:", err))
+        }
+      })
+      
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
@@ -118,6 +133,18 @@ export async function POST(request: Request) {
       console.error("UPSERT SINGLE ERROR:", error);
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
+    
+    // Disparar Push (em background)
+    getResponsavelIdsForTargets(data.dados).then(targetIds => {
+      if (targetIds.length > 0) {
+        sendPushNotification({
+          title: `Novo Comunicado: ${data.titulo}`,
+          body: `Um novo comunicado foi enviado por ${data.autor}.`,
+          targetUserIds: targetIds,
+        }).catch(err => console.error("Push Error:", err))
+      }
+    })
+
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {
     console.error("POST CATCH ERROR:", e);

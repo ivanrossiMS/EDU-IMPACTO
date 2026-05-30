@@ -123,7 +123,7 @@ export default function ADPerfilPage({ params }: { params: Promise<{ slug: strin
                   <div style={{ width: 40, height: 40, borderRadius: 12, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <UserCog size={20} color="#4f46e5" />
                   </div>
-                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Informações Pessoais</h3>
+                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Informações do Aluno</h3>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

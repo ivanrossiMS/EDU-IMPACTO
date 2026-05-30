@@ -11,7 +11,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
 
 export default function ADAdminMomentos() {
-  const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm } = useAgendaDigital()
+  const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData()
   const { currentUser } = useApp()
   const [filterType, setFilterType] = useState('all')
@@ -219,7 +219,14 @@ export default function ADAdminMomentos() {
         ))}
       </div>
 
-      {filteredFeed.length === 0 && (
+      {filteredFeed.length === 0 && isDataLoading && (
+        <div style={{ textAlign: 'center', padding: '80px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <Loader2 size={32} className="animate-spin" style={{ color: '#6366f1' }} />
+          <div style={{ fontSize: 16, fontWeight: 600, color: '#9ca3af' }}>Carregando momentos...</div>
+        </div>
+      )}
+      
+      {filteredFeed.length === 0 && !isDataLoading && (
         <div style={{ textAlign: 'center', padding: '80px 0', color: '#9ca3af' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📸</div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>Nenhum momento encontrado</div>

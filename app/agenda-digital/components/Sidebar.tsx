@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { compressImage } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
-import { updateProfilePhotoAction } from '@/app/(app)/meu-perfil/actions'
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -98,8 +97,18 @@ export function ADSidebar() {
 
       const fotoUrl = uploadRes.url
       
-      const updateRes = await updateProfilePhotoAction(currentUser.id, fotoUrl)
-      if (updateRes.error) throw new Error(updateRes.error)
+      const updateReq = await fetch('/api/user-photo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ userId: currentUser.id, fotoUrl })
+      })
+
+      if (!updateReq.ok) {
+        const updateErr = await updateReq.json().catch(() => ({}))
+        throw new Error(updateErr.error || 'Erro ao salvar a foto de perfil.')
+      }
 
       localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)
       setCurrentUser({ ...currentUser, foto: fotoUrl })
@@ -118,7 +127,8 @@ export function ADSidebar() {
     const fetchUnread = async () => {
       try {
         const res = await fetch(`/api/agenda/notificacoes/unread?aluno_id=${alunoId}`)
-        if (res.ok && isMounted) {
+        const contentType = res.headers.get("content-type");
+        if (res.ok && isMounted && contentType?.includes("application/json")) {
           const data = await res.json()
           setUnreadStats(data)
         }

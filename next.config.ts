@@ -20,15 +20,16 @@ const securityHeaders = [
       "default-src 'self'",
       // Em prod não precisamos de unsafe-eval (apenas Next.js dev mode)
       process.env.NODE_ENV === 'development'
-        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
-        : "script-src 'self' 'unsafe-inline'",
+        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.onesignal.com"
+        : "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob: https://*.supabase.co https://*.supabase.in",
       process.env.NODE_ENV === 'development'
-        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:*"
-        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br",
+        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:* https://*.onesignal.com"
+        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com",
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
     ].join('; '),
   },

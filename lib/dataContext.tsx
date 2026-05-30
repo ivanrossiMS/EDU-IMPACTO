@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useCallback, useEffect, useMemo } from 'react'
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray, invalidateAllCache } from './useSupabaseCollection'
 import { useConfigDb, invalidateConfigCache } from './useConfigDb'
@@ -1325,10 +1325,6 @@ interface DataState {
   tarefas: Tarefa[]; setTarefas: Setter<Tarefa[]>
   mantenedores: Mantenedor[]; setMantenedores: Setter<Mantenedor[]>
   eventosAgenda: EventoAgenda[]; setEventosAgenda: Setter<EventoAgenda[]>
-  rotinaItems: RotinaItem[]; setRotinaItems: Setter<RotinaItem[]>
-  autorizacoes: AutorizacaoDigital[]; setAutorizacoes: Setter<AutorizacaoDigital[]>
-  momentos: MomentoItem[]; setMomentos: Setter<MomentoItem[]>
-  enquetes: Enquete[]; setEnquetes: Setter<Enquete[]>
   ocorrencias: Ocorrencia[]; setOcorrencias: Setter<Ocorrencia[]>
   transferencias: Transferencia[]; setTransferencias: Setter<Transferencia[]>
   frequencias: RegistroFrequencia[]; setFrequencias: Setter<RegistroFrequencia[]>
@@ -1359,26 +1355,16 @@ interface DataState {
   // Operações Financeiras
   movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
   caixasAbertos: CaixaAberta[]; setCaixasAbertos: Setter<CaixaAberta[]>
-  
-  unidadesFiscais: UnidadeFiscal[]; setUnidadesFiscais: Setter<UnidadeFiscal[]>
   notasFiscais: NotaFiscal[]; setNotasFiscais: Setter<NotaFiscal[]>
   // RH
   advertencias: Advertencia[]; setAdvertencias: Setter<Advertencia[]>
   adiantamentos: Adiantamento[]; setAdiantamentos: Setter<Adiantamento[]>
-  systemLogs: SystemLog[]; setSystemLogs: Setter<SystemLog[]>
-  logSystemAction: (modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => void
   wipeAll: () => void
+  logSystemAction: (modulo: string, acao: string, descricao: string, payload?: any) => void
   // Censo Escolar
   censoConfig: CensoConfig; setCensoConfig: (v: CensoConfig) => void
-  censoPendencias: CensoPendencia[]; setCensoPendencias: Setter<CensoPendencia[]>
-  censoExports: CensoExport[]; setCensoExports: Setter<CensoExport[]>
-  censoAuditLogs: CensoAuditLog[]; setCensoAuditLogs: Setter<CensoAuditLog[]>
-  censoOperacoes: CensoOperacaoEnvio[]; setCensoOperacoes: Setter<CensoOperacaoEnvio[]>
   logCensoAction: (acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => void
   // Enriquecimento Censitário
-  censoAlunosData: CensoAlunoData[]; setCensoAlunosData: Setter<CensoAlunoData[]>
-  censoTurmasData: CensoTurmaData[]; setCensoTurmasData: Setter<CensoTurmaData[]>
-  censoProfsData: CensoProfissionalData[]; setCensoProfsData: Setter<CensoProfissionalData[]>
   perfis: Perfil[]; setPerfis: Setter<Perfil[]>
   perfisLoading: boolean
 }
@@ -1456,9 +1442,7 @@ const DataContext = createContext<DataState>({
   censoExports: [], setCensoExports: NOOP,
   // Non-arrays with safe defaults
 
-  censoConfig: {} as any, setCensoConfig: NOOP,
-  logSystemAction: NOOP,
-  logCensoAction: NOOP,
+  censoConfig: {} as any, setCensoConfig: NOOP,  logCensoAction: NOOP,
   wipeAll: NOOP,
 } as unknown as DataState)
 
@@ -1482,18 +1466,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // ── DADOS PRIMÁRIOS — persistidos no Supabase ──────────────────────
   // (alunos, titulos, contas-pagar, caixas, funcionários foram desacoplados para SWR Regional nas próprias telas para não travar Context global)
   const [turmas, setTurmas] = useSupabaseArray<Turma>('turmas')
-  const [leads, setLeads] = useSupabaseArray<Lead>('leads')
+  const [leads, setLeads] = useState<Lead[]>([])
   
   const [comunicados, setComunicados] = useSupabaseArray<Comunicado>('comunicados')
   const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
   const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
   const [eventosAgenda, setEventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
-  const [rotinaItems, setRotinaItems] = useSupabaseArray<RotinaItem>('agenda/rotina')
-  const [autorizacoes, setAutorizacoes] = useSupabaseArray<AutorizacaoDigital>('agenda/autorizacoes')
-  const [momentos, setMomentos] = useSupabaseArray<MomentoItem>('agenda/momentos')
-  const [enquetes, setEnquetes] = useSupabaseArray<Enquete>('agenda/enquetes')
+  const [ setRotinaItems] = useSupabaseArray<RotinaItem>('agenda/rotina')
+  const [ setAutorizacoes] = useSupabaseArray<AutorizacaoDigital>('agenda/autorizacoes')
+  const [ setMomentos] = useSupabaseArray<MomentoItem>('agenda/momentos')
+  const [ setEnquetes] = useSupabaseArray<Enquete>('agenda/enquetes')
   const [ocorrencias, setOcorrencias] = useSupabaseArray<Ocorrencia>('ocorrencias')
-  const [transferencias, setTransferencias] = useSupabaseArray<Transferencia>('academico/transferencias')
+  const [transferencias, setTransferencias] = useState<Transferencia[]>([])
   const [frequencias, setFrequencias] = useSupabaseArray<RegistroFrequencia>('academico/frequencias')
   const [lancamentosNota, setLancamentosNota] = useSupabaseArray<LancamentoNota>('academico/notas')
   // Config Pedagógico
@@ -1568,16 +1552,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const { data: cfgCalendarioLetivo, setData: setCfgCalendarioLetivo } = useConfigDb<ConfigCalendarioLetivo>('cfgCalendarioLetivo')
   // ── OPERAÇÕES FINANCEIRAS — persistidas no Supabase ────────────────
-  const [movimentacoesManuais, setMovimentacoesManuais] = useSupabaseArray<MovimentacaoManual>('financeiro/movimentacoes')
+  const [movimentacoesManuais, setMovimentacoesManuais] = useState<MovimentacaoManual[]>([])
   // caixasAbertos movido para SWR Direto na Tela de Caixas
   
-  const [unidadesFiscais, setUnidadesFiscais] = useSupabaseArray<UnidadeFiscal>('financeiro/unidades-fiscais')
-  const [notasFiscais, setNotasFiscais] = useSupabaseArray<NotaFiscal>('financeiro/notas-fiscais')
+  const [ setUnidadesFiscais] = useSupabaseArray<UnidadeFiscal>('financeiro/unidades-fiscais')
+  const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([])
   const [advertencias, setAdvertencias] = useSupabaseArray<Advertencia>('rh/advertencias')
   const [adiantamentos, setAdiantamentos] = useSupabaseArray<Adiantamento>('rh/adiantamentos')
 
   // ── SYSTEM LOGS — persistidos no Supabase ──────────────────────────
-  const [systemLogs, setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
+  const [ setSystemLogs] = useSupabaseArray<SystemLog>('system-logs')
 
   const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
 
@@ -1592,14 +1576,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
   const [censoConfig, setCensoConfigRaw] = useLocalStorage<CensoConfig>(KEYS.censoConfig, CENSO_CONFIG_DEFAULT)
   const setCensoConfig = useCallback((v: CensoConfig) => setCensoConfigRaw(v), [setCensoConfigRaw])
-  const [censoPendencias, setCensoPendencias] = useSupabaseArray<CensoPendencia>('censo/pendencias')
-  const [censoExports, setCensoExports] = useSupabaseArray<CensoExport>('censo/exports')
-  const [censoAuditLogs, setCensoAuditLogs] = useSupabaseArray<CensoAuditLog>('censo/auditoria')
-  const [censoOperacoes, setCensoOperacoes] = useSupabaseArray<CensoOperacaoEnvio>('censo/operacoes')
+  const [ setCensoPendencias] = useSupabaseArray<CensoPendencia>('censo/pendencias')
+  const [ setCensoExports] = useSupabaseArray<CensoExport>('censo/exports')
+  const [ setCensoAuditLogs] = useSupabaseArray<CensoAuditLog>('censo/auditoria')
+  const [ setCensoOperacoes] = useSupabaseArray<CensoOperacaoEnvio>('censo/operacoes')
   // Enriquecimento Censitário
-  const [censoAlunosData, setCensoAlunosData] = useSupabaseArray<CensoAlunoData>('censo/escola/alunos')
-  const [censoTurmasData, setCensoTurmasData] = useSupabaseArray<CensoTurmaData>('censo/escola/turmas')
-  const [censoProfsData, setCensoProfsData] = useSupabaseArray<CensoProfissionalData>('censo/escola/profs')
+  const [ setCensoAlunosData] = useSupabaseArray<CensoAlunoData>('censo/escola/alunos')
+  const [ setCensoTurmasData] = useSupabaseArray<CensoTurmaData>('censo/escola/turmas')
+  const [ setCensoProfsData] = useSupabaseArray<CensoProfissionalData>('censo/escola/profs')
 
   const logCensoAction = useCallback((acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => {
     let userName = 'Admin Local'
@@ -1619,7 +1603,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       modulo,
       ...payload,
     }
-    setCensoAuditLogs(prev => [log, ...prev].slice(0, 500))
+    
   }, [setCensoAuditLogs])
 
   const logSystemAction = useCallback((modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => {
@@ -1665,14 +1649,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ip: '127.0.0.1',
       ...sanitizedPayload
     }
-    setSystemLogs(prev => [newLog, ...prev])
     // Persist log to Supabase asynchronously (fire and forget)
     fetch('/api/system-logs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify([newLog]),
     }).catch(() => { /* silently ignore log write errors */ })
-  }, [setSystemLogs])
+  }, [])
 
   const createTrackedSetter = useCallback(<T extends Record<string, any>>(
     modulo: string,
@@ -1738,11 +1721,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (newLogs.length > 0) {
-              setSystemLogs(prev => {
-                const ts = Date.now()
-                const withIds = newLogs.map((l, i) => ({ ...l, id: `LOG-${ts}-${i}` }))
-                return [...withIds, ...prev].slice(0, 300)
-              })
+              const ts = Date.now()
+              const withIds = newLogs.map((l, i) => ({ ...l, id: `LOG-${ts}-${i}` }))
+              // Persist log to Supabase asynchronously (fire and forget)
+              fetch('/api/system-logs', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(withIds),
+              }).catch(() => { /* silently ignore log write errors */ })
             }
           })
         }
@@ -1750,7 +1736,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         return nextArray
       })
     }
-  }, [setSystemLogs])
+  }, [])
 
   const wipeAll = useCallback(() => {
     invalidateAllCache()
@@ -1760,18 +1746,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTurmas([]); setLeads([])
 
     setComunicados([]); setTarefas([]); setMantenedores([])
-    setEventosAgenda([]); setRotinaItems([]); setAutorizacoes([])
-    setMomentos([]); setEnquetes([])
-    setOcorrencias([]); setTransferencias([]); setFrequencias([]); setLancamentosNota([])
+    setEventosAgenda([]); setOcorrencias([]); setTransferencias([]); setFrequencias([]); setLancamentosNota([])
     setCfgDisciplinas(DISCIPLINAS_DEFAULT); setCfgNiveisEnsino(NIVEIS_DEFAULT); setCfgSeries([]); setCfgTiposOcorrencia(TIPOS_OCORRENCIA_DEFAULT); setCfgEsquemasAvaliacao([]); setCfgGruposAvaliacao([]); setCfgArredondamentos([]); setCfgTurnos(TURNOS_DEFAULT); setCfgSituacaoAluno(SITUACOES_DEFAULT); setCfgGruposAlunos(GRUPOS_ALUNOS_DEFAULT);
     setCfgMetodosPagamento([]); setCfgCartoes([]); setCfgEventos([]); setCfgGruposDesconto([])
     setCfgPadroesPagamento([]); setCfgPlanoContas([]); setCfgTiposDocumento([]); setCfgConvenios([])
 
-    setUnidadesFiscais([]); setNotasFiscais([])
-    setAdvertencias([]); setAdiantamentos([]); setSystemLogs([])
-    setCensoPendencias([]); setCensoExports([]); setCensoAuditLogs([]); setCensoOperacoes([])
-    setCensoAlunosData([]); setCensoTurmasData([]); setCensoProfsData([])
-  }, [])
+    setNotasFiscais([])
+    setAdvertencias([]); setAdiantamentos([]);    }, [])
 
   // Memoize tracked setters to keep stable references
   const trackedSetters = useMemo(() => ({
@@ -1782,11 +1763,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTarefas: createTrackedSetter('Operacional', 'Tarefas', setTarefas),
     setMantenedores: createTrackedSetter('Configurações', 'Mantenedores', setMantenedores),
     setEventosAgenda: createTrackedSetter('Agenda', 'Eventos', setEventosAgenda),
-    setRotinaItems: createTrackedSetter('Pedagógico', 'Rotina', setRotinaItems),
-    setAutorizacoes: createTrackedSetter('Agenda', 'Autorizações', setAutorizacoes),
-    setMomentos: createTrackedSetter('Agenda', 'Momentos', setMomentos),
-    setEnquetes: createTrackedSetter('Agenda', 'Enquetes', setEnquetes),
-    setOcorrencias: createTrackedSetter('Operacional', 'Ocorrências', setOcorrencias),
+                    setOcorrencias: createTrackedSetter('Operacional', 'Ocorrências', setOcorrencias),
     setTransferencias: createTrackedSetter('Acadêmico', 'Transferências', setTransferencias),
     setFrequencias: createTrackedSetter('Acadêmico', 'Frequências', setFrequencias),
     setLancamentosNota: createTrackedSetter('Acadêmico', 'Notas', setLancamentosNota),
@@ -1834,10 +1811,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     tarefas, ...{ setTarefas: trackedSetters.setTarefas },
     mantenedores, ...{ setMantenedores: trackedSetters.setMantenedores },
     eventosAgenda, ...{ setEventosAgenda: trackedSetters.setEventosAgenda },
-    rotinaItems, ...{ setRotinaItems: trackedSetters.setRotinaItems },
-    autorizacoes, ...{ setAutorizacoes: trackedSetters.setAutorizacoes },
-    momentos, ...{ setMomentos: trackedSetters.setMomentos },
-    enquetes, ...{ setEnquetes: trackedSetters.setEnquetes },
+
     ocorrencias, ...{ setOcorrencias: trackedSetters.setOcorrencias },
     transferencias, ...{ setTransferencias: trackedSetters.setTransferencias },
     frequencias, ...{ setFrequencias: trackedSetters.setFrequencias },
@@ -1866,23 +1840,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     movimentacoesManuais, ...{ setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais },
     
-    unidadesFiscais, setUnidadesFiscais,
+     setUnidadesFiscais,
     notasFiscais, setNotasFiscais,
     advertencias, ...{ setAdvertencias: trackedSetters.setAdvertencias },
     adiantamentos, ...{ setAdiantamentos: trackedSetters.setAdiantamentos },
-    systemLogs, setSystemLogs, logSystemAction,
+      logSystemAction,
     wipeAll,
     // Censo Escolar
     censoConfig, setCensoConfig,
-    censoPendencias, setCensoPendencias,
-    censoExports, setCensoExports,
-    censoAuditLogs, setCensoAuditLogs,
-    censoOperacoes, setCensoOperacoes,
+     setCensoPendencias,
+     setCensoExports,
+     setCensoAuditLogs,
+     setCensoOperacoes,
     logCensoAction,
     // Enriquecimento Censitário
-    censoAlunosData, setCensoAlunosData,
-    censoTurmasData, setCensoTurmasData,
-    censoProfsData, setCensoProfsData,
+     setCensoAlunosData,
+     setCensoTurmasData,
+     setCensoProfsData,
     perfisLoading,
     perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
     setPerfis: (val: any) => {
@@ -1893,18 +1867,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [
     turmas, leads, comunicados, tarefas, mantenedores,
-    eventosAgenda, rotinaItems, autorizacoes, momentos, enquetes,
+    eventosAgenda,    
     ocorrencias, transferencias, frequencias, lancamentosNota,
     cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas,
     cfgNiveisEnsino, cfgSeries, cfgTiposOcorrencia, cfgEsquemasAvaliacao, cfgGruposAvaliacao, cfgArredondamentos, esquemaNota, cfgFormulasNotas,
     cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto,
     cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios,
     cfgCalendarioLetivo, movimentacoesManuais,
-    unidadesFiscais, notasFiscais, advertencias, adiantamentos,
-    systemLogs, logSystemAction, wipeAll,
-    censoConfig, censoPendencias, censoExports, censoAuditLogs,
-    censoOperacoes, logCensoAction,
-    censoAlunosData, censoTurmasData, censoProfsData, perfis,
+     notasFiscais, advertencias, adiantamentos,
+     logSystemAction, wipeAll,
+    censoConfig,   
+     logCensoAction,
+       perfis,
     perfisLoading,
     trackedSetters,
   ])

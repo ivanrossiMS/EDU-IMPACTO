@@ -96,6 +96,7 @@ interface ADContextState {
   adConfirm: (message: string, title?: string, onConfirm?: () => void) => void
   adLoading: boolean
   setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
+  isDataLoading: boolean
 }
 
 const AgendaDigitalContext = createContext<ADContextState>({
@@ -122,7 +123,8 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adAlert: () => {},
   adConfirm: () => {},
   adLoading: false,
-  setAdLoading: () => {}
+  setAdLoading: () => {},
+  isDataLoading: false
 })
 
 // Dados de semente para demonstração
@@ -138,11 +140,17 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   // Se for família, não faz fetch global massivo (Páginas buscam localmente)
   const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
 
-  const [comunicados, setComunicadosState, { setLocal: setLocalComunicadosState }] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
-  const [chatsList, setChatsList] = useSupabaseArray<ADChat>('agenda/chats', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
-  const [chatGroups, setChatGroups] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], familyOptions)
-  const [messagesArray, setMessagesArray] = useSupabaseArray<any>('agenda/mensagens', [], isFamily ? familyOptions : { refreshIntervalMs: 5000 })
-  const [momentosFeed, setMomentosFeed] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
+  const [comunicados, setComunicadosState, { setLocal: setLocalComunicadosState, loading: comunicadosLoading }] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
+  // Módulos desativados (Removendo o polling/sobrecarga do useSupabaseArray)
+  const [chatsList, setChatsList] = useState<ADChat[]>([])
+  const [chatGroups, setChatGroups] = useState<ADChatGroup[]>([])
+  const [messagesArray, setMessagesArray] = useState<any[]>([])
+  const chatsLoading = false;
+  const chatGroupsLoading = false;
+  const messagesLoading = false;
+  const [momentosFeed, setMomentosFeed, { loading: momentosLoading }] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
+
+
 
   const messages = React.useMemo(() => {
     const record: Record<string, ADMessage[]> = {}
@@ -175,6 +183,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const [adLoading, setAdLoading] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
+  const isDataLoading = !isLoaded || comunicadosLoading || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
   const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
   const [adConfig, setAdConfig] = useState<ADConfig>({
     permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
@@ -268,7 +277,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       adAlert,
       adConfirm,
       adLoading,
-      setAdLoading
+      setAdLoading,
+      isDataLoading
     }}>
       {children}
       

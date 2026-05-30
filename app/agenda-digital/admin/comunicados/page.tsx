@@ -13,7 +13,7 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2
 } from 'lucide-react'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
@@ -25,7 +25,7 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, adAlert, adConfirm } = useAgendaDigital()
+  const { comunicados, setComunicados, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const { forms, setDisparos } = useFormularios()
@@ -343,7 +343,13 @@ export default function ADAdminComunicados() {
 
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {filtered.length === 0 && (
+          {filtered.length === 0 && isDataLoading && (
+            <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+              <Loader2 size={32} className="animate-spin" style={{ color: '#6366f1' }} />
+              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Carregando comunicados...</p>
+            </div>
+          )}
+          {filtered.length === 0 && !isDataLoading && (
             <div style={{ textAlign: 'center', padding: '80px 20px', background: 'rgba(0,0,0,0.02)', borderRadius: 20, border: '2px dashed hsl(var(--border-subtle))' }}>
               <Bell size={48} style={{ opacity: 0.1, marginBottom: 16 }} />
               <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>

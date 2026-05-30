@@ -545,8 +545,7 @@ export default function TestDataSection() {
                 cor:rnd(CORES),
               })
             }
-            data.setRotinaItems(p => [...p, ...items])
-            addLog({ module:'Horário de Aulas', count:items.length, ok:true })
+                        addLog({ module:'Horário de Aulas', count:items.length, ok:true })
             break
           }
 
@@ -740,8 +739,7 @@ export default function TestDataSection() {
     data.setLancamentosNota(p => p.filter(x => !isSeed(x.id)))
     data.setOcorrencias(p => p.filter(x => !isSeed(x.id)))
     data.setTransferencias(p => p.filter(x => !isSeed(x.id)))
-    data.setRotinaItems(p => p.filter(x => !isSeed(x.id)))
-    data.setEventosAgenda(p => p.filter(x => !isSeed(x.id)))
+        data.setEventosAgenda(p => p.filter(x => !isSeed(x.id)))
     addLog({ module:'Limpeza concluída', count:0, ok:true })
     setDeleting(false); setDone(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps

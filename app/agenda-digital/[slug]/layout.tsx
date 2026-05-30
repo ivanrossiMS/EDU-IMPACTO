@@ -2,6 +2,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
+import { AgendaRealtimeProvider } from '../components/AgendaRealtimeProvider';
 
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
@@ -236,14 +237,23 @@ export default function AgendaDigitalFamilyLayout({
      const loadProfile = async () => {
         try {
            const res = await fetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
-           const data = await res.json()
-           if (res.ok) {
-              setProfileData(data)
-           } else {
-              console.error(data.error)
+           
+           const contentType = res.headers.get("content-type");
+           if (!contentType || !contentType.includes("application/json")) {
+             console.error('Expected JSON, but received HTML or other format.');
+             return;
            }
+
+           if (!res.ok) {
+              const data = await res.json()
+              console.error(data.error)
+              return
+           }
+
+           const data = await res.json()
+           setProfileData(data)
         } catch(e) {
-           console.error(e)
+           console.error('Failed to load profile data:', e)
         } finally {
            setIsLoading(false)
         }
@@ -1748,7 +1758,9 @@ export default function AgendaDigitalFamilyLayout({
         {/* Page Content Area */}
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
           <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole }}>
-            {children}
+            <AgendaRealtimeProvider>
+              {children}
+            </AgendaRealtimeProvider>
           </SelectedStudentProvider>
         </div>
       </div>
