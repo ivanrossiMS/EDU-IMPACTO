@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import Script from 'next/script'
 import { useRouter, useParams } from 'next/navigation'
-import { BellRing, Calendar, FileText, Image as ImageIcon, CheckCircle, ShieldAlert } from 'lucide-react'
+import { BellRing, Calendar, FileText, Image as ImageIcon, CheckCircle, ShieldAlert, Megaphone, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
@@ -215,14 +215,46 @@ export function AgendaRealtimeProvider({
           });
           
           // 3. Show Standard Modern Toast (Garante que vai aparecer)
-          toast.success('Novo comunicado recebido!', {
-            description: newCom.titulo,
+          toast.custom((t) => (
+            <div className="flex items-center w-full sm:w-[400px] bg-white p-3.5 sm:p-4 rounded-[20px] sm:rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto">
+              {/* Ícone */}
+              <div className="relative flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#F3F0FF] flex items-center justify-center">
+                <Megaphone className="w-5 h-5 sm:w-6 sm:h-6 text-[#6C48FA]" />
+                <span className="absolute -top-0.5 -right-0.5 sm:top-0 sm:right-0 w-3 h-3 sm:w-3.5 sm:h-3.5 bg-[#FF4F64] border-2 border-white rounded-full"></span>
+              </div>
+
+              {/* Textos */}
+              <div className="flex-1 min-w-0">
+                <h4 className="text-gray-900 font-bold text-[14px] sm:text-[15px] leading-snug truncate">
+                  Novo comunicado disponível!
+                </h4>
+                <p className="text-gray-500 text-[12px] sm:text-[13px] leading-snug mt-0.5 truncate pr-2">
+                  Acesse agora para não perder nenhuma novidade.
+                </p>
+              </div>
+
+              {/* Botão */}
+              <button 
+                onClick={() => {
+                  toast.dismiss(t);
+                  router.push(`/agenda-digital/${alunoId}/comunicados`);
+                }}
+                className="flex-shrink-0 bg-[#6C48FA] hover:bg-[#5a38dd] text-white text-[13px] sm:text-sm font-semibold px-3 sm:px-4 py-2 rounded-[10px] sm:rounded-[12px] transition-colors"
+              >
+                Ver agora
+              </button>
+
+              {/* Fechar */}
+              <button 
+                onClick={() => toast.dismiss(t)}
+                className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors ml-0.5 sm:ml-1 p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          ), {
             duration: 8000,
-            position: 'top-right',
-            action: {
-              label: 'Ver agora',
-              onClick: () => router.push(`/agenda-digital/${alunoId}/comunicados`)
-            }
+            position: 'top-center'
           });
         }
       })
