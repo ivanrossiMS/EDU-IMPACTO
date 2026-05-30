@@ -1,6 +1,9 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
+import { compressImage } from '@/lib/mediaCompressor'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { updateProfilePhotoAction } from '@/app/(app)/meu-perfil/actions'
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -25,7 +28,9 @@ import {
   BarChart2,
   AlertTriangle,
   GraduationCap,
-  UserCog
+  UserCog,
+  Camera,
+  Loader2
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -65,6 +70,46 @@ export function ADSidebar() {
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
   const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0 })
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !currentUser) return
+    
+    setIsUploadingPhoto(true)
+    try {
+      const fileToUpload = await compressImage(file, {
+        maxWidth: 300,
+        maxHeight: 300,
+        quality: 0.85,
+        format: 'image/webp'
+      });
+
+      const uploadRes = await uploadFileToSupabase({
+        bucket: 'comunicados-midia',
+        folder: 'avatars',
+        file: fileToUpload,
+        usageType: 'fixed'
+      })
+
+      if (!uploadRes.ok || !uploadRes.url) {
+        throw new Error(uploadRes.error || 'Falha no envio da foto.')
+      }
+
+      const fotoUrl = uploadRes.url
+      
+      const updateRes = await updateProfilePhotoAction(currentUser.id, fotoUrl)
+      if (updateRes.error) throw new Error(updateRes.error)
+
+      localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)
+      setCurrentUser({ ...currentUser, foto: fotoUrl })
+      
+    } catch (err: any) {
+      alert('Erro ao atualizar foto: ' + err.message)
+    } finally {
+      setIsUploadingPhoto(false)
+    }
+  }
 
   // usando useEffect do top-level (já deve estar importado ou usamos o top level)
   useEffect(() => {
@@ -517,14 +562,23 @@ export function ADSidebar() {
                 boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14, overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
                     <UserAvatar 
                       userId={currentUser?.id} 
                       name={currentUser?.nome || 'Usuário'} 
                       fotoUrl={currentUser?.foto}
                       size={36}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
                     />
+                    {isUploadingPhoto && (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Loader2 className="animate-spin" size={14} color="#fff" />
+                      </div>
+                    )}
+                    <label style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', borderRadius: '50%' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
+                      <Camera size={14} color="#fff" />
+                      <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
+                    </label>
                   </div>
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
@@ -568,14 +622,23 @@ export function ADSidebar() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14, overflow: 'hidden' }}>
+                <div style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 14 }}>
                   <UserAvatar 
                     userId={currentUser?.id} 
                     name={currentUser?.nome || 'Usuário'} 
                     fotoUrl={currentUser?.foto}
                     size={40}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
                   />
+                  {isUploadingPhoto && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Loader2 className="animate-spin" size={16} color="#fff" />
+                    </div>
+                  )}
+                  <label style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', borderRadius: '50%' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
+                    <Camera size={16} color="#fff" />
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
+                  </label>
                 </div>
                 {currentUser?.cargo !== 'Aluno' && (
                   <button 
