@@ -138,7 +138,8 @@ export default function ADAdminComunicados() {
         dataAgendamento: dataAgendamento || null,
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
+        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       }
 
@@ -164,7 +165,8 @@ export default function ADAdminComunicados() {
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
+        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados',
         prioridade: 'normal',
         fixado: false,

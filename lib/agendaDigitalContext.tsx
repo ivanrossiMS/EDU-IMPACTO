@@ -14,6 +14,7 @@ export interface ADComunicado {
   autorCargo: string
   autorId?: string
   turmas: string[]
+  turmasIds?: string[]
   alunosIds: string[]
   destino?: string
   prioridade: 'normal' | 'alta' | 'urgente'

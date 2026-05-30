@@ -143,6 +143,7 @@ export function AgendaRealtimeProvider({
 
       // Converte tudo para string para evitar bug de [4697].includes("4697") === false
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses || turmasStringArray)
+      const alvoTurmasIds = ensureStringArray(dados.turmasIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
 
       const alunoStr = String(alunoId)
@@ -170,6 +171,7 @@ export function AgendaRealtimeProvider({
       // Turma Específica
       if (turmaNome && alvoTurmas.includes(turmaNomeStr)) return true
       if (rawTurma && alvoTurmas.includes(rawTurmaStr)) return true
+      if (rawTurma && alvoTurmasIds.includes(rawTurmaStr)) return true
 
       // Aluno Específico
       if (

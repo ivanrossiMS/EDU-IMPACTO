@@ -176,6 +176,7 @@ function buildRow(c: any) {
     status: rest.status || 'enviado',
     prioridade: rest.prioridade || 'normal',
     turmas: Array.isArray(rest.turmas) ? rest.turmas : [],
+    turmasIds: Array.isArray(rest.turmasIds) ? rest.turmasIds : [],
     alunosIds: Array.isArray(rest.alunosIds) ? rest.alunosIds : [],
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
