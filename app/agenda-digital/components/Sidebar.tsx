@@ -610,44 +610,40 @@ export function ADSidebar() {
 
                 {!isCollapsed && (
                   <button 
-                    onClick={() => {
-                      alert('Processando pedido de notificação... aguarde.');
-                      if (typeof window !== 'undefined') {
-                        const win = window as any;
-                        
-                        // Fallback se o OneSignal não carregar em 2 segundos (AdBlocker)
-                        setTimeout(() => {
-                          if (!win.OneSignal) {
-                            alert('❌ ERRO CRÍTICO: O script do OneSignal foi completamente bloqueado! Você está usando um AdBlocker (ex: uBlock, AdGuard) ou o navegador Brave? Desative os escudos para este site!');
+                    onClick={async () => {
+                      if (typeof window === 'undefined') return;
+                      const win = window as any;
+                      
+                      try {
+                        const OS = win.OneSignal;
+                        // Verifica se o objeto OneSignal já existe e tem a API de Notifications
+                        if (OS && OS.Notifications) {
+                          const current = OS.Notifications.permission;
+                          if (current === true || current === 'granted') {
+                            alert('✅ As notificações já estão Ativadas no seu Chrome!');
+                            return;
                           }
-                        }, 2000);
-
-                        win.OneSignalDeferred = win.OneSignalDeferred || [];
-                        win.OneSignalDeferred.push(async function(OneSignal: any) {
-                          try {
-                            const current = OneSignal.Notifications.permission;
-                            if (current === true || current === 'granted') {
-                              alert('✅ As notificações já estão Ativadas no seu Chrome!');
-                              return;
-                            }
-                            
-                            if (current === false || current === 'denied') {
-                              alert('❌ O Chrome está bloqueando as notificações nas configurações.');
-                              return;
-                            }
-
-                            await OneSignal.Notifications.requestPermission();
-                            
-                            const after = OneSignal.Notifications.permission;
-                            if (after === true || after === 'granted') {
-                              alert('🎉 Notificações ativadas com sucesso!');
-                            } else {
-                              alert('⚠️ A permissão não foi concedida. (Talvez bloqueada pelo macOS).');
-                            }
-                          } catch (e) {
-                            alert('Erro interno do OneSignal.');
+                          
+                          if (current === false || current === 'denied') {
+                            alert('❌ O Chrome está bloqueando as notificações. Clique no cadeado do navegador para liberar.');
+                            return;
                           }
-                        });
+
+                          // Tenta pedir permissão nativa DIRETAMENTE sem a fila do Deferred
+                          await OS.Notifications.requestPermission();
+                          
+                          const after = OS.Notifications.permission;
+                          if (after === true || after === 'granted') {
+                            alert('🎉 Notificações ativadas com sucesso!');
+                          } else {
+                            alert('⚠️ A permissão não foi concedida (pode ter sido bloqueada pelo macOS ou ignorada).');
+                          }
+                        } else {
+                          // Se OS.Notifications não existir, o SDK não carregou ou está travado
+                          alert('❌ ERRO: O sistema de notificações não carregou. Isso pode ser causado por extensões de AdBlocker ou falha na rede ao baixar o OneSignal.');
+                        }
+                      } catch (e) {
+                        alert('❌ Erro Crítico ao chamar a permissão: ' + String(e));
                       }
                     }}
                     style={{
