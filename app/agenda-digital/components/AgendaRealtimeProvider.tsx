@@ -163,8 +163,7 @@ export function AgendaRealtimeProvider({
           // 1. Emit Event for page.tsx to pick up and auto-append
           window.dispatchEvent(new CustomEvent('ad:comunicado-inserted', { detail: newCom }));
           
-          // 2. Show Custom Modern Toast
-          toast.custom((t) => (
+          toast(
             <div 
               style={{
                 background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
@@ -175,13 +174,11 @@ export function AgendaRealtimeProvider({
                 alignItems: 'center',
                 gap: 16,
                 boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.5)',
-                width: 350,
-                maxWidth: '100vw',
+                width: '100%',
                 animation: 'pulseGlow 2s infinite',
                 cursor: 'pointer'
               }}
               onClick={() => {
-                toast.dismiss(t);
                 router.push(`/agenda-digital/${alunoId}/comunicados`);
               }}
             >
@@ -193,10 +190,11 @@ export function AgendaRealtimeProvider({
                 <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{newCom.titulo}</div>
               </div>
               <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800 }}>
-                Ler
+                Ver agora
               </div>
-            </div>
-          ), { duration: 6000, position: 'bottom-center' });
+            </div>,
+            { duration: 6000, position: 'bottom-center' }
+          );
         }
       })
       // --- MOMENTOS ---
@@ -261,7 +259,7 @@ export function AgendaRealtimeProvider({
   return (
     <>
       <Script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" strategy="afterInteractive" />
-      <Toaster position="top-center" richColors />
+      <Toaster position="bottom-center" toastOptions={{ style: { zIndex: 999999, background: 'transparent', border: 'none', boxShadow: 'none' } }} />
       {children}
     </>
   )
