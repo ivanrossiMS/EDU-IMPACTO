@@ -610,16 +610,38 @@ export function ADSidebar() {
 
                 {!isCollapsed && (
                   <button 
-                    onClick={async () => {
-                      if (typeof window !== 'undefined' && (window as any).OneSignal) {
-                        try {
-                          await (window as any).OneSignal.Notifications.requestPermission()
-                        } catch (e) {
-                          console.error(e)
-                          alert('Não foi possível pedir permissão. Verifique as configurações de notificação do seu navegador.')
-                        }
-                      } else {
-                        alert('Sistema de notificações está carregando ou bloqueado. Aguarde um instante.')
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        const win = window as any;
+                        win.OneSignalDeferred = win.OneSignalDeferred || [];
+                        win.OneSignalDeferred.push(async function(OneSignal: any) {
+                          try {
+                            const current = OneSignal.Notifications.permission;
+                            if (current === true || current === 'granted') {
+                              alert('✅ As notificações já estão Ativadas no seu Chrome!');
+                              return;
+                            }
+                            
+                            // Se estiver bloqueado nativamente pelo navegador
+                            if (current === false || current === 'denied') {
+                              alert('❌ O Chrome está bloqueando as notificações. Você precisa clicar no ícone de "Cadeado" ou "Configurações" ao lado da barra de endereços (URL) e mudar Notificações para "Permitir".');
+                              return;
+                            }
+
+                            // Tenta pedir permissão
+                            await OneSignal.Notifications.requestPermission();
+                            
+                            const after = OneSignal.Notifications.permission;
+                            if (after === true || after === 'granted') {
+                              alert('🎉 Notificações ativadas com sucesso!');
+                            } else {
+                              alert('⚠️ A permissão não foi concedida. Talvez o macOS ou o Chrome esteja bloqueando silenciosamente. Verifique as Preferências de Sistema do seu Mac (Notificações -> Google Chrome).');
+                            }
+                          } catch (e) {
+                            console.error(e);
+                            alert('Erro interno do OneSignal. Verifique se você não está usando um AdBlocker.');
+                          }
+                        });
                       }
                     }}
                     style={{
