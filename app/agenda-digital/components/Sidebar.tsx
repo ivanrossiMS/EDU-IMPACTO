@@ -612,38 +612,35 @@ export function ADSidebar() {
                   <button 
                     onClick={async () => {
                       if (typeof window === 'undefined') return;
-                      const win = window as any;
                       
                       try {
-                        const OS = win.OneSignal;
-                        // Verifica se o objeto OneSignal já existe e tem a API de Notifications
-                        if (OS && OS.Notifications) {
-                          const current = OS.Notifications.permission;
-                          if (current === true || current === 'granted') {
-                            alert('✅ As notificações já estão Ativadas no seu Chrome!');
-                            return;
-                          }
-                          
-                          if (current === false || current === 'denied') {
-                            alert('❌ O Chrome está bloqueando as notificações. Clique no cadeado do navegador para liberar.');
-                            return;
-                          }
-
-                          // Tenta pedir permissão nativa DIRETAMENTE sem a fila do Deferred
-                          await OS.Notifications.requestPermission();
-                          
-                          const after = OS.Notifications.permission;
-                          if (after === true || after === 'granted') {
-                            alert('🎉 Notificações ativadas com sucesso!');
-                          } else {
-                            alert('⚠️ A permissão não foi concedida (pode ter sido bloqueada pelo macOS ou ignorada).');
-                          }
+                        const nativePerm = Notification.permission;
+                        alert("🔍 DIAGNÓSTICO PROFUNDO:\n\n1. Permissão Nativa do Chrome: " + nativePerm);
+                        
+                        if (nativePerm === 'granted') {
+                          // Se já está permitido, dispara um teste nativo!
+                          new Notification('Teste de Conexão', { body: 'O Chrome e o Mac estão liberando notificações!' });
+                          alert("✅ Disparei uma notificação nativa de Teste!\n\nSe ela não pulou no canto superior direito da tela do seu Mac, então é 100% o MACOS (Ajustes da Apple) que está silenciando o Google Chrome!");
+                        } else if (nativePerm === 'denied') {
+                          alert("❌ O Chrome está respondendo 'denied' (negado) na raiz. Isso significa que ele ainda está bloqueando.");
                         } else {
-                          // Se OS.Notifications não existir, o SDK não carregou ou está travado
-                          alert('❌ ERRO: O sistema de notificações não carregou. Isso pode ser causado por extensões de AdBlocker ou falha na rede ao baixar o OneSignal.');
+                          // Pede permissão nativa pura, sem OneSignal
+                          const ask = await Notification.requestPermission();
+                          alert("Você respondeu à caixa do Chrome: " + ask);
+                          if (ask === 'granted') {
+                            new Notification('Sucesso', { body: 'Notificação ativada!' });
+                          }
+                        }
+                        
+                        // Mostra também o que o OneSignal acha
+                        const OS = (window as any).OneSignal;
+                        if (OS && OS.Notifications) {
+                          alert("2. Status interno do OneSignal: " + OS.Notifications.permission);
+                        } else {
+                          alert("2. OneSignal não está carregado.");
                         }
                       } catch (e) {
-                        alert('❌ Erro Crítico ao chamar a permissão: ' + String(e));
+                        alert('❌ Erro no teste nativo: ' + String(e));
                       }
                     }}
                     style={{
