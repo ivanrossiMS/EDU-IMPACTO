@@ -1,7 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check } from 'lucide-react'
+import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check, Camera } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
