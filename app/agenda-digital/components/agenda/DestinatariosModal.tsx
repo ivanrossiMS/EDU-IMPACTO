@@ -218,12 +218,44 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           position: 'fixed', inset: 0, zIndex: 2147483647,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
+          <style>{`
+            .dest-modal-container {
+              width: 100%;
+              height: 100dvh;
+              position: absolute;
+              inset: 0;
+              background: #F8FAFC;
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+            }
+            .dest-modal-backdrop {
+              display: none;
+            }
+            @media (min-width: 1024px) {
+              .dest-modal-backdrop {
+                display: block;
+                position: absolute;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.4);
+                backdrop-filter: blur(8px);
+              }
+              .dest-modal-container {
+                position: relative;
+                inset: auto;
+                max-width: 700px;
+                height: 90vh;
+                border-radius: 28px;
+                box-shadow: 0 40px 100px rgba(0,0,0,0.2);
+              }
+            }
+          `}</style>
+          
           {/* Backdrop Desktop */}
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }}
-            className="hidden lg:block"
+            className="dest-modal-backdrop"
           />
 
           <motion.div 
@@ -231,50 +263,50 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: '100%', opacity: 0, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute inset-0 lg:relative lg:inset-auto w-full h-[100dvh] lg:h-[90vh] lg:max-w-[700px] lg:rounded-[28px] lg:shadow-2xl overflow-hidden flex flex-col bg-[#F8FAFC]"
-            style={{ boxShadow: '0 40px 100px rgba(0,0,0,0.2)', zIndex: 2147483647 }}
+            className="dest-modal-container"
+            style={{ zIndex: 2147483647 }}
           >
             {/* Header (Fixed) */}
-            <header className="h-[72px] shrink-0 bg-[#F8FAFC]/80 backdrop-blur-md border-b border-[#E2E8F0] flex items-center justify-between px-4 lg:px-6 z-20 sticky top-0">
+            <header style={{ height: 72, flexShrink: 0, background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', position: 'sticky', top: 0, zIndex: 20 }}>
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={onClose}
-                className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors"
+                style={{ width: 48, height: 48, borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', border: 'none', cursor: 'pointer' }}
               >
                 <X size={24} />
               </motion.button>
 
-              <div className="flex flex-col items-center">
-                <h2 className="text-[17px] font-semibold text-[#0F172A] leading-tight">Destinatários</h2>
-                <span className="text-[13px] font-medium text-[#64748B]">Selecione quem receberá o comunicado</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0F172A', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B' }}>Selecione quem receberá o comunicado</span>
               </div>
 
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={handleConfirm}
-                className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#6D5DF6] to-[#8B5CF6] flex items-center justify-center text-white shadow-lg shadow-indigo-500/30"
+                style={{ width: 48, height: 48, borderRadius: '16px', background: 'linear-gradient(to top right, #6D5DF6, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(109, 93, 246, 0.3)' }}
               >
-                <Check size={28} strokeWidth={2.5} />
+                <Check size={24} strokeWidth={2.5} />
               </motion.button>
             </header>
 
             {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto pb-[120px]">
+            <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
               
               {/* Selected Chips Area */}
-              <div className="px-4 lg:px-6 pt-6 pb-2">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[15px] font-semibold text-[#0F172A]">
+              <div style={{ padding: '24px 24px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
                     Selecionados ({Object.keys(selected).length})
                   </h3>
                   {Object.keys(selected).length > 0 && (
-                    <button onClick={() => setSelected({})} className="text-[14px] font-semibold text-[#6D5DF6] hover:text-[#4F46E5]">
+                    <button onClick={() => setSelected({})} style={{ fontSize: 14, fontWeight: 600, color: '#6D5DF6', background: 'none', border: 'none', cursor: 'pointer' }}>
                       Limpar tudo
                     </button>
                   )}
                 </div>
 
-                <div className="flex overflow-x-auto pb-4 gap-2 no-scrollbar" style={{ scrollbarWidth: 'none' }}>
+                <div style={{ display: 'flex', overflowX: 'auto', paddingBottom: 16, gap: 8, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                   <AnimatePresence mode="popLayout">
                     {smartChips.map(chip => (
                       <motion.div
@@ -283,38 +315,41 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)' }}
                         key={chip.id}
-                        className="shrink-0 h10 px-4 py-2 bg-white border border-[#E2E8F0] rounded-full flex items-center gap-3 shadow-sm"
+                        style={{ flexShrink: 0, height: 40, padding: '0 16px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 100, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
                       >
-                        <Building2 size={16} className="text-[#6D5DF6]" />
-                        <span className="text-[14px] font-medium text-[#0F172A]">{chip.name}</span>
-                        <button onClick={chip.onRemove} className="text-[#94A3B8] hover:text-red-500 transition-colors ml-1">
+                        <Building2 size={16} color="#6D5DF6" />
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{chip.name}</span>
+                        <button onClick={chip.onRemove} style={{ color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginLeft: 4 }}>
                           <X size={16} />
                         </button>
                       </motion.div>
                     ))}
                   </AnimatePresence>
                   {smartChips.length === 0 && (
-                    <span className="text-[14px] text-[#94A3B8] italic py-2">Nenhum destinatário selecionado</span>
+                    <span style={{ fontSize: 14, color: '#94A3B8', fontStyle: 'italic', padding: '8px 0' }}>Nenhum destinatário selecionado</span>
                   )}
                 </div>
               </div>
 
               {/* Main List */}
-              <div className="px-4 lg:px-6 pb-6">
+              <div style={{ padding: '0 24px 24px' }}>
                 
                 {/* Selecionar Tudo Linha */}
-                <div className="flex items-center justify-between mb-4 mt-2">
-                  <h3 className="text-[15px] font-semibold text-[#0F172A]">Todos</h3>
-                  <button onClick={toggleAll} className="flex items-center gap-2 text-[14px] font-semibold text-[#64748B] hover:text-[#0F172A] transition-colors">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>Todos</h3>
+                    <span style={{ background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>{listItems.length}</span>
+                  </div>
+                  <button onClick={toggleAll} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 600, color: '#4F46E5', background: 'none', border: 'none', cursor: 'pointer' }}>
                     Selecionar tudo
-                    <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-all ${allLeafIds.length > 0 && allLeafIds.every(id => !!selected[id]) ? 'bg-[#6D5DF6] border-[#6D5DF6]' : 'border-2 border-[#CBD5E1] bg-transparent'}`}>
-                       {allLeafIds.length > 0 && allLeafIds.every(id => !!selected[id]) && <Check size={14} color="#fff" strokeWidth={3} />}
+                    <div style={{ width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', background: allLeafIds.length > 0 && allLeafIds.every(id => !!selected[id]) ? '#6D5DF6' : 'transparent', border: allLeafIds.length > 0 && allLeafIds.every(id => !!selected[id]) ? '2px solid #6D5DF6' : '2px solid #CBD5E1' }}>
+                       {allLeafIds.length > 0 && allLeafIds.every(id => !!selected[id]) && <Check size={16} color="#fff" strokeWidth={3} />}
                     </div>
                   </button>
                 </div>
 
                 {/* Cards List */}
-                <div className="flex flex-col gap-3">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {listItems.map(item => {
                     const isFullySelected = item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
                     const Icon = item.icon
@@ -326,42 +361,47 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => toggleSelect(item)}
-                        className={`cursor-pointer relative overflow-hidden rounded-[18px] p-4 flex items-center gap-4 transition-all duration-200 border ${
-                          isFullySelected 
-                            ? 'bg-[#F5F3FF] border-[#C4B5FD]' 
-                            : 'bg-white border-[#E2E8F0] hover:border-[#CBD5E1]'
-                        }`}
+                        style={{ 
+                          cursor: 'pointer', overflow: 'hidden', borderRadius: 20, padding: '16px',
+                          display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16,
+                          background: isFullySelected ? '#F5F3FF' : '#fff',
+                          border: isFullySelected ? '2px solid #C4B5FD' : '2px solid #E2E8F0',
+                          transition: 'all 0.2s'
+                        }}
                       >
                         {/* Checkbox */}
-                        <div className={`w-6 h-6 shrink-0 rounded-[6px] flex items-center justify-center transition-all ${
-                          isFullySelected ? 'bg-[#6D5DF6] border-[#6D5DF6]' : 'border-2 border-[#CBD5E1] bg-white'
-                        }`}>
+                        <div style={{ 
+                          width: 24, height: 24, flexShrink: 0, borderRadius: 6, 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+                          background: isFullySelected ? '#6D5DF6' : '#fff',
+                          border: isFullySelected ? '2px solid #6D5DF6' : '2px solid #CBD5E1'
+                        }}>
                           <AnimatePresence>
                             {isFullySelected && (
                               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
-                                <Check size={14} color="#fff" strokeWidth={3} />
+                                <Check size={16} color="#fff" strokeWidth={3} />
                               </motion.div>
                             )}
                           </AnimatePresence>
                         </div>
 
                         {/* Icon */}
-                        <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center ${isCategory ? 'bg-[#EEF2FF] text-[#4F46E5]' : 'bg-[#F8FAFC] text-[#64748B]'}`}>
-                          <Icon size={20} />
+                        <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isCategory ? '#EEF2FF' : '#F8FAFC', color: isCategory ? '#4F46E5' : '#6D5DF6' }}>
+                          <Icon size={22} />
                         </div>
 
                         {/* Text */}
-                        <div className="flex flex-col flex-1 min-w-0">
-                          <span className={`text-[16px] font-semibold truncate ${isFullySelected ? 'text-[#4F46E5]' : 'text-[#0F172A]'}`}>
+                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {item.title}
                           </span>
-                          <span className="text-[13px] font-medium text-[#64748B] truncate">
+                          <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {item.subtitle}
                           </span>
                         </div>
 
                         {/* Badge */}
-                        <div className="shrink-0 bg-[#F1F5F9] text-[#475569] text-[12px] font-semibold px-3 py-1 rounded-full">
+                        <div style={{ flexShrink: 0, background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 100 }}>
                           {item.countBadge}
                         </div>
                       </motion.div>
@@ -372,20 +412,20 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             </div>
 
             {/* Footer Fixed */}
-            <div className="absolute bottom-0 left-0 right-0 h-[88px] bg-white/70 backdrop-blur-xl border-t border-[#E2E8F0] px-4 lg:px-6 flex items-center gap-4 z-20">
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 88, background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(16px)', borderTop: '1px solid #E2E8F0', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 16, zIndex: 20 }}>
                <motion.button 
                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                  onClick={onClose}
-                 className="flex-1 h-14 rounded-[18px] bg-white border border-[#E2E8F0] text-[#0F172A] font-semibold text-[16px] shadow-sm"
+                 style={{ flex: 1, height: 56, borderRadius: 16, background: '#fff', border: '1px solid #E2E8F0', color: '#0F172A', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
                >
                  Cancelar
                </motion.button>
                <motion.button 
                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                  onClick={handleConfirm}
-                 className="flex-[2] h-14 rounded-[18px] bg-gradient-to-r from-[#6D5DF6] to-[#4F46E5] text-white font-semibold text-[16px] shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2"
+                 style={{ flex: 2, height: 56, borderRadius: 16, background: 'linear-gradient(to right, #6D5DF6, #4F46E5)', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', boxShadow: '0 8px 24px rgba(109, 93, 246, 0.3)' }}
                >
-                 <Check size={20} />
+                 <Check size={20} strokeWidth={2.5} />
                  Confirmar ({Object.keys(selected).length})
                </motion.button>
             </div>
