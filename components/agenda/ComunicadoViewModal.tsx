@@ -226,9 +226,9 @@ export function ComunicadoViewModal({
           }
           .cvm-header {
             flex-shrink: 0;
-            background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
-            padding: 16px 20px;
-            padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+            background: linear-gradient(135deg, #312e81 0%, #4f46e5 50%, #8b5cf6 100%);
+            padding: 24px 24px;
+            padding-top: calc(env(safe-area-inset-top, 0px) + 24px);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -236,6 +236,19 @@ export function ComunicadoViewModal({
             position: sticky;
             top: 0;
             z-index: 10;
+            overflow: hidden;
+          }
+          .cvm-header-bg {
+            position: absolute;
+            inset: 0;
+            opacity: 0.15;
+            pointer-events: none;
+            background-image: repeating-linear-gradient(45deg, #ffffff 0, #ffffff 1px, transparent 1px, transparent 16px);
+            animation: bgScroll 20s linear infinite;
+          }
+          @keyframes bgScroll {
+            0% { background-position: 0 0; }
+            100% { background-position: 64px 64px; }
           }
           .cvm-body {
             flex: 1;
@@ -302,26 +315,25 @@ export function ComunicadoViewModal({
         >
           {/* HEADER */}
           <div className="cvm-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div className="cvm-header-bg" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, zIndex: 1, position: 'relative' }}>
               <div className="cvm-avatar-area">
-                <UserAvatar userId={comunicado.autorId} name={comunicado.autor} fotoUrl={comunicado.autorFoto} size={54} />
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.2 }}>{comunicado.autor}</span>
-                    {comunicado.autorCargo && (
-                      <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: 12, textTransform: 'uppercase' }}>
-                        {comunicado.autorCargo}
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 12, color: '#e0e7ff', fontWeight: 500 }}>
+                <UserAvatar userId={comunicado.autorId} name={comunicado.autor} fotoUrl={comunicado.autorFoto} size={58} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>{comunicado.autor}</span>
+                  {comunicado.autorCargo && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#e0e7ff', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {comunicado.autorCargo}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', fontWeight: 500, marginTop: 2 }}>
                     {formattedDate} às {formattedTime}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, zIndex: 1, position: 'relative' }}>
               <button className="cvm-icon-btn" onClick={onClose}>
                 <X size={24} />
               </button>
@@ -331,27 +343,43 @@ export function ComunicadoViewModal({
           {/* BODY */}
           <div className="cvm-body">
             
-            {/* Title Block */}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-              <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', color: '#fff', borderRadius: 16, padding: 12, flexShrink: 0, boxShadow: '0 8px 16px rgba(79,70,229,0.2)' }}>
-                📣
+            {/* Title & Text Content Wrapped in Rounded Card */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: 24,
+              padding: 28,
+              boxShadow: '0 4px 24px rgba(0,0,0,0.03)',
+              maxWidth: 800,
+              width: '100%',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 20
+            }}>
+              {/* Title Block */}
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', color: '#fff', borderRadius: 16, padding: 12, flexShrink: 0, boxShadow: '0 8px 16px rgba(79,70,229,0.2)' }}>
+                  📣
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3, marginBottom: 8 }}>
+                    {comunicado.titulo}
+                  </h1>
+                  
+                  {/* Prioridade */}
+                  {(comunicado.prioridade === 'alta' || comunicado.prioridade === 'urgente') && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {comunicado.prioridade === 'alta' && <span style={{ background: '#fee2e2', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fca5a5' }}>Prioridade Alta</span>}
+                      {comunicado.prioridade === 'urgente' && <span style={{ background: '#ffedd5', color: '#f97316', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fdba74' }}>Urgente</span>}
+                    </div>
+                  )}
+                </div>
               </div>
-              <h1 style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>
-                {comunicado.titulo}
-              </h1>
+
+              {/* Text Content */}
+              <div style={{ fontSize: 16, lineHeight: 1.7, color: '#334155', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} 
+                   dangerouslySetInnerHTML={{ __html: comunicado.conteudo.replace(/\n/g, '<br/>') }} />
             </div>
-
-            {/* Prioridade */}
-            {(comunicado.prioridade === 'alta' || comunicado.prioridade === 'urgente') && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                {comunicado.prioridade === 'alta' && <span style={{ background: '#fee2e2', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fca5a5' }}>Prioridade Alta</span>}
-                {comunicado.prioridade === 'urgente' && <span style={{ background: '#ffedd5', color: '#f97316', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fdba74' }}>Urgente</span>}
-              </div>
-            )}
-
-            {/* Text Content */}
-            <div style={{ fontSize: 16, lineHeight: 1.7, color: '#334155', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxWidth: 800 }} 
-                 dangerouslySetInnerHTML={{ __html: comunicado.conteudo.replace(/\n/g, '<br/>') }} />
 
             {/* Attachments - Visual Order */}
             {comunicado.anexos && comunicado.anexos.length > 0 && (
