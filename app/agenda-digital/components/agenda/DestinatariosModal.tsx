@@ -231,7 +231,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: '100%', opacity: 0, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="w-full h-[100dvh] lg:h-[90vh] lg:max-w-[700px] lg:rounded-[28px] lg:shadow-2xl overflow-hidden flex flex-col bg-[#F8FAFC] relative"
+            className="absolute inset-0 lg:relative lg:inset-auto w-full h-[100dvh] lg:h-[90vh] lg:max-w-[700px] lg:rounded-[28px] lg:shadow-2xl overflow-hidden flex flex-col bg-[#F8FAFC]"
             style={{ boxShadow: '0 40px 100px rgba(0,0,0,0.2)', zIndex: 2147483647 }}
           >
             {/* Header (Fixed) */}

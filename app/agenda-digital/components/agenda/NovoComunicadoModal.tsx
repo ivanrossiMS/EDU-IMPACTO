@@ -411,9 +411,16 @@ export default function NovoComunicadoModal({
         <div className="ad-nc-header">
           <div style={{ width: 40 }} />
           
-          <div style={{ textAlign: 'center' }}>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <h2 style={{ fontSize: 18, fontWeight: 800, color: '#fff', margin: 0 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: 0, fontWeight: 500 }}>Envie um comunicado para sua escola</p>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 24, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={24} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{currentUser?.nome || 'Usuário ERP'}</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 2 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
+              </div>
+            </div>
           </div>
           
           <button 
@@ -467,15 +474,6 @@ export default function NovoComunicadoModal({
               )}
             </div>
 
-            {/* REMETENTE */}
-            <div className="ad-nc-card" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 16, background: 'linear-gradient(to right, #FAFAFA, #FFFFFF)' }}>
-              <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={48} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#8B5CF6', letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 2 }}>Remetente Padrão</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>{currentUser?.nome || 'Usuário ERP'}</div>
-                <div style={{ fontSize: 13, color: '#64748B', fontWeight: 500 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</div>
-              </div>
-            </div>
           </div>
 
           {/* SECTION 2: TITULO */}
