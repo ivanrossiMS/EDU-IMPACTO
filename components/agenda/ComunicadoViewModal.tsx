@@ -340,7 +340,19 @@ export function ComunicadoViewModal({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <span style={{ fontWeight: 800, fontSize: 18, lineHeight: 1.2 }}>{comunicado.autor}</span>
                   {comunicado.autorCargo && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#e0e7ff', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    <span style={{ 
+                      fontSize: 10, 
+                      fontWeight: 800, 
+                      color: '#ffffff', 
+                      background: 'rgba(255, 255, 255, 0.2)', 
+                      backdropFilter: 'blur(4px)',
+                      padding: '2px 8px', 
+                      borderRadius: 12, 
+                      textTransform: 'uppercase', 
+                      letterSpacing: 0.5,
+                      width: 'fit-content',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}>
                       {comunicado.autorCargo}
                     </span>
                   )}
