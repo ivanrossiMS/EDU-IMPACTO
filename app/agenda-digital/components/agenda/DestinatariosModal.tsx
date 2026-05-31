@@ -212,7 +212,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     <AnimatePresence>
       {isOpen && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 99999,
+          position: 'fixed', inset: 0, zIndex: 999999,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           {/* Backdrop Desktop */}

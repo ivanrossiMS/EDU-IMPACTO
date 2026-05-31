@@ -326,13 +326,13 @@ export default function NovoComunicadoModal({
         
         .ad-nc-dropzone {
           border: 2px dashed #E2E8F0;
-          border-radius: 18px;
-          padding: 24px;
+          border-radius: 12px;
+          padding: 12px 16px;
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
           align-items: center;
-          justify-content: center;
-          gap: 8px;
+          justify-content: flex-start;
+          gap: 12px;
           cursor: pointer;
           background: #FAFAFA;
           transition: all 0.2s;
@@ -552,11 +552,13 @@ export default function NovoComunicadoModal({
             </div>
             
             <label className="ad-nc-dropzone">
-              <div style={{ background: '#F1F5F9', width: 48, height: 48, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <UploadCloud size={24} color="#8B5CF6" />
+              <div style={{ background: '#F1F5F9', width: 40, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <UploadCloud size={20} color="#8B5CF6" />
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>Adicionar arquivos</div>
-              <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500 }}>Máx. 50MB por arquivo</div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Adicionar arquivos</span>
+                <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500 }}>Máx. 50MB por arquivo</span>
+              </div>
               <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={handleFileUpload} />
             </label>
 
