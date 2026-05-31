@@ -1,6 +1,7 @@
 
 'use client'
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Search, Users, Check, School, Building2, GraduationCap, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
@@ -207,7 +208,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     onClose()
   }
 
-  return (
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <div style={{
@@ -390,4 +391,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       )}
     </AnimatePresence>
   )
+
+  if (typeof window === "undefined") return null;
+  return createPortal(modalContent, document.body);
 }

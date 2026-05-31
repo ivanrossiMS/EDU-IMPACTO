@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { 
   X, SendIcon, Clock, FileText, Paperclip, Image as ImageIcon, 
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
@@ -126,7 +127,9 @@ export default function NovoComunicadoModal({
 
   if (!isOpen) return null;
 
-  return (
+  if (!isOpen) return null;
+
+  const modalContent = (
     <div style={{
       position: 'fixed',
       inset: 0,
@@ -698,4 +701,7 @@ export default function NovoComunicadoModal({
       </motion.div>
     </div>
   )
+
+  if (typeof window === "undefined") return null;
+  return createPortal(modalContent, document.body);
 }
