@@ -241,14 +241,32 @@ export function ComunicadoViewModal({
           .cvm-header-bg {
             position: absolute;
             inset: 0;
-            opacity: 0.15;
+            opacity: 0.8;
             pointer-events: none;
-            background-image: repeating-linear-gradient(45deg, #ffffff 0, #ffffff 1px, transparent 1px, transparent 16px);
-            animation: bgScroll 20s linear infinite;
+            overflow: hidden;
           }
-          @keyframes bgScroll {
-            0% { background-position: 0 0; }
-            100% { background-position: 64px 64px; }
+          .cvm-header-bg::before,
+          .cvm-header-bg::after {
+            content: '';
+            position: absolute;
+            width: 150%;
+            height: 150%;
+            border-radius: 42%;
+            background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+            animation: rotateWave 12s linear infinite;
+            top: -120%;
+            left: -25%;
+          }
+          .cvm-header-bg::after {
+            background: linear-gradient(to left, rgba(255,255,255,0.05), rgba(255,255,255,0.15));
+            animation: rotateWave 18s linear infinite reverse;
+            top: -110%;
+            left: -10%;
+            border-radius: 45%;
+          }
+          @keyframes rotateWave {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
           }
           .cvm-body {
             flex: 1;
