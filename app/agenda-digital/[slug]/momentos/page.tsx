@@ -54,25 +54,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return () => { document.body.style.overflow = ''; }
   }, [lightboxOpen]);
 
-  // Listener para realtime (adiciona o momento ao feed automaticamente)
-  useEffect(() => {
-    const handleMomentoInserted = (e: any) => {
-      const newMomento = e.detail
-      console.log('Recebido momento na UI via evento custom:', newMomento)
-      const updateFeed = (prev: any[]) => {
-        if (prev.some((m: any) => m.id === newMomento.id)) return prev
-        return [newMomento, ...prev]
-      }
-      
-      if (setLocal) {
-        setLocal(updateFeed)
-      } else {
-        setMomentosFeed(updateFeed as any)
-      }
-    }
-    window.addEventListener('ad:momento-inserted', handleMomentoInserted)
-    return () => window.removeEventListener('ad:momento-inserted', handleMomentoInserted)
-  }, [setLocal, setMomentosFeed])
+
 
   const handleLike = (momentId: number | string) => {
     setMomentosFeed(prev => prev.map(m => {
@@ -104,7 +86,6 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
   const meusMomentos = momentosFeed.filter(m => {
-    if (m.status !== 'approved') return false // pais só veem aprovados
     if (!m.targetClasses || m.targetClasses.length === 0) return true
     
     const rawTurma = String(aluno?.turma || '').toLowerCase()

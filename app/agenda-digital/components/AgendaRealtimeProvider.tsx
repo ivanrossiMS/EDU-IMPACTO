@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
+import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -40,6 +41,11 @@ export function AgendaRealtimeProvider({
   try {
     const selected = useSelectedStudent();
     if (selected && selected.aluno) alunoObj = selected.aluno;
+  } catch(e) {}
+  
+  let agendaCtx: any = null;
+  try {
+    agendaCtx = useAgendaDigital();
   } catch(e) {}
   
   try {
@@ -88,12 +94,12 @@ export function AgendaRealtimeProvider({
             }
 
 
-            if (isFamily && responsavelId && isMounted && typeof window !== 'undefined' && window.OneSignal) {
+            if (currentUser?.id && isMounted && typeof window !== 'undefined' && window.OneSignal) {
               try {
                 // Em algumas versões do v16 o login pode falhar se o init não terminou 100%
                 if (typeof window.OneSignal.login === 'function') {
-                  await window.OneSignal.login(String(responsavelId))
-                  console.log(`✅ OneSignal logado para o Responsável: ${responsavelId}`)
+                  await window.OneSignal.login(String(currentUser.id))
+                  console.log(`✅ OneSignal logado para o Usuário: ${currentUser.id}`)
                 }
               } catch (loginErr: any) {
                 console.warn('⚠️ OneSignal Login Error (Ignorável):', loginErr?.message || loginErr)
@@ -123,7 +129,10 @@ export function AgendaRealtimeProvider({
 
   useEffect(() => {
     // 2. Setup Supabase Realtime (In-App Toast Notifications)
-    if (!isFamily || !alunoId) return
+    if (!currentUser?.id) return
+
+    const isAdminOrColab = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Colaborador'
+    const identifier = alunoId || currentUser.id
 
     console.log('🎧 Iniciando Supabase Realtime para notificações locais...')
     
@@ -141,50 +150,102 @@ export function AgendaRealtimeProvider({
         return [String(val)]
       }
 
-      // Converte tudo para string para evitar bug de [4697].includes("4697") === false
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses || turmasStringArray)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
 
-      const alunoStr = String(alunoId)
-      const turmaNomeStr = String(turmaNome)
-      const rawTurmaStr = String(rawTurma)
+      // Se for ADMIN, recebe tudo! (Eles monitoram o fluxo da escola toda)
+      if (currentUser?.perfil === 'Administrador') return true
 
-      console.log('--- DEBUG TARGETING ---')
-      console.log('alvoTurmas:', alvoTurmas)
-      console.log('alvoAlunos:', alvoAlunos)
-      console.log('alunoStr (eu):', alunoStr)
-      console.log('turmaNomeStr (eu):', turmaNomeStr)
-      console.log('rawTurmaStr (eu):', rawTurmaStr)
-      console.log('-----------------------')
+      // Lógica de visualização baseada no Aluno/Turma selecionada (Família/Aluno)
+      if (alunoId) {
+        const alunoStr = String(alunoId)
+        const turmaNomeStr = String(turmaNome)
+        const rawTurmaStr = String(rawTurma)
 
-      // Todos / Toda a Escola
-      if (
-        dados.destino === 'todos' ||
-        dados.destino === 'Todos' ||
-        alvoTurmas.includes('Todos') || 
-        alvoTurmas.includes('Toda a Escola') || 
-        alvoTurmas.includes('TODOS') || 
-        alvoTurmas.includes('Toda a escola')
-      ) return true
+        const dest = String(dados.destino || '').toLowerCase()
 
-      // Turma Específica
-      if (turmaNome && alvoTurmas.includes(turmaNomeStr)) return true
-      if (rawTurma && alvoTurmas.includes(rawTurmaStr)) return true
-      if (rawTurma && alvoTurmasIds.includes(rawTurmaStr)) return true
+        // Todos / Toda a Escola
+        if (
+          dest === 'todos' ||
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase()
+            return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
+          })
+        ) return true
 
-      // Aluno Específico
-      if (
-        alvoAlunos.includes(alunoStr) || 
-        alvoAlunos.includes(`a_${alunoStr}`) || 
-        alvoAlunos.includes(`_ALU${alunoStr}`)
-      ) return true
+        // Turma Específica
+        const tNomeStr = turmaNome ? String(turmaNome).toLowerCase() : ''
+        const rTurmaStr = rawTurma ? String(rawTurma).toLowerCase() : ''
+
+        if (alvoTurmas.some(t => {
+          const tl = t.toLowerCase()
+          if (tNomeStr && (tl.includes(tNomeStr) || tNomeStr.includes(tl))) return true
+          if (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl))) return true
+          return false
+        })) return true
+
+        if (alvoTurmasIds.some(t => {
+          const tl = t.toLowerCase()
+          if (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl))) return true
+          return false
+        })) return true
+
+        // Aluno Específico
+        if (
+          alvoAlunos.includes(alunoStr) || 
+          alvoAlunos.includes(`a_${alunoStr}`) || 
+          alvoAlunos.includes(`_ALU${alunoStr}`)
+        ) return true
+
+        return false
+      }
+
+      // Lógica de visualização de Colaborador (Valida as turmas que o colaborador dá aula)
+      if (currentUser?.perfil === 'Colaborador') {
+        const dest = String(dados.destino || '').toLowerCase()
+        if (
+          dest === 'todos' ||
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase()
+            return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
+          })
+        ) return true
+
+        const userGroups = agendaCtx?.chatGroups || []
+        const userTurmas = turmasArray.filter(t => {
+           return userGroups.some((g: any) => {
+             let colabs = g.colaboradoresIds;
+             if (typeof colabs === 'string') {
+               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+             }
+             if (!Array.isArray(colabs)) colabs = [];
+             if (!colabs.some((id: any) => String(id) === String(currentUser.id))) return false;
+             return String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase()
+           })
+        })
+
+        return userTurmas.some(t => {
+           const tNome = String(t.nome).toLowerCase()
+           const tId = String(t.id).toLowerCase()
+           const tCod = String(t.codigo).toLowerCase()
+           
+           return alvoTurmas.some(alvo => {
+             const al = alvo.toLowerCase()
+             return al === tNome || al.includes(tNome) || tNome.includes(al) ||
+                    al === tId || al === tCod
+           }) || alvoTurmasIds.some(alvo => {
+             const al = alvo.toLowerCase()
+             return al === tId || al === tCod
+           })
+        })
+      }
 
       return false
     }
 
     // Usa um nome único para o canal para evitar erro de reaproveitar canal já inscrito (Strict Mode)
-    const channelName = `agenda-realtime-events-${alunoId}-${Date.now()}`
+    const channelName = `agenda-realtime-events-${identifier}-${Date.now()}`
     const channel = supabase.channel(channelName)
       // --- COMUNICADOS ---
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comunicados' }, (payload) => {
@@ -242,68 +303,6 @@ export function AgendaRealtimeProvider({
                 className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
               >
                 Ver agora
-              </button>
-
-              {/* Fechar */}
-              <button 
-                onClick={() => toast.dismiss(t)}
-                className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
-              >
-                <X size={20} strokeWidth={2} />
-              </button>
-            </div>
-          ), {
-            duration: 10000,
-            position: 'top-center'
-          });
-        }
-      })
-      // --- MOMENTOS ---
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'momentos' }, (payload) => {
-        const row = payload.new
-        console.log('📡 REALTIME MOMENTO RECEBIDO:', row.id, row.dados)
-        if (row.dados?.status !== 'approved') return
-        if (isTargetingAluno(row.dados)) {
-          const momentoPayload = { id: row.id, ...(row.dados || {}) };
-          window.dispatchEvent(new CustomEvent('ad:momento-inserted', { detail: momentoPayload }));
-
-          addNotification({
-            id: row.id,
-            type: 'momento',
-            title: row.dados?.author || row.titulo || 'Novo momento',
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${alunoId}/momentos`
-          });
-
-          // Ultra Modern Toast UI para Momentos
-          toast.custom((t) => (
-            <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
-              {/* Ícone Container */}
-              <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#FFF0F5] flex items-center justify-center">
-                <ImageIcon size={24} strokeWidth={1.5} className="text-[#F24C9D]" />
-                <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#6C48FA] border-[2px] sm:border-[2.5px] border-white rounded-full"></span>
-              </div>
-
-              {/* Textos */}
-              <div className="flex-1 min-w-0 pr-1 sm:pr-2">
-                <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
-                  Novo momento compartilhado!
-                </h4>
-                <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
-                  Uma nova foto ou vídeo foi adicionada ao mural.
-                </p>
-              </div>
-
-              {/* Botão */}
-              <button 
-                onClick={() => {
-                  toast.dismiss(t);
-                  router.push(`/agenda-digital/${alunoId}/momentos`);
-                }}
-                className="flex-shrink-0 bg-[#F24C9D] hover:bg-[#D93C8A] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(242,76,157,0.3)]"
-              >
-                Ver foto
               </button>
 
               {/* Fechar */}
@@ -389,11 +388,12 @@ export function AgendaRealtimeProvider({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [alunoId, isFamily, router])
+  }, [alunoId, isFamily, router, currentUser?.id, currentUser?.perfil, turmaNome, rawTurma])
 
   return (
     <>
       <Script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" strategy="afterInteractive" />
+      <PushPermissionBanner />
       <Toaster position="top-right" richColors />
       {children}
     </>

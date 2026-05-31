@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,11 +31,40 @@ export async function POST(request: Request) {
       const rows = body.map(f => buildRow(f))
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+      for (const row of rows) {
+        // Enviar notificação para o aluno correspondente
+        const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
+        if (targetIds.length > 0) {
+          await sendAgendaPushNotification({
+            type: 'frequencia',
+            itemId: String(row.id),
+            title: 'Atualização de frequência',
+            message: `Há uma nova atualização de frequência disponível.`,
+            targetUserIds: targetIds,
+            targetUrl: `/agenda-digital/frequencia`
+          }).catch(err => console.error('Frequencia Push Error:', err))
+        }
+      }
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
     const { data, error } = await supabase.from('frequencias').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+    if (targetIds.length > 0) {
+      sendAgendaPushNotification({
+        type: 'frequencia',
+        itemId: String(data.id),
+        title: 'Atualização de frequência',
+        message: `Há uma nova atualização de frequência disponível.`,
+        targetUserIds: targetIds,
+        targetUrl: `/agenda-digital/frequencia`
+      }).catch(err => console.error('Frequencia Push Error:', err))
+    }
+
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

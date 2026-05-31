@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,12 +48,41 @@ export async function POST(request: Request) {
       const rows = body.map(buildRowAuth)
       const { error } = await supabase.from('eventos_agenda').upsert(rows)
       if (error) throw new Error(error.message)
+      
+      // Disparar Push (Background)
+      for (const row of rows) {
+        const targetIds = await getResponsavelIdsForTargets({ targetClasses: row.turmas })
+        if (targetIds.length > 0) {
+          await sendAgendaPushNotification({
+            type: 'calendario',
+            itemId: String(row.id),
+            title: 'Novo evento no calendário',
+            message: `Um novo evento (${row.titulo}) foi adicionado à sua agenda.`,
+            targetUserIds: targetIds,
+            targetUrl: '/agenda-digital/calendario'
+          }).catch(err => console.error('Evento Push Error:', err))
+        }
+      }
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
     const row = buildRowAuth(body)
     const { data, error } = await supabase.from('eventos_agenda').upsert(row).select().single()
     if (error) throw new Error(error.message)
+
+    // Disparar Push (Background)
+    const targetIds = await getResponsavelIdsForTargets({ targetClasses: data.turmas })
+    if (targetIds.length > 0) {
+      sendAgendaPushNotification({
+        type: 'calendario',
+        itemId: String(data.id),
+        title: 'Novo evento no calendário',
+        message: `Um novo evento (${data.titulo}) foi adicionado à sua agenda.`,
+        targetUserIds: targetIds,
+        targetUrl: '/agenda-digital/calendario'
+      }).catch(err => console.error('Evento Push Error:', err))
+    }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {

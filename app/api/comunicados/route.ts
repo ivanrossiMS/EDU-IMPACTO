@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
-import { sendPushNotification } from '@/lib/server/pushService'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
@@ -118,10 +118,13 @@ export async function POST(request: Request) {
       for (const row of rows) {
         const targetIds = await getResponsavelIdsForTargets(row.dados)
         if (targetIds.length > 0) {
-          await sendPushNotification({
+          await sendAgendaPushNotification({
+            type: 'comunicados',
+            itemId: String(row.id),
             title: `Novo Comunicado: ${row.titulo}`,
-            body: `Um novo comunicado foi enviado por ${row.autor}.`,
+            message: `Um novo comunicado foi enviado por ${row.autor}.`,
             targetUserIds: targetIds,
+            targetUrl: '/agenda-digital/comunicados'
           }).catch(err => console.error("Push Error:", err))
         }
       }
@@ -139,10 +142,13 @@ export async function POST(request: Request) {
     // Disparar Push
     const targetIds = await getResponsavelIdsForTargets(data.dados);
     if (targetIds.length > 0) {
-      await sendPushNotification({
+      await sendAgendaPushNotification({
+        type: 'comunicados',
+        itemId: String(data.id),
         title: `Novo Comunicado: ${data.titulo}`,
-        body: `Um novo comunicado foi enviado por ${data.autor}.`,
+        message: `Um novo comunicado foi enviado por ${data.autor}.`,
         targetUserIds: targetIds,
+        targetUrl: '/agenda-digital/comunicados'
       }).catch(err => console.error("Push Error:", err))
     }
 

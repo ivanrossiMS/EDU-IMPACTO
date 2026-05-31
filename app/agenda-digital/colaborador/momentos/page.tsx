@@ -25,6 +25,8 @@ export default function ADMomentosPage() {
   
   const { setMomentosFeed } = useAgendaDigital()
 
+
+
   const { chatGroups } = useAgendaDigital()
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
 
@@ -96,7 +98,6 @@ export default function ADMomentosPage() {
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
   
   const meusMomentos = momentosFeed.filter(m => {
-    if (m.status !== 'approved') return false
     if (!m.targetClasses || m.targetClasses.length === 0) return true
     
     // Check if any of the target classes match our active turmas
@@ -109,16 +110,42 @@ export default function ADMomentosPage() {
       )
     })
   }).sort((a, b) => {
-    const dateA = new Date((a as any).date || 0).getTime()
-    const dateB = new Date((b as any).date || 0).getTime()
-    return dateB - dateA
-  })
-.sort((a, b) => {
     // Ordem do mais novo para o mais antigo
     const dateA = new Date((a as any).date || 0).getTime()
     const dateB = new Date((b as any).date || 0).getTime()
     return dateB - dateA
   })
+
+  // Marcação de lidos
+  useEffect(() => {
+    if (!currentUser?.id || meusMomentos.length === 0) return;
+    
+    // Identifica quais IDs não constam como lidos para este colaborador
+    const unreadIds = meusMomentos
+      .filter(m => {
+        const leituras = (m as any).leituras || {};
+        return !leituras[currentUser.id];
+      })
+      .map(m => m.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'momento',
+          ids: unreadIds,
+          alunoId: currentUser.id // API usa esse campo como ID de quem leu
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark momentos as read:', err));
+    }
+  }, [meusMomentos, currentUser?.id]);
 
   return (
     <div style={{

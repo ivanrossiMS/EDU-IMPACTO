@@ -1,6 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
@@ -14,7 +14,6 @@ export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData()
   const { currentUser } = useApp()
-  const [filterType, setFilterType] = useState('all')
   const [filterTurma, setFilterTurma] = useState('all')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 15
@@ -28,11 +27,6 @@ export default function ADAdminMomentos() {
     desc: ''
   })
 
-  const handleApprove = (id: number | string) => setFeed(prev => prev.map(p => p.id === id ? { ...p, status: 'approved' } : p))
-  const handleReject = (id: number | string) => {
-    const reason = prompt('Motivo da rejeição:') || 'Não especificado'
-    setFeed(prev => prev.map(p => p.id === id ? { ...p, status: 'rejected', reason } : p))
-  }
 
   const submitPost = async () => {
     if (isSubmitting) return
@@ -107,9 +101,8 @@ export default function ADAdminMomentos() {
   }
 
   const filteredFeed = feed.filter(p => {
-    const matchStatus = filterType === 'all' || p.status === filterType
     const matchTurma = filterTurma === 'all' || (p.targetClasses || []).includes(filterTurma) || (p.targetClasses || []).includes('Toda a Escola')
-    return matchStatus && matchTurma
+    return matchTurma
   })
 
   const totalPages = Math.max(1, Math.ceil(filteredFeed.length / PAGE_SIZE))
@@ -117,9 +110,39 @@ export default function ADAdminMomentos() {
   const selectStyle: React.CSSProperties = {
     appearance: 'none', WebkitAppearance: 'none',
     background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12,
-    padding: '8px 36px 8px 14px', fontSize: 14, color: '#374151',
     cursor: 'pointer', outline: 'none', height: 42
   }
+
+  // Marcação de lidos
+  useEffect(() => {
+    if (!currentUser?.id || pagedFeed.length === 0) return;
+    
+    // Identifica quais IDs não constam como lidos para este admin
+    const unreadIds = pagedFeed
+      .filter(m => {
+        const leituras = (m as any).leituras || {};
+        return !leituras[currentUser.id];
+      })
+      .map(m => m.id);
+
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'momento',
+          ids: unreadIds,
+          alunoId: currentUser.id // API usa esse campo como ID de quem leu
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        }
+      })
+      .catch(err => console.error('Failed to mark momentos as read:', err));
+    }
+  }, [pagedFeed, currentUser?.id]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '28px 32px', fontFamily: 'Inter, Outfit, sans-serif' }}>
@@ -134,16 +157,6 @@ export default function ADAdminMomentos() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Filter: Postagens */}
-          <div style={{ position: 'relative' }}>
-            <select style={selectStyle} value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="all">Todas as postagens</option>
-              <option value="pending">Pendentes</option>
-              <option value="approved">Aprovadas</option>
-            </select>
-            <ChevronDown size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
-          </div>
-
           {/* Filter: Turmas */}
           <div style={{ position: 'relative' }}>
             <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
@@ -213,8 +226,6 @@ export default function ADAdminMomentos() {
             key={post.id}
             post={post}
             index={(page - 1) * PAGE_SIZE + i}
-            onApprove={handleApprove}
-            onReject={handleReject}
             onDelete={id => adConfirm('Apagar momento?', 'Apagar', () => setFeed(prev => prev.filter(p => p.id !== id)))}
           />
         ))}

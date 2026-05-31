@@ -47,12 +47,10 @@ const CARD_THEMES = [
 type Props = {
   post: ADMomento
   index: number
-  onApprove: (id: string | number) => void
-  onReject: (id: string | number) => void
   onDelete: (id: string | number) => void
 }
 
-export function MomentoPostCard({ post, index, onApprove, onReject, onDelete }: Props) {
+export function MomentoPostCard({ post, index, onDelete }: Props) {
   const [slide, setSlide] = useState(0)
   const [showComments, setShowComments] = useState(false)
   const [showTargets, setShowTargets] = useState(false)
@@ -231,31 +229,6 @@ export function MomentoPostCard({ post, index, onApprove, onReject, onDelete }: 
           {/* Body */}
           <div style={{ padding: '16px 16px 12px', display: 'flex', flexDirection: 'column', gap: 10, background: theme.bodyBg }}>
             <p style={{ margin: 0, color: '#f1f5f9', fontSize: 15, fontWeight: 600, lineHeight: 1.4 }}>{post.desc}</p>
-
-            {post.status === 'approved' && (
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, width: 'fit-content',
-                background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(52,211,153,0.3)',
-                borderRadius: 20, padding: '8px 16px',
-              }}>
-                <Check size={15} color="#34d399" strokeWidth={3} />
-                <span style={{ color: '#34d399', fontWeight: 700, fontSize: 13 }}>Publicado no Mural</span>
-              </div>
-            )}
-
-            {post.status === 'pending' && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => onApprove(post.id)} style={{
-                  flex: 1, background: 'linear-gradient(135deg,#10b981,#059669)',
-                  color: '#fff', border: 'none', borderRadius: 20, padding: '10px', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(16,185,129,0.35)'
-                }}>✓ Aprovar</button>
-                <button onClick={() => onReject(post.id)} style={{
-                  width: 42, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
-                  color: '#ef4444', borderRadius: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}><X size={16} /></button>
-              </div>
-            )}
           </div>
 
           {/* Footer */}

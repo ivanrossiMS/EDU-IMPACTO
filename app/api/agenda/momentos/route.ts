@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
-import { sendPushNotification } from '@/lib/server/pushService'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
@@ -49,15 +49,16 @@ export async function POST(request: Request) {
 
       // Disparar Push (Background)
       rows.forEach(async (row: any) => {
-        if (row.dados?.status === 'approved') {
-          const targetIds = await getResponsavelIdsForTargets(row.dados)
-          if (targetIds.length > 0) {
-             sendPushNotification({
-                title: 'Novo Momento Escolar',
-                body: `Foi compartilhado um novo ${row.dados.tipo === 'video' ? 'vídeo' : 'momento'} da escola!`,
-                targetUserIds: targetIds,
-             }).catch(err => console.error('Momento Push Error:', err))
-          }
+        const targetIds = await getResponsavelIdsForTargets(row.dados)
+        if (targetIds.length > 0) {
+           sendAgendaPushNotification({
+              type: 'momentos',
+              itemId: String(row.id),
+              title: 'Novo momento publicado',
+              message: `Há novas fotos ou vídeos disponíveis na sua agenda.`,
+              targetUserIds: targetIds,
+              targetUrl: '/agenda-digital/momentos'
+           }).catch(err => console.error('Momento Push Error:', err))
         }
       })
 
@@ -71,17 +72,18 @@ export async function POST(request: Request) {
        throw new Error(error.message)
     }
 
-    if (data.dados?.status === 'approved') {
-       getResponsavelIdsForTargets(data.dados).then(targetIds => {
-         if (targetIds.length > 0) {
-            sendPushNotification({
-               title: 'Novo Momento Escolar',
-               body: `Foi compartilhado um novo ${data.dados.tipo === 'video' ? 'vídeo' : 'momento'} da escola!`,
-               targetUserIds: targetIds,
-            }).catch(err => console.error('Momento Push Error:', err))
-         }
-       })
-    }
+    getResponsavelIdsForTargets(data.dados).then(targetIds => {
+      if (targetIds.length > 0) {
+         sendAgendaPushNotification({
+            type: 'momentos',
+            itemId: String(data.id),
+            title: 'Novo momento publicado',
+            message: `Há novas fotos ou vídeos disponíveis na sua agenda.`,
+            targetUserIds: targetIds,
+            targetUrl: '/agenda-digital/momentos'
+         }).catch(err => console.error('Momento Push Error:', err))
+      }
+    })
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {

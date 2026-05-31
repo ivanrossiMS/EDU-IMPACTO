@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,6 +53,21 @@ export async function POST(request: Request) {
       .select()
       
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    
+    if (data && data.length > 0) {
+      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data[0].aluno_id] })
+      if (targetIds.length > 0) {
+        sendAgendaPushNotification({
+          type: 'notas',
+          itemId: String(data[0].id),
+          title: 'Nova nota disponível',
+          message: `Uma nova nota foi publicada na agenda.`,
+          targetUserIds: targetIds,
+          targetUrl: `/agenda-digital/notas`
+        }).catch(err => console.error('Boletins Push Error:', err))
+      }
+    }
+
     return NextResponse.json({ data })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
