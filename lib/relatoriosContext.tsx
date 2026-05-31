@@ -80,7 +80,23 @@ interface RelatoriosContextState {
 const RelatoriosContext = createContext<RelatoriosContextState | null>(null)
 
 // Seed Data mimicking the User's "Rotina - Meio Período (Fund)" example
-const MOCK_TEMPLATES: ReportTemplate[] = []
+const MOCK_TEMPLATES: ReportTemplate[] = [
+  {
+    id: 'TPL-mock-1',
+    name: 'Relatório de Desenvolvimento',
+    description: 'Relatório padrão para acompanhamento do aluno.',
+    category: 'Pedagógico',
+    icon: 'FileText',
+    color: '#3B82F6',
+    status: 'ativo',
+    permissions: { view: ['todos'], fill: ['professores'], edit: ['admin'], approve: [] },
+    version: 1,
+    sections: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    author: 'Sistema'
+  }
+]
 
 export function RelatoriosProvider({ children }: { children: ReactNode }) {
   const [templates, setTemplates] = useState<ReportTemplate[]>([])
