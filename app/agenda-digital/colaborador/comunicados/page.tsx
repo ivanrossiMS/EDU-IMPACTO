@@ -16,6 +16,7 @@ import { Plus, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, S
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
@@ -952,218 +953,20 @@ export default function ColaboradorComunicadosPage() {
       </div>
 
       <AnimatePresence>
-{/* Modal do Comunicado Expandido */}
-      {selectedComunicado && (
-        <Portal>
-        <motion.div className="ad-expanded-comunicado-overlay" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }} onClick={() => setSelectedComunicado(null)}>
-          <motion.div className="ad-modal-container ad-expanded-comunicado-card" initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: '#f8fafc', borderRadius: 28, width: '100%', maxWidth: 740, minHeight: 'fit-content', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.15), 0 0 0 1px rgba(255,255,255,0.1)', position: 'relative', marginBottom: '5vh' }} onClick={e => e.stopPropagation()}>
-            
-            <div style={{ flexShrink: 0, background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', padding: '32px 24px 24px 24px', position: 'relative', overflow: 'hidden', borderTopLeftRadius: 28, borderTopRightRadius: 28, borderBottomLeftRadius: 16, borderBottomRightRadius: 16, boxShadow: '0 4px 16px rgba(99,102,241,0.1)' }}>
-              
-              <button onClick={() => setSelectedComunicado(null)} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}>
-                <X size={18} color="#ffffff" />
-              </button>
-
-              <div style={{ position: 'relative', zIndex: 2 }}>
-                {(selectedComunicado.prioridade === 'alta' || selectedComunicado.prioridade === 'urgente') && (
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                    {selectedComunicado.prioridade === 'alta' && <span style={{ background: 'rgba(239,68,68,0.2)', color: '#fee2e2', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid rgba(239,68,68,0.3)' }}>Prioridade Alta</span>}
-                    {selectedComunicado.prioridade === 'urgente' && <span style={{ background: 'rgba(249,115,22,0.2)', color: '#ffedd5', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid rgba(249,115,22,0.3)' }}>Urgente</span>}
-                  </div>
-                )}
-
-                <h2 style={{ fontSize: 24, fontWeight: 800, color: '#ffffff', marginBottom: 28, lineHeight: 1.3, paddingRight: 60, textShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                  {selectedComunicado.titulo}
-                </h2>
-
-                <style dangerouslySetInnerHTML={{__html: `
-                    @media (max-width: 768px) {
-                      .ad-modal-megaphone { display: none !important; }
-                      .ad-modal-author-row { padding-right: 0 !important; }
-                      .ad-modal-avatar-wrapper > div, .ad-modal-avatar-wrapper > span { width: 36px !important; height: 36px !important; font-size: 14px !important; }
-                      .ad-modal-avatar-wrapper img { width: 36px !important; height: 36px !important; }
-                      .ad-modal-author-name { font-size: 14px !important; text-shadow: none !important; }
-                      .ad-modal-author-role { display: none !important; }
-                      .ad-modal-author-date { font-size: 11px !important; }
-                      .ad-modal-calendar-icon { width: 12px !important; height: 12px !important; }
-                      .ad-modal-time-only { display: none !important; }
-                      .ad-modal-content-wrapper { padding-left: 0 !important; padding-right: 0 !important; }
-                      .ad-body-text-card { border-radius: 0 !important; border-left: none !important; border-right: none !important; }
-                    }
-                `}} />
-                
-                <div className="ad-modal-author-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 3, width: '100%', paddingRight: 70 }}>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <div className="ad-modal-avatar-wrapper">
-                        <UserAvatar userId={selectedComunicado.autorId} name={selectedComunicado.autor} fotoUrl={selectedComunicado.autorFoto} size={44} />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div className="ad-modal-author-name" style={{ fontWeight: 800, fontSize: 16, color: '#ffffff', letterSpacing: -0.3, textShadow: '0 1px 4px rgba(0,0,0,0.1)' }}>{selectedComunicado.autor}</div>
-                        <div className="ad-modal-author-role" style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600 }}>{selectedComunicado.autorCargo}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="ad-modal-author-date" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#e0e7ff', fontSize: 13, fontWeight: 500, textAlign: 'right' }}>
-                      <Calendar className="ad-modal-calendar-icon" size={14} color="#c7d2fe" />
-                      <span>
-                         <span className="ad-modal-date-only">{new Date(selectedComunicado.dataEnvio || (selectedComunicado as any).created_at || new Date()).toLocaleString('pt-BR', { dateStyle: 'short' })}</span>
-                         <span className="ad-modal-time-only"> às {new Date(selectedComunicado.dataEnvio || (selectedComunicado as any).created_at || new Date()).toLocaleString('pt-BR', { timeStyle: 'short' })}</span>
-                      </span>
-                    </div>
-                </div>
-                  
-                <div className="ad-modal-megaphone" style={{ fontSize: 72, position: 'absolute', right: -10, bottom: 0, opacity: 0.95, filter: 'drop-shadow(0 12px 24px rgba(0,0,0,0.3))' }}>📣</div>
-              </div>
-
-              {/* Decorative shapes */}
-              <div style={{ position: 'absolute', top: -30, right: -20, width: 200, height: 200, background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%)', borderRadius: '50%', zIndex: 1 }} />
-              <div style={{ position: 'absolute', bottom: -50, left: -50, width: 150, height: 150, background: 'radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 60%)', borderRadius: '50%', zIndex: 1 }} />
-            </div>
-
-            <div className="ad-modal-content-wrapper" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                
-              {/* Message Content */}
-              <div className="ad-body-text-card" style={{ border: '1px solid #f1f5f9', borderRadius: 20, padding: '24px', background: '#ffffff', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
-                <div className="ad-body-text" style={{ fontSize: 16, lineHeight: 1.6, color: '#0f172a', whiteSpace: 'pre-wrap', fontWeight: 500 }} dangerouslySetInnerHTML={{ __html: selectedComunicado.conteudo.replace(/\n/g, '<br/>') }}>
-                </div>
-              </div>
-
-              {/* Attachments Section */}
-              {selectedComunicado.anexos && selectedComunicado.anexos.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                    <Paperclip size={20} color="#6d28d9" />
-                    <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      Anexos e Documentos Disponíveis
-                    </h4>
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {selectedComunicado.anexos.map((anexo: string, idx: number) => {
-                      const parsed = parseAnexo(anexo)
-                      if (!parsed) return null
-                      
-                      const isForm = parsed.name.startsWith('Formulário:')
-                      const isRel = parsed.name.startsWith('Relatório:')
-                      const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif')
-                      const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4')
-                      
-                      const fileExt = parsed.name.split('.').pop()?.toUpperCase() || 'FILE'
-                      
-                      return (
-                        <div key={idx} style={{ 
-                          padding: (isImg || isVid) ? 0 : '16px', 
-                          background: (isImg || isVid) ? 'transparent' : '#f8fafc', 
-                          borderRadius: 20, 
-                          border: (isImg || isVid) ? 'none' : '1px solid #f1f5f9', 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center', 
-                          gap: 16, 
-                          cursor: 'pointer', 
-                          flexWrap: 'wrap', 
-                          overflow: 'hidden' 
-                        }} onClick={() => {
-                                if (isForm || isRel) setOpenedFormStr(anexo)
-                                else if (isImg) setMaximizedImageStr(parsed.url)
-                                else if (isVid) setMaximizedVideoStr(parsed.url)
-                                else handleDownload(anexo)
-                              }}>
-                          
-                          {!(isImg || isVid) && (
-                            <div className="ad-attachment-info" style={{ display: 'flex', gap: 16, alignItems: 'center', flex: 1, minWidth: 200 }}>
-                              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#6366f1', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(99,102,241,0.3)' }}>
-                                 <FileText size={20} style={{ marginBottom: 2 }} />
-                                 <span style={{ fontSize: 9, fontWeight: 800 }}>{fileExt.substring(0, 3)}</span>
-                              </div>
-                              <div>
-                                 <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', marginBottom: 4, wordBreak: 'break-all' }}>{parsed.name.replace(/^(Formulário:|Relatório:)\s*/, '')}</div>
-                                 <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : 'Documento'} • Clique para abrir</div>
-                              </div>
-                            </div>
-                          )}
-
-                          {(isImg || isVid) && (
-                              <div style={{ width: '100%', borderRadius: 20, overflow: 'hidden', background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 600, border: '1px solid #e2e8f0', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.15)' }}>
-                                {isImg ? (
-                                   <Image src={parsed.url} alt={parsed.name} width={800} height={600} style={{ width: '100%', height: 'auto', maxHeight: 600, objectFit: 'contain', display: 'block' }} />
-                                ) : (
-                                   <video src={parsed.url} style={{ width: '100%', maxHeight: 600, objectFit: 'contain', display: 'block' }} preload="metadata" />
-                                )}
-                                {(isImg || isVid) && (
-                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}>
-                                    {isVid && (
-                                      <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.8)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style={{ marginLeft: 4 }}>
-                                          <path d="M8 5V19L19 12L8 5Z" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                          )}
-
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {selectedComunicado.exigeCiencia && (
-                <div style={{ marginTop: 24 }}>
-                  <div style={{ 
-                    background: !!(selectedComunicado.ciencias || {})[userSlug] ? 'linear-gradient(to right, rgba(34,197,94,0.05), rgba(34,197,94,0.02))' : 'linear-gradient(to right, rgba(99,102,241,0.05), rgba(99,102,241,0.02))', 
-                    padding: '20px 24px', 
-                    borderRadius: 20,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    border: !!(selectedComunicado.ciencias || {})[userSlug] ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(99,102,241,0.2)',
-                    flexWrap: 'wrap',
-                    gap: 16
-                  }}>
-                    <div style={{ fontSize: 14, color: !!(selectedComunicado.ciencias || {})[userSlug] ? '#15803d' : '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12 }}>
-                      {!!(selectedComunicado.ciencias || {})[userSlug] ? <CheckCircle2 size={24} color="#22c55e" /> : <ShieldAlert size={24} color="#6366f1" />}
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 800 }}>{!!(selectedComunicado.ciencias || {})[userSlug] ? 'Ciência confirmada' : 'Assinatura Eletrônica Necessária'}</div>
-                        <div style={{ fontSize: 13, fontWeight: 500, marginTop: 2, opacity: 0.8 }}>{!!(selectedComunicado.ciencias || {})[userSlug] ? 'Você já deu ciência neste comunicado oficial.' : 'A escola exige sua confirmação de leitura neste comunicado.'}</div>
-                      </div>
-                    </div>
-                    {!((selectedComunicado.ciencias || {})[userSlug]) && (
-                      <button 
-                          onClick={(e) => { e.stopPropagation(); handleCiencia(selectedComunicado.id) }} 
-                          className="btn" 
-                          style={{ background: '#6366f1', color: '#fff', padding: '10px 20px', fontSize: 14, fontWeight: 700, border: 'none', borderRadius: 12, boxShadow: '0 8px 16px -4px rgba(99,102,241,0.4)', flexShrink: 0 }}
-                          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                      >
-                          Assinar Ciência
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {selectedComunicado.permiteResposta && (
-                <div style={{ marginTop: 24 }}>
-                  <ComunicadoChat 
-                    comunicadoId={selectedComunicado.id} 
-                    remetenteId={userSlug} 
-                    remetenteNome={currentUser?.nome || 'Colaborador'} 
-                    remetenteAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
-                    isAdmin={true}
-                    adminAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
-                  />
-                </div>
-              )}
-
-            </div>
-          </motion.div>
-        </motion.div>
-        </Portal>
-      )}
+        {selectedComunicado && (
+          <ComunicadoViewModal
+            comunicado={selectedComunicado}
+            onClose={() => setSelectedComunicado(null)}
+            onCiencia={handleCiencia}
+            currentUserSlug={userSlug}
+            currentUserName={currentUser?.nome || 'Colaborador'}
+            currentUserAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
+            isAdminMode={true}
+            setOpenedFormStr={setOpenedFormStr}
+            setMaximizedImageStr={setMaximizedImageStr}
+            setMaximizedVideoStr={setMaximizedVideoStr}
+          />
+        )}
       </AnimatePresence>
 
       <AnimatePresence>
