@@ -14,8 +14,8 @@ import { useApp } from '@/lib/context'
 import { Plus, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
-import { supabase } from '@/lib/supabase'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -120,13 +120,44 @@ export default function ColaboradorComunicadosPage() {
   const { comunicados, setComunicados, setComunicadosLocally } = useAgendaDigital()
   const loading = false;
   
-  const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
-  const comunicadosRef = useRef(comunicados)
-  const isPollingRef = useRef(false)
-  
-  useEffect(() => {
-    comunicadosRef.current = comunicados
-  }, [comunicados])
+  useAgendaRealtime({
+    table: 'comunicados',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo comunicado: ${doc.titulo || 'Sem título'}`,
+      updateMessage: (doc) => `Comunicado atualizado: ${doc.titulo || 'Sem título'}`,
+      icon: <Bell size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newCom }) => {
+      const com = { ...newCom, _isNew: true };
+      if (setComunicadosLocally) {
+        setComunicadosLocally((prev: any) => {
+          if (prev.some((c: any) => c.id === com.id)) return prev;
+          const newFeed = [com, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+          return newFeed;
+        });
+        setTimeout(() => {
+          setComunicadosLocally((curr: any) => curr.map((c: any) => c.id === com.id ? { ...c, _isNew: false } : c));
+        }, 5000);
+      }
+    },
+    onUpdate: ({ new: updatedCom }) => {
+      if (setComunicadosLocally) {
+        setComunicadosLocally((prev: any) => prev.map((c: any) => c.id === updatedCom.id ? { ...c, ...updatedCom } : c));
+      }
+      if (selectedComunicado?.id === updatedCom.id) {
+        setSelectedComunicado((prev: any) => ({ ...prev, ...updatedCom }));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setComunicadosLocally) {
+        setComunicadosLocally((prev: any) => prev.filter((c: any) => c.id !== old?.id));
+      }
+      if (selectedComunicado?.id === old?.id) {
+        setSelectedComunicado(null);
+      }
+    }
+  });
 
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
@@ -537,48 +568,6 @@ export default function ColaboradorComunicadosPage() {
 
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <AnimatePresence>
-          {newComunicadosBuffer.length > 0 && !selectedComunicado && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              style={{
-                marginBottom: 24,
-                padding: '16px 24px',
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                borderRadius: 20,
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.4)',
-                cursor: 'pointer'
-              }}
-              onClick={() => {
-                setComunicados(prev => {
-                  const toAdd = newComunicadosBuffer.filter(n => !prev.some((p: any) => p.id === n.id));
-                  return [...toAdd, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
-                });
-                setNewComunicadosBuffer([]);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ background: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 12, display: 'flex' }}>
-                  <Bell size={20} color="#fff" style={{ animation: 'pulseGlowAmbient 2s infinite' }} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{newComunicadosBuffer.length === 1 ? 'Novo comunicado disponível' : `${newComunicadosBuffer.length} novos comunicados`}</div>
-                  <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 500 }}>Clique para atualizar a lista</div>
-                </div>
-              </div>
-              <div style={{ background: '#fff', color: '#4f46e5', padding: '6px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800 }}>
-                Ver agora
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

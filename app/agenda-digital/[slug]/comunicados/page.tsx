@@ -15,6 +15,7 @@ import { useData } from '@/lib/dataContext'
 import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoData: any) => {
@@ -95,74 +96,39 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
     comunicadosRef.current = localComunicados
   }, [localComunicados])
 
-  // --- EVENT BUS SUBSCRIPTION (From AgendaRealtimeProvider) ---
-  useEffect(() => {
-    const handleNewComunicado = (e: any) => {
-      const newCom = { ...e.detail, _isNew: true };
+  useAgendaRealtime({
+    table: 'comunicados',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo comunicado: ${doc.titulo || 'Sem título'}`,
+      updateMessage: (doc) => `Comunicado atualizado: ${doc.titulo || 'Sem título'}`,
+      icon: <Bell size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newCom }) => {
+      const com = { ...newCom, _isNew: true };
       setLocalComunicados(prev => {
-        if (prev.some((c: any) => c.id === newCom.id)) return prev;
-        const newFeed = [newCom, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
+        if (prev.some((c: any) => c.id === com.id)) return prev;
+        const newFeed = [com, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
         return newFeed;
       });
-      
-      // Remove _isNew after 5 seconds to stop glowing
       setTimeout(() => {
-        setLocalComunicados(curr => curr.map(c => c.id === newCom.id ? { ...c, _isNew: false } : c));
+        setLocalComunicados(curr => curr.map(c => c.id === com.id ? { ...c, _isNew: false } : c));
       }, 5000);
-
       window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
-    };
-
-    window.addEventListener('ad:comunicado-inserted', handleNewComunicado);
-    return () => {
-      window.removeEventListener('ad:comunicado-inserted', handleNewComunicado);
-    };
-  }, []);
-
-  // --- FALLBACK POLLING (Segurança Extra) ---
-  useEffect(() => {
-    if (!aluno?.id) return;
-    
-    const fetchLatest = async () => {
-      if (isPollingRef.current) return;
-      
-      const latestCom = comunicadosRef.current[0];
-      if (!latestCom) return; // Se não tem nenhum, espera o SWR
-      
-      isPollingRef.current = true;
-      try {
-        const latestDate = new Date(latestCom.created_at || latestCom.data).toISOString();
-        const res = await fetch(`/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&since=${latestDate}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.length > 0) {
-            setLocalComunicados(prev => {
-              const newItems = json.filter((j: any) => !prev.some((p: any) => p.id === j.id));
-              if (newItems.length === 0) return prev;
-              const newFeed = [...newItems, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
-              return newFeed;
-            });
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
-          }
-        }
-      } catch (e) {
-        console.error("Polling error:", e);
-      } finally {
-        isPollingRef.current = false;
+    },
+    onUpdate: ({ new: updatedCom }) => {
+      setLocalComunicados(prev => prev.map(c => c.id === updatedCom.id ? { ...c, ...updatedCom } : c));
+      if (selectedComunicado?.id === updatedCom.id) {
+        setSelectedComunicado((prev: any) => ({ ...prev, ...updatedCom }));
       }
-    };
-
-    // Poll a cada 60 segundos
-    const intervalId = setInterval(fetchLatest, 60000);
-    
-    // Poll ao focar na janela (usuário voltou pro app)
-    window.addEventListener('focus', fetchLatest);
-    
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener('focus', fetchLatest);
-    };
-  }, [aluno?.id, turmaNome]);
+    },
+    onDelete: ({ old }) => {
+      setLocalComunicados(prev => prev.filter(c => c.id !== old?.id));
+      if (selectedComunicado?.id === old?.id) {
+        setSelectedComunicado(null);
+      }
+    }
+  });
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')

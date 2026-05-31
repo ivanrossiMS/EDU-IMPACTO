@@ -6,6 +6,8 @@ import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, AlertC
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 export default function ADNotasPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital();
@@ -28,9 +30,30 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
   const { data: responseData, isLoading } = useApiQuery<any>(
     ['boletins', aluno?.id || ''],
     `/api/boletins?aluno_id=${aluno?.id}`,
-    {},
+    undefined,
     { enabled: !!aluno?.id }
   )
+
+  const queryClient = useQueryClient()
+
+  useAgendaRealtime({
+    table: 'boletins',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Nova nota lançada no boletim!`,
+      updateMessage: (doc) => `Nota atualizada!`,
+      icon: <FileText size={18} color="#3b82f6" />
+    },
+    onInsert: () => {
+      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+    },
+    onUpdate: () => {
+      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+    },
+    onDelete: () => {
+      queryClient.invalidateQueries({ queryKey: ['boletins', aluno?.id || ''] })
+    }
+  });
 
   const boletins = responseData?.data || []
 

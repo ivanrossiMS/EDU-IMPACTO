@@ -7,6 +7,7 @@ import { useData, EventoAgenda } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, use } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2 } from 'lucide-react'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -30,8 +31,36 @@ function todayStr() {
 }
 
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
-  const [eventosAgenda, , { loading }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
+
+  useAgendaRealtime({
+    table: 'eventos_agenda',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo evento: ${doc.titulo || 'Sem título'}`,
+      updateMessage: (doc) => `Evento atualizado: ${doc.titulo || 'Sem título'}`,
+      icon: <Calendar size={18} color="#6366f1" />
+    },
+    onInsert: ({ new: newEvento }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => {
+          if (prev.some((p: any) => p.id === newEvento.id)) return prev;
+          return [...prev, newEvento];
+        });
+      }
+    },
+    onUpdate: ({ new: updatedEvento }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => prev.map((p: any) => p.id === updatedEvento.id ? { ...p, ...updatedEvento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
   const resolvedParams = use(params as Promise<{ slug: string }>)
   const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()

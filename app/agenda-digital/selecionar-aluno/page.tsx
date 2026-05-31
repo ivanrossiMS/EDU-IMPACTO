@@ -3,8 +3,8 @@ import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles } from 'lucide-react'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -42,10 +42,12 @@ function formatShortName(name: string): string {
   return `${firstName} ${lastName}`;
 }
 
-export default function SelecionarAluno() {
+function SelecionarAlunoContent() {
   const { turmas = [] } = useData();
   const { currentUser, hydrated } = useApp()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTarget = searchParams.get('redirect') || 'comunicados'
 
   // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
   const [meusAlunos, setMeusAlunos] = useState<any[]>([])
@@ -103,16 +105,16 @@ export default function SelecionarAluno() {
         if (stored) {
           const u = JSON.parse(stored)
           if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-            setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
+            setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
             return
           }
         }
       }
       if (currentUser.id) {
-        setTimeout(() => { window.location.href = `/agenda-digital/aluno/comunicados` }, 50)
+        setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
       }
     }
-  }, [isStillLoading, currentUser])
+  }, [isStillLoading, currentUser, redirectTarget])
 
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
 
@@ -718,7 +720,7 @@ export default function SelecionarAluno() {
               meusAlunos.map((student) => {
                 const pendingAlerts = student.pendenciasAtrasadas || 0;
                 return (
-                  <Link key={student.id} href={`/agenda-digital/${student.id}/comunicados`} className="portal-modern-card">
+                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}`} className="portal-modern-card">
                     <div className="card-avatar-container">
                       {student.foto ? (
                         <img src={student.foto} alt={student.nome} className="card-avatar-img" />
@@ -786,7 +788,7 @@ export default function SelecionarAluno() {
             </div>
 
             <div className="cards-column">
-              <Link href="/agenda-digital/colaborador/comunicados" className="portal-modern-card collaborator-theme">
+              <Link href={`/agenda-digital/colaborador/${redirectTarget}`} className="portal-modern-card collaborator-theme">
                 <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
                   {currentUser.foto ? (
                     <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
@@ -815,5 +817,13 @@ export default function SelecionarAluno() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function SelecionarAluno() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <SelecionarAlunoContent />
+    </Suspense>
   )
 }

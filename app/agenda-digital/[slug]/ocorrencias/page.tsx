@@ -7,6 +7,8 @@ import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital()
@@ -22,6 +24,27 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   const endpoint = aluno?.id ? `/api/ocorrencias?aluno_id=${aluno.id}` : ''
   const { data: rawOcorrencias, refetch, isLoading } = useApiQuery<any[]>(['ocorrencias', aluno?.id], endpoint, undefined, { enabled: !!endpoint })
   const ocorrencias = rawOcorrencias || []
+  
+  const queryClient = useQueryClient()
+
+  useAgendaRealtime({
+    table: 'ocorrencias',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Nova ocorrência registrada!`,
+      updateMessage: (doc) => `Ocorrência atualizada!`,
+      icon: <AlertTriangle size={18} color="#ef4444" />
+    },
+    onInsert: () => {
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    },
+    onUpdate: () => {
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    },
+    onDelete: () => {
+      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    }
+  });
 
   // Impede visualização se a coordenação/admin bloqueou no config
   if (adConfig?.permissoes?.visualizarOcorrencias === false) {

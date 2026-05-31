@@ -1324,7 +1324,7 @@ interface DataState {
   comunicados: Comunicado[]; setComunicados: Setter<Comunicado[]>
   tarefas: Tarefa[]; setTarefas: Setter<Tarefa[]>
   mantenedores: Mantenedor[]; setMantenedores: Setter<Mantenedor[]>
-  eventosAgenda: EventoAgenda[]; setEventosAgenda: Setter<EventoAgenda[]>
+  eventosAgenda: EventoAgenda[]; setEventosAgenda: Setter<EventoAgenda[]>; setLocalEventosAgenda?: Setter<EventoAgenda[]>
   ocorrencias: Ocorrencia[]; setOcorrencias: Setter<Ocorrencia[]>
   transferencias: Transferencia[]; setTransferencias: Setter<Transferencia[]>
   frequencias: RegistroFrequencia[]; setFrequencias: Setter<RegistroFrequencia[]>
@@ -1393,7 +1393,7 @@ const DataContext = createContext<DataState>({
   comunicados: [], setComunicados: NOOP,
   tarefas: [], setTarefas: NOOP,
   mantenedores: [], setMantenedores: NOOP,
-  eventosAgenda: [], setEventosAgenda: NOOP,
+  eventosAgenda: [], setEventosAgenda: NOOP, setLocalEventosAgenda: NOOP,
   rotinaItems: [], setRotinaItems: NOOP,
   autorizacoes: [], setAutorizacoes: NOOP,
   momentos: [], setMomentos: NOOP,
@@ -1471,7 +1471,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [comunicados, setComunicados] = useSupabaseArray<Comunicado>('comunicados')
   const [tarefas, setTarefas] = useSupabaseArray<Tarefa>('tarefas')
   const [mantenedores, setMantenedores] = useSupabaseArray<Mantenedor>('configuracoes/mantenedores')
-  const [eventosAgenda, setEventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventosAgenda }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [ setRotinaItems] = useSupabaseArray<RotinaItem>('agenda/rotina')
   const [ setAutorizacoes] = useSupabaseArray<AutorizacaoDigital>('agenda/autorizacoes')
   const [ setMomentos] = useSupabaseArray<MomentoItem>('agenda/momentos')
@@ -1810,7 +1810,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     comunicados, ...{ setComunicados: trackedSetters.setComunicados },
     tarefas, ...{ setTarefas: trackedSetters.setTarefas },
     mantenedores, ...{ setMantenedores: trackedSetters.setMantenedores },
-    eventosAgenda, ...{ setEventosAgenda: trackedSetters.setEventosAgenda },
+    eventosAgenda, ...{ setEventosAgenda: trackedSetters.setEventosAgenda }, setLocalEventosAgenda,
 
     ocorrencias, ...{ setOcorrencias: trackedSetters.setOcorrencias },
     transferencias, ...{ setTransferencias: trackedSetters.setTransferencias },

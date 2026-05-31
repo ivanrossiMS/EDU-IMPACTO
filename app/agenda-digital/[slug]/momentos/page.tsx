@@ -11,6 +11,7 @@ import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials } from '@/lib/utils'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   // removido const { momentosFeed } = useAgendaDigital()
@@ -40,6 +41,39 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   })()
   
   const [momentosFeed, setMomentosFeed, { loading, setLocal }] = useSupabaseArray<any>('agenda/momentos', [])
+
+  useAgendaRealtime({
+    table: 'momentos',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo momento adicionado!`,
+      updateMessage: (doc) => `Momento atualizado!`,
+      icon: <Camera size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newMomento }) => {
+      const m = { ...newMomento, _isNew: true };
+      if (setLocal) {
+        setLocal((prev: any) => {
+          if (prev.some((p: any) => p.id === m.id)) return prev;
+          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+          return newFeed;
+        });
+        setTimeout(() => {
+          setLocal((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
+        }, 5000);
+      }
+    },
+    onUpdate: ({ new: updatedMomento }) => {
+      if (setLocal) {
+        setLocal((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setLocal) {
+        setLocal((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
 
   // Estado para o Lightbox/Galeria

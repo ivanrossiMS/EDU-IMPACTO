@@ -6,7 +6,8 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData, EventoAgenda } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Plus, Users, Globe, Edit2, Trash2, X, Upload } from 'lucide-react'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -31,8 +32,36 @@ function todayStr() {
 }
 
 export default function ADCalendarioPage() {
-  const [eventosAgenda] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
+
+  useAgendaRealtime({
+    table: 'eventos_agenda',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo evento: ${doc.titulo || 'Sem título'}`,
+      updateMessage: (doc) => `Evento atualizado: ${doc.titulo || 'Sem título'}`,
+      icon: <Calendar size={18} color="#6366f1" />
+    },
+    onInsert: ({ new: newEvento }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => {
+          if (prev.some((p: any) => p.id === newEvento.id)) return prev;
+          return [...prev, newEvento];
+        });
+      }
+    },
+    onUpdate: ({ new: updatedEvento }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => prev.map((p: any) => p.id === updatedEvento.id ? { ...p, ...updatedEvento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setLocalEventos) {
+        setLocalEventos((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
   
   const { currentUser } = useApp()
 

@@ -1,7 +1,8 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { BookOpen, Sparkles } from 'lucide-react'
@@ -9,24 +10,35 @@ import { BookOpen, Sparkles } from 'lucide-react'
 const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
 
 export default function AgendaDigitalIndex() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+      <AgendaDigitalIndexContent />
+    </Suspense>
+  )
+}
+
+function AgendaDigitalIndexContent() {
   const router = useRouter()
   const { currentUserPerfil, currentUser } = useApp()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     // Prevent execution if user is not loaded
     if (!currentUserPerfil || !currentUser) return;
 
     const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
+    const redirect = searchParams.get('redirect') || 'comunicados'
+    const redirectParamString = searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}` : ''
     
     if (isAdmin) {
-      router.replace('/agenda-digital/admin')
+      router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
     } else {
       if (currentUser?.cargo === 'Aluno') {
         const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
         
         // Fast path: if we already have the ID, redirect immediately!
         if (directAlunoId) {
-          router.replace(`/agenda-digital/${directAlunoId}/comunicados`)
+          router.replace(`/agenda-digital/${directAlunoId}/${redirect}`)
           return
         }
 
@@ -35,7 +47,7 @@ export default function AgendaDigitalIndex() {
           try {
             const nomeLower = (currentUser.nome || '').trim()
             if (!nomeLower) {
-              router.replace('/agenda-digital/selecionar-aluno')
+              router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
               return
             }
             
@@ -47,13 +59,13 @@ export default function AgendaDigitalIndex() {
               .single()
               
             if (data && data.id) {
-              router.replace(`/agenda-digital/${data.id}/comunicados`)
+              router.replace(`/agenda-digital/${data.id}/${redirect}`)
             } else {
-              router.replace('/agenda-digital/selecionar-aluno')
+              router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
             }
           } catch (e) {
             console.error('Error fetching aluno ID', e)
-            router.replace('/agenda-digital/selecionar-aluno')
+            router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
           }
         }
         
@@ -62,9 +74,9 @@ export default function AgendaDigitalIndex() {
       }
       
       // Default fallback for other roles
-      router.replace('/agenda-digital/selecionar-aluno')
+      router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
     }
-  }, [currentUserPerfil, currentUser, router])
+  }, [currentUserPerfil, currentUser, router, searchParams])
 
   return (
     <div style={{

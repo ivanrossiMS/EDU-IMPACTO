@@ -216,6 +216,15 @@ export default function AgendaDigitalFamilyLayout({
   const paramsHook = useParams<{ slug: string }>()
   const resolvedParams = paramsHook || (params as any)
 
+  // Intercept generic push notification URLs (e.g., /agenda-digital/comunicados)
+  const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
+  if (isGenericModule) {
+    if (typeof window !== 'undefined') {
+      router.replace(`/agenda-digital?redirect=${resolvedParams.slug}`)
+    }
+    return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">Carregando...</div>
+  }
+
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
   const isAlunoLogado = currentUser?.cargo === 'Aluno'
 

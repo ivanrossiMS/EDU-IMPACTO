@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon } from 'lucide-react'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -123,7 +124,36 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
 }
 
 export default function CalendarioPage() {
-  const { eventosAgenda = [], setEventosAgenda } = useData()
+  const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda } = useData()
+
+  useAgendaRealtime({
+    table: 'eventos_agenda',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo evento adicionado: ${doc.titulo || 'Sem título'}`,
+      updateMessage: (doc) => `Evento atualizado: ${doc.titulo || 'Sem título'}`,
+      icon: <CalendarIcon size={18} color="#6366f1" />
+    },
+    onInsert: ({ new: newEvento }) => {
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda((prev: any) => {
+          if (prev.some((p: any) => p.id === newEvento.id)) return prev;
+          return [...prev, newEvento];
+        });
+      }
+    },
+    onUpdate: ({ new: updatedEvento }) => {
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda((prev: any) => prev.map((p: any) => p.id === updatedEvento.id ? { ...p, ...updatedEvento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setLocalEventosAgenda) {
+        setLocalEventosAgenda((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
+
   const [gruposManuais = []] = useSupabaseArray<{nome: string}>('agenda/grupos')
   const turmasNomes = gruposManuais.map(t => t.nome)
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])

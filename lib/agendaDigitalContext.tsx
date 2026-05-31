@@ -89,6 +89,7 @@ interface ADContextState {
   setMessages: React.Dispatch<React.SetStateAction<Record<string, ADMessage[]>>>
   momentosFeed: ADMomento[]
   setMomentosFeed: React.Dispatch<React.SetStateAction<ADMomento[]>>
+  setMomentosFeedLocally?: React.Dispatch<React.SetStateAction<ADMomento[]>>
   bannerUrl: string | null
   setBannerUrl: (url: string | null) => void
   adConfig: ADConfig
@@ -112,6 +113,7 @@ const AgendaDigitalContext = createContext<ADContextState>({
   setMessages: () => {},
   momentosFeed: [],
   setMomentosFeed: () => {},
+  setMomentosFeedLocally: () => {},
   bannerUrl: null,
   setBannerUrl: () => {},
   adConfig: {
@@ -149,7 +151,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const chatsLoading = false;
   const chatGroupsLoading = false;
   const messagesLoading = false;
-  const [momentosFeed, setMomentosFeed, { loading: momentosLoading }] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
+  const [momentosFeed, setMomentosFeed, { setLocal: setLocalMomentosFeed, loading: momentosLoading }] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
 
 
 
@@ -271,6 +273,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       setMessages,
       momentosFeed: momentosFeed || [],
       setMomentosFeed,
+      setMomentosFeedLocally: setLocalMomentosFeed,
       bannerUrl,
       setBannerUrl: setBannerUrlState,
       adConfig: adConfig || {},

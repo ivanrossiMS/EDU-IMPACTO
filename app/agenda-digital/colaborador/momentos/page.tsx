@@ -8,6 +8,7 @@ import React, { use, useState, useMemo, useEffect } from 'react'
 import { X, Expand, Play, Heart, MessageCircle, Share2, Filter, Upload, Trash2, Camera, Download, PlayCircle, MoreVertical, Image as ImageIcon, Sparkles, Smile, Star, Send } from 'lucide-react'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { useApp } from '@/lib/context'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials } from '@/lib/utils'
 
@@ -23,7 +24,40 @@ export default function ADMomentosPage() {
   
   
   
-  const { setMomentosFeed } = useAgendaDigital()
+  const { setMomentosFeed, setMomentosFeedLocally } = useAgendaDigital()
+
+  useAgendaRealtime({
+    table: 'momentos',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo momento adicionado!`,
+      updateMessage: (doc) => `Momento atualizado!`,
+      icon: <Camera size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newMomento }) => {
+      const m = { ...newMomento, _isNew: true };
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => {
+          if (prev.some((p: any) => p.id === m.id)) return prev;
+          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+          return newFeed;
+        });
+        setTimeout(() => {
+          setMomentosFeedLocally((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
+        }, 5000);
+      }
+    },
+    onUpdate: ({ new: updatedMomento }) => {
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
 
 
 

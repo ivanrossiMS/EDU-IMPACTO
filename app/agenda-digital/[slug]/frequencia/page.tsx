@@ -8,6 +8,8 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, isToday, parseISO, isFuture } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { useQueryClient } from '@tanstack/react-query'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital()
@@ -26,7 +28,27 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
 
   const { aluno } = useSelectedStudent()
   const resolvedParams = use(params as Promise<{ slug: string }>)
-  
+  const queryClient = useQueryClient()
+
+  useAgendaRealtime({
+    table: 'frequencias',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Nova frequência registrada!`,
+      updateMessage: (doc) => `Registro de frequência atualizado!`,
+      icon: <CheckCircle2 size={18} color="#16a34a" />
+    },
+    onInsert: () => {
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+    },
+    onUpdate: () => {
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+    },
+    onDelete: () => {
+      queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
+    }
+  });
+
   // State for interactive calendar
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)

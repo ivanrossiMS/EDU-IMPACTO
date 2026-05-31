@@ -9,9 +9,10 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
 export default function ADAdminMomentos() {
-  const { momentosFeed: feed, setMomentosFeed: setFeed, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
+  const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData()
   const { currentUser } = useApp()
   const [filterTurma, setFilterTurma] = useState('all')
@@ -26,6 +27,39 @@ export default function ADAdminMomentos() {
     targetClasses: [] as { id: string; name: string; type: 'turma' | 'funcionario' | 'aluno' | 'grupo' }[],
     desc: ''
   })
+
+  useAgendaRealtime({
+    table: 'momentos',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo momento de ${doc.author || 'alguém'}!`,
+      updateMessage: (doc) => `Momento atualizado!`,
+      icon: <Camera size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newMomento }) => {
+      const m = { ...newMomento, _isNew: true };
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => {
+          if (prev.some((p: any) => p.id === m.id)) return prev;
+          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+          return newFeed;
+        });
+        setTimeout(() => {
+          setMomentosFeedLocally((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
+        }, 5000);
+      }
+    },
+    onUpdate: ({ new: updatedMomento }) => {
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      }
+    }
+  });
 
 
   const submitPost = async () => {
