@@ -21,8 +21,39 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   const data = useData()
   const turmas = allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
-  const [alunos] = useSupabaseArray<any>('alunos')
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
+  const [alunos] = useSupabaseArray<any>('alunos')
+
+  const [selectedAno, setSelectedAno] = useState<string>('Todos')
+
+  const availableAnos = useMemo(() => {
+    const anos = new Set<string>()
+    turmas.forEach((t: any) => {
+      const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
+      if (a) anos.add(a)
+    })
+    ;(gruposManuais || []).forEach((g: any) => {
+      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+      if (a) anos.add(a)
+    })
+    return Array.from(anos).sort((a,b) => b.localeCompare(a))
+  }, [turmas, gruposManuais])
+
+  const filteredTurmas = useMemo(() => {
+    if (selectedAno === 'Todos') return turmas
+    return turmas.filter((t: any) => {
+      const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
+      return a === selectedAno
+    })
+  }, [turmas, selectedAno])
+
+  const filteredGrupos = useMemo(() => {
+    if (selectedAno === 'Todos') return gruposManuais
+    return (gruposManuais || []).filter((g: any) => {
+      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+      return a ? a === selectedAno : true // Show groups without year in all filters
+    })
+  }, [gruposManuais, selectedAno])
   
   // selected holds ONLY leaf nodes: turmas and grupos
   const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
@@ -62,12 +93,12 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     
     // Categorias
     const mappedCats = categorias.map(cat => {
-      const tList = turmas.filter(cat.match)
+      const tList = filteredTurmas.filter(cat.match)
       return { ...cat, turmas: tList }
     }).filter(c => c.turmas.length > 0)
 
     const catTurmasIds = new Set(mappedCats.flatMap(c => c.turmas.map((t: any) => String(t.id))))
-    const restantes = turmas.filter((t: any) => !catTurmasIds.has(String(t.id)))
+    const restantes = filteredTurmas.filter((t: any) => !catTurmasIds.has(String(t.id)))
     if (restantes.length > 0) {
       mappedCats.push({ name: 'Outras Turmas', turmas: restantes, match: () => false })
     }
@@ -103,13 +134,13 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
 
     // Grupos
-    ;(gruposManuais || []).forEach((g: any) => {
+    const sortedGrupos = [...(filteredGrupos || [])].sort((a, b) => a.nome.localeCompare(b.nome))
+    sortedGrupos.forEach((g: any) => {
       const gId = `g_${g.id}`
       leafIds.push(gId)
       items.push({
         id: gId,
         title: g.nome,
-        subtitle: 'Grupo personalizado',
         countBadge: `${(g.alunosIds?.length || 0) + (g.colaboradoresIds?.length || 0)} pessoas`,
         type: 'grupo',
         icon: GraduationCap,
@@ -119,7 +150,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
 
     return { listItems: items, allLeafIds: leafIds }
-  }, [turmas, gruposManuais, classCounts])
+  }, [filteredTurmas, filteredGrupos, classCounts])
 
   // Compute smart chips
   const smartChips = useMemo(() => {
@@ -267,69 +298,61 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             style={{ zIndex: 2147483647 }}
           >
             {/* Header (Fixed) */}
-            <header style={{ height: 72, flexShrink: 0, background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', position: 'sticky', top: 0, zIndex: 20 }}>
+            <header style={{ 
+              height: 72, flexShrink: 0, 
+              background: 'linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6)',
+              backgroundSize: '300% 300%',
+              animation: 'waveAnimation 8s ease infinite',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 20 
+            }}>
+              <style>{`
+                @keyframes waveAnimation {
+                  0% { background-position: 0% 50%; }
+                  50% { background-position: 100% 50%; }
+                  100% { background-position: 0% 50%; }
+                }
+              `}</style>
+              
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={onClose}
-                style={{ width: 48, height: 48, borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', border: 'none', cursor: 'pointer' }}
+                style={{ width: 48, height: 48, position: 'absolute', left: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer' }}
               >
                 <X size={24} />
               </motion.button>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0F172A', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
-                <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B' }}>Selecione quem receberá o comunicado</span>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Selecione quem receberá o comunicado</span>
               </div>
-
-              <motion.button 
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={handleConfirm}
-                style={{ width: 48, height: 48, borderRadius: '16px', background: 'linear-gradient(to top right, #6D5DF6, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(109, 93, 246, 0.3)' }}
-              >
-                <Check size={24} strokeWidth={2.5} />
-              </motion.button>
             </header>
 
             {/* Scrollable Content */}
             <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
               
-              {/* Selected Chips Area */}
-              <div style={{ padding: '24px 24px 8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
-                    Selecionados ({Object.keys(selected).length})
-                  </h3>
-                  {Object.keys(selected).length > 0 && (
-                    <button onClick={() => setSelected({})} style={{ fontSize: 14, fontWeight: 600, color: '#6D5DF6', background: 'none', border: 'none', cursor: 'pointer' }}>
-                      Limpar tudo
-                    </button>
-                  )}
+              {/* Filtro Ano Letivo */}
+              {availableAnos.length > 0 && (
+                <div style={{ padding: '24px 24px 8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Ano Letivo</label>
+                    <select
+                      value={selectedAno}
+                      onChange={(e) => setSelectedAno(e.target.value)}
+                      style={{
+                        width: '100%', height: 48, borderRadius: 16, border: '1px solid #E2E8F0', background: '#fff',
+                        padding: '0 16px', fontSize: 15, fontWeight: 600, color: '#0F172A', outline: 'none',
+                        cursor: 'pointer', appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3Csvg width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748B%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
+                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', backgroundSize: '20px'
+                      }}
+                    >
+                      <option value="Todos">Todos os anos</option>
+                      {availableAnos.map(ano => (
+                        <option key={ano} value={ano}>{ano}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-
-                <div style={{ display: 'flex', overflowX: 'auto', paddingBottom: 16, gap: 8, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                  <AnimatePresence mode="popLayout">
-                    {smartChips.map(chip => (
-                      <motion.div
-                        layout
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8, filter: 'blur(4px)' }}
-                        key={chip.id}
-                        style={{ flexShrink: 0, height: 40, padding: '0 16px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 100, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-                      >
-                        <Building2 size={16} color="#6D5DF6" />
-                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0F172A' }}>{chip.name}</span>
-                        <button onClick={chip.onRemove} style={{ color: '#94A3B8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginLeft: 4 }}>
-                          <X size={16} />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                  {smartChips.length === 0 && (
-                    <span style={{ fontSize: 14, color: '#94A3B8', fontStyle: 'italic', padding: '8px 0' }}>Nenhum destinatário selecionado</span>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Main List */}
               <div style={{ padding: '0 24px 24px' }}>
@@ -395,9 +418,11 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                           <span style={{ fontSize: 16, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {item.title}
                           </span>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {item.subtitle}
-                          </span>
+                          {item.subtitle && (
+                            <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {item.subtitle}
+                            </span>
+                          )}
                         </div>
 
                         {/* Badge */}
