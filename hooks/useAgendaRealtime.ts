@@ -11,7 +11,12 @@ export interface UseAgendaRealtimeProps<T = any> {
   onInsert?: (payload: { new: T; old: T | null }) => void
   onUpdate?: (payload: { new: T; old: T | null }) => void
   onDelete?: (payload: { new: T | null; old: T }) => void
-  toastConfig?: any // Deprecated here, handled by global provider
+  toastConfig?: {
+    enabled?: boolean
+    insertMessage?: (data: T) => string
+    updateMessage?: (data: T) => string
+    icon?: React.ReactNode
+  }
 }
 
 export function useAgendaRealtime<T = any>({
