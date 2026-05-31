@@ -324,6 +324,7 @@ export function AgendaRealtimeProvider({
         const row = payload.new
         // eventos_agenda salva 'turmas' na raiz e não no jsonb dados geralmente, ou em dados
         if (isTargetingAluno(row.dados, row.turmas)) {
+          window.dispatchEvent(new CustomEvent('ad:evento-inserted', { detail: row }));
           addNotification({
             id: row.id,
             type: 'evento',
@@ -343,6 +344,7 @@ export function AgendaRealtimeProvider({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ocorrencias' }, (payload) => {
         const row = payload.new
         if (String(row.aluno_id) === String(alunoId) || String(row.dados?.aluno_id) === String(alunoId) || String(row.dados?.alunoId) === String(alunoId)) {
+          window.dispatchEvent(new CustomEvent('ad:ocorrencia-inserted', { detail: row }));
           addNotification({
             id: row.id,
             type: 'ocorrencia',
@@ -364,6 +366,7 @@ export function AgendaRealtimeProvider({
         const alunoStr = String(alunoId)
         const alunoSemZero = alunoStr.replace(/^0+/, '')
         if (String(row.aluno_id) === alunoStr || String(row.aluno_id) === alunoSemZero) {
+          window.dispatchEvent(new CustomEvent('ad:nota-inserted', { detail: row }));
           addNotification({
             id: row.id,
             type: 'nota',
@@ -376,6 +379,47 @@ export function AgendaRealtimeProvider({
             description: `O boletim de notas foi atualizado.`,
             icon: <FileText size={20} className="text-indigo-500" />,
             action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) }
+          })
+        }
+      })
+      // --- FREQUÊNCIAS ---
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'frequencias' }, (payload) => {
+        const row = payload.new
+        if (String(row.aluno_id) === String(alunoId) || String(row.dados?.aluno_id) === String(alunoId)) {
+          window.dispatchEvent(new CustomEvent('ad:frequencia-inserted', { detail: row }));
+          addNotification({
+            id: row.id,
+            type: 'frequencia',
+            title: 'Nova falta registrada',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/frequencia`
+          });
+          toast('Nova Falta Registrada', {
+            description: `Uma nova falta foi lançada no sistema.`,
+            icon: <Calendar size={20} className="text-orange-500" />,
+            action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) }
+          })
+        }
+      })
+      // --- MOMENTOS ---
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'momentos' }, (payload) => {
+        const row = payload.new
+        const newCom = { ...row, ...(row.dados || {}) }
+        if (isTargetingAluno(newCom)) {
+          window.dispatchEvent(new CustomEvent('ad:momento-inserted', { detail: newCom }));
+          addNotification({
+            id: newCom.id,
+            type: 'momento',
+            title: newCom.titulo || 'Novo Momento',
+            createdAt: newCom.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/momentos`
+          });
+          toast('Novas Fotos/Vídeos', {
+            description: newCom.titulo || 'Um novo momento foi compartilhado',
+            icon: <ImageIcon size={20} className="text-pink-500" />,
+            action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) }
           })
         }
       })

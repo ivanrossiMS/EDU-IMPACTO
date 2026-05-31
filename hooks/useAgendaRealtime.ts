@@ -220,25 +220,8 @@ export function useAgendaRealtime<T = any>({
 
           if (eventType === 'INSERT') {
             if (onInsertRef.current) onInsertRef.current({ new: newRec as T, old: null })
-            
-            // Toasts para inserts
-            if (toastConfig?.enabled && toastConfig.insertMessage) {
-              // Verifica se não fui eu quem criou
-              const isMine = String(newRec?.autorId || newRec?.criado_por || newRec?.responsavel_id) === String(currentUser?.id)
-              if (!isMine) {
-                toast.success(toastConfig.insertMessage(newRec as T), { icon: toastConfig.icon })
-              }
-            }
           } else if (eventType === 'UPDATE') {
             if (onUpdateRef.current) onUpdateRef.current({ new: newRec as T, old: oldRec as T })
-            
-            // Toasts para updates
-            if (toastConfig?.enabled && toastConfig.updateMessage) {
-              const isMine = String(newRec?.autorId || newRec?.criado_por || newRec?.responsavel_id) === String(currentUser?.id)
-              if (!isMine) {
-                toast.info(toastConfig.updateMessage(newRec as T), { icon: toastConfig.icon })
-              }
-            }
           } else if (eventType === 'DELETE') {
             if (onDeleteRef.current) onDeleteRef.current({ new: null, old: oldRec as T })
           }

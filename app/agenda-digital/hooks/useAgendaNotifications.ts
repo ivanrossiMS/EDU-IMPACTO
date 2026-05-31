@@ -4,7 +4,7 @@ import { create } from 'zustand';
 
 export interface NotificationItem {
   id: string;
-  type: 'comunicado' | 'momento' | 'evento' | 'ocorrencia' | 'nota';
+  type: 'comunicado' | 'momento' | 'evento' | 'ocorrencia' | 'nota' | 'frequencia';
   title: string;
   description?: string;
   createdAt: string;
