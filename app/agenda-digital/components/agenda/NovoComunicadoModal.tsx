@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom'
 import { 
   X, SendIcon, Clock, FileText, Paperclip, Image as ImageIcon, 
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
-  ChevronRight, Save, UploadCloud, Users, Trash2, Calendar
+  ChevronRight, Save, UploadCloud, Users, Trash2, Calendar,
+  Palette, BarChart2, Receipt
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -458,7 +459,7 @@ export default function NovoComunicadoModal({
               </div>
               
               {selectedDest.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 120, overflowY: 'auto' }}>
                   {selectedDest.map(d => (
                     <div key={d.id} className="ad-nc-chip" onClick={e => e.stopPropagation()}>
                       {d.type === 'turma' ? <Users size={12} /> : <UserAvatar name={d.name} size={16} />}
@@ -529,6 +530,10 @@ export default function NovoComunicadoModal({
                    if(url) document.execCommand('createLink', false, url); 
                    editorRef.current?.focus(); 
                 }}><LinkIcon size={18}/></button>
+                <label className="ad-nc-tool-btn" style={{ position: 'relative', overflow: 'hidden' }}>
+                  <Palette size={18}/>
+                  <input type="color" onChange={(e) => { document.execCommand('foreColor', false, e.target.value); editorRef.current?.focus(); }} style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+                </label>
                 <div style={{ position: 'relative' }}>
                   <button className="ad-nc-tool-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)}><Smile size={18}/></button>
                   {showEmojiPicker && (
@@ -552,16 +557,29 @@ export default function NovoComunicadoModal({
               Anexos <span style={{ fontWeight: 400 }}>(opcional)</span>
             </div>
             
-            <label className="ad-nc-dropzone">
-              <div style={{ background: '#F1F5F9', width: 40, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <UploadCloud size={20} color="#8B5CF6" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>Adicionar arquivos</span>
-                <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 500 }}>Máx. 50MB por arquivo</span>
-              </div>
-              <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={handleFileUpload} />
-            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#8B5CF6'; e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
+                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <Paperclip size={20} color="#8B5CF6" />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Anexar</span>
+                <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={handleFileUpload} />
+              </label>
+
+              <button onClick={(e) => { e.preventDefault(); alert('Em breve: Relatório') }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#3B82F6'; e.currentTarget.style.background = '#EFF6FF'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
+                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <BarChart2 size={20} color="#3B82F6" />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Relatório</span>
+              </button>
+
+              <button onClick={(e) => { e.preventDefault(); alert('Em breve: Cobrança') }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#10B981'; e.currentTarget.style.background = '#ECFDF5'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
+                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                  <Receipt size={20} color="#10B981" />
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Cobrança</span>
+              </button>
+            </div>
 
             {/* PREVIEW ANEXOS */}
             {anexos.length > 0 && (
