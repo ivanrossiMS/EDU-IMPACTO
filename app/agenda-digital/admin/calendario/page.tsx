@@ -381,7 +381,7 @@ export default function CalendarioPage() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 8px 16px rgba(99, 102, 241, 0.2)' }}>
-                   <Calendar size={20} />
+                   <CalendarIcon size={20} />
                 </div>
                 <div>
                   <div style={{ fontWeight: 900, fontSize: 17, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
@@ -535,7 +535,7 @@ export default function CalendarioPage() {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Calendar size={16} />
+                  <CalendarIcon size={16} />
                 </div>
                 <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>Próximos Compromissos</span>
               </div>
