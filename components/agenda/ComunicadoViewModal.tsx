@@ -211,7 +211,7 @@ export function ComunicadoViewModal({
             width: 100%;
             height: 100%;
             max-width: 1100px;
-            max-height: 92vh;
+            max-height: 100vh;
             background: #ffffff;
             display: flex;
             flex-direction: column;
@@ -221,12 +221,14 @@ export function ComunicadoViewModal({
           @media (min-width: 768px) {
             .cvm-modal-container {
               border-radius: 24px;
+              max-height: 92vh;
             }
           }
           .cvm-header {
             flex-shrink: 0;
             background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%);
             padding: 16px 20px;
+            padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -249,7 +251,7 @@ export function ComunicadoViewModal({
             background: #ffffff;
             border-top: 1px solid #e2e8f0;
             padding: 12px 20px;
-            padding-bottom: env(safe-area-inset-bottom, 12px);
+            padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
             position: sticky;
             bottom: 0;
             z-index: 10;
@@ -301,12 +303,8 @@ export function ComunicadoViewModal({
           {/* HEADER */}
           <div className="cvm-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <button className="cvm-icon-btn" onClick={onClose}>
-                <X size={20} />
-              </button>
-              
               <div className="cvm-avatar-area">
-                <UserAvatar userId={comunicado.autorId} name={comunicado.autor} fotoUrl={comunicado.autorFoto} size={42} />
+                <UserAvatar userId={comunicado.autorId} name={comunicado.autor} fotoUrl={comunicado.autorFoto} size={54} />
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.2 }}>{comunicado.autor}</span>
@@ -324,9 +322,9 @@ export function ComunicadoViewModal({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button className="cvm-icon-btn" style={{ display: 'none' /* Omit sharing for now or implement later */ }}><Share size={18} /></button>
-              <button className="cvm-icon-btn"><Bookmark size={18} /></button>
-              <button className="cvm-icon-btn"><MoreHorizontal size={18} /></button>
+              <button className="cvm-icon-btn" onClick={onClose}>
+                <X size={24} />
+              </button>
             </div>
           </div>
 
