@@ -135,7 +135,7 @@ export default function NovoComunicadoModal({
       inset: 0,
       background: 'rgba(15, 23, 42, 0.4)',
       backdropFilter: 'blur(8px)',
-      zIndex: 99999,
+      zIndex: 99990,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center'
@@ -150,7 +150,7 @@ export default function NovoComunicadoModal({
           position: absolute;
           top: 0;
           left: 0;
-          z-index: 99999;
+          z-index: 99990;
           overflow: hidden;
         }
         @media (min-width: 1024px) {
@@ -704,6 +704,13 @@ export default function NovoComunicadoModal({
     </div>
   )
 
-  if (typeof window === "undefined") return null;
+  
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return createPortal(modalContent, document.body);
 }

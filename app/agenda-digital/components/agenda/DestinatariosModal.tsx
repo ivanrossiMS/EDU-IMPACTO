@@ -212,7 +212,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     <AnimatePresence>
       {isOpen && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 999999,
+          position: 'fixed', inset: 0, zIndex: 2147483647,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           {/* Backdrop Desktop */}
@@ -229,7 +229,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             exit={{ y: '100%', opacity: 0, scale: 0.95 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="w-full h-[100dvh] lg:h-[90vh] lg:max-w-[700px] lg:rounded-[28px] lg:shadow-2xl overflow-hidden flex flex-col bg-[#F8FAFC] relative"
-            style={{ boxShadow: '0 40px 100px rgba(0,0,0,0.2)' }}
+            style={{ boxShadow: '0 40px 100px rgba(0,0,0,0.2)', zIndex: 2147483647 }}
           >
             {/* Header (Fixed) */}
             <header className="h-[72px] shrink-0 bg-[#F8FAFC]/80 backdrop-blur-md border-b border-[#E2E8F0] flex items-center justify-between px-4 lg:px-6 z-20 sticky top-0">
@@ -392,6 +392,13 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     </AnimatePresence>
   )
 
-  if (typeof window === "undefined") return null;
+  
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
   return createPortal(modalContent, document.body);
 }
