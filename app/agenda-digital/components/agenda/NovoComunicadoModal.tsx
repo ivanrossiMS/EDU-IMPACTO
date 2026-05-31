@@ -139,33 +139,47 @@ export default function NovoComunicadoModal({
     }}>
       <style>{`
         .ad-nc-container {
-          width: 100vw;
-          height: 100dvh;
+          width: 100%;
+          height: 100%;
           background: #F8FAFC;
           display: flex;
           flex-direction: column;
-          position: relative;
+          position: absolute;
+          top: 0;
+          left: 0;
+          z-index: 99999;
           overflow: hidden;
         }
         @media (min-width: 1024px) {
           .ad-nc-container {
             max-width: 900px;
             height: 92vh;
+            position: relative;
+            top: auto;
+            left: auto;
             border-radius: 28px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
           }
         }
         
+        @keyframes waveAnimation {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
         .ad-nc-header {
-          height: 72px;
+          height: 80px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 0 20px;
-          background: #FFFFFF;
-          border-bottom: 1px solid #E2E8F0;
+          background: linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6);
+          background-size: 300% 300%;
+          animation: waveAnimation 8s ease infinite;
+          border-bottom: 1px solid rgba(255,255,255,0.2);
           flex-shrink: 0;
           z-index: 10;
+          color: white;
         }
         
         .ad-nc-btn-send {
@@ -193,7 +207,7 @@ export default function NovoComunicadoModal({
         .ad-nc-body {
           flex: 1;
           overflow-y: auto;
-          padding: 24px 20px 100px 20px;
+          padding: 24px 20px 110px 20px;
           display: flex;
           flex-direction: column;
           gap: 24px;
@@ -330,15 +344,15 @@ export default function NovoComunicadoModal({
           bottom: 0;
           left: 0;
           right: 0;
-          height: 72px;
+          height: 80px;
           background: rgba(255, 255, 255, 0.85);
           backdrop-filter: blur(12px);
           -webkit-backdrop-filter: blur(12px);
           border-top: 1px solid rgba(226, 232, 240, 0.6);
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr 1fr 1.3fr;
           gap: 12px;
-          padding: 12px 20px;
+          padding: 12px 16px;
           z-index: 10;
         }
         
@@ -389,31 +403,25 @@ export default function NovoComunicadoModal({
       >
         {/* HEADER */}
         <div className="ad-nc-header">
+          <div style={{ width: 40 }} />
+          
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#fff', margin: 0 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: 0, fontWeight: 500 }}>Envie um comunicado para sua escola</p>
+          </div>
+          
           <button 
             onClick={onClose}
             style={{ 
               width: 40, height: 40, borderRadius: 20, border: 'none', 
-              background: '#F1F5F9', color: '#64748B', display: 'flex', 
+              background: 'rgba(255,255,255,0.2)', color: '#fff', display: 'flex', 
               alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s', backdropFilter: 'blur(4px)'
             }}
-            onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
-            onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
           >
             <X size={20} />
-          </button>
-          
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0F172A', margin: 0 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
-            <p style={{ fontSize: 12, color: '#64748B', margin: 0, fontWeight: 500 }}>Envie um comunicado para sua escola</p>
-          </div>
-          
-          <button className="ad-nc-btn-send" onClick={() => handleAction(false)}>
-            {isUploading ? (
-              <div style={{ width: 18, height: 18, borderRadius: 9, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
-            ) : (
-              <SendIcon size={18} fill="currentColor" />
-            )}
           </button>
         </div>
 
@@ -593,6 +601,16 @@ export default function NovoComunicadoModal({
         <div className="ad-nc-footer">
           <button 
             className="ad-nc-footer-btn ad-nc-btn-secondary" 
+            style={{ flexDirection: 'column', gap: 4 }}
+            onClick={() => handleAction(true)}
+          >
+            <Save size={18} color="#64748B" />
+            <span style={{ color: '#0F172A', fontSize: 12 }}>Rascunho</span>
+          </button>
+
+          <button 
+            className="ad-nc-footer-btn ad-nc-btn-secondary" 
+            style={{ flexDirection: 'column', gap: 4 }}
             onClick={() => {
               if (!dataAgendamento) {
                  const nowLocal = new Date();
@@ -610,23 +628,23 @@ export default function NovoComunicadoModal({
             }}
           >
             <Calendar size={18} color="#6D5DF6" />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span style={{ color: '#0F172A' }}>{dataAgendamento ? 'Agendado' : 'Agendar'}</span>
-              <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 500 }}>
-                {dataAgendamento ? new Date(dataAgendamento).toLocaleDateString('pt-BR') : 'Programar envio'}
-              </span>
-            </div>
+            <span style={{ color: '#0F172A', fontSize: 12 }}>{dataAgendamento ? 'Agendado' : 'Agendar'}</span>
           </button>
-
+          
           <button 
-            className="ad-nc-footer-btn ad-nc-btn-secondary" 
-            onClick={() => handleAction(true)}
+            className="ad-nc-footer-btn" 
+            style={{
+              background: 'linear-gradient(135deg, #6D5DF6 0%, #8B5CF6 100%)',
+              color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(109, 93, 246, 0.3)'
+            }}
+            onClick={() => handleAction(false)}
           >
-            <Save size={18} color="#64748B" />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span style={{ color: '#0F172A' }}>Salvar rascunho</span>
-              <span style={{ fontSize: 10, color: '#94A3B8', fontWeight: 500 }}>Salvar para depois</span>
-            </div>
+            {isUploading ? (
+              <div style={{ width: 18, height: 18, borderRadius: 9, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <SendIcon size={18} fill="currentColor" />
+            )}
+            <span>Enviar</span>
           </button>
         </div>
 
