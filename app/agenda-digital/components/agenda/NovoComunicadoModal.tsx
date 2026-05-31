@@ -174,11 +174,10 @@ export default function NovoComunicadoModal({
           100% { background-position: 0% 50%; }
         }
         .ad-nc-header {
-          height: 80px;
+          padding: 28px 24px 20px;
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
-          padding: 0 20px;
           background: linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6);
           background-size: 300% 300%;
           animation: waveAnimation 8s ease infinite;
@@ -409,16 +408,17 @@ export default function NovoComunicadoModal({
       >
         {/* HEADER */}
         <div className="ad-nc-header">
-          <div style={{ width: 40 }} />
           
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 800, color: '#fff', margin: 0 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: -0.5 }}>{initialData ? 'Editar Comunicado' : 'Novo Comunicado'}</h2>
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 24, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={24} />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{currentUser?.nome || 'Usuário ERP'}</span>
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 2 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+              <div style={{ border: '2px solid rgba(255,255,255,0.3)', borderRadius: '50%', padding: 2 }}>
+                <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'Usuário'} size={32} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{currentUser?.nome || 'Usuário ERP'}</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: 600, marginTop: 4 }}>{currentUser?.cargo || currentUser?.perfil || 'Administração'}</span>
               </div>
             </div>
           </div>

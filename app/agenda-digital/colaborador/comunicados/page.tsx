@@ -18,7 +18,7 @@ import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
+import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useLocalStorage } from '@/lib/useLocalStorage'
@@ -1155,6 +1155,7 @@ export default function ColaboradorComunicadosPage() {
         onClose={() => setShowDestModal(false)}
         initialSelected={selectedDest}
         onAdd={(res) => setSelectedDest(res as any)}
+        allowedTurmasIds={turmaOptions.map(t => String(t.id))}
       />
 
       <AnimatePresence>
