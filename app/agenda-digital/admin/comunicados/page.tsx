@@ -16,6 +16,7 @@ import {
   ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2
 } from 'lucide-react'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
+import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
@@ -78,16 +79,10 @@ export default function ADAdminComunicados() {
   const [showComposer, setShowComposer] = useState(false)
   const [selectedDest, setSelectedDest] = useState<{id: string, name: string, type: 'turma' | 'funcionario' | 'aluno'}[]>([])
   const [showDestModal, setShowDestModal] = useState(false)
-  const [newTitulo, setNewTitulo] = useState('')
-  const [newConteudo, setNewConteudo] = useState('')
-  const [anexos, setAnexos] = useState<string[]>([])
+      const [anexos, setAnexos] = useState<string[]>([])
   const [dataAgendamento, setDataAgendamento] = useState('')
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
-  const [tempDataAgendamento, setTempDataAgendamento] = useState('')
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
+      const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+      const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
   
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
   const [cobrancaForm, setCobrancaForm] = useState({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
@@ -110,16 +105,12 @@ export default function ADAdminComunicados() {
   const availableRoles = Array.from(new Set(comunicados.map(c => c.autorCargo || (c as any).dados?.autorCargo).filter(Boolean))) as string[];
   const availableAuthors = Array.from(new Set(comunicados.map(c => c.autor || (c as any).dados?.autor).filter(Boolean))) as string[];
 
-  const comunicadoRichEditorRef = useRef<HTMLDivElement>(null)
-
-  // Sync editor content only on showComposer or edit changes to avoid cursor jumps
-  useEffect(() => {
-    if (showComposer && comunicadoRichEditorRef.current) {
-      comunicadoRichEditorRef.current.innerHTML = newConteudo;
-    }
-  }, [showComposer]);
-
-  const handleEnviar = (asRascunho = false) => {
+  
+  
+  const handleEnviar = (data: any, asRascunho = false) => {
+    const { titulo, conteudo, anexos, dataAgendamento } = data;
+    const newTitulo = titulo;
+    const newConteudo = conteudo;
     if (!newTitulo.trim() || !newConteudo.trim()) {
       adAlert('Por favor, preencha o título e o conteúdo.', 'Atenção')
       return
@@ -194,7 +185,7 @@ export default function ADAdminComunicados() {
       
       // Auto-register form dispatches if it contains forms
       if (!asRascunho) {
-         const appendedForms = anexos.filter(a => a.startsWith('Formulário: ')).map(a => a.replace('Formulário: ', ''))
+         const appendedForms = anexos.filter((a: any) => a.startsWith('Formulário: ')).map((a: any) => a.replace('Formulário: ', ''))
          if (appendedForms.length > 0) {
             const isGlobal = newCom.turmas.length === 0 && newCom.alunosIds.length === 0
             const targets = alunosAtivos.filter(a => {
@@ -205,7 +196,7 @@ export default function ADAdminComunicados() {
             })
 
             const newDisparos: any[] = []
-            appendedForms.forEach(formName => {
+            appendedForms.forEach((formName: string) => {
                const f = forms.find(x => x.name === formName)
                if (f) {
                   targets.forEach(t => {
@@ -227,18 +218,18 @@ export default function ADAdminComunicados() {
       }
     }
     setShowComposer(false)
-    setNewTitulo('')
-    setNewConteudo('')
-    setAnexos([])
+    
+    
+    
   }
 
   const openEdit = (c: ADComunicado) => {
     setEditComId(c.id)
-    setNewTitulo(c.titulo)
-    setNewConteudo(c.conteudo || (c as any).texto || '')
-    setAnexos(c.anexos || [])
-    setDataAgendamento(c.dataAgendamento || '')
-    setTempDataAgendamento(c.dataAgendamento || '')
+    
+
+    
+    
+    
     
     const mappedDest: {id: string, name: string, type: 'turma' | 'aluno'}[] = []
     c.turmas.forEach((t, i) => mappedDest.push({id: `t${c.id}${i}`, name: t, type: 'turma'}))
@@ -254,23 +245,20 @@ export default function ADAdminComunicados() {
 
   const handleReenviar = (c: ADComunicado) => {
     setEditComId(null)
-    setNewTitulo(c.titulo)
-    setNewConteudo(c.conteudo || (c as any).texto || '')
-    setAnexos(c.anexos || [])
+
     setSelectedDest([]) // Permite selecionar novos destinatários
-    setDataAgendamento('')
-    setTempDataAgendamento('')
+    
+    
     setShowComposer(true)
   }
 
   const handleNovo = () => {
     setEditComId(null)
-    setNewTitulo('')
-    setNewConteudo('')
-    if (comunicadoRichEditorRef.current) comunicadoRichEditorRef.current.innerHTML = ''
-    setAnexos([])
-    setDataAgendamento('')
-    setTempDataAgendamento('')
+    
+    
+        
+    
+    
     setSelectedDest([])
     setShowComposer(true)
   }
@@ -596,327 +584,19 @@ export default function ADAdminComunicados() {
 </motion.div>
 )}</AnimatePresence>
 
+      
       {/* Modal Composer */}
-      {showComposer && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-          zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div className="card" style={{ width: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700 }}>{editComId ? 'Editar Comunicado' : 'Escrever Novo Comunicado'}</h3>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setShowComposer(false); setAnexos([]); }}><X size={18} /></button>
-            </div>
-            
-            <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Para:</div>
-                  {!editComId && <button className="btn btn-secondary btn-sm" onClick={() => setShowDestModal(true)}>+ Adicionar Destinatários</button>}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, background: 'hsl(var(--bg-main))', padding: '12px', borderRadius: 8, minHeight: 48, maxHeight: 120, overflowY: 'auto', border: '1px solid hsl(var(--border-subtle))' }}>
-                  {selectedDest.length === 0 && <span className="badge badge-ghost text-muted" style={{ padding: '6px 12px' }}>Toda a Escola (Todos os Alunos Ativos)</span>}
-                  {selectedDest.map(d => (
-                    <span key={d.id} className="badge" style={{ background: d.type === 'turma' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)', color: d.type === 'turma' ? '#4f46e5' : '#10b981', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', fontSize: 13 }}>
-                      {d.type === 'turma' ? 'Turma:' : ''} {d.name}
-                      {!editComId && <button onClick={() => setSelectedDest(prev => prev.filter(x => x.id !== d.id))} style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', display: 'flex', color: 'inherit' }}><X size={14} color="currentColor"/></button>}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              
-              <div style={{ padding: '12px 16px', background: 'rgba(59,130,246,0.05)', borderRadius: 8, border: '1px dashed rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                 <UserAvatar userId={currentUser?.id} name={currentUser?.nome || 'U'} size={42} />
-                 <div>
-                    <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase' }}>Remetente Vinculado Automaticamente</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#3b82f6' }}>{currentUser?.nome || 'Usuário ERP'} <span style={{ fontWeight: 500, color: 'hsl(var(--text-secondary))' }}>({currentUser?.cargo || currentUser?.perfil || 'Administração'})</span></div>
-                 </div>
-              </div>
-              
-              <input className="form-input" placeholder="Título do Comunicado" style={{ fontSize: 16, fontWeight: 600 }} value={newTitulo} onChange={e => setNewTitulo(e.target.value)} />
+      <NovoComunicadoModal
+        isOpen={showComposer}
+        onClose={() => setShowComposer(false)}
+        initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
+        currentUser={currentUser}
+        selectedDest={selectedDest}
+        onClickSelectDest={() => setShowDestModal(true)}
+        onRemoveDest={id => setSelectedDest(prev => prev.filter(x => x.id !== id))}
+        onSave={(data, isDraft) => handleEnviar(data, isDraft)}
+      />
 
-              {/* Rich Text Editor Simulation */}
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                border: '1px solid hsl(var(--border-subtle))', 
-                borderRadius: 16, 
-                overflow: 'hidden',
-                background: 'white',
-                boxShadow: '0 4px 20px -5px rgba(0,0,0,0.05)',
-                flexShrink: 0
-              }}>
-                <div style={{ 
-                  padding: '10px 16px', 
-                  background: '#f8fafc', 
-                  borderBottom: '1px solid hsl(var(--border-subtle))', 
-                  display: 'flex', 
-                  gap: 8,
-                  alignItems: 'center'
-                }}>
-                   <button onClick={() => { document.execCommand('bold', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Negrito"><Bold size={16}/></button>
-                   <button onClick={() => { document.execCommand('italic', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Itálico"><Italic size={16}/></button>
-                   <button onClick={() => { document.execCommand('underline', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Sublinhado"><Underline size={16}/></button>
-                   <div style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
-                   <button onClick={() => { document.execCommand('insertUnorderedList', false); comunicadoRichEditorRef.current?.focus(); }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Lista"><List size={16}/></button>
-                   <button onClick={() => { 
-                     const url = prompt('Digite o link:'); 
-                     if(url) document.execCommand('createLink', false, url); 
-                     comunicadoRichEditorRef.current?.focus(); 
-                   }} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Link"><LinkIcon size={16}/></button>
-                   <div style={{ width: 1, height: 20, background: '#e2e8f0', margin: '0 4px' }} />
-                   <div style={{ position: 'relative' }}>
-                      <button onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="btn btn-ghost btn-sm" style={{ padding: 8, height: 32, width: 32, borderRadius: 8 }} title="Emoji"><Smile size={16}/></button>
-                      {showEmojiPicker && (
-                        <div style={{ position: 'absolute', top: 40, left: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 10, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1)', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, zIndex: 100 }}>
-                          {EMOJIS.map(emoji => (
-                            <button key={emoji} onClick={() => { document.execCommand('insertText', false, emoji); setShowEmojiPicker(false); comunicadoRichEditorRef.current?.focus(); }} style={{ background: 'transparent', border: 0, fontSize: 20, cursor: 'pointer', padding: 4, borderRadius: 6 }}>
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                   </div>
-                </div>
-
-                <div 
-                  ref={comunicadoRichEditorRef}
-                  contentEditable
-                  className="wysiwyg-editor"
-                  style={{ 
-                    minHeight: 150, 
-                    maxHeight: 350,
-                    padding: '16px 20px', 
-                    outline: 'none', 
-                    fontSize: 15, 
-                    lineHeight: 1.6,
-                    overflowY: 'auto',
-                    color: '#334155'
-                  }}
-                  onInput={e => setNewConteudo(e.currentTarget.innerHTML)}
-                />
-
-                {anexos.length > 0 && (
-                  <div style={{ 
-                    padding: '12px 16px', 
-                    display: 'flex', 
-                    gap: 12, 
-                    flexWrap: 'wrap', 
-                    borderTop: '1px solid #f1f5f9', 
-                    background: '#f8fafc',
-                    maxHeight: 180,
-                    overflowY: 'auto'
-                  }}>
-                    {anexos.map((anexo, i) => {
-                      const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
-                      const name = parts[0];
-                      const url = parts[1];
-                      const mimeType = parts[2] || '';
-                      const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
-                      const isVid = mimeType.startsWith('video/') || (url && url.startsWith('data:video')) || /\.(mp4|webm|ogg|mov)$/i.test(name);
-
-                      return (
-                        <div key={i} style={{ position: 'relative', width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                           <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: 'white', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', position: 'relative' }}>
-                              {isImg ? (
-                                <Image src={url} alt="Capa" width={80} height={80} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : isVid ? (
-                                <div style={{ width: '100%', height: '100%', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                   <div style={{ width: 24, height: 24, borderRadius: 12, border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <div style={{ width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '8px solid white', marginLeft: 2 }} />
-                                   </div>
-                                </div>
-                              ) : (
-                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
-                                  <FileText size={24} color="#64748b" />
-                                </div>
-                              )}
-                              
-                              <button 
-                                onClick={() => setAnexos(anexos.filter(a => a !== anexo))}
-                                style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, background: 'rgba(239, 68, 68, 0.9)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 5 }}
-                              >
-                                <X size={14} strokeWidth={3} />
-                              </button>
-                           </div>
-                           <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textAlign: 'center', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                        </div>
-                      );
-                    })}
-                    
-                    {isUploading && (
-                      <div style={{ width: 80, height: 80, borderRadius: 12, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                         <div style={{ width: 24, height: 24, borderRadius: 12, border: '3px solid #e2e8f0', borderTopColor: '#4f46e5', animation: 'spin 1s linear infinite' }} />
-                         <span style={{ fontSize: 10, fontWeight: 700, color: '#4f46e5' }}>{uploadProgress}%</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {!anexos.length && isUploading && (
-                  <div style={{ padding: '16px', borderTop: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', alignItems: 'center', gap: 12 }}>
-                     <div style={{ width: 20, height: 20, borderRadius: 10, border: '2px solid #e2e8f0', borderTopColor: '#4f46e5', animation: 'spin 1s linear infinite' }} />
-                     <span style={{ fontSize: 13, fontWeight: 600, color: '#4f46e5' }}>Processando mídia... {uploadProgress}%</span>
-                  </div>
-                )}
-              </div>
-
-               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
-                 <label className="btn" style={{ 
-                   cursor: 'pointer', background: 'rgba(99, 102, 241, 0.05)', color: '#4f46e5', border: '1px solid rgba(99, 102, 241, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
-                 }}>
-                   <Paperclip size={16} /> Anexar Arquivo
-                   <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={async e => { 
-                      const file = e.target.files?.[0];
-                      e.target.value = '';
-                      if (!file) return;
-                      
-                      const MAX_SIZE = 50 * 1024 * 1024;
-                      if (file.size > MAX_SIZE) {
-                        adAlert('Arquivo muito grande. O limite é 50MB.', 'Erro');
-                        return;
-                      }
-
-                      setIsUploading(true);
-                      setUploadProgress(5);
-
-                      try {
-                        // 1. Obter URL assinada
-                        let fileToUpload: File = file;
-
-                        if (file.type.startsWith('image/')) {
-                          setUploadProgress(10);
-                          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' });
-                          setUploadProgress(40);
-                        } else if (file.type.startsWith('video/')) {
-                          setUploadProgress(5);
-                          fileToUpload = await compressVideo(file, (percent) => {
-                            const scaled = Math.round(5 + (percent * 0.45));
-                            setUploadProgress(scaled);
-                          }) as File;
-                        }
-
-                        setUploadProgress(60);
-
-                        // Upload centralizado com Cache-Control
-                        const uploadRes = await uploadFileToSupabase({
-                          bucket: 'comunicados-midia',
-                          file: fileToUpload,
-                          usageType: 'common' 
-                        });
-
-                        if (!uploadRes.ok || !uploadRes.url) {
-                          console.error('[upload-midia]', uploadRes.error);
-                          adAlert(uploadRes.error || 'Erro no envio direto do arquivo.', 'Erro de Conexão');
-                          setIsUploading(false);
-                          setUploadProgress(0);
-                          return;
-                        }
-
-                        setUploadProgress(100);
-                        setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}`]);
-                        setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
-                      } catch (err: any) {
-                        adAlert('Erro inesperado: ' + (err?.message || ''), 'Erro');
-                        setIsUploading(false);
-                        setUploadProgress(0);
-                      }
-                    }} />
-                 </label>
-
-                 <button className="btn" style={{ 
-                   background: 'rgba(139, 92, 246, 0.05)', color: '#7c3aed', border: '1px solid rgba(139, 92, 246, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
-                 }} onClick={() => setShowFormsModal(true)}>
-                   <FileText size={16} /> Formulário
-                 </button>
-
-                 <button className="btn" style={{ 
-                   background: 'rgba(236, 72, 153, 0.05)', color: '#db2777', border: '1px solid rgba(236, 72, 153, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
-                 }} onClick={() => setShowRelsModal(true)}>
-                   <FileBarChart size={16} /> Relatório
-                 </button>
-
-                 <button className="btn" style={{ 
-                   background: 'rgba(16, 185, 129, 0.05)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.2)', height: 40, borderRadius: 12, padding: '0 16px', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' 
-                 }} onClick={() => setShowCobrancaModal(true)}>
-                   <BadgeDollarSign size={16} /> Nova Cobrança
-                 </button>
-               </div>
-            </div>
-
-            <div style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-overlay))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '0 0 24px 24px' }}>
-              <button className="btn btn-ghost" onClick={() => handleEnviar(true)} style={{ fontWeight: 700, color: '#64748b' }}>Salvar Rascunho</button>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <button 
-                  type="button"
-                  className="btn" 
-                  onClick={() => {
-                    if (dataAgendamento) {
-                      setTempDataAgendamento(dataAgendamento);
-                    } else {
-                      const nowLocal = new Date();
-                      nowLocal.setHours(nowLocal.getHours() + 24);
-                      const localString = nowLocal.getFullYear() + '-' + 
-                        String(nowLocal.getMonth() + 1).padStart(2, '0') + '-' + 
-                        String(nowLocal.getDate()).padStart(2, '0') + 'T' + 
-                        String(nowLocal.getHours()).padStart(2, '0') + ':' + 
-                        String(nowLocal.getMinutes()).padStart(2, '0');
-                      setTempDataAgendamento(localString);
-                    }
-                    setShowScheduleModal(true);
-                  }} 
-                  style={{ 
-                    height: 40, 
-                    borderRadius: 10, 
-                    fontWeight: 700, 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8, 
-                    border: '1px solid ' + (dataAgendamento ? 'rgba(79, 70, 229, 0.3)' : 'hsl(var(--border-subtle))'),
-                    background: dataAgendamento ? 'rgba(79, 70, 229, 0.05)' : 'white',
-                    color: dataAgendamento ? '#4f46e5' : '#64748b',
-                    padding: '0 16px',
-                    transition: 'all 0.2s',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Clock size={16} /> 
-                  {dataAgendamento ? (
-                    (() => {
-                      try {
-                        const d = new Date(dataAgendamento);
-                        return `Agendado: ${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-                      } catch (e) {
-                        return 'Agendado';
-                      }
-                    })()
-                  ) : 'Agendar Envio'}
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  disabled={isUploading}
-                  style={{ 
-                    height: 40, 
-                    padding: '0 24px', 
-                    borderRadius: 10, 
-                    fontWeight: 800, 
-                    gap: 8, 
-                    boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)',
-                    opacity: isUploading ? 0.6 : 1,
-                    cursor: isUploading ? 'not-allowed' : 'pointer'
-                  }} 
-                  onClick={() => handleEnviar(false)}
-                >
-                   {isUploading ? (
-                     <div style={{ width: 16, height: 16, borderRadius: 8, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
-                   ) : <SendIcon size={16} />}
-                   {isUploading ? 'Processando...' : dataAgendamento ? 'Agendar' : editComId ? 'Salvar Alterações' : 'Enviar Agora'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Destinatarios Universal Modal */}
       <DestinatariosModal 
         isOpen={showDestModal}
@@ -978,7 +658,7 @@ export default function ADAdminComunicados() {
                     setAppCharges(prev => [novaCob, ...prev])
                     
                     const txtCob = `\n\n[Aviso de Fatura Gerada] Acesse o link para pagamento no seu app:\n **${cobrancaForm.motivo}** - R$ ${novaCob.valor.toFixed(2)}\n`
-                    setNewConteudo(p => p + txtCob)
+                    
                         
                     setCobrancaForm({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
                     setShowCobrancaModal(false)
@@ -994,7 +674,7 @@ export default function ADAdminComunicados() {
         isOpen={showRelsModal} 
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
-        onAdd={(text, payload) => setAnexos(prev => [...prev, `${text}|payload:${JSON.stringify(payload)}|report-payload`])} 
+        onAdd={(text, payload) => alert('Adicione o relatório anexando o PDF gerado ou insira o link.')} 
       />
 
       <AnimatePresence>
@@ -1022,7 +702,7 @@ export default function ADAdminComunicados() {
                       background: '#fff', border: '1px solid #e2e8f0', display: 'flex', gap: 18, cursor: 'pointer',
                       transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
                     }}
-                    onClick={() => { setAnexos(prev => [...prev, `Formulário: ${f.name}`]); setShowFormsModal(false) }}
+                    onClick={() => { ; setShowFormsModal(false) }}
                   >
                     <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(59, 130, 246, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6', flexShrink: 0 }}>
                       <FileText size={24} />
@@ -1366,91 +1046,7 @@ export default function ADAdminComunicados() {
         )}
       </AnimatePresence>
 
-      {/* Modal de Agendamento */}
-      <AnimatePresence>
-        {showScheduleModal && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            exit={{ opacity: 0 }} 
-            style={{ position: 'fixed', inset: 0, zIndex: 10003, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0, y: 20 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-              transition={{ type: "spring", stiffness: 300, damping: 25 }} 
-              className="card" 
-              style={{ width: 420, padding: 28, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 24, background: '#fff' }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>📅 Agendar Envio</h3>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Escolha a data e hora para disparo automático.</div>
-                </div>
-                <button className="btn btn-ghost btn-sm" onClick={() => setShowScheduleModal(false)}><X size={18} /></button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 24 }}>
-                <div>
-                  <label className="form-label" style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, display: 'block' }}>Data e Hora de Disparo</label>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <Clock size={16} style={{ position: 'absolute', left: 16, color: '#64748b' }} />
-                    <input 
-                      type="datetime-local" 
-                      className="form-input" 
-                      style={{ width: '100%', fontSize: 14, paddingLeft: 44, height: 48, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }} 
-                      value={tempDataAgendamento} 
-                      onChange={e => setTempDataAgendamento(e.target.value)} 
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <button 
-                  className="btn btn-primary" 
-                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 800, background: '#4f46e5', borderColor: '#4f46e5' }}
-                  onClick={() => {
-                    if (!tempDataAgendamento) {
-                      adAlert('Selecione uma data e hora válidas.', 'Aviso');
-                      return;
-                    }
-                    setDataAgendamento(tempDataAgendamento);
-                    setShowScheduleModal(false);
-                    adAlert(`Envio agendado com sucesso para ${new Date(tempDataAgendamento).toLocaleDateString('pt-BR')} às ${new Date(tempDataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Clique em "Agendar" para salvar o comunicado.`, 'Sucesso');
-                  }}
-                >
-                  Confirmar Agendamento
-                </button>
-                
-                {dataAgendamento && (
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
-                    onClick={() => {
-                      setDataAgendamento('');
-                      setTempDataAgendamento('');
-                      setShowScheduleModal(false);
-                      adAlert('Agendamento removido. O comunicado será enviado imediatamente ao salvar.', 'Informação');
-                    }}
-                  >
-                    Remover Agendamento
-                  </button>
-                )}
-
-                <button 
-                  className="btn btn-ghost" 
-                  style={{ width: '100%', height: 44, borderRadius: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))' }}
-                  onClick={() => setShowScheduleModal(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      
 
       {/* Drawer para ver destinatários */}
       <AnimatePresence>
