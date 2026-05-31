@@ -16,6 +16,9 @@ interface DestinatariosModalProps {
 }
 
 export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
   const data = useData()
   const turmas = allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
   const [alunos] = useSupabaseArray<any>('alunos')
@@ -393,11 +396,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   )
 
   
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
   if (!mounted) return null;
 
   return createPortal(modalContent, document.body);

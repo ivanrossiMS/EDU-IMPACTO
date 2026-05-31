@@ -28,6 +28,9 @@ export default function NovoComunicadoModal({
   isOpen, onClose, onSave, initialData, currentUser,
   onClickSelectDest, selectedDest = [], onRemoveDest
 }: NovoComunicadoModalProps) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+
   const [titulo, setTitulo] = useState('')
   const [conteudo, setConteudo] = useState('')
   const [anexos, setAnexos] = useState<string[]>([])
@@ -704,13 +707,6 @@ export default function NovoComunicadoModal({
     </div>
   )
 
-  
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
   if (!mounted) return null;
-
   return createPortal(modalContent, document.body);
 }
