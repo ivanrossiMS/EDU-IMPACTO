@@ -445,7 +445,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                 if (names.length > 2) return `${names.length} Alunos`;
                                 return names.join(', ');
                               }
-                              return `${m.alunosIds.length} Aluno(s)`;
+                              return `${m.alunosIds?.length || 0} Aluno(s)`;
                             }
                             const classes = m.targetClasses || [];
                             if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
