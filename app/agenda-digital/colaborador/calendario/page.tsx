@@ -189,18 +189,14 @@ export default function ADCalendarioPage() {
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
 
-  useEffect(() => {
-    if (selectedTurmaId === 'all' && turmaOptions.length > 0) {
-      setSelectedTurmaId(turmaOptions[0].id)
-    }
-  }, [turmaOptions, selectedTurmaId])
-
   const selectedTurmaName = React.useMemo(() => {
+    if (selectedTurmaId === 'all') return 'Todas as turmas'
     const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
     return t ? t.nome : 'Selecione uma turma'
   }, [selectedTurmaId, turmas])
 
   const activeTurmas = React.useMemo(() => {
+    if (selectedTurmaId === 'all') return turmaOptions
     const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
     return t ? [t] : []
   }, [selectedTurmaId, turmaOptions, turmas])

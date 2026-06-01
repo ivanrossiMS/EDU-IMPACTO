@@ -70,6 +70,31 @@ export function TurmaDropdown({ turmaOptions, selectedTurmaId, setSelectedTurmaI
               overflowY: 'auto'
             }}
           >
+            <button
+              onClick={() => { setSelectedTurmaId('all'); setIsOpen(false) }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '10px 12px',
+                border: 'none',
+                background: selectedTurmaId === 'all' ? '#e0e7ff' : 'transparent',
+                color: selectedTurmaId === 'all' ? '#4f46e5' : 'hsl(var(--text-main))',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: '14px',
+                fontWeight: selectedTurmaId === 'all' ? 700 : 500,
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={e => { if (selectedTurmaId !== 'all') e.currentTarget.style.background = 'hsl(var(--bg-main))' }}
+              onMouseLeave={e => { if (selectedTurmaId !== 'all') e.currentTarget.style.background = 'transparent' }}
+            >
+              <span>Todas as turmas</span>
+              {selectedTurmaId === 'all' && <Check size={14} />}
+            </button>
+
             {turmaOptions.map(t => (
               <button
                 key={t.id}
