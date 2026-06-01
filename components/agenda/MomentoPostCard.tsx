@@ -4,6 +4,7 @@ import { Check, X, MoreHorizontal, MessageSquare, Heart, ChevronLeft, ChevronRig
 import { ADMomento } from '@/lib/agendaDigitalContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApp } from '@/lib/context'
+import { formatDateTime } from '@/lib/utils'
 
 // Ultra-modern gradient configs per card slot
 const CARD_THEMES = [
@@ -58,6 +59,18 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
   const { adConfirm } = useAgendaDigital()
   const { currentUser } = useApp()
 
+  const displayTime = (() => {
+    const dt = (post as any).created_at || (post as any).date;
+    if (dt) {
+      try {
+        return formatDateTime(dt);
+      } catch (e) {
+        return post.time || 'Agora';
+      }
+    }
+    return post.time || 'Agora';
+  })()
+
   // Resolve o nome real: se o campo author estiver vazio ou for o placeholder antigo, usa o usuario logado
   const authorName = (!post.author || post.author === 'Administração')
     ? (currentUser?.nome || 'Administração')
@@ -70,10 +83,19 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
   const theme = CARD_THEMES[index % CARD_THEMES.length]
 
   const targets = post.targetClasses || []
-  const isAllSchool = !targets.length || targets.includes('Toda a Escola')
+  const hasAlunos = post.alunosIds && post.alunosIds.length > 0
+  const isAllSchool = !hasAlunos && (!targets.length || targets.includes('Toda a Escola'))
 
   const targetLabel = (() => {
     if (isAllSchool) return 'Toda a Escola'
+    if (hasAlunos) {
+      const names = post.alunosNomes || []
+      if (names.length > 0) {
+        if (names.length > 2) return `${names.length} Alunos`
+        return names.join(', ')
+      }
+      return `${post.alunosIds?.length} Aluno(s)`
+    }
     const groups: Record<string, number> = {}
     targets.forEach(t => { const k = t.split(' - ')[0] || t; groups[k] = (groups[k] || 0) + 1 })
     const e = Object.entries(groups)
@@ -136,7 +158,7 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
                   >
                     {targetLabel}
                   </button>
-                  <span style={{ color: '#6b7280', fontSize: 11 }}> • {post.time}</span>
+                  <span style={{ color: '#6b7280', fontSize: 11 }}> • {displayTime}</span>
                 </div>
               </div>
             </div>
@@ -283,24 +305,43 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <h3 style={{ margin: 0, color: '#f1f5f9', fontSize: 16, fontWeight: 800 }}>Grupos Selecionados</h3>
-                <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}>{targets.length} grupo{targets.length !== 1 ? 's' : ''} neste momento</p>
+                <h3 style={{ margin: 0, color: '#f1f5f9', fontSize: 16, fontWeight: 800 }}>
+                  {hasAlunos ? 'Alunos Selecionados' : 'Grupos Selecionados'}
+                </h3>
+                <p style={{ margin: '4px 0 0', color: '#6b7280', fontSize: 12 }}>
+                  {hasAlunos 
+                    ? `${post.alunosIds?.length} aluno${post.alunosIds?.length !== 1 ? 's' : ''} neste momento`
+                    : `${targets.length} grupo${targets.length !== 1 ? 's' : ''} neste momento`}
+                </p>
               </div>
               <button onClick={() => setShowTargets(false)} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer', color: '#9ca3af', display: 'flex' }}>
                 <X size={16} />
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 360, overflowY: 'auto' }}>
-              {targets.map((t, i) => (
-                <div key={i} style={{
-                  padding: '10px 14px', borderRadius: 12,
-                  background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)',
-                  display: 'flex', alignItems: 'center', gap: 10
-                }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(135deg,#a855f7,#ec4899)', flexShrink: 0 }} />
-                  <span style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 500 }}>{t}</span>
-                </div>
-              ))}
+              {hasAlunos ? (
+                (post.alunosNomes || post.alunosIds || []).map((t, i) => (
+                  <div key={i} style={{
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)',
+                    display: 'flex', alignItems: 'center', gap: 10
+                  }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(135deg,#a855f7,#ec4899)', flexShrink: 0 }} />
+                    <span style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 500 }}>{t}</span>
+                  </div>
+                ))
+              ) : (
+                targets.map((t, i) => (
+                  <div key={i} style={{
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.2)',
+                    display: 'flex', alignItems: 'center', gap: 10
+                  }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'linear-gradient(135deg,#a855f7,#ec4899)', flexShrink: 0 }} />
+                    <span style={{ color: '#e2e8f0', fontSize: 14, fontWeight: 500 }}>{t}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

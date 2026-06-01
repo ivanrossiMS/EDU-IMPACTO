@@ -67,7 +67,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   // 'denied'   = usuário não tem acesso
   const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
   
-  const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno')
+  const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno') || pathname?.includes('/agenda-digital/selecionar-perfil-admin')
   const isIndexPage = pathname === '/agenda-digital'
   const isRouterPage = isSelectStudent || isIndexPage
   

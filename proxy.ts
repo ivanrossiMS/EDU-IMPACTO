@@ -23,6 +23,8 @@ const PUBLIC_PATHS = [
   '/api/test',
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
+  '/api/saida/config',  // TV e tablet precisam acessar sem redirect
+  '/api/saida/calls',   // TV e tablet precisam acessar sem redirect
   '/recibo',            // recibos públicos
   '/_next',             // assets Next.js
   '/favicon.ico',

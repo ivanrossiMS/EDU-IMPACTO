@@ -34,8 +34,8 @@ export type ADChat = { id: number | string, name: string, status: string, previe
 export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string, authorId?: string }
 export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
-export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[] }
-export type ADMomento = { id: number | string, author: string, targetClasses: string[], targetClassesIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[] }
+export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[], isGlobalAccess?: boolean }
+export type ADMomento = { id: number | string, author: string, targetClasses: string[], targetClassesIds?: string[], alunosIds?: string[], alunosNomes?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[] }
 
 export interface ADConfig {
   permissoes: { 
@@ -144,12 +144,11 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
 
   const [comunicados, setComunicadosState, { setLocal: setLocalComunicadosState, loading: comunicadosLoading }] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
-  // Módulos desativados (Removendo o polling/sobrecarga do useSupabaseArray)
+  // Módulos desativados/otimizados
   const [chatsList, setChatsList] = useState<ADChat[]>([])
-  const [chatGroups, setChatGroups] = useState<ADChatGroup[]>([])
+  const [chatGroups, setChatGroups, { loading: chatGroupsLoading }] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], { refreshIntervalMs: 0 })
   const [messagesArray, setMessagesArray] = useState<any[]>([])
   const chatsLoading = false;
-  const chatGroupsLoading = false;
   const messagesLoading = false;
   const [momentosFeed, setMomentosFeed, { setLocal: setLocalMomentosFeed, loading: momentosLoading }] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
 

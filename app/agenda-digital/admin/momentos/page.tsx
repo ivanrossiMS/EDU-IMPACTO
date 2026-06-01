@@ -1,6 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check, Camera } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
@@ -10,10 +10,12 @@ import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData()
+  const [alunos = []] = useSupabaseArray<any>('alunos', [])
   const { currentUser } = useApp()
   const [filterTurma, setFilterTurma] = useState('all')
   const [page, setPage] = useState(1)
@@ -113,11 +115,25 @@ export default function ADAdminMomentos() {
         return { type: file.type.includes('video') ? 'video' : 'image', url: uploadRes.url }
       }))
 
+      const isSelected = newPost.targetClasses.length > 0;
+      const selectedTurmas = isSelected ? newPost.targetClasses.filter(t => t.type === 'turma' || t.type === 'grupo') : [];
+      const selectedAlunos = isSelected ? newPost.targetClasses.filter(t => t.type === 'aluno') : [];
+
+      const targetClasses = selectedTurmas.length > 0 
+        ? selectedTurmas.map(t => t.name) 
+        : (selectedAlunos.length > 0 ? [] : ['Toda a Escola']);
+        
+      const targetClassesIds = selectedTurmas.map(t => String(t.id).replace(/^t_?/, ''));
+      const alunosIds = selectedAlunos.map(t => String(t.id).replace(/^a_?/, ''));
+      const alunosNomes = selectedAlunos.map(t => t.name);
+
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: currentUser?.nome || 'Administração',
-        targetClasses: newPost.targetClasses.length > 0 ? newPost.targetClasses.map(t => t.name) : ['Toda a Escola'],
-        targetClassesIds: newPost.targetClasses.length > 0 ? newPost.targetClasses.map(t => String(t.id).replace(/^t_?/, '')) : [],
+        targetClasses,
+        targetClassesIds,
+        alunosIds,
+        alunosNomes,
         media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
 
@@ -134,13 +150,44 @@ export default function ADAdminMomentos() {
     }
   }
 
-  const filteredFeed = feed.filter(p => {
-    const matchTurma = filterTurma === 'all' || (p.targetClasses || []).includes(filterTurma) || (p.targetClasses || []).includes('Toda a Escola')
-    return matchTurma
-  })
+  const filteredFeed = React.useMemo(() => {
+    return feed.filter(p => {
+      if (filterTurma === 'all') return true
+
+      const targetClasses = p.targetClasses || []
+      const targetAlunos = p.alunosIds || []
+
+      // Se for global
+      if (targetClasses.length === 0 && targetAlunos.length === 0) return true
+
+      // Se for direcionado a turmas
+      if (targetClasses.includes(filterTurma) || targetClasses.includes('Toda a Escola')) return true
+
+      // Se for direcionado a alunos específicos
+      if (targetAlunos.length > 0) {
+        const matchedAlunos = (alunos || []).filter((a: any) => 
+          targetAlunos.some((idRaw: string) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, ''))
+        )
+        const hasAlunoInSelectedTurma = matchedAlunos.some((a: any) => {
+          const turmaObj = turmas.find((t: any) => 
+            String(t.id) === String(a.turma) || 
+            String(t.codigo) === String(a.turma) || 
+            String(t.nome) === String(a.turma)
+          )
+          return turmaObj?.nome === filterTurma || a.turma === filterTurma
+        })
+        if (hasAlunoInSelectedTurma) return true
+      }
+
+      return false
+    })
+  }, [feed, filterTurma, alunos, turmas])
 
   const totalPages = Math.max(1, Math.ceil(filteredFeed.length / PAGE_SIZE))
-  const pagedFeed = filteredFeed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  
+  const pagedFeed = React.useMemo(() => {
+    return filteredFeed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  }, [filteredFeed, page])
   const selectStyle: React.CSSProperties = {
     appearance: 'none', WebkitAppearance: 'none',
     background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 12,

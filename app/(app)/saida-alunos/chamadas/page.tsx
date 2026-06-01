@@ -1095,7 +1095,7 @@ function ChamadasContent() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
-  const [filter,        setFilter]        = useState<FilterType>('waiting')
+  const [filter,        setFilter]        = useState<FilterType>('all')
   const [callSearch,    setCallSearch]    = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 

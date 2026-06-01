@@ -12,6 +12,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { useRelatorios } from '@/lib/relatoriosContext'
+import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 
 export interface NovoComunicadoModalProps {
   isOpen: boolean;
@@ -589,10 +590,25 @@ export default function NovoComunicadoModal({
             {anexos.length > 0 && (
               <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 12 }}>
                 {anexos.map((anexo, i) => {
-                  const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
-                  const name = parts[0];
-                  const url = parts[1];
-                  const mimeType = parts[2] || '';
+                  let name = '';
+                  let url = '';
+                  let mimeType = '';
+                  if (typeof anexo === 'string') {
+                    if (anexo.endsWith('|report-payload')) {
+                      const firstPipe = anexo.indexOf('|');
+                      const lastPipe = anexo.lastIndexOf('|');
+                      name = anexo.substring(0, firstPipe);
+                      url = anexo.substring(firstPipe + 1, lastPipe);
+                      mimeType = 'report-payload';
+                    } else {
+                      const parts = anexo.split('|');
+                      name = parts[0];
+                      url = parts[1];
+                      mimeType = parts[2] || '';
+                    }
+                  } else {
+                    name = String(anexo);
+                  }
                   const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
                   
                   return (
@@ -725,43 +741,18 @@ export default function NovoComunicadoModal({
 
       </motion.div>
 
-      {/* Relatórios Modal */}
-      <AnimatePresence>
-        {showRelsModal && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, zIndex: 2147483648, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              style={{ background: '#fff', width: '100%', maxWidth: 440, borderRadius: 24, boxShadow: '0 20px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh', overflow: 'hidden' }}
-            >
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 24px 16px', borderBottom: '1px solid #E2E8F0' }}>
-                 <h3 style={{ fontWeight: 800, fontSize: 18, color: '#0F172A', margin: 0 }}>Anexar Relatório</h3>
-                 <button onClick={() => setShowRelsModal(false)} style={{ background: '#F1F5F9', border: 'none', cursor: 'pointer', width: 36, height: 36, borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                   <X size={18} color="#64748B" />
-                 </button>
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 24, overflowY: 'auto' }}>
-                  {relatoriosTemplates.filter((r: any) => r.status !== 'arquivado').map((r: any) => (
-                     <button key={r.id} style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#8B5CF6'; e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#F8FAFC'; }} onClick={() => { setAnexos([...anexos, `Relatório: ${r.name}`]); setShowRelsModal(false) }}>
-                        <div style={{ background: '#EFF6FF', width: 40, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <BarChart2 size={20} color="#3B82F6" />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: '#0F172A' }}>{r.name}</span>
-                          <span style={{ fontSize: 13, color: '#64748B' }}>Modelo de relatório do sistema</span>
-                        </div>
-                     </button>
-                  ))}
-                  {relatoriosTemplates.filter((r: any) => r.status !== 'arquivado').length === 0 && (
-                     <div style={{ color: '#94A3B8', fontSize: 14, textAlign: 'center', padding: 32 }}>Nenhum modelo de relatório ativo foi encontrado.</div>
-                  )}
-               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Relatórios Modal (Componente Avançado Integrado) */}
+      <ReportsSelectionModal
+        isOpen={showRelsModal}
+        onClose={() => setShowRelsModal(false)}
+        selectedDest={selectedDest}
+        onAdd={(text, payload) => {
+          const stringified = JSON.stringify(payload);
+          const finalAttachmentString = `${text}|payload:${stringified}|report-payload`;
+          setAnexos(prev => [...prev, finalAttachmentString]);
+          // Não precisa fechar aqui, o ReportsSelectionModal chama onClose internamente no handleFinish
+        }}
+      />
     </div>
   )
 

@@ -179,6 +179,12 @@ export async function POST(request: NextRequest) {
 
     if (error || !user) {
       console.log('[login debug] Final auth error:', error?.message)
+      
+      const isNetworkError = error?.message?.toLowerCase().includes('fetch') || error?.message?.toLowerCase().includes('timed out') || error?.status === 522;
+      if (isNetworkError) {
+        return NextResponse.json({ error: 'Erro de conexão com o banco de dados (Timeout). Tente novamente em alguns instantes.' }, { status: 504 })
+      }
+
       // Friendly messages per user type
       if (userType === 'aluno') {
         return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 401 })

@@ -228,7 +228,7 @@ export default function LoginPage() {
     } catch (err: any) {
       setLoginLoading(false)
       setLoginError(err.message || 'Credenciais inválidas.')
-      console.error(err)
+      console.log('Login falhou:', err.message)
     }
   }
 
@@ -754,7 +754,7 @@ export default function LoginPage() {
              // Go directly to the unified selector page — it shows both family & collaborator cards
              const p = pendingAuth?.perfil;
              if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                 window.location.href = '/agenda-digital/admin/comunicados';
+                 window.location.href = '/agenda-digital/selecionar-perfil-admin';
              } else {
                  window.location.href = '/agenda-digital/selecionar-aluno';
              }
@@ -803,7 +803,7 @@ export default function LoginPage() {
           onClick={() => {
              const p = pendingAuth?.perfil;
              if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                 window.location.href = '/agenda-digital/admin/comunicados';
+                 window.location.href = '/agenda-digital/selecionar-perfil-admin';
              } else {
                  window.location.href = '/agenda-digital/colaborador/comunicados';
              }

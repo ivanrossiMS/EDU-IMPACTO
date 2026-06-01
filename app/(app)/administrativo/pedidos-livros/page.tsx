@@ -26,7 +26,7 @@ interface PedidoMeta {
   obs?: string
 }
 
-const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio']
+const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
 
 function isEventoLivro(descricao?: string): boolean {
   if (!descricao) return false
@@ -97,6 +97,7 @@ export default function PedidosLivrosPage() {
   // Filtros UI
   const [busca, setBusca]               = React.useState('')
   const [filtroView, setFiltroView]     = React.useState<FiltroView>('todos')
+  const [filtroAno, setFiltroAno]       = React.useState(new Date().getFullYear().toString())
   const [filtroTurma, setFiltroTurma]   = React.useState('')
   const [filtroEvento, setFiltroEvento] = React.useState('')
   const [filtroSegmento, setFiltroSeg]  = React.useState('')
@@ -105,7 +106,7 @@ export default function PedidosLivrosPage() {
   const [obsTexto, setObsTexto]         = React.useState('')
   const [modalParcelas, setModalParcelas] = React.useState<typeof grupos[0] | null>(null)
   const [modalNovoPedido, setModalNovoPedido] = React.useState(false)
-  const [novoPedidoForm, setNovoPedidoForm] = React.useState({ alunoId: '', eventoDescricao: 'Livros', valor: '', vencimento: '' })
+  const [novoPedidoForm, setNovoPedidoForm] = React.useState({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', turmasDisponiveis: [] as {id:string, nome:string}[] })
   const [buscaAluno, setBuscaAluno] = React.useState('')
   const [showBuscaAluno, setShowBuscaAluno] = React.useState(false)
 
@@ -216,6 +217,8 @@ export default function PedidosLivrosPage() {
     id: string
     aluno: string
     alunoId?: string
+    turmaId?: string
+    turma?: string
     eventoDescricao: string
     eventoId?: string
     valor: number
@@ -291,6 +294,7 @@ export default function PedidosLivrosPage() {
     alunoNome: string
     turma: string
     segmento: string
+    anoLetivo: string
     eventoId?: string
     eventoDescricao: string
     parcelas: ParcelaUnificada[]
@@ -307,13 +311,14 @@ export default function PedidosLivrosPage() {
       const alu = (alunos || []).find(a => a.nome === p.aluno || a.id === p.alunoId)
       const key = `${p.aluno}__${p.eventoDescricao}`
       if (!map.has(key)) {
-        const tObj = rawTurmas.find((t: any) => t.id === alu?.turma)
-        const nomeTurma = tObj?.nome || alu?.turma || '—'
+        const tObj = rawTurmas.find((t: any) => t.id === (p.turmaId || alu?.turma))
+        const nomeTurma = p.turma || tObj?.nome || alu?.turma || '—'
 
         map.set(key, {
           alunoNome: p.aluno,
           turma: nomeTurma,
           segmento: inferirSegmento(alu?.serie, nomeTurma),
+          anoLetivo: p.vencimento ? p.vencimento.substring(0, 4) : new Date().getFullYear().toString(),
           eventoId: p.eventoId,
           eventoDescricao: p.eventoDescricao,
           parcelas: [],
@@ -387,6 +392,7 @@ export default function PedidosLivrosPage() {
 
   // ── Filtrar grupos ─────────────────────────────────────────────────
   const turmas       = [...new Set(grupos.map(g => g.turma))].filter(t => t !== '—').sort()
+  const anosDisponiveis = [...new Set(grupos.map(g => g.anoLetivo))].filter(Boolean).sort().reverse()
   const eventosLista = [...new Set(grupos.map(g => g.eventoDescricao))].sort()
   const segmentos    = [...new Set(grupos.map(g => g.segmento))].filter(Boolean).sort()
 
@@ -400,6 +406,7 @@ export default function PedidosLivrosPage() {
     const matchTurma    = !filtroTurma    || g.turma    === filtroTurma
     const matchEvento   = !filtroEvento   || g.eventoDescricao === filtroEvento
     const matchSegmento = !filtroSegmento || g.segmento === filtroSegmento
+    const matchAno      = !filtroAno      || g.anoLetivo === filtroAno
 
     const feito    = isFeito(g.pedidoId)
     const entregue  = isEntregue(g.pedidoId)
@@ -409,7 +416,7 @@ export default function PedidosLivrosPage() {
       filtroView === 'feitos'    ? feito :
       !feito
 
-    return matchBusca && matchTurma && matchEvento && matchSegmento && matchView
+    return matchBusca && matchTurma && matchEvento && matchSegmento && matchView && matchAno
   })
 
   // ── Ação em lote ───────────────────────────────────────────────────
@@ -570,6 +577,12 @@ export default function PedidosLivrosPage() {
             ))}
           </div>
 
+          {/* Ano Letivo */}
+          <select className="form-input" style={{ width: 120 }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
+            <option value="">Todos os anos</option>
+            {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+
           {/* Segmento */}
           <select className="form-input" style={{ width: 170 }} value={filtroSegmento} onChange={e => setFiltroSeg(e.target.value)}>
             <option value="">Todos os segmentos</option>
@@ -606,10 +619,10 @@ export default function PedidosLivrosPage() {
             ))}
           </div>
 
-          {(busca || filtroTurma || filtroEvento || filtroSegmento || filtroView !== 'todos') && (
+          {(busca || filtroAno !== new Date().getFullYear().toString() || filtroTurma || filtroEvento || filtroSegmento || filtroView !== 'todos') && (
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => { setBusca(''); setFiltroTurma(''); setFiltroEvento(''); setFiltroSeg(''); setFiltroView('todos') }}
+              onClick={() => { setBusca(''); setFiltroAno(new Date().getFullYear().toString()); setFiltroTurma(''); setFiltroEvento(''); setFiltroSeg(''); setFiltroView('todos') }}
             >
               <X size={12} /> Limpar
             </button>
@@ -711,7 +724,7 @@ export default function PedidosLivrosPage() {
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 14 }}>{chave}</div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                        {gsChave.length} aluno(s) · {feitosChave}/{gsChave.length} feitos · {fmt(valorChave)}
+                        {gsChave.length} aluno(s) · {feitosChave}/{gsChave.length} feitos
                       </div>
                     </div>
                     {/* Barra de progresso inline */}
@@ -750,7 +763,6 @@ export default function PedidosLivrosPage() {
                         <th>Aluno & Turma</th>
                         {agrupamento !== 'evento' && <th>Evento</th>}
                         <th style={{ textAlign: 'center' }}>Qtd</th>
-                        <th style={{ textAlign: 'right' }}>Total</th>
                         <th style={{ textAlign: 'center', minWidth: 400 }}>Rastreamento do Pedido</th>
                         <th>Observações</th>
                         <th style={{ textAlign: 'center' }}>Ações</th>
@@ -831,11 +843,6 @@ export default function PedidosLivrosPage() {
                             {/* Qtd */}
                             <td style={{ textAlign: 'center' }}>
                               <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>{g.parcelas.length}</span>
-                            </td>
-
-                            {/* Valor */}
-                            <td style={{ textAlign: 'right', fontWeight: 800, fontFamily: 'Outfit,sans-serif', fontSize: 14, color: '#10b981' }}>
-                              {fmt(g.valorTotal)}
                             </td>
 
                             {/* Rastreamento Moderno */}
@@ -996,9 +1003,6 @@ export default function PedidosLivrosPage() {
                           style={{ padding: '10px 16px', fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
                           Subtotal ({gsChave.length} aluno(s))
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 900, fontSize: 14, color: '#34d399', fontFamily: 'Outfit,sans-serif' }}>
-                          {fmt(valorChave)}
-                        </td>
                         <td colSpan={5} />
                       </tr>
                     </tfoot>
@@ -1118,8 +1122,6 @@ export default function PedidosLivrosPage() {
                       <th style={{ textAlign:'center',width:50 }}>#</th>
                       <th>Competência</th>
                       <th>Vencimento</th>
-                      <th style={{ textAlign:'right' }}>Valor</th>
-                      <th style={{ textAlign:'right' }}>Valor Final</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1132,8 +1134,6 @@ export default function PedidosLivrosPage() {
                           </td>
                           <td style={{ fontSize:12,color:'hsl(var(--text-muted))' }}>{raw.competencia ?? '—'}</td>
                           <td style={{ fontSize:13,fontWeight:600 }}>{fmtData(p.vencimento)}</td>
-                          <td style={{ textAlign:'right',fontSize:13 }}>{fmt(raw.valor ?? p.valor)}</td>
-                          <td style={{ textAlign:'right',fontWeight:700,color:'#34d399' }}>{fmt(raw.valorFinal ?? raw.valor ?? p.valor)}</td>
                         </tr>
                       )
                     })}
@@ -1142,7 +1142,6 @@ export default function PedidosLivrosPage() {
               </div>
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,padding:'12px 16px',background:'hsl(var(--bg-elevated))',borderRadius:10 }}>
                 <span style={{ fontSize:13,fontWeight:600,color:'hsl(var(--text-muted))' }}>{modalParcelas.parcelas.length} parcela(s)</span>
-                <span style={{ fontWeight:900,fontSize:16,color:'#34d399',fontFamily:'Outfit,sans-serif' }}>Total: {fmt(modalParcelas.valorTotal)}</span>
               </div>
             </div>
 
@@ -1187,7 +1186,7 @@ export default function PedidosLivrosPage() {
                     <button
                       type="button"
                       style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}
-                      onClick={() => { setBuscaAluno(''); setNovoPedidoForm(p => ({...p, alunoId: ''})) }}
+                      onClick={() => { setBuscaAluno(''); setNovoPedidoForm(p => ({...p, alunoId: '', turmasDisponiveis: [], turmaId: '', turma: ''})) }}
                     >
                       <X size={13} />
                     </button>
@@ -1195,12 +1194,27 @@ export default function PedidosLivrosPage() {
                 </div>
                 {showBuscaAluno && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
-                    {alunos.filter(a => !buscaAluno || a.nome.toLowerCase().includes(buscaAluno.toLowerCase()) || a.turma.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 15).map(a => (
+                    {alunos.filter(a => !buscaAluno || a.nome.toLowerCase().includes(buscaAluno.toLowerCase()) || a.turma.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 15).map(a => {
+                      const hList = a.historicoTurmas || a.dados?.historicoTurmas || []
+                      const turmas = hList.length > 0 
+                        ? hList.map((h: any) => {
+                            const tObj = rawTurmas.find((t: any) => t.id === h.serieTurma)
+                            const tNome = tObj?.nome || h.serieTurma
+                            return { id: h.serieTurma, nome: `${tNome} - ${h.anoLetivo}` }
+                          })
+                        : [{ id: a.turma, nome: a.turma }]
+                      return (
                       <div
                         key={a.id}
                         onMouseDown={() => {
-                          setNovoPedidoForm(p => ({...p, alunoId: a.id}))
-                          setBuscaAluno(`${a.nome} (${a.turma})`)
+                          setNovoPedidoForm(p => ({
+                            ...p, 
+                            alunoId: a.id, 
+                            turmasDisponiveis: turmas,
+                            turmaId: turmas.length === 1 ? turmas[0].id : '',
+                            turma: turmas.length === 1 ? turmas[0].nome : ''
+                          }))
+                          setBuscaAluno(`${a.nome}`)
                           setShowBuscaAluno(false)
                         }}
                         style={{ padding: '8px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid hsl(var(--border-subtle))' }}
@@ -1208,9 +1222,9 @@ export default function PedidosLivrosPage() {
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         <div style={{ fontWeight: 600 }}>{a.nome}</div>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{a.turma}</div>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{turmas.map((t:any) => t.nome).join(' | ')}</div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -1222,16 +1236,27 @@ export default function PedidosLivrosPage() {
                     <option value="Apostilas EM">Apostilas EM</option>
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
                     <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
+                    <option value="LIV">LIV</option>
                   </select>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>DATA PREVISTA</label>
-                  <input type="date" className="form-input" value={novoPedidoForm.vencimento} onChange={e => setNovoPedidoForm(p => ({...p, vencimento: e.target.value}))} />
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>VALOR TOTAL (R$)</label>
-                <input type="number" step="0.01" className="form-input" value={novoPedidoForm.valor} onChange={e => setNovoPedidoForm(p => ({...p, valor: e.target.value}))} placeholder="0.00" />
+                {novoPedidoForm.alunoId && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>TURMA DO ALUNO *</label>
+                    <select 
+                      className="form-input" 
+                      value={novoPedidoForm.turmaId} 
+                      onChange={e => {
+                        const sel = novoPedidoForm.turmasDisponiveis.find(t => t.id === e.target.value)
+                        setNovoPedidoForm(p => ({...p, turmaId: e.target.value, turma: sel ? sel.nome : ''}))
+                      }}
+                    >
+                      <option value="">Selecione a Turma...</option>
+                      {novoPedidoForm.turmasDisponiveis.map(t => (
+                        <option key={t.id} value={t.id}>{t.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
                 💡 Este pedido será aglutinado junto aos eventos financeiros automáticos.
@@ -1247,13 +1272,15 @@ export default function PedidosLivrosPage() {
                      aluno: al.nome,
                      alunoId: al.id,
                      eventoDescricao: novoPedidoForm.eventoDescricao,
-                     valor: Number(novoPedidoForm.valor) || 0,
-                     vencimento: novoPedidoForm.vencimento || new Date().toISOString().slice(0,10),
+                     turmaId: novoPedidoForm.turmaId,
+                     turma: novoPedidoForm.turma,
+                     valor: 0,
+                     vencimento: new Date().toISOString().slice(0,10),
                      dataLancamento: new Date().toISOString()
                    }
                    setPedidosManuais(prev => [...prev, novo])
                    setModalNovoPedido(false)
-                   setNovoPedidoForm({ alunoId: '', eventoDescricao: 'Livros', valor: '', vencimento: '' })
+                   setNovoPedidoForm({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', turmasDisponiveis: [] })
                  }
                }}>
                  <Check size={14}/> Inserir Pedido
@@ -1286,16 +1313,9 @@ export default function PedidosLivrosPage() {
                     <option value="Apostilas EM">Apostilas EM</option>
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
                     <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
+                    <option value="LIV">LIV</option>
                   </select>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>DATA PREVISTA / VENCIMENTO</label>
-                  <input type="date" className="form-input" value={editForm.vencimento} onChange={e => setEditForm(p => ({...p, vencimento: e.target.value}))} />
-                </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>VALOR TOTAL (R$)</label>
-                <input type="number" step="0.01" className="form-input" value={editForm.valor} onChange={e => setEditForm(p => ({...p, valor: e.target.value}))} placeholder="0.00" />
               </div>
             </div>
             <div style={{ padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

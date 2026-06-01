@@ -588,7 +588,7 @@ export default function ADAdminComunicados() {
       {/* Modal Composer */}
       <NovoComunicadoModal
         isOpen={showComposer}
-        onClose={() => setShowComposer(false)}
+        onClose={() => { setShowComposer(false); setSelectedDest([]); }}
         initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
         currentUser={currentUser}
         selectedDest={selectedDest}
@@ -790,10 +790,25 @@ export default function ADAdminComunicados() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Anexos e Mídia ({viewingCom.anexos.length})</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                       {viewingCom.anexos.map((a, i) => {
-                        const parts = typeof a === 'string' ? a.split('|') : [String(a)];
-                        const name = parts[0];
-                        const url = parts[1] || (name.startsWith('http') ? name : '');
-                        const mimeType = parts[2] || '';
+                        let name = '';
+                        let url = '';
+                        let mimeType = '';
+                        if (typeof a === 'string') {
+                          if (a.endsWith('|report-payload')) {
+                            const firstPipe = a.indexOf('|');
+                            const lastPipe = a.lastIndexOf('|');
+                            name = a.substring(0, firstPipe);
+                            url = a.substring(firstPipe + 1, lastPipe);
+                            mimeType = 'report-payload';
+                          } else {
+                            const parts = a.split('|');
+                            name = parts[0];
+                            url = parts[1] || (parts[0].startsWith('http') ? parts[0] : '');
+                            mimeType = parts[2] || '';
+                          }
+                        } else {
+                          name = String(a);
+                        }
                         
                         const isImg = mimeType.startsWith('image/') || (url && (url.startsWith('data:image') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name)));
                         const isVid = mimeType.startsWith('video/') || (url && (url.startsWith('data:video') || /\.(mp4|webm|ogg|mov|quicktime)$/i.test(name)));
@@ -1195,11 +1210,26 @@ export default function ADAdminComunicados() {
                       if (attachmentFilter === 'nenhum' && hasAny) valid = false;
                       if (attachmentFilter === 'qualquer' && !hasAny) valid = false;
                       if (['relatorio', 'formulario', 'imagem', 'video'].includes(attachmentFilter)) {
-                        const matchesType = anexosList.some((a: string) => {
-                          const parts = typeof a === 'string' ? a.split('|') : [String(a)];
-                          const name = parts[0] || '';
-                          const url = parts[1] || '';
-                          const mimeType = parts[2] || '';
+                        const matchesType = anexosList.some((anexo: string) => {
+                          let name = '';
+                          let url = '';
+                          let mimeType = '';
+                          if (typeof anexo === 'string') {
+                            if (anexo.endsWith('|report-payload')) {
+                              const firstPipe = anexo.indexOf('|');
+                              const lastPipe = anexo.lastIndexOf('|');
+                              name = anexo.substring(0, firstPipe);
+                              url = anexo.substring(firstPipe + 1, lastPipe);
+                              mimeType = 'report-payload';
+                            } else {
+                              const parts = anexo.split('|');
+                              name = parts[0];
+                              url = parts[1];
+                              mimeType = parts[2] || '';
+                            }
+                          } else {
+                            name = String(anexo);
+                          }
                           if (attachmentFilter === 'relatorio' && name.startsWith('Relatório:')) return true;
                           if (attachmentFilter === 'formulario' && name.startsWith('Formulário:')) return true;
                           const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);

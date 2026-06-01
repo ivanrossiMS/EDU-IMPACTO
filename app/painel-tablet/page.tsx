@@ -206,8 +206,8 @@ function StudentCard({
 
         {/* Gradient overlay at bottom */}
         <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: '55%',
-          background: 'linear-gradient(to top, rgba(10,18,30,0.98) 0%, rgba(10,18,30,0.6) 50%, transparent 100%)',
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
+          background: 'linear-gradient(to top, rgba(10,18,30,0.95) 0%, rgba(10,18,30,0.4) 60%, transparent 100%)',
           pointerEvents: 'none',
         }}/>
 
@@ -521,27 +521,8 @@ function PainelTabletContent() {
     // 2. Usar dados completos dos alunos que já vieram da API
     let matchedStudents: any[] = filhos || []
 
-    // 3. Validar dias de acesso do responsável
+    // 3. Montar lista de alunos e verificar "proibido" primeiro
     const diasAcesso: string[] = resp.dias_acesso || []
-    if (diasAcesso.length > 0 && !diasAcesso.includes(todayKey)) {
-      const reason = `${gName} só pode retirar alunos nos dias: ${diasAcesso.join(', ')}. Hoje é ${todayKey}.`
-
-      for (const aluno of matchedStudents) {
-        const foto = aluno.foto && aluno.foto.length > 10 ? aluno.foto : null
-        blockAttempt(aluno.id, aluno.nome, aluno.turma, `rfid-${code}`, gName, code, 'dia_restrito', reason, foto)
-      }
-
-      setBlockInfo({
-        type: 'dia_restrito', reason,
-        studentName: matchedStudents.map((m: any) => m.nome).join(', '),
-        guardianName: gName,
-      })
-      showToast(`⚠ Dia não permitido para ${gName}`, false)
-      doBlockReset()
-      return
-    }
-
-    // 4. Montar lista de alunos e verificar "proibido"
     const students: any[] = []
     let isProhibited = false
     let prohibitionReason = ''
@@ -585,6 +566,7 @@ function PainelTabletContent() {
       students.push({ ...alunoCompleto, _aut: autObj })
     }
 
+    // Se estiver proibido, bloqueia tudo imediatamente (prioridade máxima)
     if (isProhibited) {
       setBlockInfo({
         type: 'proibido', reason: prohibitionReason,
@@ -592,6 +574,25 @@ function PainelTabletContent() {
         guardianName: gName,
       })
       showToast(`🚫 Acesso bloqueado: ${gName}`, false)
+      doBlockReset()
+      return
+    }
+
+    // 4. Validar dias de acesso do responsável (só se não for proibido)
+    if (diasAcesso.length > 0 && !diasAcesso.includes(todayKey)) {
+      const reason = `${gName} só pode retirar alunos nos dias: ${diasAcesso.join(', ')}. Hoje é ${todayKey}.`
+
+      for (const aluno of matchedStudents) {
+        const foto = aluno.foto && aluno.foto.length > 10 ? aluno.foto : null
+        blockAttempt(aluno.id, aluno.nome, aluno.turma, `rfid-${code}`, gName, code, 'dia_restrito', reason, foto)
+      }
+
+      setBlockInfo({
+        type: 'dia_restrito', reason,
+        studentName: matchedStudents.map((m: any) => m.nome).join(', '),
+        guardianName: gName,
+      })
+      showToast(`⚠ Dia não permitido para ${gName}`, false)
       doBlockReset()
       return
     }

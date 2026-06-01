@@ -1,7 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-
+import React, { createContext, useContext, ReactNode } from 'react'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 export type FieldType = 
   | 'texto-curto' | 'texto-longo' | 'unica-escolha' | 'multipla-escolha' 
   | 'sim-nao' | 'numero' | 'moeda' | 'percentual' | 'data' | 'hora' 
@@ -70,70 +70,30 @@ export type ReportRecord = {
 
 interface RelatoriosContextState {
   templates: ReportTemplate[]
-  setTemplates: React.Dispatch<React.SetStateAction<ReportTemplate[]>>
+  setTemplates: (value: ReportTemplate[] | ((prev: ReportTemplate[]) => ReportTemplate[])) => Promise<void> | void
   records: ReportRecord[]
-  setRecords: React.Dispatch<React.SetStateAction<ReportRecord[]>>
+  setRecords: (value: ReportRecord[] | ((prev: ReportRecord[]) => ReportRecord[])) => Promise<void> | void
   logs: any[]
   addLog: (action: string, details: string) => void
 }
 
 const RelatoriosContext = createContext<RelatoriosContextState | null>(null)
 
-// Seed Data mimicking the User's "Rotina - Meio Período (Fund)" example
-const MOCK_TEMPLATES: ReportTemplate[] = [
-  {
-    id: 'TPL-mock-1',
-    name: 'Relatório de Desenvolvimento',
-    description: 'Relatório padrão para acompanhamento do aluno.',
-    category: 'Pedagógico',
-    icon: 'FileText',
-    color: '#3B82F6',
-    status: 'ativo',
-    permissions: { view: ['todos'], fill: ['professores'], edit: ['admin'], approve: [] },
-    version: 1,
-    sections: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    author: 'Sistema'
-  }
-]
-
 export function RelatoriosProvider({ children }: { children: ReactNode }) {
-  const [templates, setTemplates] = useState<ReportTemplate[]>([])
-  const [records, setRecords] = useState<ReportRecord[]>([])
-  const [logs, setLogs] = useState<any[]>([])
-  const [isLoaded, setIsLoaded] = useState(false)
+  // Using useSupabaseArray to sync directly with Supabase via the API routes we just created
+  const [templates, setTemplates] = useSupabaseArray<ReportTemplate>('agenda/relatorios_templates', [])
+  const [records, setRecords] = useSupabaseArray<ReportRecord>('agenda/relatorios_records', [])
+  const [logs, setLogs] = useSupabaseArray<any>('agenda/relatorios_logs', [])
 
-  useEffect(() => {
-    try {
-      const storedTemplates = localStorage.getItem('ad_relatorios_templates')
-      if (storedTemplates && JSON.parse(storedTemplates).length > 0) {
-        setTemplates(JSON.parse(storedTemplates))
-      } else {
-        setTemplates(MOCK_TEMPLATES) // Initial Seed
-      }
-
-      const storedRecords = localStorage.getItem('ad_relatorios_records')
-      if (storedRecords) setRecords(JSON.parse(storedRecords))
-
-      const storedLogs = localStorage.getItem('ad_relatorios_logs')
-      if (storedLogs) setLogs(JSON.parse(storedLogs))
-    } catch (e) {
-      console.error(e)
+  const addLog = async (action: string, details: string) => {
+    const newLog = { 
+      id: crypto.randomUUID(), 
+      action, 
+      details, 
+      user: 'Admin', 
+      date: new Date().toISOString() 
     }
-    setIsLoaded(true)
-  }, [])
-
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('ad_relatorios_templates', JSON.stringify(templates))
-      localStorage.setItem('ad_relatorios_records', JSON.stringify(records))
-      localStorage.setItem('ad_relatorios_logs', JSON.stringify(logs))
-    }
-  }, [templates, records, logs, isLoaded])
-
-  const addLog = (action: string, details: string) => {
-    setLogs(prev => [{ id: Date.now(), action, details, user: 'Admin', date: new Date().toISOString() }, ...prev])
+    await setLogs(prev => [newLog, ...prev])
   }
 
   return (

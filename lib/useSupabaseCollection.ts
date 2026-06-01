@@ -142,7 +142,8 @@ export function useSupabaseCollection<T>(
           return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
             cache: 'no-store',
-            credentials: 'include'
+            credentials: 'include',
+            redirect: 'error'
           })
             .then(async r => {
               const contentType = r.headers.get('content-type')
@@ -265,6 +266,7 @@ export function useSupabaseCollection<T>(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(next),
           credentials: 'include',
+          redirect: 'error'
         })
         const contentType = res.headers.get('content-type')
         if (contentType && contentType.includes('text/html')) {
@@ -338,7 +340,8 @@ export function useSupabaseArray<T>(
           return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
             cache: 'no-store',
-            credentials: 'include'
+            credentials: 'include',
+            redirect: 'error'
           })
             .then(async r => {
               const contentType = r.headers.get('content-type')
@@ -378,6 +381,8 @@ export function useSupabaseArray<T>(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(arr),
+        credentials: 'include',
+        redirect: 'error'
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))

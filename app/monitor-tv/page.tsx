@@ -378,6 +378,7 @@ function MonitorContent() {
       const currentTurmas = turmasRef.current
 
       if (payload.event === 'CALL_STUDENT') {
+        if (d.status === 'blocked') return // Não exibir nem falar alunos bloqueados/restritos
         setDisplayCalls(prev => {
           const next = prev.find(c => c.id === d.id) ? prev : [d, ...prev]
           return [...next].sort(byTimeDesc).slice(0, 25)
@@ -923,7 +924,7 @@ function MonitorContent() {
           height: calc(100% + 30px);
           object-fit: cover;
           z-index: 0;
-          filter: blur(28px) brightness(0.32);
+          filter: blur(24px) brightness(0.65) saturate(1.4);
           pointer-events: none;
           transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
         }
@@ -936,7 +937,7 @@ function MonitorContent() {
           object-fit: contain;
           z-index: 1;
           transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
-          filter: brightness(1.15) contrast(1.2) saturate(1.25);
+          filter: brightness(1.25) contrast(1.25) saturate(1.35);
         }
 
         .tv-card-photo-bg-initials {
@@ -1011,17 +1012,17 @@ function MonitorContent() {
           50% { transform: translateY(-6px); }
         }
 
-        /* Dense Black Linear Gradient Overlay */
+        /* Optimized Soft Dark Gradient Overlay for higher photo visibility */
         .tv-card-gradient-overlay {
           position: absolute;
           bottom: 0;
           left: 0;
           right: 0;
-          height: 60%;
+          height: 50%;
           background: linear-gradient(
             to top,
-            rgba(2, 6, 23, 0.98) 0%,
-            rgba(2, 6, 23, 0.85) 45%,
+            rgba(2, 6, 23, 0.95) 0%,
+            rgba(2, 6, 23, 0.65) 50%,
             transparent 100%
           );
           z-index: 2;

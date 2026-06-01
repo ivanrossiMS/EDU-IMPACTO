@@ -31,7 +31,11 @@ function AgendaDigitalIndexContent() {
     const redirectParamString = searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}` : ''
     
     if (isAdmin) {
-      router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
+      if (currentUserPerfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master') {
+        router.replace('/agenda-digital/selecionar-perfil-admin')
+      } else {
+        router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
+      }
     } else {
       if (currentUser?.cargo === 'Aluno') {
         const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id

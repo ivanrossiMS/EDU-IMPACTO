@@ -115,11 +115,11 @@ function VisibilidadeSelector({
   )
 }
 
-const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
+const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string } = {
   titulo: '', descricao: '', tipo: 'evento', data: '', horaInicio: '', horaFim: '',
   turmas: [], local: '', cor: '#f59e0b', recorrente: false, criadoPor: 'Usuário',
   confirmacaoNecessaria: false, confirmados: [], unidade: '',
-  diaTodo: false,
+  diaTodo: false, dataFim: ''
 }
 
 export default function CalendarioPage() {
@@ -136,7 +136,7 @@ export default function CalendarioPage() {
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
   const [searchTermSelection, setSearchTermSelection] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'>>(BLANK_EVENTO)
+  const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
 
   const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
     tipo: 'todos', turmasSel: [], usuario: 'Todos',
@@ -174,20 +174,36 @@ export default function CalendarioPage() {
       setEventosAgenda(prev => prev.map(e => e.id === editingId ? {
         ...e,
         ...form,
+        dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : { visibilidadeUsuario: undefined }),
       } : e))
     } else {
-      const novoEvento: EventoAgenda = {
+      const getDates = (start: string, end?: string) => {
+        if (!end || end < start) return [start]
+        const dates = []
+        let curr = new Date(start + 'T12:00:00')
+        const last = new Date(end + 'T12:00:00')
+        while (curr <= last) {
+          dates.push(curr.toISOString().split('T')[0])
+          curr.setDate(curr.getDate() + 1)
+        }
+        return dates
+      }
+
+      const datesToCreate = getDates(form.data, form.dataFim)
+      const novosEventos = datesToCreate.map(d => ({
         ...form,
+        data: d,
+        dataFim: undefined,
         cor: TIPO_CORES[form.tipo] ?? '#f59e0b',
         turmas: turmasList,
         id: newId('EV'),
         createdAt: new Date().toISOString(),
         ...(visibilidade.tipo === 'usuario' ? { visibilidadeUsuario: visibilidade.usuario } as any : {}),
-      }
-      setEventosAgenda(prev => [...prev, novoEvento])
+      }))
+      setEventosAgenda(prev => [...prev, ...novosEventos])
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
     setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
@@ -632,10 +648,14 @@ export default function CalendarioPage() {
                   <input className="form-input" style={{ borderRadius: 14, height: 48, fontSize: 14, fontWeight: 600 }} value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: Reunião Pedagógica" />
                 </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
                   <div>
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Data</label>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Data Início</label>
                     <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="date" value={form.data} onChange={e => setForm(p => ({ ...p, data: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Data Final (Opc.)</label>
+                    <input className="form-input" style={{ borderRadius: 14, height: 48 }} type="date" value={form.dataFim || ''} min={form.data} disabled={!!editingId} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} />
                   </div>
                   <div>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Tipo</label>

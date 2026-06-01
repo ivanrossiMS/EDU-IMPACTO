@@ -23,6 +23,8 @@ type GrupoDigital = {
   colaboradoresIds: string[];
   equipesIds?: string[]; // Equipes vinculadas a este grupo de turma
   ano?: string;
+  syncId?: string; // ID de sincronização com ERP
+  isGlobalAccess?: boolean; // Visível a todos os usuários e com acesso a todas as turmas
 }
 
 type EquipeGrupo = {
@@ -84,10 +86,12 @@ export default function ADAdminTurmas() {
   const [showNovoGrupo, setShowNovoGrupo] = useState(false)
   const [showNovaEquipe, setShowNovaEquipe] = useState(false)
   const [novoNome, setNovoNome] = useState('')
+  const [novoAno, setNovoAno] = useState('')
   const [novaCor, setNovaCor] = useState(DEFAULT_COLORS[0])
+  const [novoIsGlobal, setNovoIsGlobal] = useState(false)
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [novoIcone, setNovoIcone] = useState('Users')
   const [novaDescricao, setNovaDescricao] = useState('')
-  const [novoAno, setNovoAno] = useState('')
   const [buscaAluno, setBuscaAluno] = useState('')
   const [buscaColab, setBuscaColab] = useState('')
   const [isLoaded, setIsLoaded] = useState(false)
@@ -125,9 +129,10 @@ export default function ADAdminTurmas() {
         const tNomeNorm = tNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
         return aTurmaNorm === tNomeNorm && aTurmaNorm !== ''
       })
-      const grupoExistente = (grupos || []).find(g => g.id === `sync-${t.id}` || g.nome === t.nome)
+      const grupoExistente = (grupos || []).find(g => g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}` || g.nome === t.nome)
       return {
-        id: grupoExistente?.id || `sync-${t.id}`,
+        id: grupoExistente?.id || crypto.randomUUID(),
+        syncId: `sync-${t.id}`,
         nome: t.nome,
         cor: grupoExistente?.cor || DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
         alunosIds: alunosDaTurma.map(a => a.id),
@@ -137,7 +142,7 @@ export default function ADAdminTurmas() {
       }
     })
     // Preservar grupos criados manualmente
-    const gruposManuais = (grupos || []).filter(g => !g.id.startsWith('sync-'))
+    const gruposManuais = (grupos || []).filter(g => !g.syncId && !g.id.startsWith('sync-'))
     setGrupos([...gruposManuais, ...novos])
   }
 
@@ -211,9 +216,14 @@ export default function ADAdminTurmas() {
               </div>
             </div>
           </div>
-          <button onClick={() => excluirGrupo(activeGrupo.id)} className="btn btn-secondary" style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Trash2 size={16} /> Excluir Grupo
-          </button>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={() => { setEditingGroupId(activeGrupo.id); setNovoNome(activeGrupo.nome); setNovoAno(activeGrupo.ano || ''); setNovaCor(activeGrupo.cor); setNovoIsGlobal(!!activeGrupo.isGlobalAccess); setShowNovoGrupo(true); }} className="btn btn-secondary" style={{ border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Pencil size={16} /> Editar Grupo
+            </button>
+            <button onClick={() => excluirGrupo(activeGrupo.id)} className="btn btn-secondary" style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Trash2 size={16} /> Excluir Grupo
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, flex: 1 }}>
@@ -360,6 +370,63 @@ export default function ADAdminTurmas() {
             )}
           </div>
         </div>
+        <AnimatePresence>
+          {showNovoGrupo && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} style={{ background: 'white', borderRadius: 24, width: 440, padding: 32, boxShadow: '0 24px 64px rgba(0,0,0,0.15)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>Editar Grupo Digital</h3>
+                  <button onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setEditingGroupId(null); }} style={{ width: 32, height: 32, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
+                </div>
+                <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal } : g)) } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <input className="form-input" placeholder="Nome do Grupo" autoFocus value={novoNome} onChange={e => setNovoNome(e.target.value)} required />
+                  
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 10, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Ano Letivo</p>
+                    <select 
+                      className="form-input" 
+                      value={novoAno} 
+                      onChange={e => setNovoAno(e.target.value)}
+                      style={{ width: '100%', borderRadius: 12, fontSize: 14 }}
+                    >
+                      <option value="">Todos / Sem Ano Letivo</option>
+                      {cfgCalendarioLetivo.map((c: any) => (
+                        <option key={c.ano} value={c.ano}>{c.ano}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 10, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cor</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {DEFAULT_COLORS.map(c => (
+                        <div key={c} onClick={() => setNovaCor(c)} style={{ width: 32, height: 32, borderRadius: 16, background: c, cursor: 'pointer', border: novaCor === c ? `3px solid ${c}` : '3px solid transparent', boxShadow: novaCor === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : 'none', transition: 'all 0.15s' }} />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(99,102,241,0.05)', borderRadius: 14, border: '1px solid rgba(99,102,241,0.1)' }}>
+                    <input 
+                      type="checkbox" 
+                      id="isGlobalAccessEdit" 
+                      checked={novoIsGlobal} 
+                      onChange={e => setNovoIsGlobal(e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label htmlFor="isGlobalAccessEdit" style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', cursor: 'pointer' }}>Acesso Global</label>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos usuários e tem acesso a todas turmas (menos comunicados, só se for destinatário).</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
+                    <button type="submit" className="btn btn-primary" style={{ background: novaCor, border: 'none' }}>Salvar Alterações</button>
+                  </div>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
@@ -383,7 +450,7 @@ export default function ADAdminTurmas() {
           <button onClick={handleAutoSync} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, fontWeight: 700 }}>
             <DownloadCloud size={16} /> Sincronizar ERP
           </button>
-          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setShowNovoGrupo(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', border: 'none', fontWeight: 800 }}>
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => { setEditingGroupId(null); setNovoNome(''); setNovoAno(''); setNovaCor(DEFAULT_COLORS[0]); setNovoIsGlobal(false); setShowNovoGrupo(true) }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', border: 'none', fontWeight: 800 }}>
             <Plus size={16} /> Novo Grupo
           </motion.button>
         </div>
@@ -394,7 +461,7 @@ export default function ADAdminTurmas() {
         // Agrupar turmas por ano letivo
         const gruposPorAno: Record<string, GrupoDigital[]> = {};
         (grupos || []).forEach(g => {
-          const turmaId = g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null
+          const turmaId = g.syncId ? g.syncId.replace('sync-', '') : (g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null)
           const turmaERP = turmaId ? turmas.find(t => String(t.id) === turmaId) : null
           const ano = g.ano !== undefined && g.ano !== null ? g.ano : (turmaERP?.ano ? String(turmaERP.ano) : '')
           const grupoAno = ano || 'Outros / Sem Ano Letivo'
@@ -513,10 +580,10 @@ export default function ADAdminTurmas() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }} style={{ background: 'white', borderRadius: 24, width: 440, padding: 32, boxShadow: '0 24px 64px rgba(0,0,0,0.15)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>Criar Grupo Digital</h3>
-                <button onClick={() => { setShowNovoGrupo(false); setNovoAno(''); }} style={{ width: 32, height: 32, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
+                <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>{editingGroupId ? 'Editar Grupo Digital' : 'Criar Grupo Digital'}</h3>
+                <button onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setEditingGroupId(null); }} style={{ width: 32, height: 32, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
               </div>
-              <form onSubmit={e => { e.preventDefault(); const novo: GrupoDigital = { id: `manual-${Date.now()}`, nome: novoNome, cor: novaCor, alunosIds: [], colaboradoresIds: [], equipesIds: [], ano: novoAno }; setGrupos([...(grupos || []), novo]); setNovoNome(''); setNovoAno(''); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal } : g)) } else { const novo: GrupoDigital = { id: crypto.randomUUID(), nome: novoNome, cor: novaCor, alunosIds: [], colaboradoresIds: [], equipesIds: [], ano: novoAno, isGlobalAccess: novoIsGlobal }; setGrupos([...(grupos || []), novo]); } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <input className="form-input" placeholder="Nome do Grupo" autoFocus value={novoNome} onChange={e => setNovoNome(e.target.value)} required />
                 
                 <div>
@@ -542,9 +609,23 @@ export default function ADAdminTurmas() {
                     ))}
                   </div>
                 </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(99,102,241,0.05)', borderRadius: 14, border: '1px solid rgba(99,102,241,0.1)' }}>
+                  <input 
+                    type="checkbox" 
+                    id="isGlobalAccess" 
+                    checked={novoIsGlobal} 
+                    onChange={e => setNovoIsGlobal(e.target.checked)}
+                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label htmlFor="isGlobalAccess" style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', cursor: 'pointer' }}>Acesso Global</label>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos usuários e tem acesso a todas turmas (menos comunicados, só se for destinatário).</span>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); }} className="btn btn-secondary">Cancelar</button>
-                  <button type="submit" className="btn btn-primary" style={{ background: novaCor, border: 'none' }}>Criar Grupo</button>
+                  <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
+                  <button type="submit" className="btn btn-primary" style={{ background: novaCor, border: 'none' }}>{editingGroupId ? 'Salvar Alterações' : 'Criar Grupo'}</button>
                 </div>
               </form>
             </motion.div>

@@ -148,7 +148,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd }: 
 
   return (
     <AnimatePresence>
-      <div className="ad-reports-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div className="ad-reports-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         
         {step === 1 ? (
           /* ========================================================================= */

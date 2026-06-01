@@ -161,7 +161,7 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
   const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [])
   const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [])
   const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls }] = useSupabaseArray<PickupCall>('saida/calls', [])
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [])
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
 
@@ -194,6 +194,9 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
     let channel: any = null
 
     const setupRealtime = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      // Allow connection even without auth so Monitor TV can receive broadcasts
+      
       setRealtimeStatus('connecting')
       
       // Clean up any stale channel from React Strict Mode re-mounts fully
@@ -217,15 +220,15 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
             
             if (eventType === 'INSERT') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
-              setActiveCalls((prev: PickupCall[]) => {
+              setActiveCallsLocal?.((prev: PickupCall[]) => {
                 if (prev.some(c => c.id === call.id)) return prev
                 return [call, ...prev]
               })
             } else if (eventType === 'UPDATE') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
-              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === call.id ? call : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === call.id ? call : c))
             } else if (eventType === 'DELETE') {
-              setActiveCalls((prev: PickupCall[]) => prev.filter(c => c.id !== oldRow.id))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.filter(c => c.id !== oldRow.id))
             }
           }
         )
@@ -240,20 +243,20 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
               if (processedBroadcasts.current.size > 200) processedBroadcasts.current.clear();
             }
             if (event === 'CALL_STUDENT') {
-              setActiveCalls((prev: PickupCall[]) => {
+              setActiveCallsLocal?.((prev: PickupCall[]) => {
                 if (prev.some(c => c.id === data.id)) return prev
                 return [data, ...prev]
               })
             } else if (event === 'CONFIRM_PICKUP') {
-              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
             } else if (event === 'CANCEL_CALL') {
-              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
             } else if (event === 'RECALL_STUDENT') {
-              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
             } else if (event === 'REVERT_CALL') {
-              setActiveCalls((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
             } else if (event === 'CLEAR_ALL_CALLS') {
-              setActiveCalls([])
+              setActiveCallsLocal?.([])
             }
           }
         )
@@ -284,25 +287,25 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       if ((payload.data as any)._remote) return  // avoid loops
       const d = payload.data as unknown as PickupCall & { callId?: string }
       if (payload.event === 'CALL_STUDENT') {
-        setActiveCalls(prev => {
+        setActiveCallsLocal?.(prev => {
           if (prev.find(c => c.id === d.id)) return prev
           return [d, ...prev]
         })
       }
       if (payload.event === 'CONFIRM_PICKUP' && d.callId) {
-        setActiveCalls(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
+        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
       }
       if (payload.event === 'CANCEL_CALL' && d.callId) {
-        setActiveCalls(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'cancelled' } : c))
+        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'cancelled' } : c))
       }
       if (payload.event === 'RECALL_STUDENT' && d.callId) {
-        setActiveCalls(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
+        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
       }
       if (payload.event === 'REVERT_CALL' && d.callId) {
-        setActiveCalls(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
+        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
-        setActiveCalls([])
+        setActiveCallsLocal?.([])
       }
     })
     return () => { unsub() }
@@ -370,9 +373,11 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       blockType, blockReason,
     }
     setActiveCalls(prev => [call, ...prev])
+    emit('CALL_STUDENT', { ...call, _remote: false })
+    sendBroadcast('CALL_STUDENT', call)
     addLog('BLOCKED', `Acesso bloqueado (${blockType}): ${guardianName} tentou retirar ${studentName} — ${blockReason}`)
     return call
-  }, [addLog])
+  }, [addLog, emit, sendBroadcast])
 
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
@@ -535,12 +540,16 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json()
         const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
-        setActiveCalls(arr)
+        if (setActiveCallsLocal) {
+          setActiveCallsLocal(arr)
+        } else {
+          setActiveCalls(arr) // fallback
+        }
       }
     } catch (e) {
       console.error('Erro ao recarregar chamadas:', e)
     }
-  }, [setActiveCalls])
+  }, [setActiveCalls, setActiveCallsLocal])
 
   return (
     <Ctx.Provider value={{

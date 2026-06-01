@@ -78,8 +78,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const turmaObj = turmas.find((t: any) => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
   const turmaNome = turmaObj?.nome || rawTurma
 
-  const [limit, setLimit] = useState(10)
-  const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}&limit=${limit}` : 'comunicados?limit=0'
+  const [limit, setLimit] = useState(6)
+  const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : 'comunicados'
   const [comunicados, , { loading }] = useSupabaseArray<any>(endpoint)
   const [localComunicados, setLocalComunicados] = useState<any[]>([])
 
@@ -480,6 +480,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             return dateB - dateA;
           });
           
+          const paginatedComunicados = filteredComunicados.slice(0, limit);
+          
           if (loading || !aluno) {
             return [1, 2, 3].map((idx) => (
             <motion.div 
@@ -506,7 +508,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           ));
           }
           
-          if (filteredComunicados.length === 0) {
+          if (paginatedComunicados.length === 0) {
             return (
           <EmptyStateCard 
             title="Nenhum comunicado"
@@ -516,8 +518,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             );
           }
           
-          return filteredComunicados.map((c: any, index: number) => {
-            const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
+          return (
+            <>
+              {paginatedComunicados.map((c: any, index: number) => {
+                const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
             let parsedDate = new Date();
             try {
               const d = new Date(rawDate);
@@ -537,10 +541,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                style={{ display: 'flex', position: 'relative', paddingBottom: index !== filteredComunicados.length - 1 ? 8 : 0 }}
+                style={{ display: 'flex', position: 'relative', paddingBottom: index !== paginatedComunicados.length - 1 ? 8 : 0 }}
               >
                 {/* Timeline Laser Connector */}
-                {index !== filteredComunicados.length - 1 && (
+                {index !== paginatedComunicados.length - 1 && (
                   <div className="ad-com-timeline-line" style={{ 
                     position: 'absolute', 
                     top: 48, 
@@ -765,16 +769,17 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 </div>
               </motion.div>
             )
-          })
+          })}
+              {filteredComunicados.length > limit && (
+                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
+                   <button onClick={() => setLimit(l => l + 6)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                     Carregar Mais
+                   </button>
+                 </div>
+              )}
+            </>
+          )
         })()}
-        
-        {(localComunicados || []).length >= limit && (
-           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
-             <button onClick={() => setLimit(l => l + 10)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-               Carregar Mais
-             </button>
-           </div>
-        )}
         
         <AnimatePresence>
           {selectedComunicado && (

@@ -1,10 +1,10 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
-
-import React, { useState, useEffect } from 'react'
-import { X, Search, Users, ChevronRight, ChevronLeft, Check, User, School } from 'lucide-react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft, ChevronRight } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 interface DestinatariosModalProps {
   isOpen: boolean
@@ -15,207 +15,333 @@ interface DestinatariosModalProps {
 }
 
 export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
-  const data = useData();
-  const turmas = allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || []);
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [search, setSearch] = useState('')
-  const [activeFolder, setActiveFolder] = useState<{ id: string, name: string, type?: string } | null>(null)
-  const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
+  const data = useData()
+  const turmas = useMemo(() => {
+    return allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
+  }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
-  const [sysUsers, setSysUsers] = useState<any[]>([])
+  const [alunos] = useSupabaseArray<any>('alunos')
+  const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [currentCatId, setCurrentCatId] = useState<string | null>(null)
+
+  const [selectedAno, setSelectedAno] = useState<string>('')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const availableAnos = useMemo(() => {
+    const anos = new Set<string>()
+    turmas.forEach((t: any) => {
+      const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
+      if (a) anos.add(a)
+    })
+    ;(gruposManuais || []).forEach((g: any) => {
+      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+      if (a) anos.add(a)
+    })
+    return Array.from(anos).sort((a,b) => b.localeCompare(a))
+  }, [turmas, gruposManuais])
+
+  const filteredTurmas = useMemo(() => {
+    if (availableAnos.length === 0) return turmas
+    if (selectedAno === '') return []
+    return turmas.filter((t: any) => {
+      const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
+      return a === selectedAno
+    })
+  }, [turmas, selectedAno, availableAnos])
+
+  const filteredGrupos = useMemo(() => {
+    if (availableAnos.length === 0) return gruposManuais
+    if (selectedAno === '') return []
+    return (gruposManuais || []).filter((g: any) => {
+      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+      return a ? a === selectedAno : true
+    })
+  }, [gruposManuais, selectedAno, availableAnos])
+  
+  const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
+  const [hasHydrated, setHasHydrated] = useState(false)
+
+  const { alunosByTurmaRef, alunosById, colaboradoresById } = useMemo(() => {
+    const byTurmaRef = new Map<string, any[]>()
+    const aById = new Map<string, any>()
+    const cById = new Map<string, any>()
+
+    ;(alunos || []).forEach((a: any) => {
+      aById.set(String(a.id), a)
+      const ref = String(a.turma)
+      if (ref) {
+        let list = byTurmaRef.get(ref)
+        if (!list) {
+          list = []
+          byTurmaRef.set(ref, list)
+        }
+        list.push(a)
+      }
+    })
+
+    ;(colaboradores || []).forEach((c: any) => {
+      cById.set(String(c.id), c)
+    })
+
+    return { alunosByTurmaRef: byTurmaRef, alunosById: aById, colaboradoresById: cById }
+  }, [alunos, colaboradores])
+
+  const getTurmaAlunos = (t: any) => {
+    const refs = new Set<string>()
+    if (t.id) refs.add(String(t.id))
+    if (t.codigo) refs.add(String(t.codigo))
+    if (t.nome) refs.add(String(t.nome))
+    
+    const all: any[] = []
+    refs.forEach(ref => {
+      const list = alunosByTurmaRef.get(ref)
+      if (list) all.push(...list)
+    })
+    
+    const unique = new Map()
+    all.forEach(a => unique.set(a.id, a))
+    return Array.from(unique.values())
+  }
 
   useEffect(() => {
-    if (isOpen) {
-      const map: typeof selected = {}
+    if (!isOpen) {
+      setHasHydrated(false)
+      setCurrentCatId(null)
+      setSelected({})
+      setSearchQuery('')
+      setSelectedAno('')
+      return
+    }
+    if (hasHydrated) return
+
+    if (initialSelected.length > 0) {
+       const hasTurma = initialSelected.some(s => {
+         const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+         return type === 'turma'
+       })
+       if (hasTurma && turmas.length === 0) return
+
+       const hasGrupo = initialSelected.some(s => {
+         const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+         return type === 'grupo'
+       })
+       if (hasGrupo && gruposManuais.length === 0) return
+       
+       if ((hasTurma || hasGrupo) && alunos.length === 0) return
+    }
+
+    const map: typeof selected = {}
       initialSelected.forEach(s => {
-        const type = s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : 'turma'
-        map[s.id] = { id: s.id, name: s.name, type: type as any }
+        const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+        
+        if (type === 'turma') {
+           const t = turmas.find((x:any) => String(x.id) === String(s.id) || String(x.nome) === String(s.name))
+           if (t) {
+             const tAlunos = getTurmaAlunos(t)
+             tAlunos.forEach((a:any) => {
+               map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' }
+             })
+           }
+        } else if (type === 'grupo') {
+           const g = gruposManuais.find((x:any) => String(x.id) === String(s.id).replace('g_',''))
+           if (g) {
+             const gAlunos = (g.alunosIds || []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
+             const gColabs = (g.colaboradoresIds || []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
+             gAlunos.forEach((a:any) => map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' })
+             gColabs.forEach((c:any) => map[`f_${c.id}`] = { id: `f_${c.id}`, name: c.nome, type: 'funcionario' })
+           }
+        } else {
+          map[s.id] = { id: s.id, name: s.name, type: type as any }
+        }
       })
       setSelected(map)
-      setSearch('')
-      setActiveFolder(null)
-      const sysU = localStorage.getItem('edu-sys-users')
-      if (sysU) {
-        try { setSysUsers(JSON.parse(sysU)) } catch {}
-      }
+      setHasHydrated(true)
+  }, [isOpen, hasHydrated, initialSelected, turmas, gruposManuais, alunos, colaboradores, alunosByTurmaRef, alunosById, colaboradoresById])
+
+  const { listItems, allLeafIds } = useMemo(() => {
+    const categorias = [
+      { name: 'Educação Infantil', match: (t: any) => /NÍVEL|INFANTIL|BERÇÁRIO|MATERNAL|JARDIM|PRÉ-ESCOLA/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Fundamental I', match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(1|2|3|4|5)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Fundamental II', match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(6|7|8|9)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Médio', match: (t: any) => /SÉRIE|MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) },
+    ]
+
+    const items: any[] = []
+    const leafIds = new Set<string>()
+    
+    const mappedCats = categorias.map(cat => {
+      const tList = filteredTurmas.filter(cat.match)
+      return { ...cat, turmas: tList }
+    }).filter(c => c.turmas.length > 0)
+
+    const catTurmasIds = new Set(mappedCats.flatMap(c => c.turmas.map((t: any) => String(t.id))))
+    const restantes = filteredTurmas.filter((t: any) => !catTurmasIds.has(String(t.id)))
+    if (restantes.length > 0) {
+      mappedCats.push({ name: 'Outras Turmas', turmas: restantes, match: () => false })
     }
-  }, [isOpen, initialSelected])
 
-  if (!isOpen) return null
+    mappedCats.forEach(cat => {
+      const catPeopleIds = new Set<string>()
+      const catPayloads = new Map<string, any>()
+      
+      const turmasItems: any[] = []
+      
+      cat.turmas.forEach((t: any) => {
+        const tAlunos = getTurmaAlunos(t)
+        const payloads = tAlunos.map(a => ({ id: `a_${a.id}`, name: a.nome, type: 'aluno' }))
+        
+        payloads.forEach(p => {
+          leafIds.add(p.id)
+          catPeopleIds.add(p.id)
+          catPayloads.set(p.id, p)
+        })
+        
+        turmasItems.push({
+          id: `t_${t.id}`,
+          title: t.nome,
+          subtitle: t.turno || 'Turma',
+          countBadge: `${payloads.length} pessoas`,
+          type: 'turma',
+          icon: Users,
+          leafIds: payloads.map(p => p.id),
+          payloads: payloads,
+          people: payloads
+        })
+      })
 
-  // class counts
-  const classCounts: Record<string, number> = {}
-  ;(turmas || []).forEach(t => classCounts[t.id] = 0)
-  ;(alunos || []).forEach(a => {
-    const t = (turmas || []).find(x => 
-      String(x.id) === String(a.turma) || 
-      String(x.codigo) === String(a.turma) || 
-      String(x.nome) === String(a.turma)
-    )
-    if (t) classCounts[t.id] = (classCounts[t.id] || 0) + 1
-  })
-
-  // List arrays
-  const categoriasTurmas = [
-    { 
-      name: 'Educação Infantil', 
-      match: (t: any) => {
-        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
-        return /NÍVEL|INFANTIL|BERÇÁRIO|MATERNAL|JARDIM|PRÉ-ESCOLA/i.test(nameOrSerie);
+      if (catPeopleIds.size > 0 || cat.turmas.length > 0) {
+        items.push({
+          id: `cat_${cat.name}`,
+          title: cat.name,
+          subtitle: `Categoria com ${cat.turmas.length} turmas`,
+          countBadge: `${catPeopleIds.size} pessoas`,
+          type: 'category',
+          icon: Building2,
+          leafIds: Array.from(catPeopleIds),
+          payloads: Array.from(catPayloads.values()),
+          people: null,
+          children: turmasItems
+        })
       }
-    },
-    { 
-      name: 'Ensino Fundamental 1', 
-      match: (t: any) => {
-        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
-        if (/MÉDIO/i.test(nameOrSerie)) return false;
-        return /(1|2|3|4|5)º?\s*ANO/i.test(nameOrSerie);
-      }
-    },
-    { 
-      name: 'Ensino Fundamental 2', 
-      match: (t: any) => {
-        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
-        if (/MÉDIO/i.test(nameOrSerie)) return false;
-        return /(6|7|8|9)º?\s*ANO/i.test(nameOrSerie);
-      }
-    },
-    { 
-      name: 'Ensino Médio', 
-      match: (t: any) => {
-        const nameOrSerie = `${t.nome} ${t.serie || ''}`;
-        return /SÉRIE|MÉDIO/i.test(nameOrSerie);
-      }
-    },
-  ]
-
-  const turmasFolders = categoriasTurmas.map(cat => {
-    const tList = turmas.filter(cat.match)
-    const totalStudents = tList.reduce((acc, t) => acc + (classCounts[t.id] || 0), 0)
-    return {
-      id: `cat_${cat.name}`,
-      name: cat.name,
-      type: 'category' as const,
-      count: tList.length,
-      studentCount: totalStudents,
-      turmas: tList
-    }
-  }).filter(c => c.count > 0)
-
-  // Turmas que sobraram (não entraram em categorias)
-  const turmasCategorizadasIds = new Set(turmasFolders.flatMap(f => f.turmas.map(t => t.id)))
-  const turmasRestantes = turmas.filter(t => !turmasCategorizadasIds.has(t.id))
-  
-  if (turmasRestantes.length > 0) {
-    const totalStudents = turmasRestantes.reduce((acc, t) => acc + (classCounts[t.id] || 0), 0)
-    turmasFolders.push({
-      id: 'cat_outros',
-      name: 'Outros Grupos/Turmas',
-      type: 'category' as const,
-      count: turmasRestantes.length,
-      studentCount: totalStudents,
-      turmas: turmasRestantes
     })
-  }
-  
-  const rootGrupos = (gruposManuais || []).map(g => ({
-    id: `g_${g.id}`,
-    name: g.nome,
-    type: 'grupo' as const,
-    count: (g.alunosIds?.length || 0) + (g.colaboradoresIds?.length || 0),
-    isGrupo: true
-  }))
-  
-  const combinedFolders = [...turmasFolders, ...rootGrupos]
 
-  const allFilteredFolders = combinedFolders.filter(item => item.name.toLowerCase().includes(search.toLowerCase()))
-  const allFilteredAlunos = alunos.filter(a => a.nome.toLowerCase().includes(search.toLowerCase())).map(a => ({
-    id: `a_${a.id}`,
-    name: a.nome,
-    type: 'aluno' as const,
-    turmaNome: a.turma,
-    badge: 'Aluno'
-  }))
+    const visibleGrupos = (filteredGrupos || []).filter((g: any) => {
+      const isSyncedTurma = g.syncId || String(g.id).startsWith('sync-')
+      if (isSyncedTurma) return !!g.isGlobalAccess
+      return true
+    })
 
-  let activeFolderMembers: any[] = []
-  if (activeFolder) {
-    if (activeFolder.type === 'grupo') {
-      const gObj = gruposManuais.find(g => g.id === activeFolder.id.replace('g_', ''))
-      if (gObj) {
-        const als = alunos.filter(a => gObj.alunosIds?.includes(a.id)).map(a => ({
-           id: `a_${a.id}`, name: a.nome, type: 'aluno' as const, turmaNome: a.turma, badge: 'Aluno'
-        }))
-        const cols = sysUsers.filter(s => gObj.colaboradoresIds?.includes(s.id)).map(s => ({
-           id: `f_${s.id}`, name: s.nome, type: 'funcionario' as const, turmaNome: s.perfil || 'Gestor', badge: 'Gestor'
-        }))
-        activeFolderMembers = [...als, ...cols]
-      }
-    } else if (activeFolder.type === 'category') {
-      const cat = turmasFolders.find(c => c.id === activeFolder.id)
-      if (cat) {
-        activeFolderMembers = cat.turmas.map(t => ({
-          id: t.id,
-          name: t.nome,
-          type: 'turma' as const,
-          turmaNome: t.turno,
-          badge: 'Turma'
-        }))
-      }
+    const sortedGrupos = [...visibleGrupos].sort((a, b) => a.nome.localeCompare(b.nome))
+    sortedGrupos.forEach((g: any) => {
+      const gAlunos = (g.alunosIds || []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
+      const gColabs = (g.colaboradoresIds || []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
+      
+      const payloads = [
+        ...gAlunos.map((a: any) => ({ id: `a_${a.id}`, name: a.nome, type: 'aluno' })),
+        ...gColabs.map((c: any) => ({ id: `f_${c.id}`, name: c.nome, type: 'funcionario' }))
+      ]
+      
+      payloads.forEach(p => leafIds.add(p.id))
+
+      items.push({
+        id: `g_${g.id}`,
+        title: g.nome,
+        countBadge: `${payloads.length} pessoas`,
+        type: 'grupo',
+        icon: GraduationCap,
+        leafIds: payloads.map(p => p.id),
+        payloads: payloads,
+        people: payloads
+      })
+    })
+
+    return { listItems: items, allLeafIds: Array.from(leafIds) }
+  }, [filteredTurmas, filteredGrupos, alunosByTurmaRef, alunosById, colaboradoresById])
+
+  const activeItems = currentCatId 
+    ? (listItems.find(i => i.id === currentCatId)?.children || [])
+    : listItems
+
+  const flatPeopleList = useMemo(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    const peopleMap = new Map<string, any>()
+
+    const extractPeople = (items: any[]) => {
+      items.forEach(item => {
+         if (item.people) {
+            item.people.forEach((p: any) => {
+               if (p.name.toLowerCase().includes(q)) {
+                 peopleMap.set(p.id, p)
+               }
+            })
+         }
+         if (item.children) {
+            extractPeople(item.children)
+         }
+      })
     }
-  }
-
-  const isItemFolderSelected = (item: any) => {
-    if (item.type === 'category') {
-      return item.turmas && item.turmas.length > 0 && item.turmas.every((t: any) => !!selected[t.id])
-    }
-    return !!selected[item.id]
-  }
+    
+    extractPeople(listItems)
+    return Array.from(peopleMap.values()).sort((a,b) => a.name.localeCompare(b.name))
+  }, [listItems, searchQuery])
 
   const toggleSelect = (item: any) => {
     setSelected(prev => {
       const next = { ...prev }
-      if (item.type === 'category') {
-        const catTurmas = item.turmas || []
-        const allSelected = catTurmas.every((t: any) => !!prev[t.id])
-        if (allSelected) {
-          catTurmas.forEach((t: any) => delete next[t.id])
-        } else {
-          catTurmas.forEach((t: any) => {
-            next[t.id] = { id: t.id, name: t.nome, type: 'turma' }
-          })
-        }
+      const leafIds = item.leafIds as string[]
+      const allSelected = leafIds.length > 0 && leafIds.every((id: string) => !!prev[id])
+      
+      if (allSelected) {
+        leafIds.forEach((id: string) => delete next[id])
       } else {
-        if (next[item.id]) delete next[item.id]
-        else next[item.id] = item
+        item.payloads.forEach((p: any) => {
+          next[p.id] = p
+        })
       }
       return next
     })
   }
 
-  const handleSelectAll = (itemsToToggle: any[]) => {
-    const allSelected = itemsToToggle.every(i => isItemFolderSelected(i))
-    if (allSelected) {
+  const toggleAll = () => {
+    if (searchQuery.trim() !== '') {
+       const allSelected = flatPeopleList.length > 0 && flatPeopleList.every(p => !!selected[p.id])
+       if (allSelected) {
+          setSelected(prev => {
+             const next = { ...prev }
+             flatPeopleList.forEach(p => delete next[p.id])
+             return next
+          })
+       } else {
+          setSelected(prev => {
+             const next = { ...prev }
+             flatPeopleList.forEach(p => next[p.id] = p)
+             return next
+          })
+       }
+       return
+    }
+
+    const activeLeavesArray = Array.from(new Set<string>(activeItems.flatMap((i: any) => i.leafIds as string[])))
+    const allActiveSelected = activeLeavesArray.length > 0 && activeLeavesArray.every((id: string) => !!selected[id])
+
+    if (allActiveSelected) {
       setSelected(prev => {
         const next = { ...prev }
-        itemsToToggle.forEach(i => {
-          if (i.type === 'category') {
-            ;(i.turmas || []).forEach((t: any) => delete next[t.id])
-          } else {
-            delete next[i.id]
-          }
-        })
+        activeLeavesArray.forEach((id: string) => delete next[id])
         return next
       })
     } else {
       setSelected(prev => {
         const next = { ...prev }
-        itemsToToggle.forEach(i => {
-          if (i.type === 'category') {
-            ;(i.turmas || []).forEach((t: any) => {
-              next[t.id] = { id: t.id, name: t.nome, type: 'turma' }
-            })
-          } else {
-            next[i.id] = { id: i.id, name: i.name, type: i.type }
+        activeItems.forEach((item: any) => {
+          if (item.payloads) {
+             item.payloads.forEach((p: any) => next[p.id] = p)
           }
         })
         return next
@@ -223,247 +349,411 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     }
   }
 
-  return (
-    <div className="ad-destinatarios-modal-overlay" style={{
-      position: 'fixed', inset: 0, zIndex: 9999, 
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)'
-    }}>
-      <div className="ad-destinatarios-modal-card" style={{
-        background: '#fff', 
-        width: 480, 
-        height: '90vh', 
-        maxHeight: 800,
-        borderRadius: 16,
-        display: 'flex', 
-        flexDirection: 'column',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        overflow: 'hidden'
-      }}>
-        {/* Header */}
-        <div style={{ padding: '24px 24px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {activeFolder && !search && (
-               <button onClick={() => setActiveFolder(null)} style={{ background: '#f3f4f6', border: 0, borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                 <ChevronLeft size={20} color="#374151" />
-               </button>
-            )}
-            <h2 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: '#111827' }}>
-              {search ? 'Buscar Alvos' : activeFolder ? activeFolder.name : 'Destinatários'}
-            </h2>
-          </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 0, cursor: 'pointer', padding: 4, color: '#6b7280' }}>
-            <X size={24} />
-          </button>
-        </div>
+  const handleConfirm = () => {
+    const result: any[] = []
+    const selectedLeaves = new Set(Object.keys(selected))
+    const coveredLeaves = new Set<string>()
+    
+    const allGroupItems: any[] = []
+    listItems.forEach(item => {
+      allGroupItems.push(item)
+      if (item.children) {
+        allGroupItems.push(...item.children)
+      }
+    })
 
-        {/* Search */}
-        <div style={{ padding: '0 24px 16px' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={20} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
-            <input 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Pesquisar..."
-              style={{
-                width: '100%', padding: '12px 16px 12px 48px',
-                borderRadius: 24, border: '1px solid #e5e7eb',
-                fontSize: 16, outline: 'none'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-              onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
-            />
-          </div>
-        </div>
+    allGroupItems.forEach(item => {
+      if (item.type === 'turma' || item.type === 'grupo') {
+        if (item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
+           result.push({ id: item.id, name: item.title, type: item.type })
+           item.leafIds.forEach((id: string) => coveredLeaves.add(id))
+        }
+      }
+    })
 
-        {/* List Areas */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
-           
-           {/* DEFAULT ROOT VIEW (TURMAS) */}
-           {!search && !activeFolder && (
-             <>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={() => handleSelectAll(combinedFolders)}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%', 
-                    border: combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i)) ? 'none' : '2px solid #d1d5db',
-                    background: combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i)) ? '#3b82f6' : 'transparent',
-                    marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {(combinedFolders.length > 0 && combinedFolders.every(i => isItemFolderSelected(i))) && <Check size={16} color="#fff" strokeWidth={3} />}
+    selectedLeaves.forEach(id => {
+      if (!coveredLeaves.has(id)) {
+        result.push(selected[id])
+      }
+    })
+
+    onAdd(result)
+    onClose()
+  }
+
+  const isAllActiveSelected = searchQuery.trim() !== ''
+    ? (flatPeopleList.length > 0 && flatPeopleList.every(p => !!selected[p.id]))
+    : (activeItems.length > 0 && activeItems.flatMap((i:any) => i.leafIds).length > 0 && activeItems.flatMap((i:any) => i.leafIds).every((id:string) => !!selected[id]))
+
+  const modalContent = (
+    <AnimatePresence>
+      {isOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 2147483647,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <style>{`
+            .dest-modal-container {
+              width: 100%;
+              height: 100dvh;
+              position: absolute;
+              inset: 0;
+              background: #F8FAFC;
+              display: flex;
+              flex-direction: column;
+              overflow: hidden;
+            }
+            .dest-modal-backdrop {
+              display: none;
+            }
+            @media (min-width: 1024px) {
+              .dest-modal-backdrop {
+                display: block;
+                position: absolute;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.4);
+                backdrop-filter: blur(8px);
+              }
+              .dest-modal-container {
+                position: relative;
+                inset: auto;
+                max-width: 700px;
+                height: 90vh;
+                border-radius: 28px;
+                box-shadow: 0 40px 100px rgba(0,0,0,0.2);
+              }
+            }
+          `}</style>
+          
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="dest-modal-backdrop"
+          />
+
+          <motion.div 
+            initial={{ y: '100%', opacity: 0, scale: 0.95 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: '100%', opacity: 0, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="dest-modal-container"
+            style={{ zIndex: 2147483647 }}
+          >
+            <header style={{ 
+              height: 72, flexShrink: 0, 
+              background: 'linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6)',
+              backgroundSize: '300% 300%',
+              animation: 'waveAnimation 8s ease infinite',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 20 
+            }}>
+              <style>{`
+                @keyframes waveAnimation {
+                  0% { background-position: 0% 50%; }
+                  50% { background-position: 100% 50%; }
+                  100% { background-position: 0% 50%; }
+                }
+              `}</style>
+              
+              <motion.button 
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                onClick={onClose}
+                style={{ width: 48, height: 48, position: 'absolute', right: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={24} />
+              </motion.button>
+
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Selecione quem receberá o comunicado</span>
+              </div>
+            </header>
+
+            <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
+              {availableAnos.length > 0 && !currentCatId && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '24px 24px 8px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Ano Letivo</label>
+                    <select
+                      value={selectedAno}
+                      onChange={(e) => setSelectedAno(e.target.value)}
+                      style={{
+                        width: '100%', height: 48, borderRadius: 16, border: '1px solid #E2E8F0', background: '#fff',
+                        padding: '0 16px', fontSize: 15, fontWeight: 600, color: '#0F172A', outline: 'none',
+                        cursor: 'pointer', appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3Csvg width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748B%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
+                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', backgroundSize: '20px'
+                      }}
+                    >
+                      <option value="" disabled>Selecione o ano letivo...</option>
+                      {availableAnos.map(ano => (
+                        <option key={ano} value={ano}>{ano}</option>
+                      ))}
+                    </select>
                   </div>
-                  <span style={{ fontSize: 16, color: '#374151' }}>Selecionar tudo</span>
-                </div>
-                
+                </motion.div>
+              )}
 
+              <div style={{ padding: '0 24px 24px' }}>
+                {availableAnos.length > 0 && selectedAno === '' ? (
+                  <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
+                    <div style={{ background: '#F1F5F9', width: 80, height: 80, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                      <Calendar size={40} color="#94A3B8" />
+                    </div>
+                    <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0F172A', marginBottom: 12 }}>Selecione o Ano Letivo</h3>
+                    <p style={{ fontSize: 15, maxWidth: 320, margin: '0 auto', lineHeight: 1.5 }}>
+                      Por favor, selecione o ano letivo acima para visualizar e selecionar as turmas e grupos correspondentes.
+                    </p>
+                  </div>
+                ) : (
+                  <AnimatePresence mode="popLayout">
+                    <motion.div
+                      key={currentCatId || 'root'}
+                      initial={{ opacity: 0, x: currentCatId ? 50 : -50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: currentCatId ? -50 : 50 }}
+                      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                    >
+                      {currentCatId && (
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, marginTop: 16 }}>
+                           <button 
+                             onClick={() => setCurrentCatId(null)} 
+                             style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 8, color: '#4F46E5', fontWeight: 600, cursor: 'pointer', padding: '8px 0', fontSize: 15 }}
+                           >
+                             <ArrowLeft size={20} />
+                             Voltar para Segmentos
+                           </button>
+                        </div>
+                      )}
 
-                {combinedFolders.map(item => {
-                  const isSelected = isItemFolderSelected(item)
-                  const isCategory = item.type === 'category'
-                  return (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', padding: '0 16px', borderBottom: '1px solid #f3f4f6' }}>
-                       <div style={{
-                         width: 24, height: 24, borderRadius: '50%', 
-                         border: isSelected ? 'none' : '2px solid #d1d5db',
-                         background: isSelected ? '#3b82f6' : 'transparent',
-                         marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                       }} onClick={() => toggleSelect(item as any)}>
-                         {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                       </div>
-                       
-                       <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '16px 0', cursor: 'pointer' }} onClick={() => setActiveFolder(item as any)}>
-                         <span style={{ fontSize: 16, color: '#374151', flex: 1 }}>
-                           {item.name}
-                         </span>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#6b7280', fontSize: 13, marginRight: 12 }}>
-                           {isCategory ? (
-                             <>
-                               <School size={14} />
-                               <span>{item.count} {item.count === 1 ? 'turma' : 'turmas'}</span>
-                             </>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: currentCatId ? 0 : 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                            {currentCatId ? listItems.find(i => i.id === currentCatId)?.title : 'Todos'}
+                          </h3>
+                          <span style={{ background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>{activeItems.length}</span>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flex: 1, margin: '0 16px', position: 'relative' }}>
+                          <Search size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 11 }} />
+                          <input
+                            placeholder="Buscar por nome..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            style={{
+                              width: '100%', height: 40, borderRadius: 12, border: '1px solid #E2E8F0',
+                              padding: '0 16px 0 38px', fontSize: 14, outline: 'none'
+                            }}
+                          />
+                        </div>
+                        <button onClick={toggleAll} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 600, color: '#4F46E5', background: 'none', border: 'none', cursor: 'pointer' }}>
+                          Selecionar tudo
+                          <div style={{ width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', background: isAllActiveSelected ? '#6D5DF6' : 'transparent', border: isAllActiveSelected ? '2px solid #6D5DF6' : '2px solid #CBD5E1' }}>
+                             {isAllActiveSelected && <Check size={16} color="#fff" strokeWidth={3} />}
+                          </div>
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {searchQuery.trim() !== '' ? (
+                           flatPeopleList.length === 0 ? (
+                             <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
+                                Nenhum resultado encontrado para "{searchQuery}"
+                             </div>
                            ) : (
-                             <>
-                               <Users size={14} />
-                               <span>{item.count}</span>
-                             </>
-                           )}
-                         </div>
-                         <ChevronRight size={20} color="#9ca3af" />
-                       </div>
-                    </div>
-                  )
-                })}
-             </>
-           )}
+                             flatPeopleList.map((person: any) => {
+                               const isPersonSelected = !!selected[person.id]
+                               return (
+                                 <div 
+                                    key={person.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelected(prev => {
+                                        const next = { ...prev }
+                                        if (isPersonSelected) delete next[person.id]
+                                        else next[person.id] = person
+                                        return next
+                                      })
+                                    }}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+                                      borderRadius: 16, cursor: 'pointer',
+                                      background: isPersonSelected ? '#F5F3FF' : '#fff',
+                                      border: isPersonSelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
+                                      transition: 'all 0.2s'
+                                    }}
+                                 >
+                                    <div style={{ 
+                                      width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                      background: isPersonSelected ? '#6D5DF6' : '#fff',
+                                      border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                    }}>
+                                      {isPersonSelected && <Check size={16} color="#fff" strokeWidth={3} />}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: 15, fontWeight: 600, color: '#0F172A' }}>{person.name}</span>
+                                      <span style={{ fontSize: 12, color: '#64748B', textTransform: 'capitalize' }}>{person.type}</span>
+                                    </div>
+                                 </div>
+                               )
+                             })
+                           )
+                        ) : (
+                          activeItems.map((item: any) => {
+                            const isFullySelected = item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
+                            const Icon = item.icon
+                            const isCategory = item.type === 'category'
+                            
+                            const isPartiallySelected = !isFullySelected && item.leafIds.some((id: string) => !!selected[id])
+                            
+                            return (
+                              <motion.div
+                                key={item.id}
+                                style={{ 
+                                  borderRadius: 20, 
+                                  background: isFullySelected ? '#F5F3FF' : '#fff',
+                                  border: isFullySelected ? '2px solid #C4B5FD' : '2px solid #E2E8F0',
+                                  transition: 'all 0.2s',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                <div 
+                                  onClick={() => {
+                                    if (isCategory) {
+                                      setCurrentCatId(item.id)
+                                    } else if (item.people) {
+                                      setExpandedId(expandedId === item.id ? null : item.id)
+                                    } else {
+                                      toggleSelect(item)
+                                    }
+                                  }}
+                                  style={{
+                                    cursor: 'pointer', padding: '16px',
+                                    display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16,
+                                  }}
+                                >
+                                  <div 
+                                    onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
+                                    style={{ 
+                                      width: 24, height: 24, flexShrink: 0, borderRadius: 6, 
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+                                      background: isFullySelected ? '#6D5DF6' : isPartiallySelected ? '#C4B5FD' : '#fff',
+                                      border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {isFullySelected ? <Check size={16} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{width:10, height:3, background:'#fff', borderRadius:2}} /> : null}
+                                  </div>
 
-           {/* ACTIVE FOLDER VIEW (MEMBERS) */}
-           {!search && activeFolder && (
-             <>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid #e5e7eb', marginBottom: 8 }} onClick={() => handleSelectAll(activeFolderMembers)}>
-                  <div style={{
-                    width: 24, height: 24, borderRadius: '50%', 
-                    border: activeFolderMembers.length > 0 && activeFolderMembers.every(i => !!selected[i.id]) ? 'none' : '2px solid #d1d5db',
-                    background: activeFolderMembers.length > 0 && activeFolderMembers.every(i => !!selected[i.id]) ? '#3b82f6' : 'transparent',
-                    marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {(activeFolderMembers.length > 0 && activeFolderMembers.every(i => !!selected[i.id])) && <Check size={16} color="#fff" strokeWidth={3} />}
-                  </div>
-                  <span style={{ fontSize: 16, color: '#374151', fontWeight: 600 }}>Selecionar todos de {activeFolder.name}</span>
-                </div>
+                                  <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isCategory ? '#EEF2FF' : '#F8FAFC', color: isCategory ? '#4F46E5' : '#6D5DF6' }}>
+                                    <Icon size={22} />
+                                  </div>
 
-                {activeFolderMembers.map(item => {
-                  const isSelected = !!selected[item.id]
-                  return (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer', borderRadius: 8, margin: '0 8px 4px', background: isSelected ? '#eff6ff' : 'transparent' }} onClick={() => toggleSelect(item as any)}>
-                       <div style={{
-                         width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                         border: isSelected ? 'none' : '2px solid #d1d5db',
-                         background: isSelected ? '#3b82f6' : 'transparent',
-                         marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                       }}>
-                         {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                       </div>
-                       
-                       <div style={{ width: 36, height: 36, borderRadius: '50%', background: item.type === 'funcionario' ? '#f3e8ff' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                         <User size={18} style={{ color: item.type === 'funcionario' ? '#9333ea' : '#9ca3af' }}/>
-                       </div>
-                       
-                       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                           <span style={{ fontSize: 15, color: '#111827', fontWeight: 500 }}>{item.name}</span>
-                           <span style={{ fontSize: 10, background: item.type === 'funcionario' ? '#f3e8ff' : '#dcfce7', color: item.type === 'funcionario' ? '#7e22ce' : '#15803d', padding: '2px 6px', borderRadius: 10 }}>{item.badge}</span>
-                         </div>
-                         <span style={{ fontSize: 12, color: '#9ca3af' }}>{item.turmaNome}</span>
-                       </div>
-                       {item.type === 'turma' && (
-                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#6b7280', fontSize: 13, marginLeft: 8 }}>
-                           <Users size={14} /> {classCounts[item.id] || 0}
-                         </div>
-                       )}
-                    </div>
-                  )
-                })}
-             </>
-           )}
+                                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
+                                    <span style={{ fontSize: 16, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {item.title}
+                                    </span>
+                                    {item.subtitle && (
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {item.subtitle}
+                                      </span>
+                                    )}
+                                  </div>
 
-           {/* ANY SEARCH ACTIVE */}
-           {search && (
-              <>
-                 {allFilteredFolders.length > 0 && (
-                   <div style={{ padding: '12px 16px 4px', fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Grupos Digitais</div>
-                 )}
-                 {allFilteredFolders.map(item => {
-                   const isSelected = !!selected[item.id]
-                   return (
-                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={() => toggleSelect(item as any)}>
-                        <div style={{
-                          width: 24, height: 24, borderRadius: '50%', 
-                          border: isSelected ? 'none' : '2px solid #d1d5db',
-                          background: isSelected ? '#3b82f6' : 'transparent',
-                          marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                          {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                        </div>
-                        <span style={{ fontSize: 15, color: '#374151', flex: 1 }}>{item.name} <span style={{ color: '#9ca3af', fontSize: 13 }}>({item.count} membros)</span></span>
-                        <span style={{ fontSize: 11, background: '#f3e8ff', color: '#7e22ce', padding: '2px 8px', borderRadius: 12 }}>Grupo Digital</span>
-                     </div>
-                   )
-                 })}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                                    <div style={{ background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 100 }}>
+                                      {item.countBadge}
+                                    </div>
+                                    {isCategory && (
+                                      <ChevronRight size={20} color="#94A3B8" />
+                                    )}
+                                  </div>
+                                </div>
 
-                 {allFilteredAlunos.length > 0 && (
-                   <div style={{ padding: '12px 16px 4px', fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', borderTop:allFilteredFolders.length>0?'1px solid #f3f4f6':'' }}>Alunos Soltos</div>
-                 )}
-                 {allFilteredAlunos.slice(0, 20).map(item => {
-                   const isSelected = !!selected[item.id]
-                   return (
-                     <div key={item.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }} onClick={() => toggleSelect(item)}>
-                        <div style={{
-                          width: 24, height: 24, borderRadius: '50%', 
-                          border: isSelected ? 'none' : '2px solid #d1d5db',
-                          background: isSelected ? '#3b82f6' : 'transparent',
-                          marginRight: 16, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                          {isSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                        </div>
-                        <span style={{ fontSize: 15, color: '#374151', flex: 1 }}>{item.name} <span style={{ color: '#9ca3af', fontSize: 13 }}>• {item.turmaNome}</span></span>
-                        <span style={{ fontSize: 11, background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: 12 }}>Aluno</span>
-                     </div>
-                   )
-                 })}
-                 
-                 {(allFilteredFolders.length === 0 && allFilteredAlunos.length === 0) && (
-                   <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af' }}>Nenhum cadastro atende a sua busca.</div>
-                 )}
-              </>
-           )}
+                                <AnimatePresence>
+                                  {expandedId === item.id && item.people && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      style={{ overflow: 'hidden' }}
+                                    >
+                                      <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: 16 }}>
+                                        {item.people.map((person: any) => {
+                                          const isPersonSelected = !!selected[person.id]
+                                          return (
+                                            <div 
+                                              key={person.id}
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                setSelected(prev => {
+                                                  const next = { ...prev }
+                                                  if (isPersonSelected) delete next[person.id]
+                                                  else next[person.id] = person
+                                                  return next
+                                                })
+                                              }}
+                                              style={{
+                                                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
+                                                borderRadius: 12, cursor: 'pointer',
+                                                background: isPersonSelected ? '#F8FAFC' : 'transparent',
+                                                transition: 'background 0.2s'
+                                              }}
+                                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
+                                              onMouseLeave={e => e.currentTarget.style.background = isPersonSelected ? '#F8FAFC' : 'transparent'}
+                                            >
+                                              <div style={{ 
+                                                width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                background: isPersonSelected ? '#4F46E5' : '#fff',
+                                                border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                              }}>
+                                                {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                                              </div>
+                                              <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{person.name}</span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </motion.div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+                )}
+              </div>
+            </div>
 
+            <div style={{ 
+              position: 'absolute', bottom: 0, left: 0, right: 0, padding: '24px', 
+              background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)',
+              borderTop: '1px solid rgba(0,0,0,0.05)',
+              display: 'flex', justifyContent: 'flex-end', gap: 12, zIndex: 10
+            }}>
+              <button 
+                onClick={onClose}
+                style={{ padding: '0 24px', height: 48, borderRadius: 16, background: '#F1F5F9', color: '#475569', fontSize: 15, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
+                onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirm}
+                disabled={Object.keys(selected).length === 0}
+                style={{ padding: '0 32px', height: 48, borderRadius: 16, background: Object.keys(selected).length === 0 ? '#CBD5E1' : '#4F46E5', color: '#fff', fontSize: 15, fontWeight: 700, border: 'none', cursor: Object.keys(selected).length === 0 ? 'not-allowed' : 'pointer', boxShadow: Object.keys(selected).length === 0 ? 'none' : '0 10px 25px -5px rgba(79, 70, 229, 0.4)', transition: 'all 0.2s' }}
+              >
+                Confirmar ({Object.keys(selected).length})
+              </button>
+            </div>
+          </motion.div>
         </div>
-
-        {/* Footer */}
-        <div style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f3f4f6', background: '#fff', zIndex: 10 }}>
-           <button 
-             onClick={onClose}
-             style={{ 
-               padding: '12px 24px', borderRadius: 24, background: '#fff', border: '1px solid #d1d5db', 
-               fontWeight: 600, color: '#374151', cursor: 'pointer', fontSize: 15
-             }}
-           >
-             Cancelar
-           </button>
-           <button 
-             onClick={() => {
-               onAdd(Object.values(selected))
-               onClose()
-             }}
-             style={{ 
-               padding: '12px 32px', borderRadius: 24, background: '#4f46e5', border: 0, 
-               fontWeight: 600, color: '#fff', display: 'flex', alignItems: 'center', gap: 8,
-               cursor: 'pointer', fontSize: 15
-             }}
-           >
-             <Check size={18} /> Adicionar ({Object.values(selected).length})
-           </button>
-        </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
+
+  if (!mounted) return null
+  return createPortal(modalContent, document.body)
 }

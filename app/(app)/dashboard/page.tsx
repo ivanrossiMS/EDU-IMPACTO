@@ -127,7 +127,7 @@ export default function DashboardPage() {
   }, [alunos, turmas, hoje])
 
   const ordersSummary = useMemo(() => {
-    const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio']
+    const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
     function isEventoLivro(descricao?: string): boolean {
       if (!descricao) return false
       return EVENTOS_LIVROS.some(e => descricao.toLowerCase().includes(e))
@@ -307,7 +307,6 @@ export default function DashboardPage() {
                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
                     <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.material}</div>
                   </div>
-                  <div style={{ fontSize: '14px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{formatCurrency(o.valor)}</div>
                 </div>
               ))
             )}

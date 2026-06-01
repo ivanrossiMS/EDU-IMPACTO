@@ -33,10 +33,21 @@ const parseAnexo = (anexoStr: any) => {
   }
   try {
     const str = typeof anexoStr === 'string' ? anexoStr : String(anexoStr);
-    const parts = (str && typeof str.split === 'function') ? str.split('|') : [str];
-    const name = parts[0] || '';
-    const url = parts[1] || '';
-    const mime = parts[2] || '';
+    let name = '';
+    let url = '';
+    let mime = '';
+    if (str.endsWith('|report-payload')) {
+      const firstPipe = str.indexOf('|');
+      const lastPipe = str.lastIndexOf('|');
+      name = str.substring(0, firstPipe);
+      url = str.substring(firstPipe + 1, lastPipe);
+      mime = 'report-payload';
+    } else {
+      const parts = (str && typeof str.split === 'function') ? str.split('|') : [str];
+      name = parts[0] || '';
+      url = parts[1] || '';
+      mime = parts[2] || '';
+    }
     return { name, url, mime };
   } catch(e) {
     return null;
@@ -101,10 +112,23 @@ export default function ColaboradorComunicadosPage() {
   const [alunos] = useSupabaseArray<any>('alunos')
 
   const turmaOptions = useMemo(() => {
-    const userGroups = (chatGroups || []).filter(g => g.colaboradoresIds?.includes(currentUser?.id || ''))
+    if (!currentUser?.id) return [];
+    
+    const userGroups = (chatGroups || []).filter(g => {
+      let colabs = g.colaboradoresIds;
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+      }
+      if (!Array.isArray(colabs)) colabs = [];
+      return colabs.some(id => String(id) === String(currentUser.id));
+    });
+
+    const isGlobal = userGroups.some(g => g.isGlobalAccess === true);
+    if (isGlobal) return turmas;
+
     const accessibleTurmas = turmas.filter(t => {
-       return userGroups.some(g => String(g.id) === `sync-${t.id}` || g.nome === t.nome)
-    })
+       return userGroups.some(g => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+    });
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
   
@@ -262,6 +286,7 @@ export default function ColaboradorComunicadosPage() {
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [limit, setLimit] = useState(6)
 
   if (!currentUser) return null;
 
@@ -650,6 +675,8 @@ export default function ColaboradorComunicadosPage() {
             return dateB - dateA;
           });
           
+          const paginatedComunicados = filteredComunicados.slice(0, limit);
+          
           if (loading || !currentUser) {
             return [1, 2, 3].map((idx) => (
             <motion.div 
@@ -676,7 +703,7 @@ export default function ColaboradorComunicadosPage() {
           ));
           }
           
-          if (filteredComunicados.length === 0) {
+          if (paginatedComunicados.length === 0) {
             return (
           <EmptyStateCard 
             title="Nenhum comunicado"
@@ -686,8 +713,10 @@ export default function ColaboradorComunicadosPage() {
             );
           }
           
-          return filteredComunicados.map((c: any, index: number) => {
-            const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
+          return (
+            <>
+              {paginatedComunicados.map((c: any, index: number) => {
+                const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
             let parsedDate = new Date();
             try {
               const d = new Date(rawDate);
@@ -707,10 +736,10 @@ export default function ColaboradorComunicadosPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
-                style={{ display: 'flex', position: 'relative', paddingBottom: index !== filteredComunicados.length - 1 ? 8 : 0 }}
+                style={{ display: 'flex', position: 'relative', paddingBottom: index !== paginatedComunicados.length - 1 ? 8 : 0 }}
               >
                 {/* Timeline Laser Connector */}
-                {index !== filteredComunicados.length - 1 && (
+                {index !== paginatedComunicados.length - 1 && (
                   <div className="ad-com-timeline-line" style={{ 
                     position: 'absolute', 
                     top: 48, 
@@ -940,7 +969,16 @@ export default function ColaboradorComunicadosPage() {
                 </div>
               </motion.div>
             )
-          })
+          })}
+              {filteredComunicados.length > limit && (
+                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
+                   <button onClick={() => setLimit(l => l + 6)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                     Carregar Mais
+                   </button>
+                 </div>
+              )}
+            </>
+          )
         })()}
       </div>
 
@@ -1140,7 +1178,7 @@ export default function ColaboradorComunicadosPage() {
       {/* Modal Composer */}
       <NovoComunicadoModal
         isOpen={showComposer}
-        onClose={() => setShowComposer(false)}
+        onClose={() => { setShowComposer(false); setSelectedDest([]); }}
         initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
         currentUser={currentUser}
         selectedDest={selectedDest}
