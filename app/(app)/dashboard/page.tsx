@@ -141,12 +141,16 @@ export default function DashboardPage() {
 
     const parcelasDeAlunos: any[] = []
     for (const alu of (alunos || [])) {
+      const tObj = turmas.find((t: any) => t.id === alu.turma || t.codigo === alu.turma)
+      const turmaNome = tObj?.nome || alu.turma || 'S/T'
       for (const p of (alu.parcelas ?? [])) {
         const desc = resolverDesc(p)
         if (!isEventoLivro(desc)) continue
         parcelasDeAlunos.push({
           id: `alu-${alu.id}-p-${p.num ?? p.codigo ?? String(Math.random()).slice(2)}`,
           aluno: alu.nome,
+          alunoId: alu.id,
+          turma: turmaNome,
           eventoDescricao: desc,
           valor: Number(p.valor) || 0,
         })
@@ -155,12 +159,22 @@ export default function DashboardPage() {
 
     const parcelasDeTitulos: any[] = (titulos || [])
       .filter(t => isEventoLivro(resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao })))
-      .map(t => ({
-        id: t.id,
-        aluno: t.aluno,
-        eventoDescricao: resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao }),
-        valor: t.valor,
-      }))
+      .map(t => {
+        const matchingAluno = (alunos || []).find((a: any) => a.nome === t.aluno)
+        let turmaNome = 'S/T'
+        if (matchingAluno) {
+          const tObj = turmas.find((x: any) => x.id === matchingAluno.turma || x.codigo === matchingAluno.turma)
+          turmaNome = tObj?.nome || matchingAluno.turma || 'S/T'
+        }
+        return {
+          id: t.id,
+          aluno: t.aluno,
+          alunoId: matchingAluno?.id,
+          turma: turmaNome,
+          eventoDescricao: resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao }),
+          valor: t.valor,
+        }
+      })
 
     const alunosComParcDiretas = new Set(parcelasDeAlunos.map(p => p.aluno))
     const titulosFiltrados = parcelasDeTitulos.filter(p => !alunosComParcDiretas.has(p.aluno))
@@ -173,12 +187,24 @@ export default function DashboardPage() {
       const key = `${p.aluno}__${p.eventoDescricao}`
       const pMeta = (pedidos || []).find((x: any) => x.tituloId === p.id)
       
+      let finalTurma = p.turma
+      if (!finalTurma || finalTurma === 'S/T' || finalTurma === '—') {
+        const matchingAluno = (alunos || []).find((a: any) => a.nome === p.aluno || a.id === p.alunoId)
+        if (matchingAluno) {
+          const tObj = turmas.find((x: any) => x.id === matchingAluno.turma || x.codigo === matchingAluno.turma)
+          finalTurma = tObj?.nome || matchingAluno.turma || 'S/T'
+        }
+      }
+
       if (!map.has(key)) {
-        map.set(key, { id: p.id, aluno: p.aluno, material: p.eventoDescricao, valor: 0, feito: pMeta?.feito ?? false, entregue: pMeta?.entregue ?? false })
+        map.set(key, { id: p.id, aluno: p.aluno, turma: finalTurma || 'S/T', material: p.eventoDescricao, valor: 0, feito: pMeta?.feito ?? false, entregue: pMeta?.entregue ?? false })
       } else {
         const existing = map.get(key)
         if (pMeta?.feito) existing.feito = true
         if (pMeta?.entregue) existing.entregue = true
+        if (finalTurma && (!existing.turma || existing.turma === 'S/T' || existing.turma === '—')) {
+          existing.turma = finalTurma
+        }
       }
       map.get(key).valor += p.valor
       totalValue += p.valor
@@ -199,7 +225,7 @@ export default function DashboardPage() {
       pendenteCount,
       recentOrders: uniqueOrders.slice(0, 4)
     }
-  }, [alunos, titulos, pedidos, pedidosManuais])
+  }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
   const isGlobalLoading = loadKpis || loadAlunos || loadTitulos || loadPedidosMeta || loadPedidosManuais
 
@@ -301,11 +327,11 @@ export default function DashboardPage() {
             {ordersSummary.recentOrders.length === 0 ? (
               <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
             ) : (
-              ordersSummary.recentOrders.slice(0, 2).map((o) => (
+              ordersSummary.recentOrders.slice(0, 3).map((o) => (
                 <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#f8fafc', borderRadius: '16px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.material}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
                   </div>
                 </div>
               ))

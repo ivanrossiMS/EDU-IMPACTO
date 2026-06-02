@@ -241,6 +241,15 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { perfis, perfisLoading } = useData()
   const { currentUserPerfil, hydrated } = useApp()
+  const [showDenied, setShowDenied] = useState(false)
+
+  useEffect(() => {
+    setShowDenied(false)
+    const timer = setTimeout(() => {
+      setShowDenied(true)
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [currentUserPerfil, pathname])
 
   // ── Wait for localStorage hydration ───────────────────────────────────────
   // Before hydration, currentUserPerfil = 'Diretor Geral' (false default).
@@ -294,6 +303,23 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
 
   // ── Step 3: If route is protected and not in permissions → deny ───────────
   if (matchedRoute && !userPerms.includes(matchedRoute)) {
+    if (!showDenied) {
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.08)',
+            borderTopColor: 'rgba(59,130,246,0.7)',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+        </div>
+      )
+    }
     return <AccessDeniedPage pathname={pathname} />
   }
 

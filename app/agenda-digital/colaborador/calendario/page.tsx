@@ -128,6 +128,10 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
   diaTodo: false, dataFim: ''
 }
 
+// Client-side in-memory caches to prevent redundant loading of the complete lists
+let cacheAlunos: any[] | null = null;
+let cacheFuncionarios: any[] | null = null;
+
 export default function ADCalendarioPage() {
   const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
@@ -351,13 +355,18 @@ export default function ADCalendarioPage() {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const [resAlunos, resProfs] = await Promise.all([
-          fetch('/api/alunos?limit=2000').then(r => r.json()),
-          fetch('/api/funcionarios?limit=500').then(r => r.json())
-        ])
+        if (!cacheAlunos || !cacheFuncionarios) {
+          const [resAlunos, resProfs] = await Promise.all([
+            cacheAlunos ? Promise.resolve({ data: cacheAlunos }) : fetch('/api/alunos?limit=2000&lightweight=true').then(r => r.json()),
+            cacheFuncionarios ? Promise.resolve(cacheFuncionarios) : fetch('/api/funcionarios?limit=500&lightweight=true').then(r => r.json())
+          ])
+          if (!cacheAlunos) cacheAlunos = resAlunos.data || [];
+          if (!cacheFuncionarios) cacheFuncionarios = Array.isArray(resProfs) ? resProfs : (resProfs.data || []);
+        }
+
         const todos = [
-          ...(resAlunos.data || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
-          ...(resProfs.data || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
+          ...(cacheAlunos || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
+          ...(cacheFuncionarios || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
         ]
         const mesView = month + 1
         
@@ -372,9 +381,10 @@ export default function ADCalendarioPage() {
             const pTurmaRaw = p.turma || ''
             const pTurmaObj = turmas.find((t: any) => String(t.id) === String(pTurmaRaw) || String(t.codigo) === String(pTurmaRaw) || String(t.nome) === String(pTurmaRaw))
             const pNomeTurma = pTurmaObj?.nome || p.turma_nome || pTurmaRaw
-            const pNomeTurmaLimpo = String(pNomeTurma).split('-')[0].trim()
-            
-            return activeTurmas.some(at => at.nome.toLowerCase() === pNomeTurmaLimpo.toLowerCase())
+            return activeTurmas.some(at => 
+              (pTurmaObj && (String(pTurmaObj.id) === String(at.id) || String(pTurmaObj.codigo) === String(at.codigo))) ||
+              pNomeTurma.toLowerCase().trim() === at.nome.toLowerCase().trim()
+            )
 
           }
           return true // Keep teachers visible

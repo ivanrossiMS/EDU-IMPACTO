@@ -109,7 +109,7 @@ export default function ColaboradorComunicadosPage() {
   const { adAlert, chatGroups } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   
-  const [alunos] = useSupabaseArray<any>('alunos')
+  const [alunos] = useSupabaseArray<any>('alunos?lightweight=true')
 
   const turmaOptions = useMemo(() => {
     if (!currentUser?.id) return [];

@@ -30,6 +30,10 @@ function todayStr() {
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
 }
 
+// Client-side in-memory caches to prevent redundant loading of the complete lists
+let cacheAlunos: any[] | null = null;
+let cacheFuncionarios: any[] | null = null;
+
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
   const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
@@ -164,13 +168,18 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const [resAlunos, resProfs] = await Promise.all([
-          fetch('/api/alunos?limit=2000').then(r => r.json()),
-          fetch('/api/funcionarios?limit=500').then(r => r.json())
-        ])
+        if (!cacheAlunos || !cacheFuncionarios) {
+          const [resAlunos, resProfs] = await Promise.all([
+            cacheAlunos ? Promise.resolve({ data: cacheAlunos }) : fetch('/api/alunos?limit=2000&lightweight=true').then(r => r.json()),
+            cacheFuncionarios ? Promise.resolve(cacheFuncionarios) : fetch('/api/funcionarios?limit=500&lightweight=true').then(r => r.json())
+          ])
+          if (!cacheAlunos) cacheAlunos = resAlunos.data || [];
+          if (!cacheFuncionarios) cacheFuncionarios = Array.isArray(resProfs) ? resProfs : (resProfs.data || []);
+        }
+
         const todos = [
-          ...(resAlunos.data || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
-          ...(resProfs.data || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
+          ...(cacheAlunos || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
+          ...(cacheFuncionarios || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
         ]
         const mesView = month + 1
         

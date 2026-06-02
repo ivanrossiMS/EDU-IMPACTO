@@ -90,7 +90,47 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data || []).map(normalizeRow))
+
+  const { data: { user } } = await authClient.auth.getUser();
+  let isFamilyOrStudent = false;
+  if (user) {
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    if (
+      perfil === 'Família' || 
+      perfil === 'Responsável' || 
+      cargo === 'Responsável' || 
+      cargo === 'Aluno' || 
+      perfil === 'Aluno'
+    ) {
+      isFamilyOrStudent = true;
+    } else {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('perfil, cargo')
+        .eq('id', user.id)
+        .maybeSingle();
+      
+      const dbPerfil = dbUser?.perfil || '';
+      const dbCargo = dbUser?.cargo || '';
+      if (
+        dbPerfil === 'Família' || 
+        dbPerfil === 'Responsável' || 
+        dbCargo === 'Responsável' || 
+        dbCargo === 'Aluno' || 
+        dbPerfil === 'Aluno'
+      ) {
+        isFamilyOrStudent = true;
+      }
+    }
+  }
+
+  const normalized = (data || []).map(normalizeRow);
+  const filtered = isFamilyOrStudent
+    ? normalized
+    : normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
+
+  return NextResponse.json(filtered)
 }
 
 export async function POST(request: Request) {

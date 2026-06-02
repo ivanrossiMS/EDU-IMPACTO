@@ -8,12 +8,32 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
  * - Família: data do vínculo familiar (relação aluno_responsavel)
  * - Colaborador: data de contratação/admissão
  */
+// Server-side cache for visibility dates to avoid hitting Supabase on every single API request
+const accessStartDateCache = new Map<string, { date: Date | null; expiry: number }>()
+const CACHE_DURATION_MS = 10 * 60 * 1000 // 10 minutes cache TTL
+
 export async function getLoggedUserAccessStartDate(): Promise<Date | null> {
   try {
     const authClient = await createProtectedClient()
     const { data: { user } } = await authClient.auth.getUser()
     if (!user) return null
 
+    const cached = accessStartDateCache.get(user.id)
+    if (cached && Date.now() < cached.expiry) {
+      return cached.date
+    }
+
+    const resultDate = await fetchLoggedUserAccessStartDate(user)
+    accessStartDateCache.set(user.id, { date: resultDate, expiry: Date.now() + CACHE_DURATION_MS })
+    return resultDate
+  } catch (err) {
+    console.error("Error in getLoggedUserAccessStartDate wrapper:", err)
+    return null
+  }
+}
+
+async function fetchLoggedUserAccessStartDate(user: any): Promise<Date | null> {
+  try {
     const email = user.email || ''
     const userId = user.id
 
@@ -107,7 +127,7 @@ export async function getLoggedUserAccessStartDate(): Promise<Date | null> {
     const dateStr = dbUser?.created_at || user.created_at
     return new Date(dateStr)
   } catch (err) {
-    console.error("Error in getLoggedUserAccessStartDate:", err)
+    console.error("Error in fetchLoggedUserAccessStartDate:", err)
     return null
   }
 }

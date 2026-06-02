@@ -28,8 +28,29 @@ export async function POST(request: Request) {
     const body = await request.json()
     const supabase = await createProtectedClient()
 
+    const { data: { user } } = await supabase.auth.getUser()
+    let usuarioNome = 'Sistema'
+    if (user) {
+      usuarioNome = user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('nome')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (dbUser?.nome) usuarioNome = dbUser.nome
+    }
+
+    const processItem = (item: any) => {
+      const updated = {
+        ...item,
+        dataLancamento: item.dataLancamento || new Date().toISOString(),
+        usuarioLancamento: item.usuarioLancamento || usuarioNome,
+      }
+      return buildRow(updated)
+    }
+
     if (Array.isArray(body)) {
-      const rows = body.map(buildRow)
+      const rows = body.map(processItem)
       
       // Smart sync: Delete records not in the incoming array
       const incomingIds = rows.map(r => r.id).filter(Boolean)
@@ -60,7 +81,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
-    const row = buildRow(body)
+    const row = processItem(body)
     const { data, error } = await supabase.from('adm_pedidos_livros_manuais').upsert(row).select().single()
     if (error) throw new Error(error.message)
 

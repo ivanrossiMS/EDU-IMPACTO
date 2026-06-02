@@ -19,7 +19,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
 export default function ADMomentosPage() {
   const { momentosFeed } = useAgendaDigital()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos', []);
+  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
   
   
   const { currentUser } = useApp()

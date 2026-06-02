@@ -1,10 +1,8 @@
 'use client'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-
-
-
 import { useState, useMemo, useEffect } from 'react'
 import { useData, newId } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
 import {
   X, ChevronLeft, ChevronRight, Check, Plus, Trash2, Edit2,
   User, Users, GraduationCap, FileText, DollarSign, AlertCircle,
@@ -272,6 +270,7 @@ interface Props { open: boolean; onClose: () => void; editingId?: string | null 
 
 export default function CadastroAlunoModal({ open, onClose, editingId }: Props) {
   const { turmas, cfgPadroesPagamento } = useData();
+  const { currentUser } = useApp();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
 
@@ -333,6 +332,8 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
         // Herdar evento do padrão
         eventoId: p.eventoId ?? (padrao as any).eventoId ?? '',
         eventoDescricao: p.eventoDescricao ?? (padrao as any).eventoDescricao ?? '',
+        dataLancamento: new Date().toISOString(),
+        usuarioLancamento: currentUser?.nome || 'Sistema',
       }))
     setParcelas(prev => [...prev, ...geradas.filter(g => !prev.some(pp => pp.numero === g.numero))])
   }
@@ -413,6 +414,8 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
           alunoId,
           turma: matAtual?.turmaNome ?? '',
           ano: matAtual?.ano ?? new Date().getFullYear(),
+          dataLancamento: (p as any).dataLancamento || new Date().toISOString(),
+          usuarioLancamento: (p as any).usuarioLancamento || currentUser?.nome || 'Sistema',
         }
         return titulo
       })

@@ -612,7 +612,7 @@ export function ADSidebar() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (
                     <button 
-                      onClick={() => router.push(currentUser?.perfil !== 'Família' && currentUser?.perfil !== 'Responsável' && currentUser?.cargo !== 'Responsável' ? '/login?step=choose_agenda_role' : '/agenda-digital/selecionar-aluno')}
+                      onClick={() => router.push('/agenda-digital/selecionar-aluno')}
                       style={{
                         flex: 1, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
                         color: 'white', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
@@ -663,7 +663,7 @@ export function ADSidebar() {
                 </div>
                 {currentUser?.cargo !== 'Aluno' && (
                   <button 
-                    onClick={() => router.push(currentUser?.perfil !== 'Família' && currentUser?.perfil !== 'Responsável' && currentUser?.cargo !== 'Responsável' ? '/login?step=choose_agenda_role' : '/agenda-digital/selecionar-aluno')}
+                    onClick={() => router.push('/agenda-digital/selecionar-aluno')}
                     style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}
                   >
                     <Users size={18} />

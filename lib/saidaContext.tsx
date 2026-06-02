@@ -221,14 +221,15 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
             if (eventType === 'INSERT') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
               setActiveCallsLocal?.((prev: PickupCall[]) => {
-                if (prev.some(c => c.id === call.id)) return prev
-                return [call, ...prev]
+                const arr = prev || []
+                if (arr.some(c => c.id === call.id)) return arr
+                return [call, ...arr]
               })
             } else if (eventType === 'UPDATE') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === call.id ? call : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === call.id ? call : c))
             } else if (eventType === 'DELETE') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.filter(c => c.id !== oldRow.id))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).filter(c => c.id !== oldRow.id))
             }
           }
         )
@@ -244,17 +245,18 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
             }
             if (event === 'CALL_STUDENT') {
               setActiveCallsLocal?.((prev: PickupCall[]) => {
-                if (prev.some(c => c.id === data.id)) return prev
-                return [data, ...prev]
+                const arr = prev || []
+                if (arr.some(c => c.id === data.id)) return arr
+                return [data, ...arr]
               })
             } else if (event === 'CONFIRM_PICKUP') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
             } else if (event === 'CANCEL_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
             } else if (event === 'RECALL_STUDENT') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
             } else if (event === 'REVERT_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => prev.map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
             } else if (event === 'CLEAR_ALL_CALLS') {
               setActiveCallsLocal?.([])
             }
@@ -288,21 +290,22 @@ export function SaidaProvider({ children }: { children: React.ReactNode }) {
       const d = payload.data as unknown as PickupCall & { callId?: string }
       if (payload.event === 'CALL_STUDENT') {
         setActiveCallsLocal?.(prev => {
-          if (prev.find(c => c.id === d.id)) return prev
-          return [d, ...prev]
+          const arr = prev || []
+          if (arr.find(c => c.id === d.id)) return arr
+          return [d, ...arr]
         })
       }
       if (payload.event === 'CONFIRM_PICKUP' && d.callId) {
-        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
       }
       if (payload.event === 'CANCEL_CALL' && d.callId) {
-        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'cancelled' } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'cancelled' } : c))
       }
       if (payload.event === 'RECALL_STUDENT' && d.callId) {
-        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
       }
       if (payload.event === 'REVERT_CALL' && d.callId) {
-        setActiveCallsLocal?.(prev => prev.map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setActiveCallsLocal?.([])

@@ -65,11 +65,32 @@ export async function POST(request: Request) {
     const body = await request.json()
     const supabase = await createProtectedClient()
 
+    const { data: { user } } = await supabase.auth.getUser()
+    let usuarioNome = 'Sistema'
+    if (user) {
+      usuarioNome = user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('nome')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (dbUser?.nome) usuarioNome = dbUser.nome
+    }
+
+    const processItem = (t: any) => {
+      const updated = {
+        ...t,
+        dataLancamento: t.dataLancamento || new Date().toISOString(),
+        usuarioLancamento: t.usuarioLancamento || usuarioNome,
+      }
+      return ZodTituloFinanceiro.parse(buildRowAuth(updated))
+    }
+
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
       
-      // Zod Validation para Múltiplos
-      const rows = body.map(t => ZodTituloFinanceiro.parse(buildRowAuth(t)))
+      // Zod Validation para Múltiplos com injeção de auditoria
+      const rows = body.map(processItem)
       
       // Upsert Seguro Assíncrono
       const { error } = await supabase.from('titulos').upsert(rows)
@@ -78,8 +99,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
-    // Zod Validation Única
-    const row = ZodTituloFinanceiro.parse(buildRowAuth(body))
+    // Zod Validation Única com injeção de auditoria
+    const row = processItem(body)
     const { data, error } = await supabase.from('titulos').upsert(row).select().single()
     
     if (error) throw new Error(error.message)

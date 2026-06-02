@@ -8,14 +8,29 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const q = searchParams.get('q')
+  const lightweight = searchParams.get('lightweight') === 'true'
 
-  let query = supabase.from('funcionarios').select('*').order('nome')
+  const queryFields = lightweight ? 'id, nome, status, data_nascimento, foto' : '*'
+  let query = supabase.from('funcionarios').select(queryFields as any).order('nome')
+  
   if (status && status !== 'Todos') query = query.eq('status', status)
   if (q) query = query.or(`nome.ilike.%${q}%,cargo.ilike.%${q}%,departamento.ilike.%${q}%`)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data || []).map(({ dados, ...r }) => {
+
+  if (lightweight) {
+    return NextResponse.json(((data || []) as any[]).map(r => ({
+      id: r.id,
+      nome: r.nome,
+      status: r.status,
+      data_nascimento: r.data_nascimento,
+      dataNascimento: r.data_nascimento,
+      foto: r.foto
+    })))
+  }
+
+  return NextResponse.json(((data || []) as any[]).map(({ dados, ...r }) => {
     const { data_nascimento, tipo_contrato, carga_horaria, perfil_sistema, ...rest } = r
     return {
       ...rest,

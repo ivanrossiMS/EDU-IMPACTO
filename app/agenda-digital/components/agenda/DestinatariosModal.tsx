@@ -23,7 +23,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     return allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
   }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
   const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
-  const [alunos] = useSupabaseArray<any>('alunos')
+  const [alunos] = useSupabaseArray<any>('alunos?lightweight=true')
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const [expandedId, setExpandedId] = useState<string | null>(null)

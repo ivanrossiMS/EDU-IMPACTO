@@ -50,6 +50,18 @@ export async function POST(request: Request) {
       eventoId, eventoDescricao, ...dadosBancarios
     } = body
 
+    const { data: { user } } = await supabase.auth.getUser()
+    let usuarioNome = 'Sistema'
+    if (user) {
+      usuarioNome = user.user_metadata?.nome || user.user_metadata?.name || user.email || 'Sistema'
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('nome')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (dbUser?.nome) usuarioNome = dbUser.nome
+    }
+
     const row = {
       id: id || `TIT${Date.now()}`,
       codigo: codigo || `TIT-${Math.floor(Math.random() * 90000) + 10000}`,
@@ -67,7 +79,11 @@ export async function POST(request: Request) {
       ano: ano || new Date().getFullYear(),
       evento_id: eventoId || '',
       evento_descricao: eventoDescricao || '',
-      dados_bancarios: dadosBancarios,
+      dados_bancarios: {
+        ...dadosBancarios,
+        dataLancamento: dadosBancarios.dataLancamento || new Date().toISOString(),
+        usuarioLancamento: dadosBancarios.usuarioLancamento || usuarioNome,
+      },
     }
 
     const { data, error } = await supabase.from('titulos').upsert(row).select().single()

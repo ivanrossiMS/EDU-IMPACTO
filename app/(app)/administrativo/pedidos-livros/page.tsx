@@ -20,6 +20,9 @@ interface PedidoMeta {
   feito: boolean
   usuarioFeito?: string
   dataFeito?: string
+  chegou?: boolean
+  usuarioChegou?: string
+  dataChegou?: string
   entregue?: boolean
   usuarioEntrega?: string
   dataEntrega?: string
@@ -49,6 +52,12 @@ function fmtDataHora(iso?: string) {
   const d = new Date(iso)
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
+function abreviarNome(nome?: string): string {
+  if (!nome) return '—'
+  const partes = nome.trim().split(/\s+/)
+  if (partes.length <= 2) return nome
+  return `${partes[0]} ${partes[partes.length - 1]}`
+}
 
 // ─── Chip de evento colorido ───────────────────────────────────────
 const EVENTO_CORES: Record<string, { bg: string; color: string }> = {
@@ -67,7 +76,7 @@ function getEventoCor(desc?: string) {
   return { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' }
 }
 
-type FiltroView = 'todos' | 'pendentes' | 'feitos' | 'entregues'
+type FiltroView = 'todos' | 'pendentes' | 'feitos' | 'chegou' | 'entregues'
 type FiltroAgrup = 'escola' | 'turma' | 'evento'
 
 // ─── Inferir segmento a partir da série/turma do aluno ────────────
@@ -88,7 +97,7 @@ export default function PedidosLivrosPage() {
   const { currentUser } = useApp();
 
   const [titulos, setTitulos, { loading: isTitulosLoading }] = useSupabaseArray<any>('titulos');
-  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos');
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?lightweight=true');
   const [pedidos, setPedidos, { loading: isPedidosLoading }] = useSupabaseArray<PedidoMeta>('administrativo/pedidos-livros', [])
   const [pedidosManuais, setPedidosManuais, { loading: isPedidosManuaisLoading }] = useSupabaseArray<ParcelaUnificada>('administrativo/pedidos-livros-manuais', [])
 
@@ -106,7 +115,7 @@ export default function PedidosLivrosPage() {
   const [obsTexto, setObsTexto]         = React.useState('')
   const [modalParcelas, setModalParcelas] = React.useState<typeof grupos[0] | null>(null)
   const [modalNovoPedido, setModalNovoPedido] = React.useState(false)
-  const [novoPedidoForm, setNovoPedidoForm] = React.useState({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', turmasDisponiveis: [] as {id:string, nome:string}[] })
+  const [novoPedidoForm, setNovoPedidoForm] = React.useState({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', obs: '', turmasDisponiveis: [] as {id:string, nome:string}[] })
   const [buscaAluno, setBuscaAluno] = React.useState('')
   const [showBuscaAluno, setShowBuscaAluno] = React.useState(false)
 
@@ -279,6 +288,8 @@ export default function PedidosLivrosPage() {
         eventoId: t.eventoId,
         valor: t.valor,
         vencimento: t.vencimento ?? '',
+        dataLancamento: t.dataLancamento || t.created_at || t.createdAt,
+        usuarioLancamento: t.usuarioLancamento || t.usuario || t.usuarioCriacao || 'Sistema',
       }))
   }, [titulos, resolverDesc])
 
@@ -333,6 +344,14 @@ export default function PedidosLivrosPage() {
       g.parcelas.push(p)
       g.valorTotal += p.valor
       if (p.vencimento) g.vencimentos.push(p.vencimento)
+      
+      // Se a parcela atual contiver dados de lançamento e o grupo ainda não, propaga
+      if (p.dataLancamento && !g.dataLancamento) {
+        g.dataLancamento = p.dataLancamento
+      }
+      if (p.usuarioLancamento && !g.usuarioLancamento) {
+        g.usuarioLancamento = p.usuarioLancamento
+      }
     }
     return Array.from(map.values()).sort((a, b) => a.turma.localeCompare(b.turma) || a.alunoNome.localeCompare(b.alunoNome))
   }, [todasParcelas, alunos])
@@ -343,6 +362,7 @@ export default function PedidosLivrosPage() {
     return pedidos.find(p => p.tituloId === pedidoId)
   }
   function isFeito(pedidoId: string) { return getPedido(pedidoId)?.feito ?? false }
+  function isChegou(pedidoId: string) { return getPedido(pedidoId)?.chegou ?? false }
   function isEntregue(pedidoId: string) { return getPedido(pedidoId)?.entregue ?? false }
 
   // ── Marcar / Desmarcar Feito ─────────────────────────────────────
@@ -355,6 +375,34 @@ export default function PedidosLivrosPage() {
           feito,
           usuarioFeito: feito ? currentUser?.nome || 'Usuário' : undefined,
           dataFeito: feito ? new Date().toISOString() : undefined,
+          // Se desfizer feito, desfaz também chegou e entregue
+          ...(feito ? {} : {
+            chegou: false, usuarioChegou: undefined, dataChegou: undefined,
+            entregue: false, usuarioEntrega: undefined, dataEntrega: undefined
+          })
+        })
+      }
+      return Array.from(map.values())
+    })
+  }
+
+  // ── Marcar / Desmarcar Chegou ───────────────────────────────────
+  function marcarChegou(ids: string[], chegou: boolean) {
+    setPedidos(prev => {
+      const map = new Map(prev.map(p => [p.tituloId, p]))
+      for (const id of ids) {
+        const atual = map.get(id) ?? { tituloId: id, feito: false }
+        map.set(id, {
+          ...atual,
+          chegou,
+          usuarioChegou: chegou ? currentUser?.nome || 'Usuário' : undefined,
+          dataChegou: chegou ? new Date().toISOString() : undefined,
+          // Ao marcar como chegou, marca pedido como feito também
+          feito: chegou ? true : atual.feito,
+          usuarioFeito: chegou && !atual.feito ? currentUser?.nome || 'Usuário' : atual.usuarioFeito,
+          dataFeito: chegou && !atual.feito ? new Date().toISOString() : atual.dataFeito,
+          // Ao desmarcar chegou, desmarca entregue também
+          ...(chegou ? {} : { entregue: false, usuarioEntrega: undefined, dataEntrega: undefined })
         })
       }
       return Array.from(map.values())
@@ -372,10 +420,13 @@ export default function PedidosLivrosPage() {
           entregue,
           usuarioEntrega: entregue ? currentUser?.nome || 'Usuário' : undefined,
           dataEntrega: entregue ? new Date().toISOString() : undefined,
-          // Ao marcar como entregue, marca pedido como feito também
+          // Ao marcar como entregue, marca pedido como feito e chegou também
           feito: entregue ? true : atual.feito,
           usuarioFeito: entregue && !atual.feito ? currentUser?.nome || 'Usuário' : atual.usuarioFeito,
           dataFeito: entregue && !atual.feito ? new Date().toISOString() : atual.dataFeito,
+          chegou: entregue ? true : atual.chegou,
+          usuarioChegou: entregue && !atual.chegou ? currentUser?.nome || 'Usuário' : atual.usuarioChegou,
+          dataChegou: entregue && !atual.chegou ? new Date().toISOString() : atual.dataChegou,
         })
       }
       return Array.from(map.values())
@@ -409,10 +460,12 @@ export default function PedidosLivrosPage() {
     const matchAno      = !filtroAno      || g.anoLetivo === filtroAno
 
     const feito    = isFeito(g.pedidoId)
-    const entregue  = isEntregue(g.pedidoId)
+    const chegou   = isChegou(g.pedidoId)
+    const entregue = isEntregue(g.pedidoId)
     const matchView =
       filtroView === 'todos'     ? true :
       filtroView === 'entregues' ? entregue :
+      filtroView === 'chegou'    ? chegou :
       filtroView === 'feitos'    ? feito :
       !feito
 
@@ -427,6 +480,7 @@ export default function PedidosLivrosPage() {
   // ── KPIs ──────────────────────────────────────────────────────────
   const totalGrupos    = grupos.length
   const feitosCount   = grupos.filter(g => isFeito(g.pedidoId)).length
+  const chegouCount   = grupos.filter(g => isChegou(g.pedidoId)).length
   const entreguesCount = grupos.filter(g => isEntregue(g.pedidoId)).length
   const pendenteCount = totalGrupos - feitosCount
   const valorTotalGeral = grupos.reduce((s, g) => s + g.valorTotal, 0)
@@ -454,6 +508,21 @@ export default function PedidosLivrosPage() {
 
   return (
     <div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .skeleton-shimmer {
+          background: linear-gradient(90deg, hsl(var(--bg-elevated)) 25%, hsl(var(--border-subtle)) 50%, hsl(var(--bg-elevated)) 75%);
+          background-size: 200% 100%;
+          animation: shimmer 1.5s infinite linear;
+        }
+      `}} />
       <div className="page-header" style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <div style={{
@@ -483,15 +552,17 @@ export default function PedidosLivrosPage() {
             className="btn btn-secondary"
             style={{ height: 44, padding: '0 16px', borderRadius: 12, gap: 8 }}
             onClick={() => {
-              const csv = ['Aluno,Turma,Evento,Parcelas,Valor Total,Status,Data Pedido,Usuário Pedido,Data Entrega,Usuário Entrega,Obs']
+              const csv = ['Aluno,Turma,Evento,Parcelas,Valor Total,Status,Data Pedido,Usuário Pedido,Data Chegou,Usuário Chegou,Data Entrega,Usuário Entrega,Obs']
               for (const g of grupos) {
                 const p = getPedido(g.pedidoId)
                 csv.push([
                   g.alunoNome, g.turma, g.eventoDescricao, g.parcelas.length,
                   g.valorTotal.toFixed(2),
-                  p?.entregue ? 'Entregue' : p?.feito ? 'Feito' : 'Pendente',
+                  p?.entregue ? 'Entregue' : p?.chegou ? 'Chegou' : p?.feito ? 'Pedido' : 'Pendente',
                   p?.dataFeito ? fmtDataHora(p.dataFeito) : '',
                   p?.usuarioFeito ?? '',
+                  p?.dataChegou ? fmtDataHora(p.dataChegou) : '',
+                  p?.usuarioChegou ?? '',
                   p?.dataEntrega ? fmtDataHora(p.dataEntrega) : '',
                   p?.usuarioEntrega ?? '',
                   p?.obs ?? ''
@@ -510,12 +581,13 @@ export default function PedidosLivrosPage() {
       </div>
 
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Total de Pedidos',  value: totalGrupos,    icon: '📋', color: '#60a5fa' },
           { label: 'Pendentes',         value: pendenteCount,  icon: '⏳', color: '#f59e0b' },
-          { label: 'Pedido Feito',      value: feitosCount,    icon: '✅', color: '#10b981' },
-          { label: 'Entregues',         value: entreguesCount, icon: '📦', color: '#34d399' },
+          { label: 'Pedido Feito',      value: feitosCount,    icon: '✅', color: '#8b5cf6' },
+          { label: 'Chegou na Escola',  value: chegouCount,    icon: '🏢', color: '#a78bfa' },
+          { label: 'Entregues',         value: entreguesCount, icon: '📦', color: '#10b981' },
         ].map(k => (
           <div key={k.label} className="kpi-card" style={{ position: 'relative', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -564,6 +636,7 @@ export default function PedidosLivrosPage() {
               { v: 'todos',     label: 'Todos' },
               { v: 'pendentes', label: '⏳ Pendentes' },
               { v: 'feitos',    label: '✅ Feitos' },
+              { v: 'chegou',    label: '🏢 Chegou' },
               { v: 'entregues', label: '📦 Entregues' },
             ] as { v: FiltroView; label: string }[]).map(opt => (
               <button
@@ -772,6 +845,7 @@ export default function PedidosLivrosPage() {
                       {gsChave.map(g => {
                         const pedido  = getPedido(g.pedidoId)
                         const feito   = pedido?.feito ?? false
+                        const chegou  = pedido?.chegou ?? false
                         const entregue = pedido?.entregue ?? false
                         const cor = getEventoCor(g.eventoDescricao)
                         const vencMin = g.vencimentos.sort()[0]
@@ -863,10 +937,10 @@ export default function PedidosLivrosPage() {
                                   <div style={{ textAlign: 'center' }}>
                                     <div style={{ fontSize: 10, fontWeight: 800, color: '#6366f1' }}>LANÇADO</div>
                                     <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
-                                      {g.dataLancamento ? fmtData(g.dataLancamento) : 'Sistema'}
+                                      {g.dataLancamento ? fmtDataHora(g.dataLancamento) : '—'}
                                     </div>
                                     <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
-                                      {g.usuarioLancamento || 'Sistema'}
+                                      {abreviarNome(g.usuarioLancamento || 'Sistema')}
                                     </div>
                                   </div>
                                 </div>
@@ -884,7 +958,7 @@ export default function PedidosLivrosPage() {
                                     {feito && pedido ? (
                                       <>
                                         <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{fmtDataHora(pedido.dataFeito)}</div>
-                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{pedido.usuarioFeito}</div>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{abreviarNome(pedido.usuarioFeito)}</div>
                                       </>
                                     ) : (
                                       <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>Aguardando</div>
@@ -892,20 +966,41 @@ export default function PedidosLivrosPage() {
                                   </div>
                                 </div>
 
-                                {/* Step 3: Entregue */}
+                                {/* Step 3: Chegou */}
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 1, flex: 1, opacity: chegou ? 1 : 0.4 }}>
+                                  <div style={{ 
+                                    width: 30, height: 30, borderRadius: '50%', background: chegou ? '#a78bfa' : '#e2e8f0', color: chegou ? '#fff' : '#94a3b8',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '4px solid #fff', boxShadow: chegou ? '0 0 0 1px #a78bfa30' : 'none'
+                                  }}>
+                                    <PackageCheck size={14} />
+                                  </div>
+                                  <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 800, color: chegou ? '#a78bfa' : '#94a3b8' }}>CHEGOU</div>
+                                    {chegou && pedido ? (
+                                      <>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{fmtDataHora(pedido.dataChegou)}</div>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{abreviarNome(pedido.usuarioChegou)}</div>
+                                      </>
+                                    ) : (
+                                      <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>Aguardando</div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Step 4: Entregue */}
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, zIndex: 1, flex: 1, opacity: entregue ? 1 : 0.4 }}>
                                   <div style={{ 
                                     width: 30, height: 30, borderRadius: '50%', background: entregue ? '#10b981' : '#e2e8f0', color: entregue ? '#fff' : '#94a3b8',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '4px solid #fff', boxShadow: entregue ? '0 0 0 1px #10b98130' : 'none'
                                   }}>
-                                    <PackageCheck size={14} />
+                                    <CheckCircle2 size={14} />
                                   </div>
                                   <div style={{ textAlign: 'center' }}>
                                     <div style={{ fontSize: 10, fontWeight: 800, color: entregue ? '#10b981' : '#94a3b8' }}>ENTREGUE</div>
                                     {entregue && pedido ? (
                                       <>
                                         <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{fmtDataHora(pedido.dataEntrega)}</div>
-                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{pedido.usuarioEntrega}</div>
+                                        <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>{abreviarNome(pedido.usuarioEntrega)}</div>
                                       </>
                                     ) : (
                                       <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))' }}>Pendente</div>
@@ -943,7 +1038,16 @@ export default function PedidosLivrosPage() {
                                     Marcar Pedido
                                   </button>
                                 )}
-                                {feito && !entregue && (
+                                {feito && !chegou && (
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    style={{ height: 30, padding: '0 10px', fontSize: 11, borderRadius: 8, background: '#8b5cf6', color: '#fff', border: 'none' }}
+                                    onClick={() => marcarChegou([g.pedidoId], true)}
+                                  >
+                                    Marcar Chegada
+                                  </button>
+                                )}
+                                {chegou && !entregue && (
                                   <button
                                     className="btn btn-success btn-sm"
                                     style={{ height: 30, padding: '0 10px', fontSize: 11, borderRadius: 8, background: '#10b981', color: '#fff', border: 'none' }}
@@ -981,11 +1085,11 @@ export default function PedidosLivrosPage() {
                                   >
                                     <StickyNote size={14} color={pedido?.obs ? '#a78bfa' : '#94a3b8'} />
                                   </button>
-                                  {(feito || entregue) && (
+                                  {(feito || chegou || entregue) && (
                                     <button
                                       className="btn btn-ghost btn-icon btn-sm"
                                       title="Desfazer Rastreamento"
-                                      onClick={() => entregue ? marcarEntregue([g.pedidoId], false) : marcarFeito([g.pedidoId], false)}
+                                      onClick={() => entregue ? marcarEntregue([g.pedidoId], false) : chegou ? marcarChegou([g.pedidoId], false) : marcarFeito([g.pedidoId], false)}
                                     >
                                       <RotateCcw size={14} color="#f59e0b" />
                                     </button>
@@ -1194,15 +1298,24 @@ export default function PedidosLivrosPage() {
                 </div>
                 {showBuscaAluno && (
                   <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, boxShadow: '0 10px 25px rgba(0,0,0,0.2)', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
-                    {alunos.filter(a => !buscaAluno || a.nome.toLowerCase().includes(buscaAluno.toLowerCase()) || a.turma.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 15).map(a => {
+                    {alunos.filter(a => {
+                      if (!buscaAluno) return true;
+                      const tObj = rawTurmas.find((t: any) => String(t.id) === String(a.turma));
+                      const tNome = tObj?.nome || a.turma || '';
+                      return a.nome.toLowerCase().includes(buscaAluno.toLowerCase()) || 
+                             tNome.toLowerCase().includes(buscaAluno.toLowerCase());
+                    }).slice(0, 15).map(a => {
                       const hList = a.historicoTurmas || a.dados?.historicoTurmas || []
                       const turmas = hList.length > 0 
                         ? hList.map((h: any) => {
-                            const tObj = rawTurmas.find((t: any) => t.id === h.serieTurma)
+                            const tObj = rawTurmas.find((t: any) => String(t.id) === String(h.serieTurma))
                             const tNome = tObj?.nome || h.serieTurma
                             return { id: h.serieTurma, nome: `${tNome} - ${h.anoLetivo}` }
                           })
-                        : [{ id: a.turma, nome: a.turma }]
+                        : (() => {
+                            const tObj = rawTurmas.find((t: any) => String(t.id) === String(a.turma))
+                            return [{ id: a.turma, nome: tObj?.nome || a.turma }]
+                          })()
                       return (
                       <div
                         key={a.id}
@@ -1258,6 +1371,17 @@ export default function PedidosLivrosPage() {
                   </div>
                 )}
               </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>OBSERVAÇÃO</label>
+                <textarea
+                  className="form-input"
+                  value={novoPedidoForm.obs}
+                  onChange={e => setNovoPedidoForm(p => ({ ...p, obs: e.target.value }))}
+                  placeholder="Observação opcional para o pedido..."
+                  rows={2}
+                  style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }}
+                />
+              </div>
               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
                 💡 Este pedido será aglutinado junto aos eventos financeiros automáticos.
               </div>
@@ -1267,8 +1391,9 @@ export default function PedidosLivrosPage() {
                <button className="btn btn-primary" disabled={!novoPedidoForm.alunoId} onClick={() => {
                  const al = (alunos || []).find(a => a.id === novoPedidoForm.alunoId)
                  if (al) {
+                   const pedidoId = `man-${Date.now()}`
                    const novo: ParcelaUnificada = {
-                     id: `man-${Date.now()}`,
+                     id: pedidoId,
                      aluno: al.nome,
                      alunoId: al.id,
                      eventoDescricao: novoPedidoForm.eventoDescricao,
@@ -1279,8 +1404,18 @@ export default function PedidosLivrosPage() {
                      dataLancamento: new Date().toISOString()
                    }
                    setPedidosManuais(prev => [...prev, novo])
+                   if (novoPedidoForm.obs.trim()) {
+                     setPedidos(prev => [
+                       ...prev,
+                       {
+                         tituloId: pedidoId,
+                         feito: false,
+                         obs: novoPedidoForm.obs.trim()
+                       }
+                     ])
+                   }
                    setModalNovoPedido(false)
-                   setNovoPedidoForm({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', turmasDisponiveis: [] })
+                   setNovoPedidoForm({ alunoId: '', eventoDescricao: 'Livros', turmaId: '', turma: '', obs: '', turmasDisponiveis: [] })
                  }
                }}>
                  <Check size={14}/> Inserir Pedido

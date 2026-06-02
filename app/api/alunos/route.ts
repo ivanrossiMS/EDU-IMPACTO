@@ -34,9 +34,14 @@ export async function GET(request: Request) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
+    const lightweight = url.searchParams.get('lightweight') === 'true'
+    const queryFields = lightweight
+      ? 'id, nome, matricula, status, data_nascimento, foto, turma, inadimplente, dados'
+      : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
+
     let query = supabase
       .from('alunos')
-      .select('id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at', { count: 'exact' })
+      .select(queryFields as any, { count: 'exact' })
 
     if (search) {
       // Busca por nome, cpf ou ID
@@ -110,6 +115,19 @@ export async function GET(request: Request) {
 
     if (!students || students.length === 0) {
       return NextResponse.json({ data: [], total: 0, page, limit })
+    }
+
+    if (lightweight) {
+      const formatted = (students || []).map((student: any) => ({
+        ...student,
+        ...(student.dados || {})
+      }))
+      return NextResponse.json({
+        data: formatted,
+        total: count || 0,
+        page,
+        limit
+      })
     }
 
     const allStudentRefs = students.flatMap((s: any) => [
@@ -427,7 +445,8 @@ export async function POST(request: Request) {
             ciencias: {},
             anexos: anexos,
             conteudo: msg,
-            dataEnvio: new Date().toISOString()
+            dataEnvio: new Date().toISOString(),
+            isSaudacao: true
           }
         })
       }

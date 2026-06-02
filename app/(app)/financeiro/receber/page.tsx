@@ -1,6 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { useApp } from '@/lib/context';
 
 import { useState, useMemo, useEffect } from 'react'
 
@@ -64,6 +65,7 @@ import { useQueryClient } from '@tanstack/react-query'
 
 export default function ContasReceberPage() {
   const { cfgEventos, cfgMetodosPagamento, setMovimentacoesManuais, logSystemAction } = useData();
+  const { currentUser } = useApp();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
   const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
   const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-abertos'], '/api/financeiro/caixas', { status: 'aberto', limit: 200 })
@@ -270,7 +272,9 @@ export default function ContasReceberPage() {
         descricao: `${form.descricao} (${i+1}/${previewParcelas.length})`,
         parcela: newParcelaId(eventoIdLote, i + 1),
         eventoId: eventoIdLote,
-        valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber'
+        valor: p.valor, vencimento: p.venc, origemLanca: 'manual_receber',
+        dataLancamento: new Date().toISOString(),
+        usuarioLancamento: currentUser?.nome || 'Sistema',
       }))
       
       // Envia array completo pro Bulk Upsert Enterprise!
@@ -284,7 +288,9 @@ export default function ContasReceberPage() {
         id: undefined,
         eventoId: eventoIdUnico,
         parcela: newParcelaId(eventoIdUnico, 1),
-        origemLanca: 'manual_receber'
+        origemLanca: 'manual_receber',
+        dataLancamento: new Date().toISOString(),
+        usuarioLancamento: currentUser?.nome || 'Sistema',
       }
       await mutateTitulo.mutateAsync(payload)
 

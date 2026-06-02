@@ -17,7 +17,7 @@ import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   // removido const { momentosFeed } = useAgendaDigital()
   const { aluno: contextAluno } = useSelectedStudent()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos', []);
+  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
   const [dbTurmas = []] = useSupabaseArray<any>('turmas', [])
   const { turmas: contextTurmas = [] } = useData()
   const resolvedParams = use(params as Promise<{ slug: string }>)
