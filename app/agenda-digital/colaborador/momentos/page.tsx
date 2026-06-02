@@ -13,6 +13,79 @@ import { useApp } from '@/lib/context'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
+
+const PAGE_STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Outfit:wght@300;400;600;800&display=swap');
+
+  @keyframes floatRandom {
+    0% { transform: translateY(0px) rotate(0deg) scale(1); }
+    50% { transform: translateY(-25px) rotate(180deg) scale(1.15); }
+    100% { transform: translateY(0px) rotate(360deg) scale(1); }
+  }
+  
+  @keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  .ad-main-scroll {
+    background: linear-gradient(135deg, #e0e7ff 0%, #fce7f3 40%, #fef3c7 75%, #ecfdf5 100%) !important;
+    position: relative !important;
+  }
+
+  .floating-icon {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.06));
+  }
+  
+  .polaroid-card {
+    background: #ffffff !important;
+    padding: 18px 18px 24px 18px !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255, 255, 255, 0.9) !important;
+    box-shadow: 0 20px 45px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.02) !important;
+    width: 100% !important;
+    max-width: 480px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    cursor: pointer !important;
+  }
+  .polaroid-card:hover {
+    transform: rotate(0deg) scale(1.04) translateY(-10px) !important;
+    box-shadow: 0 40px 80px rgba(99, 102, 241, 0.2), 0 6px 20px rgba(0,0,0,0.05) !important;
+    border-color: rgba(99, 102, 241, 0.3) !important;
+  }
+
+  @media (max-width: 768px) {
+    .ad-momentos-header {
+      margin: 16px 16px 16px 16px !important;
+      padding: 12px 16px !important;
+      gap: 12px !important;
+    }
+    .ad-momentos-title {
+      font-size: 13px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+    .ad-momentos-desc {
+      display: none !important;
+    }
+  }
+
+  .ad-momento-overlay { padding: 20px; z-index: 999999 !important; }
+  .ad-momento-content { border-radius: 24px; max-height: 90vh; }
+  @media (max-width: 768px) {
+    .ad-momento-overlay { padding: 0 !important; }
+    .ad-momento-content { border-radius: 0 !important; max-height: 100dvh !important; height: 100dvh !important; }
+  }
+
+  @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+`;
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
@@ -334,71 +407,7 @@ export default function ADMomentosPage() {
       background: 'transparent',
       overflow: 'visible'
     }}>
-      <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Outfit:wght@300;400;600;800&display=swap');
-
-        
-        @keyframes floatRandom {
-          0% { transform: translateY(0px) rotate(0deg) scale(1); }
-          50% { transform: translateY(-25px) rotate(180deg) scale(1.15); }
-          100% { transform: translateY(0px) rotate(360deg) scale(1); }
-        }
-        
-        @keyframes gradientMove {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        
-        /* Inject dynamic, highly colorful full-viewport premium warm-cool pastel gradient */
-        .ad-main-scroll {
-          background: linear-gradient(135deg, #e0e7ff 0%, #fce7f3 40%, #fef3c7 75%, #ecfdf5 100%) !important;
-          position: relative !important;
-        }
-
-        .floating-icon {
-          position: absolute;
-          pointer-events: none;
-          z-index: 1;
-          filter: drop-shadow(0 8px 16px rgba(0,0,0,0.06));
-        }
-        
-        .polaroid-card {
-          background: #ffffff !important;
-          padding: 18px 18px 24px 18px !important;
-          border-radius: 16px !important;
-          border: 1px solid rgba(255, 255, 255, 0.9) !important;
-          box-shadow: 0 20px 45px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.02) !important;
-          width: 100% !important;
-          max-width: 480px !important;
-          display: flex !important;
-          flex-direction: column !important;
-          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-          cursor: pointer !important;
-        }
-        .polaroid-card:hover {
-          transform: rotate(0deg) scale(1.04) translateY(-10px) !important;
-          box-shadow: 0 40px 80px rgba(99, 102, 241, 0.2), 0 6px 20px rgba(0,0,0,0.05) !important;
-          border-color: rgba(99, 102, 241, 0.3) !important;
-        }
-
-        @media (max-width: 768px) {
-          .ad-momentos-header {
-            margin: 16px 16px 16px 16px !important;
-            padding: 12px 16px !important;
-            gap: 12px !important;
-          }
-          .ad-momentos-title {
-            font-size: 13px !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-          }
-          .ad-momentos-desc {
-            display: none !important;
-          }
-        }
-      `}} />
+      {isMounted && createPortal(<style dangerouslySetInnerHTML={{__html: PAGE_STYLES}} />, document.body)}
 
       {/* Decorative Blur Blobs */}
       <div style={{
@@ -880,16 +889,9 @@ export default function ADMomentosPage() {
       )}
 
       {/* === MODAL: NOVO MOMENTO === */}
-      <style dangerouslySetInnerHTML={{__html: `
-        .ad-momento-overlay { padding: 20px; z-index: 999999 !important; }
-        .ad-momento-content { border-radius: 24px; max-height: 90vh; }
-        @media (max-width: 768px) {
-          .ad-momento-overlay { padding: 0 !important; }
-          .ad-momento-content { border-radius: 0 !important; max-height: 100dvh !important; height: 100dvh !important; }
-        }
-      `}} />
-      <AnimatePresence>
-        {isMounted && showModal && createPortal(
+      {isMounted && createPortal(
+        <AnimatePresence>
+          {showModal && (
           <motion.div className="ad-momento-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div className="ad-momento-content" initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
@@ -1003,10 +1005,11 @@ export default function ADMomentosPage() {
                 </button>
               </div>
             </motion.div>
-          </motion.div>,
-          document.body
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       <DestinatariosModal
         isOpen={showDestModal}
@@ -1015,7 +1018,6 @@ export default function ADMomentosPage() {
         onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
       />
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }
