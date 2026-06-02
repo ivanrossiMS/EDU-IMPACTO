@@ -14,6 +14,44 @@ interface DestinatariosModalProps {
   allowedTurmasIds?: string[]
 }
 
+const DEST_MODAL_STYLES = `
+  .dest-modal-container {
+    width: 100%;
+    height: 100dvh;
+    position: absolute;
+    inset: 0;
+    background: #F8FAFC;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .dest-modal-backdrop {
+    display: none;
+  }
+  @media (min-width: 1024px) {
+    .dest-modal-backdrop {
+      display: block;
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(8px);
+    }
+    .dest-modal-container {
+      position: relative;
+      inset: auto;
+      max-width: 700px;
+      height: 90vh;
+      border-radius: 28px;
+      box-shadow: 0 40px 100px rgba(0,0,0,0.2);
+    }
+  }
+  @keyframes waveAnimation {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+`;
+
 export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -393,38 +431,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           position: 'fixed', inset: 0, zIndex: 2147483647,
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          <style>{`
-            .dest-modal-container {
-              width: 100%;
-              height: 100dvh;
-              position: absolute;
-              inset: 0;
-              background: #F8FAFC;
-              display: flex;
-              flex-direction: column;
-              overflow: hidden;
-            }
-            .dest-modal-backdrop {
-              display: none;
-            }
-            @media (min-width: 1024px) {
-              .dest-modal-backdrop {
-                display: block;
-                position: absolute;
-                inset: 0;
-                background: rgba(15, 23, 42, 0.4);
-                backdrop-filter: blur(8px);
-              }
-              .dest-modal-container {
-                position: relative;
-                inset: auto;
-                max-width: 700px;
-                height: 90vh;
-                border-radius: 28px;
-                box-shadow: 0 40px 100px rgba(0,0,0,0.2);
-              }
-            }
-          `}</style>
           
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -447,13 +453,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
               animation: 'waveAnimation 8s ease infinite',
               display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 20 
             }}>
-              <style>{`
-                @keyframes waveAnimation {
-                  0% { background-position: 0% 50%; }
-                  50% { background-position: 100% 50%; }
-                  100% { background-position: 0% 50%; }
-                }
-              `}</style>
               
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
@@ -756,5 +755,11 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   )
 
   if (!mounted) return null
-  return createPortal(modalContent, document.body)
+  return createPortal(
+    <>
+      <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
+      {modalContent}
+    </>,
+    document.body
+  )
 }

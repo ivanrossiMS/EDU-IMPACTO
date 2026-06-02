@@ -889,7 +889,7 @@ export default function ADMomentosPage() {
         }
       `}} />
       <AnimatePresence>
-        {showModal && (
+        {isMounted && showModal && createPortal(
           <motion.div className="ad-momento-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div className="ad-momento-content" initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
@@ -1003,7 +1003,8 @@ export default function ADMomentosPage() {
                 </button>
               </div>
             </motion.div>
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
       </AnimatePresence>
 
