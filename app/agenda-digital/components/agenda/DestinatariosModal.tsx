@@ -232,7 +232,8 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     const visibleGrupos = (filteredGrupos || []).filter((g: any) => {
       const isSyncedTurma = g.syncId || String(g.id).startsWith('sync-')
-      if (isSyncedTurma) return !!g.isGlobalAccess
+      const isGlobal = g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1
+      if (isSyncedTurma) return isGlobal
       return true
     })
 

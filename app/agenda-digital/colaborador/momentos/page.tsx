@@ -100,21 +100,22 @@ export default function ADMomentosPage() {
 
   const turmaOptions = React.useMemo(() => {
     if (!currentUser?.id) return [];
+    if (currentUser.perfil === 'administrador' || currentUser.cargo === 'Administrador' || currentUser.perfil === 'admin') return turmas;
     
-    const userGroups = (chatGroups || []).filter(g => {
+    const userGroups = (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some(id => String(id) === String(currentUser.id));
+      return colabs.some((id: any) => String(id) === String(currentUser.id));
     });
 
-    const isGlobal = userGroups.some(g => g.isGlobalAccess === true);
+    const isGlobal = userGroups.some((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
     if (isGlobal) return turmas;
 
-    const accessibleTurmas = turmas.filter(t => {
-       return userGroups.some(g => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+    const accessibleTurmas = turmas.filter((t: any) => {
+       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
