@@ -467,7 +467,8 @@ export default function ADMomentosPage() {
           alignItems: 'center',
           gap: '24px',
           position: 'relative',
-          overflow: 'visible'
+          overflow: 'visible',
+          zIndex: 50
         }}>
           {/* Background Gradients Layer */}
           <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', overflow: 'hidden', pointerEvents: 'none' }}>
