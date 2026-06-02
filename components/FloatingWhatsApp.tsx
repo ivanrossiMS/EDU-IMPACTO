@@ -35,9 +35,27 @@ export function FloatingWhatsApp() {
   }
 
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', pointerEvents: 'none' }}>
+    <>
+      <style>{`
+        .ad-floating-whatsapp {
+          position: fixed;
+          bottom: 24px;
+          right: 24px;
+          z-index: 9999;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          pointer-events: none;
+        }
+        @media (max-width: 768px) {
+          .ad-floating-whatsapp {
+            bottom: 110px;
+          }
+        }
+      `}</style>
+      <div className="ad-floating-whatsapp">
       
-      <AnimatePresence>
+        <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -171,6 +189,7 @@ export function FloatingWhatsApp() {
           </svg>
         )}
       </button>
-    </div>
+      </div>
+    </>
   )
 }

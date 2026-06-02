@@ -144,7 +144,7 @@ export default function NovoComunicadoModal({
       inset: 0,
       background: 'rgba(15, 23, 42, 0.4)',
       backdropFilter: 'blur(8px)',
-      zIndex: 99990,
+      zIndex: 999999,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center'
@@ -152,14 +152,14 @@ export default function NovoComunicadoModal({
       <style>{`
         .ad-nc-container {
           width: 100%;
-          height: 100%;
+          height: 100dvh;
           background: #F8FAFC;
           display: flex;
           flex-direction: column;
           position: absolute;
           top: 0;
           left: 0;
-          z-index: 99990;
+          z-index: 999999;
           overflow: hidden;
         }
         @media (min-width: 1024px) {

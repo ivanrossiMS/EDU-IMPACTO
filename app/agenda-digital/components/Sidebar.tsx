@@ -257,7 +257,7 @@ export function ADSidebar() {
                     </div>
                   )}
                 </motion.div>
-                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? 'white' : 'rgba(255,255,255,0.4)', transition: 'all 0.3s', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? 'white' : 'rgba(255,255,255,0.4)', transition: 'all 0.3s', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
                   {item.label}
                 </span>
               </Link>
