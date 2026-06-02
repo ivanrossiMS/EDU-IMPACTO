@@ -9,8 +9,6 @@ export function FloatingWhatsApp() {
   const { adConfig } = useAgendaDigital()
   const [isOpen, setIsOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
-  // Opcional badge
-  const unreadCount = 1
 
   useEffect(() => {
     setMounted(true)
@@ -71,8 +69,24 @@ export function FloatingWhatsApp() {
           pointer-events: auto;
           outline: none;
           transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-          animation: pulseGlow 2s infinite ease-in-out;
+          animation: floatAndGlow 3s ease-in-out infinite;
           -webkit-tap-highlight-color: transparent;
+        }
+
+        .fab-button::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          border-radius: 50%;
+          border: 2px solid #38D66B;
+          z-index: -1;
+          animation: sonarPing 1.8s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
+          pointer-events: none;
+        }
+
+        .fab-button.is-open::before {
+          animation: none;
+          display: none;
         }
 
         /* Reflexo superior brilhante estilo Apple/Glassmorphism */
@@ -89,12 +103,18 @@ export function FloatingWhatsApp() {
         }
 
         .fab-button:hover {
-          transform: scale(1.08);
+          transform: scale(1.08) translateY(-2px);
           box-shadow: 
-            0 20px 40px rgba(37, 196, 90, 0.3), 
-            0 0 32px rgba(37, 196, 90, 0.35),
+            0 24px 48px rgba(37, 196, 90, 0.4), 
+            0 0 36px rgba(37, 196, 90, 0.4),
             inset 0 4px 6px rgba(255, 255, 255, 0.6),
             inset 0 -4px 6px rgba(0, 0, 0, 0.1);
+          animation-play-state: paused;
+        }
+
+        .fab-button:hover::before {
+          animation-play-state: paused;
+          opacity: 0;
         }
 
         .fab-button:active {
@@ -118,37 +138,32 @@ export function FloatingWhatsApp() {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
         }
 
-        .fab-badge {
-          position: absolute;
-          top: -2px;
-          right: -2px;
-          background: #FF3B30;
-          color: white;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          font-weight: 600;
-          font-size: 13px;
-          height: 24px;
-          min-width: 24px;
-          border-radius: 12px;
-          padding: 0 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 2px solid #ffffff;
-          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-          z-index: 3;
-          animation: bounceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        @keyframes floatAndGlow {
+          0% {
+            transform: translateY(0) scale(1);
+            box-shadow: 0 16px 32px rgba(37, 196, 90, 0.2), 0 0 24px rgba(37, 196, 90, 0.15), inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
+          }
+          50% {
+            transform: translateY(-6px) scale(1.02);
+            box-shadow: 0 24px 40px rgba(37, 196, 90, 0.35), 0 0 32px rgba(37, 196, 90, 0.25), inset 0 4px 6px rgba(255, 255, 255, 0.6), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
+          }
+          100% {
+            transform: translateY(0) scale(1);
+            box-shadow: 0 16px 32px rgba(37, 196, 90, 0.2), 0 0 24px rgba(37, 196, 90, 0.15), inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
+          }
         }
 
-        @keyframes pulseGlow {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.08); }
-          100% { transform: scale(1); }
-        }
-
-        @keyframes bounceIn {
-          0% { transform: scale(0); }
-          100% { transform: scale(1); }
+        @keyframes sonarPing {
+          0% {
+            transform: scale(1);
+            opacity: 1;
+            border-width: 4px;
+          }
+          100% {
+            transform: scale(1.8);
+            opacity: 0;
+            border-width: 0px;
+          }
         }
 
         @media (max-width: 768px) {
@@ -262,11 +277,7 @@ export function FloatingWhatsApp() {
         className={`fab-button ${isOpen ? 'is-open' : ''}`}
         aria-label="Contatos do WhatsApp"
         title="Falar no WhatsApp"
-      >
-        {!isOpen && unreadCount > 0 && (
-          <div className="fab-badge">{unreadCount > 99 ? '99+' : unreadCount}</div>
-        )}
-        
+      >        
         {isOpen ? (
           <X className="fab-icon" style={{ transform: 'rotate(-90deg)', transition: 'transform 0.3s' }} />
         ) : (
