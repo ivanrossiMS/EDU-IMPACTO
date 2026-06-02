@@ -86,6 +86,10 @@ const PAGE_STYLES = `
 
   @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
 `;
+
+const GlobalStyles = React.memo(function GlobalStyles() {
+  return <style dangerouslySetInnerHTML={{__html: PAGE_STYLES}} />
+})
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
@@ -407,7 +411,7 @@ export default function ADMomentosPage() {
       background: 'transparent',
       overflow: 'visible'
     }}>
-      {isMounted && createPortal(<style dangerouslySetInnerHTML={{__html: PAGE_STYLES}} />, document.body)}
+      <GlobalStyles />
 
       {/* Decorative Blur Blobs */}
       <div style={{

@@ -52,6 +52,10 @@ const DEST_MODAL_STYLES = `
   }
 `;
 
+const GlobalDestStyles = React.memo(function GlobalDestStyles() {
+  return <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
+})
+
 export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -757,7 +761,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   if (!mounted) return null
   return createPortal(
     <>
-      <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
+      <GlobalDestStyles />
       {modalContent}
     </>,
     document.body
