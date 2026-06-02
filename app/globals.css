@@ -1165,7 +1165,7 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(239,68,68, 0); } 
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239,68,68, 0); } 
 }
-}
+
 .badge-pulse-modern { 
   animation: ultra-pulse 1.5s infinite !important; 
 }
