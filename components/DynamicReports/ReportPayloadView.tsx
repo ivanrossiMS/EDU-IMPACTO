@@ -1,176 +1,245 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2 } from 'lucide-react';
-import { ReportPayload, MOCK_TEMPLATES, MOCK_STUDENTS, Student } from './types';
+import { X, Heart, Sparkles, Star } from 'lucide-react';
+import { ReportPayload, MOCK_TEMPLATES } from './types';
+import { useData } from '@/lib/dataContext';
 
 interface ReportPayloadViewProps {
   isOpen: boolean;
   onClose: () => void;
-  attachmentString: string; // e.g., "Relatório: Nome|payload:{"templateId":"...","values":{...}}|report-payload"
+  attachmentString: string;
 }
 
 export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportPayloadViewProps) {
-  const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const { turmas = [] } = useData();
 
-  // Parse the attachment string
-  const { title, payload } = useMemo(() => {
-    if (!attachmentString) return { title: '', payload: null };
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const payload = useMemo(() => {
+    if (!attachmentString) return null;
     try {
       const parts = attachmentString.split('|');
-      const title = parts[0];
-      const payloadStr = parts[1].replace('payload:', '');
-      const payload: ReportPayload = JSON.parse(payloadStr);
-      return { title, payload };
+      const p = parts.find(p => p.startsWith('payload:'));
+      if (!p) return null;
+      return JSON.parse(p.substring(8)) as ReportPayload;
     } catch (e) {
-      console.error('Failed to parse report payload', e);
-      return { title: 'Erro ao carregar relatório', payload: null };
+      console.error("Failed to parse attachment payload", e);
+      return null;
     }
   }, [attachmentString]);
 
-  const template = useMemo(() => {
-    if (!payload) return null;
-    return MOCK_TEMPLATES.find((t) => t.id === payload.templateId);
-  }, [payload]);
+  const { resolvedStudentInfo, resolvedTemplate, observacaoValue, standardFields } = useMemo(() => {
+    if (!payload) return { resolvedStudentInfo: null, resolvedTemplate: null, observacaoValue: null, standardFields: [] };
+    
+    // Parse title
+    const parts = (attachmentString || '').split('|');
+    const title = parts[0] || '';
 
-  // Extract students that are present in the payload
-  const studentsInReport = useMemo(() => {
-    if (!payload || !payload.values) return [];
-    const studentIds = Object.keys(payload.values);
-    return MOCK_STUDENTS.filter((s) => studentIds.includes(s.id));
-  }, [payload]);
-
-  useEffect(() => {
-    if (isOpen && studentsInReport.length > 0 && !activeStudentId) {
-      setActiveStudentId(studentsInReport[0].id);
+    // Resolve Turma
+    let displayTurma = payload.studentInfo?.turma || '';
+    if (displayTurma) {
+      const match = displayTurma.match(/^(\d+)(.*)$/);
+      if (match && turmas && turmas.length > 0) {
+        const t = turmas.find((t: any) => String(t.id) === match[1] || String(t.codigo) === match[1]);
+        if (t) {
+           displayTurma = `${t.nome}${match[2]}`.trim();
+        }
+      }
     }
-  }, [isOpen, studentsInReport, activeStudentId]);
 
-  if (!isOpen || !payload || !template) return null;
+    const info = { 
+        ...(payload.studentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null }), 
+        turma: displayTurma 
+    };
 
-  const activeStudent = studentsInReport.find((s) => s.id === activeStudentId);
-  const studentValues = activeStudent ? payload.values[activeStudent.id] : {};
+    const temp = MOCK_TEMPLATES.find((t) => t.id === payload.templateId) || {
+       id: payload.templateId,
+       name: title.replace('Relatório: ', '').replace('Relatório Personalizado: ', ''),
+       sections: payload.template?.sections || []
+    };
 
-  return (
+    const firstStudentId = Object.keys(payload.values || {})[0];
+    const studentValues = firstStudentId ? payload.values[firstStudentId] : {};
+
+    let obsValue = '';
+    const fields: { label: string; value: string; id: string }[] = [];
+
+    if (temp) {
+      temp.sections?.forEach((sec: any) => {
+        sec.fields?.forEach((field: any) => {
+           const val = studentValues[field.id] || 'Não preenchido';
+           if (field.label.toLowerCase().includes('obs') || field.label.toLowerCase().includes('observação')) {
+              obsValue = val;
+           } else {
+              fields.push({ label: field.label, value: val, id: field.id });
+           }
+        });
+      });
+    }
+
+    return { resolvedStudentInfo: info, resolvedTemplate: temp, observacaoValue: obsValue, standardFields: fields };
+  }, [payload, attachmentString, turmas]);
+
+  const studentInfo = resolvedStudentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null, turma: '' };
+  const template = resolvedTemplate;
+
+  const content = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
-            <div>
-              <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-              <p className="text-sm text-slate-500 mt-1">Visualização de Respostas</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+      {isOpen && payload && template && (
+        <div className="fixed inset-0 flex items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm" style={{ zIndex: 999999 }}>
+          <motion.div
+            initial={{ y: "100%", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "100%", opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="relative w-full h-full sm:h-[90vh] sm:max-h-[800px] max-w-[420px] bg-white sm:rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col hide-scrollbar overflow-hidden"
+          >
+            {/* Header */}
+            <motion.div 
+              className="relative flex-shrink-0 flex flex-col items-center justify-center text-center overflow-hidden"
+              style={{ height: '86px' }}
+              animate={{
+                background: [
+                  'linear-gradient(135deg, #6D5BFF, #8C7DFF)',
+                  'linear-gradient(135deg, #8C7DFF, #A020F0)',
+                  'linear-gradient(135deg, #A020F0, #4F46E5)',
+                  'linear-gradient(135deg, #4F46E5, #6D5BFF)',
+                ]
+              }}
+              transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
             >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+              {/* Floating orbs for ultra-modern look */}
+              <motion.div 
+                animate={{ x: [-20, 30, -20], y: [-10, 15, -10] }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-0 left-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -translate-x-1/2 -translate-y-1/2"
+              />
+              <motion.div 
+                animate={{ x: [20, -30, 20], y: [10, -15, 10] }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-0 right-0 w-40 h-40 bg-purple-300/30 rounded-full blur-2xl translate-x-1/3 translate-y-1/3"
+              />
+              
+              {/* Suggestive animated icons */}
+              <motion.div animate={{ rotate: [0, 10, 0, -10, 0], scale: [1, 1.1, 1, 1.1, 1] }} transition={{ duration: 4, repeat: Infinity }} className="absolute top-4 left-6 opacity-60">
+                 <Sparkles className="w-5 h-5 text-white" />
+              </motion.div>
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 20, repeat: Infinity, ease: 'linear' }} className="absolute bottom-3 right-12 opacity-50">
+                 <Star className="w-4 h-4 text-white" fill="white" />
+              </motion.div>
 
-          {/* Split Screen Content */}
-          <div className="flex flex-1 overflow-hidden bg-slate-50">
-            {/* Left Sidebar: Students */}
-            <div className="w-1/3 border-r border-slate-200 bg-white overflow-y-auto">
-              <div className="p-4">
-                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 px-2">
-                  Alunos ({studentsInReport.length})
-                </h4>
-                <div className="space-y-2">
-                  {studentsInReport.map((student) => (
-                    <button
-                      key={student.id}
-                      onClick={() => setActiveStudentId(student.id)}
-                      className={`w-full flex items-center p-3 rounded-xl transition-all ${
-                        activeStudentId === student.id
-                          ? 'bg-blue-50 border border-blue-200 shadow-sm'
-                          : 'bg-white border border-transparent hover:bg-slate-50 hover:border-slate-200'
-                      }`}
-                    >
-                      {student.avatarUrl ? (
-                        <img
-                          src={student.avatarUrl}
-                          alt={student.name}
-                          className="w-10 h-10 rounded-full object-cover mr-3 border border-slate-200"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-medium mr-3">
-                          {student.name.charAt(0)}
-                        </div>
-                      )}
-                      <span
-                        className={`font-medium ${
-                          activeStudentId === student.id ? 'text-blue-700' : 'text-slate-700'
-                        }`}
-                      >
-                        {student.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+              <button 
+                onClick={onClose} 
+                className="absolute top-3 right-3 text-white transition-all bg-black/30 hover:bg-black/40 p-4 rounded-full backdrop-blur-md shadow-lg z-20 hover:scale-105 active:scale-95"
+              > 
+                <X className="w-8 h-8" strokeWidth={2.5} /> 
+              </button>
+              <h2 className="text-[17px] font-[800] text-white m-0 leading-tight relative z-10 tracking-wide">
+                Relatório Diário
+              </h2>
+              <p className="text-[12px] mt-0.5 relative z-10 font-[500]" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                {payload.dataReferencia || new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </p>
+            </motion.div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto bg-gradient-to-br from-[#f8f9ff] via-[#f5f3ff] to-[#f0f4ff] flex flex-col relative z-10 hide-scrollbar">
+              
+              {/* Profile Background Layer */}
+              <div className="relative w-full flex flex-col items-center pb-6 overflow-hidden">
+                 {/* Decorative floating shapes */}
+                 <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                   <motion.div 
+                     animate={{ y: [0, -12, 0], rotate: [0, 10, 0] }} 
+                     transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                     className="absolute top-6 left-6 w-12 h-12 rounded-full border-[3px] border-indigo-200/40"
+                   />
+                   <motion.div 
+                     animate={{ y: [0, 15, 0], rotate: [15, -5, 15] }} 
+                     transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+                     className="absolute top-4 right-8 w-16 h-16 bg-purple-200/30 rounded-[20px]"
+                   />
+                   <motion.div 
+                     animate={{ x: [0, 10, 0], y: [0, 5, 0], rotate: [0, 180, 360] }} 
+                     transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
+                     className="absolute top-20 left-12 w-6 h-6 border-[3px] border-purple-200/40"
+                     style={{ clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)' }}
+                   />
+                 </div>
+
+                 {/* Avatar overlapping */}
+                 <div className="relative -mt-12 mb-3 z-10">
+                   {studentInfo.avatarUrl ? (
+                     <img 
+                       src={studentInfo.avatarUrl} 
+                       alt={studentInfo.name} 
+                       className="w-[100px] h-[100px] rounded-full object-cover border-[4px] border-white/80 backdrop-blur-sm shadow-[0_8px_32px_rgba(99,102,241,0.15)] bg-slate-100" 
+                     />
+                   ) : (
+                     <div className="w-[100px] h-[100px] rounded-full bg-indigo-100/80 backdrop-blur-sm text-indigo-500 flex items-center justify-center text-3xl font-bold border-[4px] border-white/80 shadow-[0_8px_32px_rgba(99,102,241,0.15)]">
+                       {studentInfo.name.charAt(0)}
+                     </div>
+                   )}
+                 </div>
+                 
+                 <h3 className="text-[19px] font-[800] text-[#111827] text-center m-0 leading-tight relative z-10">{studentInfo.name}</h3>
+                 {studentInfo.turma && (
+                   <p className="text-[14px] font-[500] text-[#6B7280] mt-1 text-center relative z-10">{studentInfo.turma}</p>
+                 )}
               </div>
-            </div>
 
-            {/* Right Content: Read-only report answers */}
-            <div className="w-2/3 overflow-y-auto p-8">
-              {activeStudent ? (
-                <div className="max-w-2xl mx-auto space-y-8">
-                  <div className="flex items-center space-x-4 mb-8 pb-6 border-b border-slate-200">
-                    <img
-                      src={activeStudent.avatarUrl}
-                      alt={activeStudent.name}
-                      className="w-16 h-16 rounded-full border-2 border-white shadow-md"
-                    />
-                    <div>
-                      <h3 className="text-2xl font-bold text-slate-800">{activeStudent.name}</h3>
-                      <p className="text-slate-500">Respostas do relatório</p>
+              {/* Main Info Area */}
+              <div className="w-full px-4 pb-8 flex flex-col items-center relative z-20">
+                {/* Fields List */}
+                <div className="w-full bg-white/40 backdrop-blur-xl border border-white/80 shadow-[0_8px_32px_rgba(99,102,241,0.06)] rounded-[20px] overflow-hidden">
+                {standardFields.length > 0 ? (
+                  standardFields.map((field, index) => (
+                    <div 
+                      key={field.id} 
+                      className={`flex justify-between items-center p-4 ${index !== standardFields.length - 1 ? 'border-b border-white/60' : ''}`}
+                    >
+                      <span className="text-[15px] font-[600] text-[#374151]">{field.label}</span>
+                      <span className={`text-[15px] font-[600] ${field.value === 'Não preenchido' ? 'text-[#9CA3AF]' : 'text-[#22C55E]'}`}>
+                        {field.value}
+                      </span>
                     </div>
-                  </div>
+                  ))
+                ) : (
+                   <p className="text-[#6B7280] text-[14px] text-center py-6">Nenhum item respondido.</p>
+                )}
+              </div>
 
-                  {template.sections.map((section) => (
-                    <div key={section.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-5">
-                      <h4 className="text-lg font-semibold text-slate-700 flex items-center">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500 mr-2" />
-                        {section.title}
-                      </h4>
-                      <div className="space-y-4 pl-7">
-                        {section.fields.map((field) => {
-                          const answer = studentValues[field.id];
-                          return (
-                            <div key={field.id} className="flex flex-col space-y-1">
-                              <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">
-                                {field.label}
-                              </span>
-                              <div className="text-slate-800 bg-slate-50 p-3 rounded-lg border border-slate-100 min-h-[44px] flex items-center">
-                                {answer ? (
-                                  <span className="font-medium">{answer}</span>
-                                ) : (
-                                  <span className="text-slate-400 italic">Não preenchido</span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                  <p>Selecione um aluno para ver as respostas.</p>
+              {/* Observação Block */}
+              {observacaoValue && observacaoValue !== 'Não preenchido' && (
+                <div className="w-full mt-4 bg-[#F7F5FF] rounded-[16px] p-4 relative">
+                  <h4 className="text-[#6D5BFF] font-[700] mb-2 text-[15px]">Observação</h4>
+                  <p className="text-[#4B5563] text-[14px] leading-relaxed pr-6">
+                    {observacaoValue}
+                  </p>
+                  <Heart className="w-5 h-5 text-[#6D5BFF] fill-[#6D5BFF] absolute bottom-4 right-4 opacity-60" />
                 </div>
               )}
-            </div>
-          </div>
-        </motion.div>
-      </div>
+
+              {/* Footer */}
+              <div className="w-full mt-4 flex items-center justify-center text-center bg-[#F7F5FF] rounded-[16px] p-4">
+                <span className="text-[13px] text-[#6D5BFF] font-[500]">
+                  💜 Obrigado por acompanhar o desenvolvimento de {studentInfo.name.split(' ')[0]}!
+                </span>
+              </div>
+            </div> {/* Close Main Info Area */}
+            </div> {/* Close Content Area */}
+          </motion.div>
+        </div>
+      )}
     </AnimatePresence>
   );
+
+  if (!mounted) return null;
+  return createPortal(content, document.body);
 }

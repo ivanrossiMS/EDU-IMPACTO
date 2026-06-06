@@ -93,3 +93,4 @@ tsc*.txt
 scratch*.js
 .agent/scripts/
 scratch/
+*.zip

@@ -69,6 +69,8 @@ interface ComunicadoViewModalProps {
   setOpenedFormStr?: (anexo: string) => void
   setMaximizedImageStr?: (url: string) => void
   setMaximizedVideoStr?: (url: string) => void
+  setOpenedReportTask?: (anexo: string) => void
+  setOpenedReportPayload?: (anexo: string) => void
 }
 
 export function ComunicadoViewModal({
@@ -81,8 +83,12 @@ export function ComunicadoViewModal({
   isAdminMode = false,
   setOpenedFormStr,
   setMaximizedImageStr,
-  setMaximizedVideoStr
+  setMaximizedVideoStr,
+  setOpenedReportTask,
+  setOpenedReportPayload
 }: ComunicadoViewModalProps) {
+  const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingMsg, setLoadingMsg] = useState(true)
   const [newMessage, setNewMessage] = useState('')
@@ -109,12 +115,12 @@ export function ComunicadoViewModal({
   }
 
   useEffect(() => {
-    if (comunicado.permiteResposta) {
+    if (canReply) {
       fetchMessages()
       const interval = setInterval(fetchMessages, 10000)
       return () => clearInterval(interval)
     }
-  }, [comunicado.id, currentUserSlug, isAdminMode, comunicado.permiteResposta])
+  }, [comunicado.id, currentUserSlug, isAdminMode, canReply])
 
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return
@@ -420,6 +426,8 @@ export function ComunicadoViewModal({
                   
                   const isForm = parsed.name.startsWith('Formulário:')
                   const isRel = parsed.name.startsWith('Relatório:')
+                  const isReportTask = parsed.name.startsWith('Tarefa de Relatório:')
+                  const isReportPayload = parsed.url.startsWith('payload:') || parsed.mime === 'report-payload' || parsed.name.includes('12at') || parsed.name.startsWith('Relatório Personalizado:')
                   const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif')
                   const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4')
                   
@@ -442,15 +450,17 @@ export function ComunicadoViewModal({
                     return (
                       <div key={idx} style={{ maxWidth: 800, padding: '16px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} 
                            onClick={() => {
-                             if ((isForm || isRel) && setOpenedFormStr) setOpenedFormStr(anexo)
+                             if (isReportTask && setOpenedReportTask) setOpenedReportTask(anexo)
+                             else if (isReportPayload && setOpenedReportPayload) setOpenedReportPayload(anexo)
+                             else if ((isForm || isRel) && setOpenedFormStr) setOpenedFormStr(anexo)
                              else handleDownload(parsed)
                            }}>
-                        <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f1f5f9', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <FileText size={24} />
                         </div>
                         <div>
-                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{parsed.name.replace(/^(Formulário:|Relatório:)\s*/, '')}</div>
-                           <div style={{ fontSize: 13, color: '#64748b' }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : 'Documento anexo'}</div>
+                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '')}</div>
+                           <div style={{ fontSize: 13, color: '#64748b' }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : 'Documento anexo'}</div>
                         </div>
                       </div>
                     )
@@ -484,7 +494,7 @@ export function ComunicadoViewModal({
             )}
 
             {/* Comments Feed Area */}
-            {comunicado.permiteResposta && (
+            {canReply && (
               <div style={{ marginTop: 24, maxWidth: 800 }}>
                 {messages.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -533,7 +543,7 @@ export function ComunicadoViewModal({
           </div>
 
           {/* FOOTER - FIXED INPUT */}
-          {comunicado.permiteResposta && (
+          {canReply && (
             <div className="cvm-footer">
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: '50%', background: '#f8fafc', color: '#64748b' }}>
                 <input type="file" style={{ display: 'none' }} multiple onChange={handleFileUpload} disabled={isUploading} />

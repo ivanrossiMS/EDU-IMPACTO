@@ -347,7 +347,7 @@ export default function MultiUnidadesPage() {
                             </div>
                           )}
                           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                                {u.codigoMec ? `MEC: ${u.codigoMec}` : ''}{u.idCenso ? ` · INEP: ${u.idCenso}` : ''}
+                                {u.codigoMec ? `MEC: ${u.codigoMec}` : ''}
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: 4 }}>

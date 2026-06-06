@@ -1,4 +1,5 @@
 'use client'
+import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
@@ -12,7 +13,7 @@ import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
-import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   // removido const { momentosFeed } = useAgendaDigital()
@@ -41,40 +42,16 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return String(nomeTurma).split('-')[0].trim()
   })()
   
-  const [momentosFeed, setMomentosFeed, { loading, setLocal }] = useSupabaseArray<any>('agenda/momentos', [])
+  const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, '/api/agenda/momentos')
+  const [momentosFeed, setMomentosFeed] = useState<any[]>(fetchMomentos)
 
-  useAgendaRealtime({
-    table: 'momentos',
-    toastConfig: {
-      enabled: true,
-      insertMessage: (doc) => `Novo momento adicionado!`,
-      updateMessage: (doc) => `Momento atualizado!`,
-      icon: <Camera size={18} color="#00D2FF" />
-    },
-    onInsert: ({ new: newMomento }) => {
-      const m = { ...newMomento, _isNew: true };
-      if (setLocal) {
-        setLocal((prev: any) => {
-          if (prev.some((p: any) => p.id === m.id)) return prev;
-          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
-          return newFeed;
-        });
-        setTimeout(() => {
-          setLocal((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
-        }, 5000);
-      }
-    },
-    onUpdate: ({ new: updatedMomento }) => {
-      if (setLocal) {
-        setLocal((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
-      }
-    },
-    onDelete: ({ old }) => {
-      if (setLocal) {
-        setLocal((prev: any) => prev.filter((p: any) => p.id !== old?.id));
-      }
+  // Sync state with fetched data
+  useEffect(() => {
+    if (fetchMomentos && fetchMomentos.length > 0) {
+      setMomentosFeed(fetchMomentos)
     }
-  });
+  }, [fetchMomentos])
+
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
   const [visibleCount, setVisibleCount] = useState(5)
@@ -385,11 +362,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
         {meusMomentos.length === 0 ? (
           <div style={{ padding: '0 24px' }}>
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '80px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                <Loader2 size={32} className="animate-spin" style={{ color: '#6366f1' }} />
-                <div style={{ fontSize: 16, fontWeight: 600, color: '#9ca3af' }}>Carregando momentos...</div>
-              </div>
+            {loading || !aluno ? (
+              <MomentoSkeleton count={2} />
             ) : (
               <EmptyStateCard 
                 title="Nenhum Momento Registrado"

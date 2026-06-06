@@ -64,9 +64,11 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   const turmas = useMemo(() => {
     return allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
   }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
-  const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
-  const [alunos] = useSupabaseArray<any>('alunos?lightweight=true')
-  const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
+  const [alunos, _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos?lightweight=true')
+  const [colaboradores, _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  const isLoadingData = loadingGrupos || loadingAlunos || loadingColabs
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [currentCatId, setCurrentCatId] = useState<string | null>(null)
@@ -151,6 +153,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }
 
   useEffect(() => {
+    if (isOpen && availableAnos.length > 0 && selectedAno === '') {
+      const currentYear = new Date().getFullYear().toString()
+      if (availableAnos.includes(currentYear)) {
+        setSelectedAno(currentYear)
+      } else {
+        setSelectedAno(availableAnos[0])
+      }
+    }
+  }, [isOpen, availableAnos, selectedAno])
+
+  useEffect(() => {
     if (!isOpen) {
       setHasHydrated(false)
       setCurrentCatId(null)
@@ -192,8 +205,16 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
         } else if (type === 'grupo') {
            const g = gruposManuais.find((x:any) => String(x.id) === String(s.id).replace('g_',''))
            if (g) {
-             const gAlunos = (g.alunosIds || []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
-             const gColabs = (g.colaboradoresIds || []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
+             let aIds = g.alunosIds || []
+             if (typeof aIds === 'string') {
+               try { aIds = JSON.parse(aIds) } catch(e) { aIds = [] }
+             }
+             let cIds = g.colaboradoresIds || []
+             if (typeof cIds === 'string') {
+               try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
+             }
+             const gAlunos = (Array.isArray(aIds) ? aIds : []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
+             const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
              gAlunos.forEach((a:any) => map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' })
              gColabs.forEach((c:any) => map[`f_${c.id}`] = { id: `f_${c.id}`, name: c.nome, type: 'funcionario' })
            }
@@ -247,7 +268,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           id: `t_${t.id}`,
           title: t.nome,
           subtitle: t.turno || 'Turma',
-          countBadge: `${payloads.length} pessoas`,
+          countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} pessoas`,
           type: 'turma',
           icon: Users,
           leafIds: payloads.map(p => p.id),
@@ -261,7 +282,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           id: `cat_${cat.name}`,
           title: cat.name,
           subtitle: `Categoria com ${cat.turmas.length} turmas`,
-          countBadge: `${catPeopleIds.size} pessoas`,
+          countBadge: isLoadingData ? 'Carregando...' : `${catPeopleIds.size} pessoas`,
           type: 'category',
           icon: Building2,
           leafIds: Array.from(catPeopleIds),
@@ -281,8 +302,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     const sortedGrupos = [...visibleGrupos].sort((a, b) => a.nome.localeCompare(b.nome))
     sortedGrupos.forEach((g: any) => {
-      const gAlunos = (g.alunosIds || []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
-      const gColabs = (g.colaboradoresIds || []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
+      let aIds = g.alunosIds || []
+      if (typeof aIds === 'string') {
+        try { aIds = JSON.parse(aIds) } catch(e) { aIds = [] }
+      }
+      let cIds = g.colaboradoresIds || []
+      if (typeof cIds === 'string') {
+        try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
+      }
+      
+      const gAlunos = (Array.isArray(aIds) ? aIds : []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
+      const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
       
       const payloads = [
         ...gAlunos.map((a: any) => ({ id: `a_${a.id}`, name: a.nome, type: 'aluno' })),
@@ -294,7 +324,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       items.push({
         id: `g_${g.id}`,
         title: g.nome,
-        countBadge: `${payloads.length} pessoas`,
+        countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} pessoas`,
         type: 'grupo',
         icon: GraduationCap,
         leafIds: payloads.map(p => p.id),

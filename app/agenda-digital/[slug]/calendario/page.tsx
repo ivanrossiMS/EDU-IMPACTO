@@ -30,9 +30,7 @@ function todayStr() {
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
 }
 
-// Client-side in-memory caches to prevent redundant loading of the complete lists
-let cacheAlunos: any[] | null = null;
-let cacheFuncionarios: any[] | null = null;
+// Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
   const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
@@ -168,23 +166,13 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        if (!cacheAlunos || !cacheFuncionarios) {
-          const [resAlunos, resProfs] = await Promise.all([
-            cacheAlunos ? Promise.resolve({ data: cacheAlunos }) : fetch('/api/alunos?limit=2000&lightweight=true').then(r => r.json()),
-            cacheFuncionarios ? Promise.resolve(cacheFuncionarios) : fetch('/api/funcionarios?limit=500&lightweight=true').then(r => r.json())
-          ])
-          if (!cacheAlunos) cacheAlunos = resAlunos.data || [];
-          if (!cacheFuncionarios) cacheFuncionarios = Array.isArray(resProfs) ? resProfs : (resProfs.data || []);
-        }
-
-        const todos = [
-          ...(cacheAlunos || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
-          ...(cacheFuncionarios || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
-        ]
         const mesView = month + 1
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
+        if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
+        const todos = await req.json()
         
         // Filter birthdays only for peers in the SAME CLASS or teachers
-        const niversMes = todos.filter(p => {
+        const niversMes = todos.filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
           const m = parseInt(data.split('-')[1])
@@ -198,7 +186,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
             return pNomeTurmaLimpo.toLowerCase() === turmaDoAluno.toLowerCase()
           }
           return true // Keep teachers visible
-        }).map(p => {
+        }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           const dia = parseInt(data.split('-')[2])
           let isProximo = false

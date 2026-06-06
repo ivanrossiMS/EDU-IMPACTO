@@ -157,7 +157,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             overflow-y: auto;
             overflow-x: hidden;
             position: relative;
-            background: #f8fafc;
+            background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
           }
 
           .ad-content-inner {
@@ -219,7 +219,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
         `}} />
         
-        {!isRouterPage && !adLoading && (
+        {!isRouterPage && (
           <div className="ad-sidebar-container">
             <ADSidebar />
           </div>

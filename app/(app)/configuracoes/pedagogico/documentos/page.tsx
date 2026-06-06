@@ -35,7 +35,7 @@ const CAMPOS_DISPONIVEIS: { grupo: string; fonte: MapeamentoUsuario['fonte']; ic
     { campo: 'nome',                 label: 'Nome completo',                  exemplo: 'João Pedro da Silva',      caminho: 'Acadêmico → Alunos' },
     { campo: 'matricula',            label: 'Número de matrícula',            exemplo: '20260001',                 caminho: 'Acadêmico → Alunos' },
     { campo: 'rga',                  label: 'RGA',                            exemplo: '20260001234',               caminho: 'Acadêmico → Alunos' },
-    { campo: 'idCenso',              label: 'ID Censo Escolar',               exemplo: '12345678901',               caminho: 'Relatórios → Censo' },
+
     { campo: 'cpf',                  label: 'CPF do aluno',                   exemplo: '123.456.789-00',           caminho: 'Acadêmico → Alunos → Dados Pessoais' },
     { campo: 'rg',                   label: 'RG do aluno',                    exemplo: '12.345.678-9',             caminho: 'Acadêmico → Alunos → Dados Pessoais' },
     { campo: 'orgEmissorRg',         label: 'Orgão emissor RG',               exemplo: 'SSP/SP',                   caminho: 'Acadêmico → Alunos → Dados Pessoais' },
@@ -427,7 +427,7 @@ function ModalMapear({ mascaras, mapeamentos, onClose, onSave, alunoDemo }: {
         ['nasc|nascimento|data_nasc',  { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'dataNascimento' }],
         ['matricula|matric',           { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'matricula' }],
         ['rga',                        { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'rga' }],
-        ['id_censo|censo',             { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'idCenso' }],
+
         ['sexo',                       { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'sexo' }],
         ['raca|cor|etnia',             { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'racaCor' }],
         ['naturalidade',               { codigoMascara: m.codigoMascara, fonte: 'aluno',     campo: 'naturalidade' }],

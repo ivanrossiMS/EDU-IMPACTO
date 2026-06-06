@@ -160,10 +160,7 @@ export function ADSidebar() {
     return undefined
   }
 
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    let mobileTabs: any[] = []
+  let mobileTabs: any[] = []
     
     // On student/family slug paths, always show only family tabs — never admin tabs
     if (!isFamily && !isSlugPath && alunoId !== "colaborador" && !alunoId) {
@@ -185,7 +182,6 @@ export function ADSidebar() {
 
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos`, badgeVal: unreadStats.unreadMomentos || undefined },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario`, badgeVal: unreadStats.unreadCalendario || undefined },
-        { id: 'financeiro', label: 'Financ', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
         { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias`, badgeVal: unreadStats.unreadOcorrencias || undefined },
         { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas`, badgeVal: unreadStats.unreadNotas || undefined },
@@ -196,102 +192,123 @@ export function ADSidebar() {
         }
         return true
       })
-    }
-
-    return (
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'rgba(10, 12, 26, 0.85)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-        zIndex: 9999,
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-        boxShadow: '0 -10px 40px rgba(0,0,0,0.5)'
-      }}>
-        {/* Borda Neon Animada */}
-        <div className="animated-neon-border" />
-        
-        
-        <div className="no-scrollbar" style={{ 
-           display: 'flex', 
-           alignItems: 'center', 
-           overflowX: 'auto', 
-           padding: '12px 16px 8px',
-           gap: 4,
-           scrollSnapType: 'x mandatory'
+    }    return (
+      <>
+      <div className="ad-nav-mobile-wrapper">
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: 'linear-gradient(90deg, #9f00ff 0%, #0066ff 50%, #00bfff 100%)',
+          borderRadius: '24px 24px 0 0',
+          zIndex: 9999,
+          boxShadow: '0 -4px 30px rgba(0, 102, 255, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          overflow: 'hidden',
+          paddingBottom: 'env(safe-area-inset-bottom)'
         }}>
-          {mobileTabs.map((item, idx) => {
-            const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
-            const badge = item.badgeVal !== undefined ? item.badgeVal : getBadgeValue(item.id)
-            
-            return (
-              <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 76, scrollSnapAlign: 'start' }}>
-                <motion.div 
-                  whileTap={{ scale: 0.9 }}
-                  style={{
-                    position: 'relative',
-                    width: 48, height: 32,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 16,
-                    background: isActive ? 'rgba(0, 210, 255, 0.15)' : 'transparent',
-                    color: isActive ? '#00D2FF' : 'rgba(255,255,255,0.4)',
-                    transition: 'all 0.3s',
-                    boxShadow: isActive ? '0 0 15px rgba(0,210,255,0.2)' : 'none'
-                  }}
-                >
-                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 8px rgba(0, 210, 255, 0.5))' : 'none' }} />
-                  {badge && (
-                    <div style={{ 
-                      position: 'absolute', top: -6, right: 0, 
-                      background: 'linear-gradient(135deg, #FF0080, #7928ca)', 
-                      color: 'white', fontSize: 10, fontWeight: 800, 
-                      padding: '0 5px', borderRadius: 10, 
-                      border: '2px solid #0a0c1a', minWidth: 16, textAlign: 'center',
-                      boxShadow: '0 0 8px rgba(255,0,128,0.5)'
-                    }}>
-                      {badge}
-                    </div>
+          {/* Subtle dot pattern overlay on the right */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            right: 0,
+            width: '120px',
+            background: 'radial-gradient(rgba(255,255,255,0.2) 1.5px, transparent 1.5px)',
+            backgroundSize: '10px 10px',
+            backgroundPosition: '0 0',
+            maskImage: 'linear-gradient(to right, transparent, black)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent, black)',
+            pointerEvents: 'none',
+            zIndex: 0
+          }} />
+
+          <div className="no-scrollbar" style={{
+            display: 'flex',
+            alignItems: 'center',
+            overflowX: 'auto',
+            padding: '10px 16px',
+            width: '100%',
+            gap: 0,
+            scrollSnapType: 'x mandatory'
+          }}>
+            {mobileTabs.map((item, idx) => {
+              const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
+              const badge = item.badgeVal !== undefined ? item.badgeVal : getBadgeValue(item.id)
+              
+              return (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', minWidth: '76px', scrollSnapAlign: 'start', zIndex: 1, position: 'relative' }}>
+                  {idx > 0 && (
+                    <div style={{ position: 'absolute', left: 0, width: 1, height: 28, background: 'rgba(255,255,255,0.15)' }} />
                   )}
-                </motion.div>
-                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, color: isActive ? 'white' : 'rgba(255,255,255,0.4)', transition: 'all 0.3s', whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
-                  {item.label}
-                </span>
-              </Link>
-            )
-          })}
+                  <Link href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
+                    <motion.div 
+                      whileTap={{ scale: 0.9 }}
+                      style={{
+                        position: 'relative',
+                        width: 36, height: 36,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white',
+                      }}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="active-glow"
+                          style={{
+                            position: 'absolute',
+                            width: 50, height: 50,
+                            borderRadius: '50%',
+                            background: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 40%, transparent 70%)',
+                            zIndex: 0
+                          }}
+                        />
+                      )}
+                      <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none', zIndex: 1 }} />
+                      {badge && (
+                        <div style={{ 
+                          position: 'absolute', top: 0, right: 0, 
+                          background: '#ef4444', 
+                          color: 'white', fontSize: 10, fontWeight: 800, 
+                          width: 14, height: 14, borderRadius: '50%', 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '2px solid rgba(255,255,255,0.2)',
+                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
+                          zIndex: 2
+                        }}>
+                          {badge}
+                        </div>
+                      )}
+                    </motion.div>
+                    <span style={{ fontSize: 9, fontWeight: isActive ? 800 : 500, color: 'white', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
+                      {item.label}
+                    </span>
+                    
+                    {isActive && (
+                      <motion.div
+                        layoutId="active-indicator"
+                        style={{
+                          position: 'absolute',
+                          bottom: -6,
+                          width: 14,
+                          height: 3,
+                          borderRadius: 2,
+                          background: 'white',
+                          boxShadow: '0 0 6px rgba(255,255,255,0.8)'
+                        }}
+                      />
+                    )}
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
         </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          .no-scrollbar::-webkit-scrollbar { display: none; }
-          .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-          @keyframes border-sweep {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-          .animated-neon-border {
-            position: absolute;
-            top: -2px;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #FF0080, #7928CA, #00D2FF, #7928CA, #FF0080);
-            background-size: 200% 200%;
-            animation: border-sweep 3s linear infinite;
-            box-shadow: 0 0 12px rgba(255, 0, 128, 0.6), 0 0 15px rgba(0, 210, 255, 0.5);
-            z-index: 10;
-          }
-        `}} />
       </div>
-    )
-  }
-
-  return (
-    <motion.aside
+      
+      <div className="ad-nav-desktop-wrapper" style={{ height: '100%' }}>
+      <motion.aside
       initial={false}
       animate={{ width: isCollapsed ? 90 : 280 }}
       transition={{ type: 'spring', stiffness: 200, damping: 25 }}
@@ -474,7 +491,6 @@ export function ADSidebar() {
 
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon, badge: unreadStats.unreadMomentos || undefined },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar, badge: unreadStats.unreadCalendario || undefined },
-                    { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
                     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle, badge: unreadStats.unreadOcorrencias || undefined },
                     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap, badge: unreadStats.unreadNotas || undefined },
@@ -612,7 +628,7 @@ export function ADSidebar() {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (
                     <button 
-                      onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                      onClick={() => router.push(isFamily ? '/agenda-digital/selecionar-aluno' : '/agenda-digital/selecionar-perfil-admin')}
                       style={{
                         flex: 1, height: 32, borderRadius: 8, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
                         color: 'white', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
@@ -663,7 +679,7 @@ export function ADSidebar() {
                 </div>
                 {currentUser?.cargo !== 'Aluno' && (
                   <button 
-                    onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                    onClick={() => router.push(isFamily ? '/agenda-digital/selecionar-aluno' : '/agenda-digital/selecionar-perfil-admin')}
                     style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer' }}
                   >
                     <Users size={18} />
@@ -684,12 +700,19 @@ export function ADSidebar() {
             )}
           </div>
           </div>
+        </div>
+      </motion.aside>
       </div>
-
       <style dangerouslySetInnerHTML={{__html: `
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .ad-nav-mobile-wrapper { display: none; }
+        .ad-nav-desktop-wrapper { display: block; height: 100%; }
+        @media (max-width: 768px) {
+          .ad-nav-mobile-wrapper { display: block; }
+          .ad-nav-desktop-wrapper { display: none; }
+        }
       `}} />
-    </motion.aside>
-  )
+      </>
+    )
 }

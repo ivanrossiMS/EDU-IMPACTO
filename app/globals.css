@@ -1244,3 +1244,79 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
 }
 
 @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+
+/* AGENDA DIGITAL - ULTRA MODERN GLASS REDESIGN */
+.ad-main-scroll {
+  background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%) !important;
+}
+
+/* Remove backgrounds from inner wrappers to let the main gradient shine through */
+.ad-comunicados-wrapper,
+.ad-momentos-wrapper,
+.ad-page-wrapper {
+  background: transparent !important;
+}
+
+/* Ultra Modern Glass Cards */
+.ad-feed-card, .card.ad-feed-card {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5) !important;
+  border-radius: 28px !important;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.ad-feed-card:hover, .card.ad-feed-card:hover {
+  background: rgba(255, 255, 255, 0.8) !important;
+  transform: translateY(-4px) !important;
+  box-shadow: 
+    0 20px 50px -10px rgba(99, 102, 241, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 1) !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Global Agenda Digital Cards - Ultra Modern Glass */
+.agenda-digital-wrapper .card {
+  background: rgba(255, 255, 255, 0.6) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.05),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5) !important;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.agenda-digital-wrapper .card:hover {
+  background: rgba(255, 255, 255, 0.8) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 
+    0 20px 50px -10px rgba(99, 102, 241, 0.15),
+    inset 0 0 0 1px rgba(255, 255, 255, 1) !important;
+  border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+.ad-main-scroll {
+  background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%) !important;
+}
+
+/* FIX FLICKERING ON SCROLL FOR AGENDA DIGITAL */
+.ad-main-scroll {
+  -webkit-overflow-scrolling: touch !important;
+  transform: translateZ(0) !important;
+}
+
+/* Force hardware acceleration on all animated background elements */
+.ad-comunicados-wrapper > div[style*="blur"],
+.ad-comunicados-wrapper > div[style*="animation"] {
+  will-change: transform, opacity !important;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+}

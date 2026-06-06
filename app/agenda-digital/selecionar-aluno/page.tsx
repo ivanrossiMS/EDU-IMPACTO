@@ -5,7 +5,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2 } from 'lucide-react'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -53,8 +53,9 @@ function SelecionarAlunoContent() {
   const [meusAlunos, setMeusAlunos] = useState<any[]>([])
   // Track whether we've completed at least one successful fetch
   const [hasFetched, setHasFetched] = useState(false)
-  // Prevents showing the "no students" empty state before the first real API response
   const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
+
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null)
 
   // 1. Obter metadados do responsável autenticado
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
@@ -720,7 +721,7 @@ function SelecionarAlunoContent() {
               meusAlunos.map((student) => {
                 const pendingAlerts = student.pendenciasAtrasadas || 0;
                 return (
-                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}`} className="portal-modern-card">
+                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
                     <div className="card-avatar-container">
                       {student.foto ? (
                         <img src={student.foto} alt={student.nome} className="card-avatar-img" />
@@ -764,7 +765,11 @@ function SelecionarAlunoContent() {
                       )}
 
                       <div className="chevron-circle-btn">
-                        <ChevronRight size={18} strokeWidth={2.5} />
+                        {loadingCardId === student.id ? (
+                          <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
+                        ) : (
+                          <ChevronRight size={18} strokeWidth={2.5} />
+                        )}
                       </div>
                     </div>
                   </Link>
@@ -788,7 +793,11 @@ function SelecionarAlunoContent() {
             </div>
 
             <div className="cards-column">
-              <Link href={`/agenda-digital/colaborador/${redirectTarget}`} className="portal-modern-card collaborator-theme">
+              <Link 
+                href={`/agenda-digital/colaborador/${redirectTarget}`} 
+                onClick={() => setLoadingCardId('colaborador')}
+                className="portal-modern-card collaborator-theme"
+              >
                 <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
                   {currentUser.foto ? (
                     <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
@@ -808,7 +817,11 @@ function SelecionarAlunoContent() {
 
                 <div className="card-actions-wrapper">
                   <div className="chevron-circle-btn">
-                    <ChevronRight size={18} strokeWidth={2.5} />
+                    {loadingCardId === 'colaborador' ? (
+                      <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#3b82f6' }} />
+                    ) : (
+                      <ChevronRight size={18} strokeWidth={2.5} />
+                    )}
                   </div>
                 </div>
               </Link>

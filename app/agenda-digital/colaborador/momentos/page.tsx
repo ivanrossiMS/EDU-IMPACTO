@@ -10,15 +10,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { useApp } from '@/lib/context'
-import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
+import { MomentoSkeleton } from '../../components/MomentoSkeleton'
+
 export default function ADMomentosPage() {
-  const { momentosFeed } = useAgendaDigital()
+  const { momentosFeed, isDataLoading } = useAgendaDigital()
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
   
   
@@ -41,41 +42,6 @@ export default function ADMomentosPage() {
     desc: ''
   })
 
-  useAgendaRealtime({
-    table: 'momentos',
-    toastConfig: {
-      enabled: true,
-      insertMessage: (doc) => `Novo momento adicionado!`,
-      updateMessage: (doc) => `Momento atualizado!`,
-      icon: <Camera size={18} color="#00D2FF" />
-    },
-    onInsert: ({ new: newMomento }) => {
-      const m = { ...newMomento, _isNew: true };
-      if (setMomentosFeedLocally) {
-        setMomentosFeedLocally((prev: any) => {
-          if (prev.some((p: any) => p.id === m.id)) return prev;
-          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
-          return newFeed;
-        });
-        setTimeout(() => {
-          setMomentosFeedLocally((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
-        }, 5000);
-      }
-    },
-    onUpdate: ({ new: updatedMomento }) => {
-      if (setMomentosFeedLocally) {
-        setMomentosFeedLocally((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
-      }
-    },
-    onDelete: ({ old }) => {
-      if (setMomentosFeedLocally) {
-        setMomentosFeedLocally((prev: any) => prev.filter((p: any) => p.id !== old?.id));
-      }
-    }
-  });
-
-
-
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
 
@@ -96,11 +62,13 @@ export default function ADMomentosPage() {
 
   const { chatGroups } = useAgendaDigital()
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
+  const [selectedYear, setSelectedYear] = useState<string>('')
   const [visibleCount, setVisibleCount] = useState(5)
 
   const turmaOptions = React.useMemo(() => {
     if (!currentUser?.id) return [];
-    if (currentUser.perfil === 'administrador' || currentUser.cargo === 'Administrador' || currentUser.perfil === 'admin') return turmas;
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
     
     const userGroups = (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
@@ -111,16 +79,52 @@ export default function ADMomentosPage() {
       return colabs.some((id: any) => String(id) === String(currentUser.id));
     });
 
-    const isGlobal = userGroups.some((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-    if (isGlobal) return turmas;
+    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
+    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+      return a === '';
+    });
+    
+    if (hasGlobalWithoutYear) return turmas;
+    
+    const globalYears = new Set(globalGroups.map((g: any) => {
+      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+    }).filter((a: string) => a !== ''));
 
     const accessibleTurmas = turmas.filter((t: any) => {
+       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+       if (globalYears.has(tAno)) return true;
        return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
 
+  const availableYears = React.useMemo(() => {
+    const years = new Set<string>()
+    turmaOptions.forEach((t: any) => {
+      const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || new Date().getFullYear())
+      if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
+    })
+    return Array.from(years).sort((a, b) => b.localeCompare(a)) // Descending
+  }, [turmaOptions])
 
+  useEffect(() => {
+    if (!selectedYear && availableYears.length > 0) {
+      setSelectedYear(availableYears[0])
+    }
+  }, [availableYears, selectedYear])
+
+  useEffect(() => {
+    setSelectedTurmaId('all')
+  }, [selectedYear])
+
+  const filteredTurmas = React.useMemo(() => {
+    if (!selectedYear || selectedYear === 'all') return turmaOptions
+    return turmaOptions.filter((t: any) => {
+      const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || new Date().getFullYear())
+      return year === selectedYear
+    })
+  }, [turmaOptions, selectedYear])
 
   const selectedTurmaName = React.useMemo(() => {
     if (selectedTurmaId === 'all') return 'Todas as Turmas'
@@ -208,7 +212,12 @@ export default function ADMomentosPage() {
         media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
 
-      setMomentosFeed(prev => [post, ...prev])
+      setMomentosFeedLocally?.(prev => [post, ...prev])
+      fetch('/api/agenda/momentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(post)
+      }).catch(err => console.error("Error creating momento:", err))
       setShowModal(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
       adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
@@ -222,15 +231,23 @@ export default function ADMomentosPage() {
   }
 
   const handleLike = (momentId: number | string) => {
-    setMomentosFeed(prev => prev.map(m => {
+    setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
       const myName = currentUser?.nome || 'Você'
       const likesArray = m.likes || []
       const isLiked = likesArray.includes(myName)
-      return {
+      const updatedM = {
         ...m,
         likes: isLiked ? likesArray.filter(name => name !== myName) : [...likesArray, myName]
       }
+      
+      fetch('/api/agenda/momentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedM)
+      }).catch(err => console.error("Error updating momento likes:", err))
+      
+      return updatedM
     }))
   }
 
@@ -238,13 +255,21 @@ export default function ADMomentosPage() {
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 
-    setMomentosFeed(prev => prev.map(m => {
+    setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
       const commentsArray = m.comments || []
-      return {
+      const updatedM = {
         ...m,
         comments: [...commentsArray, { id: Date.now().toString(), author: currentUser?.nome || 'Você', text, time: 'Agora' }]
       }
+      
+      fetch('/api/agenda/momentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedM)
+      }).catch(err => console.error("Error updating momento comments:", err))
+      
+      return updatedM
     }))
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
   }
@@ -433,9 +458,33 @@ export default function ADMomentosPage() {
               Fotos/Vídeos da Turma
             </h2>
             <div style={{ marginTop: 8, position: 'relative', zIndex: 50, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                {availableYears.length > 0 && (
+                  <div style={{ width: 140 }}>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      style={{
+                        width: '100%', height: 38, borderRadius: '12px', padding: '0 32px 0 16px',
+                        border: '1px solid hsl(var(--border-subtle, 220 13% 91%))', 
+                        background: 'hsl(var(--bg-surface, 0 0% 100%))',
+                        color: 'hsl(var(--text-main, 220 39% 11%))', 
+                        fontSize: '14px', fontWeight: 600,
+                        outline: 'none', cursor: 'pointer', appearance: 'none',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                        backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'14\\\' height=\\\'14\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'rgba(0,0,0,0.5)\\\' stroke-width=\\\'2\\\' stroke-linecap=\\\'round\\\' stroke-linejoin=\\\'round\\\'%3E%3Cpath d=\\\'m6 9 6 6 6-6\\\'/%3E%3C/svg%3E")',
+                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center'
+                      }}
+                    >
+                      <option value="all">Todos os Anos</option>
+                      {availableYears.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div style={{ maxWidth: 300, width: '100%' }}>
                   <TurmaDropdown 
-                    turmaOptions={[{id: 'all', nome: 'Todas as Turmas'}, ...turmaOptions]} 
+                    turmaOptions={[{id: 'all', nome: 'Todas as Turmas'}, ...filteredTurmas]} 
                     selectedTurmaId={selectedTurmaId} 
                     setSelectedTurmaId={setSelectedTurmaId} 
                     selectedTurmaName={selectedTurmaName} 
@@ -467,11 +516,15 @@ export default function ADMomentosPage() {
 
         {meusMomentos.length === 0 ? (
           <div style={{ padding: '0 24px' }}>
-            <EmptyStateCard 
-              title="Nenhum Momento Registrado"
-              description={`Ainda não há fotos publicadas para a turma ${selectedTurmaName} hoje.`}
-              icon={<ImageIcon size={48} style={{ opacity: 0.2 }} />}
-            />
+            {isDataLoading || !currentUser ? (
+              <MomentoSkeleton count={2} />
+            ) : (
+              <EmptyStateCard 
+                title="Nenhum Momento Registrado"
+                description={`Ainda não há fotos publicadas para a turma ${selectedTurmaName} hoje.`}
+                icon={<ImageIcon size={48} style={{ opacity: 0.2 }} />}
+              />
+            )}
           </div>
         ) : (
           <div style={{ 

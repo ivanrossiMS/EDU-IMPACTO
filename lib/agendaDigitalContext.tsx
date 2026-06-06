@@ -2,8 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useLocalStorage } from './useLocalStorage'
-import { useData } from './dataContext'
 import { useSupabaseArray } from './useSupabaseCollection'
+import { useQueryComunicados, useQueryMomentos } from '@/lib/hooks/useAgendaQueries'
+import { useQueryClient } from '@tanstack/react-query'
 
 export interface ADComunicado {
   id: string
@@ -141,16 +142,39 @@ const MOCK_MOMENTOS: ADMomento[] = []
 
 export function AgendaDigitalProvider({ children, isFamily = false }: { children: React.ReactNode, isFamily?: boolean }) {
   // Se for família, não faz fetch global massivo (Páginas buscam localmente)
+  const isFamilyFetch = !!isFamily
   const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
 
-  const [comunicados, setComunicadosState, { setLocal: setLocalComunicadosState, loading: comunicadosLoading }] = useSupabaseArray<ADComunicado>('comunicados', [], familyOptions)
+  const queryClient = useQueryClient()
+
+  const comunicadosQuery = useQueryComunicados(isFamilyFetch, '/api/comunicados')
+  const comunicados = comunicadosQuery.data || []
+  const comunicadosLoading = comunicadosQuery.isLoading
+
+  const setLocalComunicadosState = useCallback((updater: any) => {
+    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], updater)
+  }, [queryClient])
+  const setComunicadosState = useCallback((updater: any) => {
+    setLocalComunicadosState(updater)
+  }, [setLocalComunicadosState])
+
   // Módulos desativados/otimizados
   const [chatsList, setChatsList] = useState<ADChat[]>([])
   const [chatGroups, setChatGroups, { loading: chatGroupsLoading }] = useSupabaseArray<ADChatGroup>('agenda/grupos', [], { refreshIntervalMs: 0 })
   const [messagesArray, setMessagesArray] = useState<any[]>([])
   const chatsLoading = false;
   const messagesLoading = false;
-  const [momentosFeed, setMomentosFeed, { setLocal: setLocalMomentosFeed, loading: momentosLoading }] = useSupabaseArray<ADMomento>('agenda/momentos', [], familyOptions)
+  
+  const momentosQuery = useQueryMomentos(isFamilyFetch, '/api/agenda/momentos')
+  const momentosFeed = momentosQuery.data || []
+  const momentosLoading = momentosQuery.isLoading
+
+  const setLocalMomentosFeed = useCallback((updater: any) => {
+    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], updater)
+  }, [queryClient])
+  const setMomentosFeed = useCallback((updater: any) => {
+    setLocalMomentosFeed(updater)
+  }, [setLocalMomentosFeed])
 
 
 

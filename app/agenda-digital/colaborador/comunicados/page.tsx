@@ -17,13 +17,15 @@ import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
-import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
+import { ReportFillerModal } from '@/components/agenda/ReportFillerModal'
+import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoStr: any) => {
@@ -63,7 +65,10 @@ const getAnexoType = (anexoStr: any) => {
   if (name.startsWith('Formulário:')) {
     return { label: 'Formulário', icon: <FileText size={16} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
-  if (name.startsWith('Relatório:')) {
+  if (name.startsWith('Tarefa de Relatório:')) {
+    return { label: 'Tarefa de Relatório', icon: <ClipboardList size={16} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
+  }
+  if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
     return { label: 'Relatório', icon: <FileBarChart size={16} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
@@ -102,6 +107,7 @@ export default function ColaboradorComunicadosPage() {
   
   const [showFormsModal, setShowFormsModal] = useState(false)
   const [showRelsModal, setShowRelsModal] = useState(false)
+  const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
 
   
 
@@ -113,7 +119,8 @@ export default function ColaboradorComunicadosPage() {
 
   const turmaOptions = useMemo(() => {
     if (!currentUser?.id) return [];
-    if (currentUser.perfil === 'administrador' || currentUser.cargo === 'Administrador' || currentUser.perfil === 'admin') return turmas;
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
     
     const userGroups = (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
@@ -124,58 +131,29 @@ export default function ColaboradorComunicadosPage() {
       return colabs.some((id: any) => String(id) === String(currentUser.id));
     });
 
-    const isGlobal = userGroups.some((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-    if (isGlobal) return turmas;
+    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
+    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+      return a === '';
+    });
+    
+    if (hasGlobalWithoutYear) return turmas;
+    
+    const globalYears = new Set(globalGroups.map((g: any) => {
+      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+    }).filter((a: string) => a !== ''));
 
     const accessibleTurmas = turmas.filter((t: any) => {
+       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+       if (globalYears.has(tAno)) return true;
        return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
   
   
-  const { comunicados, setComunicados, setComunicadosLocally } = useAgendaDigital()
-  const loading = false;
+  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading } = useAgendaDigital()
   
-  useAgendaRealtime({
-    table: 'comunicados',
-    toastConfig: {
-      enabled: true,
-      insertMessage: (doc) => `Novo comunicado: ${doc.titulo || 'Sem título'}`,
-      updateMessage: (doc) => `Comunicado atualizado: ${doc.titulo || 'Sem título'}`,
-      icon: <Bell size={18} color="#00D2FF" />
-    },
-    onInsert: ({ new: newCom }) => {
-      const com = { ...newCom, _isNew: true };
-      if (setComunicadosLocally) {
-        setComunicadosLocally((prev: any) => {
-          if (prev.some((c: any) => c.id === com.id)) return prev;
-          const newFeed = [com, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
-          return newFeed;
-        });
-        setTimeout(() => {
-          setComunicadosLocally((curr: any) => curr.map((c: any) => c.id === com.id ? { ...c, _isNew: false } : c));
-        }, 5000);
-      }
-    },
-    onUpdate: ({ new: updatedCom }) => {
-      if (setComunicadosLocally) {
-        setComunicadosLocally((prev: any) => prev.map((c: any) => c.id === updatedCom.id ? { ...c, ...updatedCom } : c));
-      }
-      if (selectedComunicado?.id === updatedCom.id) {
-        setSelectedComunicado((prev: any) => ({ ...prev, ...updatedCom }));
-      }
-    },
-    onDelete: ({ old }) => {
-      if (setComunicadosLocally) {
-        setComunicadosLocally((prev: any) => prev.filter((c: any) => c.id !== old?.id));
-      }
-      if (selectedComunicado?.id === old?.id) {
-        setSelectedComunicado(null);
-      }
-    }
-  });
-
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
   const handleEnviar = (data: any, asRascunho = false) => {
@@ -193,8 +171,7 @@ export default function ColaboradorComunicadosPage() {
     }
 
     if (editComId) {
-      setComunicados((prev: any) => prev.map((c: any) => c.id === editComId ? {
-        ...c,
+      const updatedCom = {
         titulo: newTitulo,
         conteudo: newConteudo,
         autor: currentUser?.nome || 'Usuário ERP',
@@ -207,7 +184,19 @@ export default function ColaboradorComunicadosPage() {
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         destino: 'selecionados'
-      } : c))
+      };
+      
+      setComunicadosLocally?.((prev: any) => prev.map((c: any) => c.id === editComId ? { ...c, ...updatedCom } : c));
+      
+      // Update directly via API to avoid sending the whole array
+      const existingCom = comunicados.find((c: any) => c.id === editComId);
+      if (existingCom) {
+        fetch('/api/comunicados', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...existingCom, ...updatedCom })
+        }).catch(err => console.error("Error updating comunicado:", err));
+      }
     } else {
       const newCom: any = {
         id: `AD-COM-COLAB-${Date.now()}`,
@@ -232,7 +221,13 @@ export default function ColaboradorComunicadosPage() {
         ciencias: {},
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado'
       }
-      setComunicados((prev: any) => [newCom, ...prev])
+      setComunicadosLocally?.((prev: any) => [newCom, ...prev])
+      
+      fetch('/api/comunicados', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCom)
+      }).catch(err => console.error("Error creating comunicado:", err));
       
       // Auto-register form dispatches if it contains forms
       if (!asRascunho) {
@@ -293,6 +288,7 @@ export default function ColaboradorComunicadosPage() {
 
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
+  const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
   const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
@@ -664,6 +660,8 @@ export default function ColaboradorComunicadosPage() {
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
           const filteredComunicados = (comunicados || []).filter((c: any) => {
+            if (c.id?.startsWith('AD-COM-REL-STU')) return false;
+            
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';
@@ -677,31 +675,8 @@ export default function ColaboradorComunicadosPage() {
           });
           
           const paginatedComunicados = filteredComunicados.slice(0, limit);
-          
-          if (loading || !currentUser) {
-            return [1, 2, 3].map((idx) => (
-            <motion.div 
-              key={idx} 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              style={{ display: 'flex', position: 'relative', paddingBottom: 12 }}
-            >
-              <div style={{ marginRight: 32, paddingTop: 24, width: 88 }}>
-                <div style={{ width: 72, textAlign: 'right', paddingRight: 16 }}>
-                  <div style={{ width: 40, height: 24, background: '#e2e8f0', borderRadius: 6, marginLeft: 'auto', marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
-                  <div style={{ width: 30, height: 12, background: '#e2e8f0', borderRadius: 4, marginLeft: 'auto', animation: 'pulse 1.5s infinite' }} />
-                </div>
-              </div>
-              <div className="card ad-feed-card" style={{ flex: 1, padding: '24px 28px', borderRadius: 24, background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 16 }}>
-                <div style={{ width: 62, height: 62, borderRadius: 16, background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: '60%', height: 20, background: '#e2e8f0', borderRadius: 6, marginBottom: 12, animation: 'pulse 1.5s infinite' }} />
-                  <div style={{ width: '40%', height: 14, background: '#e2e8f0', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
-                </div>
-              </div>
-            </motion.div>
-          ));
+          if ((isDataLoading && filteredComunicados.length === 0) || !currentUser) {
+            return <ComunicadoSkeleton count={3} />
           }
           
           if (paginatedComunicados.length === 0) {
@@ -899,25 +874,92 @@ export default function ColaboradorComunicadosPage() {
                        {/* Attachments Section */}
                        {c.anexos && c.anexos.length > 0 && (
                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                           {c.anexos.map((anexo: string, idx: number) => {
-                             const typeInfo = getAnexoType(anexo);
-                             if (!typeInfo) return null;
+                           {(() => {
+                             let reportCount = 0;
+                             let firstReportTypeInfo: any = null;
+
+                             const otherAnexos: { anexo: string, idx: number, typeInfo: any }[] = [];
+
+                             c.anexos.forEach((anexo: string, idx: number) => {
+                               const typeInfo = getAnexoType(anexo);
+                               if (!typeInfo) return;
+                               
+                               if (anexo.endsWith('|report-payload') || anexo.includes('Relatório Personalizado:')) {
+                                 reportCount++;
+                                 if (!firstReportTypeInfo) {
+                                   firstReportTypeInfo = typeInfo;
+                                 }
+                               } else {
+                                 otherAnexos.push({ anexo, idx, typeInfo });
+                               }
+                             });
+
+                             if (reportCount <= 1) {
+                               return c.anexos.map((anexo: string, idx: number) => {
+                                 const typeInfo = getAnexoType(anexo);
+                                 if (!typeInfo) return null;
+                                 return (
+                                   <div key={idx} title={typeInfo.label} style={{ 
+                                      background: typeInfo.color, 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: '10px',
+                                      border: `1px solid ${typeInfo.textColor}3a`,
+                                      boxShadow: `0 2px 8px ${typeInfo.color}`,
+                                   }}>
+                                     {typeInfo.icon}
+                                   </div>
+                                 );
+                               });
+                             }
+
                              return (
-                               <div key={idx} title={typeInfo.label} style={{ 
-                                  background: typeInfo.color, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  width: 32,
-                                  height: 32,
-                                  borderRadius: '10px',
-                                  border: `1px solid ${typeInfo.textColor}3a`,
-                                  boxShadow: `0 2px 8px ${typeInfo.color}`,
-                               }}>
-                                 {typeInfo.icon}
-                               </div>
+                               <>
+                                 {otherAnexos.map(({ anexo, idx, typeInfo }) => (
+                                   <div key={`other-${idx}`} title={typeInfo.label} style={{ 
+                                      background: typeInfo.color, 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: '10px',
+                                      border: `1px solid ${typeInfo.textColor}3a`,
+                                      boxShadow: `0 2px 8px ${typeInfo.color}`,
+                                   }}>
+                                     {typeInfo.icon}
+                                   </div>
+                                 ))}
+
+                                 <div 
+                                    title={`${reportCount} Relatórios Individuais`} 
+                                    style={{ 
+                                      background: firstReportTypeInfo?.color || 'rgba(99,102,241,0.1)', 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center',
+                                      height: 32,
+                                      padding: '0 12px',
+                                      borderRadius: '10px',
+                                      border: `1px solid ${firstReportTypeInfo?.textColor || '#6366f1'}3a`,
+                                      boxShadow: `0 2px 8px ${firstReportTypeInfo?.color || 'rgba(99,102,241,0.2)'}`,
+                                      gap: 6
+                                   }}>
+                                   {firstReportTypeInfo?.icon}
+                                   <span style={{ 
+                                     fontSize: 12, 
+                                     fontWeight: 800, 
+                                     color: firstReportTypeInfo?.textColor || '#6366f1' 
+                                   }}>
+                                     +{reportCount - 1}
+                                   </span>
+                                 </div>
+                               </>
                              );
-                           })}
+                           })()}
                          </div>
                        )}
                     </div>
@@ -936,37 +978,7 @@ export default function ColaboradorComunicadosPage() {
                   
                   {/* Text sneak peek removed by user request */}
 
-                  {/* Exige Ciência Box */}
-                  {c.exigeCiencia && (
-                    <div style={{ 
-                      background: isCiencia ? 'linear-gradient(to right, rgba(34,197,94,0.05), transparent)' : 'linear-gradient(to right, rgba(245,158,11,0.05), transparent)', 
-                      padding: '14px 18px', 
-                      borderRadius: 12,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      borderLeft: isCiencia ? '4px solid #22c55e' : '4px solid #f59e0b',
-                      marginTop: 4
-                    }}>
-                      <div style={{ fontSize: 13, color: isCiencia ? '#15803d' : '#b45309', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {isCiencia ? <CheckCircle2 size={18} /> : <Bell size={18} />}
-                        {isCiencia ? 'Ciência registrada. Obrigado!' : 'Este comunicado exige a sua ciência obrigatória.'}
-                      </div>
-                      {!isCiencia ? (
-                        <button 
-                           onClick={(e) => { e.stopPropagation(); handleCiencia(c.id) }} 
-                           className="btn" 
-                           style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '6px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, boxShadow: '0 4px 10px -4px rgba(245,158,11,0.5)' }}
-                           onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                           onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                           Dar Ciência
-                        </button>
-                      ) : (
-                         <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Concluído</span>
-                      )}
-                    </div>
-                  )}
+                  {/* Exige Ciência Box removed as per user request */}
                 </div>
               </motion.div>
             )
@@ -996,9 +1008,26 @@ export default function ColaboradorComunicadosPage() {
             setOpenedFormStr={setOpenedFormStr}
             setMaximizedImageStr={setMaximizedImageStr}
             setMaximizedVideoStr={setMaximizedVideoStr}
+            setOpenedReportTask={setOpenedReportTaskStr}
+            setOpenedReportPayload={setOpenedReportPayloadStr}
           />
         )}
       </AnimatePresence>
+
+      <ReportFillerModal
+        isOpen={!!openedReportTaskStr}
+        anexoStr={openedReportTaskStr}
+        onClose={() => setOpenedReportTaskStr(null)}
+        currentUser={currentUser}
+        alunos={alunos}
+        turmas={turmas}
+      />
+
+      <ReportPayloadView
+        isOpen={!!openedReportPayloadStr}
+        onClose={() => setOpenedReportPayloadStr(null)}
+        attachmentString={openedReportPayloadStr || ''}
+      />
 
       <AnimatePresence>
 {/* Formulário/Relatório Simulado */}
@@ -1186,6 +1215,11 @@ export default function ColaboradorComunicadosPage() {
         onClickSelectDest={() => setShowDestModal(true)}
         onRemoveDest={id => setSelectedDest(prev => prev.filter(x => x.id !== id))}
         onSave={(data, isDraft) => handleEnviar(data, isDraft)}
+        onFillDirectly={(payload) => {
+          setShowComposer(false)
+          setSelectedDest([])
+          setOpenedReportTaskStr(`Tarefa de Relatório|payload:${JSON.stringify(payload)}|report-payload`)
+        }}
       />
 
       {/* Destinatarios Universal Modal */}
@@ -1393,7 +1427,7 @@ export default function ColaboradorComunicadosPage() {
           .ad-forms-modal-overlay,
           .ad-schedule-modal-overlay,
           .ad-expanded-comunicado-overlay {
-            z-index: 100200 !important;
+            z-index: 9999999 !important;
           }
           
           /* Mobile modal card adjustments */
@@ -1408,6 +1442,20 @@ export default function ColaboradorComunicadosPage() {
             max-height: 90vh !important;
             border-radius: 24px !important;
             overflow-y: auto !important;
+          }
+
+          /* Relatorios Modal Fullscreen on Mobile */
+          .ad-reports-modal-overlay {
+            padding: 0 !important;
+          }
+          .ad-reports-modal-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: 100% !important;
+            max-height: 100dvh !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
         }
       `}</style>

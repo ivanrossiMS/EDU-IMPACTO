@@ -437,7 +437,7 @@ export async function POST(request: Request) {
             tipo: saudacao.imagemUrl ? 'arquivo' : 'texto',
             status: 'enviado',
             prioridade: 'normal',
-            permiteResposta: false,
+            permiteResposta: true,
             exigeCiencia: false,
             alunosIds: [savedStudent.id],
             turmas: [],

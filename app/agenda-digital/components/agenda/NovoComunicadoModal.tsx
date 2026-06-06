@@ -23,13 +23,14 @@ export interface NovoComunicadoModalProps {
   onClickSelectDest?: () => void;
   selectedDest?: any[];
   onRemoveDest?: (id: string) => void;
+  onFillDirectly?: (payload: any) => void;
 }
 
 const EMOJIS = ['😀','😂','🥰','😎','🤔','🙌','👍','👏','🔥','🎉','📅','📢','📌','⭐','❤️']
 
 export default function NovoComunicadoModal({
   isOpen, onClose, onSave, initialData, currentUser,
-  onClickSelectDest, selectedDest = [], onRemoveDest
+  onClickSelectDest, selectedDest = [], onRemoveDest, onFillDirectly
 }: NovoComunicadoModalProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -740,12 +741,18 @@ export default function NovoComunicadoModal({
         </AnimatePresence>
 
       </motion.div>
+    </div>
+  )
 
-      {/* Relatórios Modal (Componente Avançado Integrado) */}
+  if (!mounted) return null;
+  return createPortal(
+    <>
+      {modalContent}
       <ReportsSelectionModal
         isOpen={showRelsModal}
         onClose={() => setShowRelsModal(false)}
         selectedDest={selectedDest}
+        onFillDirectly={onFillDirectly}
         onAdd={(text, payload) => {
           const stringified = JSON.stringify(payload);
           const finalAttachmentString = `${text}|payload:${stringified}|report-payload`;
@@ -753,9 +760,7 @@ export default function NovoComunicadoModal({
           // Não precisa fechar aqui, o ReportsSelectionModal chama onClose internamente no handleFinish
         }}
       />
-    </div>
-  )
-
-  if (!mounted) return null;
-  return createPortal(modalContent, document.body);
+    </>, 
+    document.body
+  );
 }

@@ -128,9 +128,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
   diaTodo: false, dataFim: ''
 }
 
-// Client-side in-memory caches to prevent redundant loading of the complete lists
-let cacheAlunos: any[] | null = null;
-let cacheFuncionarios: any[] | null = null;
+// Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function ADCalendarioPage() {
   const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
@@ -174,7 +172,8 @@ export default function ADCalendarioPage() {
 
   const turmaOptions = React.useMemo(() => {
     if (!currentUser?.id) return [];
-    if (currentUser.perfil === 'administrador' || currentUser.cargo === 'Administrador' || currentUser.perfil === 'admin') return turmas;
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
     
     const userGroups = (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
@@ -185,10 +184,21 @@ export default function ADCalendarioPage() {
       return colabs.some((id: any) => String(id) === String(currentUser.id));
     });
 
-    const isGlobal = userGroups.some((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-    if (isGlobal) return turmas;
+    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
+    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+      return a === '';
+    });
+    
+    if (hasGlobalWithoutYear) return turmas;
+    
+    const globalYears = new Set(globalGroups.map((g: any) => {
+      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+    }).filter((a: string) => a !== ''));
 
     const accessibleTurmas = turmas.filter((t: any) => {
+       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+       if (globalYears.has(tAno)) return true;
        return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
@@ -356,20 +366,10 @@ export default function ADCalendarioPage() {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        if (!cacheAlunos || !cacheFuncionarios) {
-          const [resAlunos, resProfs] = await Promise.all([
-            cacheAlunos ? Promise.resolve({ data: cacheAlunos }) : fetch('/api/alunos?limit=2000&lightweight=true').then(r => r.json()),
-            cacheFuncionarios ? Promise.resolve(cacheFuncionarios) : fetch('/api/funcionarios?limit=500&lightweight=true').then(r => r.json())
-          ])
-          if (!cacheAlunos) cacheAlunos = resAlunos.data || [];
-          if (!cacheFuncionarios) cacheFuncionarios = Array.isArray(resProfs) ? resProfs : (resProfs.data || []);
-        }
-
-        const todos = [
-          ...(cacheAlunos || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
-          ...(cacheFuncionarios || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
-        ]
         const mesView = month + 1
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
+        if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
+        const todos = await req.json()
         
         // Filter birthdays only for peers in the SAME CLASS or teachers
         const niversMes = todos.filter(p => {
