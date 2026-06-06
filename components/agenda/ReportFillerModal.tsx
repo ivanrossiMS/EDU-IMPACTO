@@ -17,7 +17,7 @@ interface ReportFillerModalProps {
 }
 
 export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alunos, turmas: propTurmas }: ReportFillerModalProps) {
-  const { templates = [], setSubmissions, setDisparos } = useRelatorios()
+  const { templates = [] } = useRelatorios()
   const { adAlert } = useAgendaDigital()
   const { turmas: contextTurmas = [] } = useData()
 
@@ -282,10 +282,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
         status: 'enviado'
     })
 
-    if (setSubmissions && setDisparos) {
-      setSubmissions((prev: any[]) => [...prev, ...newSubmissions])
-      setDisparos((prev: any[]) => [...prev, ...newDisparos])
-    }
+
 
     try {
       await fetch('/api/comunicados', {

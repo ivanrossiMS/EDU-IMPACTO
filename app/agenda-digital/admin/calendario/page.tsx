@@ -284,12 +284,12 @@ export default function CalendarioPage() {
         const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
-        const niversMes = todos.filter(p => {
+        const niversMes = todos.filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
           const m = parseInt(data.split('-')[1])
           return m === mesView
-        }).map(p => {
+        }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           const dia = parseInt(data.split('-')[2])
           let isProximo = false
@@ -298,7 +298,7 @@ export default function CalendarioPage() {
             isProximo = dia >= diaHoje && dia <= (diaHoje + 7)
           }
           return { ...p, dia, isProximo }
-        }).sort((a, b) => a.dia - b.dia)
+        }).sort((a: any, b: any) => a.dia - b.dia)
         setAniversariantes(niversMes)
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }

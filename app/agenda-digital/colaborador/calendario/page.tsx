@@ -372,7 +372,7 @@ export default function ADCalendarioPage() {
         const todos = await req.json()
         
         // Filter birthdays only for peers in the SAME CLASS or teachers
-        const niversMes = todos.filter(p => {
+        const niversMes = todos.filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
           const m = parseInt(data.split('-')[1])
@@ -389,7 +389,7 @@ export default function ADCalendarioPage() {
 
           }
           return true // Keep teachers visible
-        }).map(p => {
+        }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           const dia = parseInt(data.split('-')[2])
           let isProximo = false
@@ -398,7 +398,7 @@ export default function ADCalendarioPage() {
             isProximo = dia >= diaHoje && dia <= (diaHoje + 7)
           }
           return { ...p, dia, isProximo }
-        }).sort((a, b) => a.dia - b.dia)
+        }).sort((a: any, b: any) => a.dia - b.dia)
         setAniversariantes(niversMes)
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }

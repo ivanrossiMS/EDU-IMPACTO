@@ -11,6 +11,7 @@ interface ReportsSelectionModalProps {
   onClose: () => void
   onAdd: (attachmentText: string, payload: any) => void
   onFillDirectly?: (payload: any) => void
+  selectedDest?: any[]
 }
 
 export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {

@@ -183,12 +183,12 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
                      />
                    ) : (
                      <div className="w-[100px] h-[100px] rounded-full bg-indigo-100/80 backdrop-blur-sm text-indigo-500 flex items-center justify-center text-3xl font-bold border-[4px] border-white/80 shadow-[0_8px_32px_rgba(99,102,241,0.15)]">
-                       {studentInfo.name.charAt(0)}
+                       {(studentInfo.name || 'Aluno(a)').charAt(0)}
                      </div>
                    )}
                  </div>
                  
-                 <h3 className="text-[19px] font-[800] text-[#111827] text-center m-0 leading-tight relative z-10">{studentInfo.name}</h3>
+                 <h3 className="text-[19px] font-[800] text-[#111827] text-center m-0 leading-tight relative z-10">{studentInfo.name || 'Aluno(a)'}</h3>
                  {studentInfo.turma && (
                    <p className="text-[14px] font-[500] text-[#6B7280] mt-1 text-center relative z-10">{studentInfo.turma}</p>
                  )}
@@ -229,7 +229,7 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
               {/* Footer */}
               <div className="w-full mt-4 flex items-center justify-center text-center bg-[#F7F5FF] rounded-[16px] p-4">
                 <span className="text-[13px] text-[#6D5BFF] font-[500]">
-                  💜 Obrigado por acompanhar o desenvolvimento de {studentInfo.name.split(' ')[0]}!
+                  💜 Obrigado por acompanhar o desenvolvimento de {(studentInfo.name || 'Aluno').split(' ')[0]}!
                 </span>
               </div>
             </div> {/* Close Main Info Area */}

@@ -195,7 +195,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
             isProximo = dia >= diaHoje && dia <= (diaHoje + 7)
           }
           return { ...p, dia, isProximo }
-        }).sort((a, b) => a.dia - b.dia)
+        }).sort((a: any, b: any) => a.dia - b.dia)
         setAniversariantes(niversMes)
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }

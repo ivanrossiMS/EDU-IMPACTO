@@ -30,6 +30,9 @@ export interface Student {
 export interface ReportPayload {
   templateId: string;
   values: Record<string, Record<string, any>>; // studentId -> fieldId -> value
+  studentInfo?: { turma?: string; id?: string; name?: string; avatarUrl?: string | null };
+  dataReferencia?: string;
+  template?: any;
 }
 
 // --- MOCK DATA ---

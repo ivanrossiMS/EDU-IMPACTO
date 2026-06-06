@@ -76,7 +76,7 @@ export function AgendaRealtimeProvider({
         if (isNative) {
           console.log('📱 Rodando em ambiente Mobile Nativo via Capacitor');
           try {
-            const OneSignalNative = require('@onesignal/capacitor-plugin').default;
+            const OneSignalNative = require('onesignal-cordova-plugin').default;
             
             OneSignalNative.initialize(appId);
             OneSignalNative.Notifications.requestPermission(true);
