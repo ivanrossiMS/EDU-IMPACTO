@@ -66,6 +66,42 @@ export function AgendaRealtimeProvider({
         const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
         if (!appId) return
 
+        // Capacitor Native Check
+        let isNative = false;
+        try {
+          const { Capacitor } = require('@capacitor/core');
+          isNative = Capacitor.isNativePlatform();
+        } catch (e) {}
+
+        if (isNative) {
+          console.log('📱 Rodando em ambiente Mobile Nativo via Capacitor');
+          try {
+            const OneSignalNative = require('@onesignal/capacitor-plugin').default;
+            
+            OneSignalNative.initialize(appId);
+            OneSignalNative.Notifications.requestPermission(true);
+            
+            if (currentUser?.id) {
+              OneSignalNative.login(String(currentUser.id));
+              console.log(`✅ OneSignal Nativo logado para o Usuário: ${currentUser.id}`);
+            }
+
+            // Handle push deep linking natively
+            OneSignalNative.Notifications.addEventListener('click', (event: any) => {
+              const data = event.notification.additionalData;
+              if (data && data.rota) {
+                const alunoPushId = data.aluno_id || alunoId;
+                if (alunoPushId) {
+                  router.push(`/agenda-digital/${alunoPushId}/${data.rota}`);
+                }
+              }
+            });
+          } catch (nativeErr) {
+            console.error('Erro ao inicializar OneSignal Nativo:', nativeErr);
+          }
+          return; // Skip the web setup
+        }
+
         // Vanilla OneSignal v16 Setup (Evita bugs do react-onesignal e Strict Mode)
         window.OneSignalDeferred = window.OneSignalDeferred || []
         window.OneSignalDeferred.push(async function(OneSignal: any) {
@@ -259,8 +295,12 @@ export function AgendaRealtimeProvider({
           window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }));
           
           if (eventType === 'INSERT' && (row.status === 'enviado' || row.dados?.status === 'enviado')) {
-            addNotification({ id: newCom.id, type: 'comunicado', title: newCom.titulo, createdAt: newCom.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/comunicados` });
-            toast.custom((t) => (
+            const isMe = (newCom.autorId && String(newCom.autorId) === String(currentUser?.id)) || 
+                         (newCom.autor && currentUser?.nome && String(newCom.autor).trim().toLowerCase() === String(currentUser?.nome).trim().toLowerCase());
+            
+            if (!isMe) {
+              addNotification({ id: newCom.id, type: 'comunicado', title: newCom.titulo, createdAt: newCom.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/comunicados` });
+              toast.custom((t) => (
               <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
                 <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
                   <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
@@ -274,6 +314,7 @@ export function AgendaRealtimeProvider({
                 <button onClick={() => toast.dismiss(t)} className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"><X size={20} strokeWidth={2} /></button>
               </div>
             ), { duration: 10000, position: 'top-center' });
+            }
           }
         }
       })
