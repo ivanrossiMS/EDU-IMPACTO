@@ -112,31 +112,12 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
 
   if (isActive) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
-        <div style={{
-          ...baseBtnStyle,
-          background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
-          backgroundSize: '200% 200%',
-          border: 'none',
-          color: 'white',
-          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
-          cursor: 'default',
-          animation: 'shimmerYellow 2s linear infinite',
-          padding: '0 16px',
-        }}>
-          <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, overflow: 'hidden' }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2 }}>Chamando Aluno</span>
-            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
-              por {call?.guardianName} às {formatTime(call?.calledAt)}
-            </span>
-          </div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
         <button 
           onClick={() => cancelCall(call.id)}
           title="Cancelar chamada"
           style={{
-            width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
+            width: 48, height: 48, borderRadius: 20, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -144,8 +125,31 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
         >
-          <X size={24} />
+          <X size={22} />
         </button>
+        <div style={{
+          ...baseBtnStyle,
+          width: 'auto',
+          flex: 1,
+          height: 48,
+          borderRadius: 20,
+          background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
+          backgroundSize: '200% 200%',
+          border: 'none',
+          color: 'white',
+          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
+          cursor: 'default',
+          animation: 'shimmerYellow 2s linear infinite',
+          padding: '0 12px',
+        }}>
+          <Loader2 size={18} className="spin-anim" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Chamando Aluno</span>
+            <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+              por {call?.guardianName} às {formatTime(call?.calledAt)}
+            </span>
+          </div>
+        </div>
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes spin-anim { 100% { transform: rotate(360deg); } }
           .spin-anim { animation: spin-anim 1s linear infinite; }
@@ -1584,10 +1588,40 @@ export default function AgendaDigitalFamilyLayout({
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
-              <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <span style={{ whiteSpace: 'nowrap', minWidth: 0 }}>{abbreviateName(aluno.nome)}</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%' }}>
+                <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', minWidth: 0 }}>
+                  <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbreviateName(aluno.nome)}</span>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                </h2>
+                {currentUser?.cargo === 'Aluno' && (
+                  <button 
+                    onClick={async () => {
+                        localStorage.removeItem('edu-current-user');
+                        localStorage.removeItem('edu-current-perfil');
+                        setCurrentUser(null);
+                        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+                        window.location.href = '/login';
+                      }}
+                      title="Sair da Conta"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        color: '#ef4444',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                  >
+                    <LogOut size={12} strokeWidth={2.5} /> <span className="ad-desktop-only">Sair</span>
+                  </button>
+                )}
+              </div>
 
               {/* Row of 3 mini cards */}
               <div className="ad-mini-cards-grid" style={{ marginTop: 0 }}>
@@ -1654,8 +1688,8 @@ export default function AgendaDigitalFamilyLayout({
           </div>
 
           {/* AREA 3: AÇÕES LATERAIS (À direita) - Botão Portaria */}
-          <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '240px' }}>
-            {currentUser && currentUser.cargo !== 'Aluno' && (
+          {currentUser && currentUser.cargo !== 'Aluno' && (
+            <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '240px' }}>
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', width: '100%' }}>
                 {adConfig?.permissoes?.chamadaAlunoPortaria !== false ? (
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1755,8 +1789,8 @@ export default function AgendaDigitalFamilyLayout({
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1773,6 +1807,27 @@ export default function AgendaDigitalFamilyLayout({
         </div>
       </div>
 
+
+      {/* Mobile Navigation Bottom Bar */}
+      <nav className="ad-mobile-nav ad-mobile-nav-bar">
+        {filteredNavItems.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+          return (
+            <Link 
+              key={item.href}
+              href={item.href}
+              className="ad-mobile-nav-item"
+              style={{
+                color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))',
+                opacity: isActive ? 1 : 0.7
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
 
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }

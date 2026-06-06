@@ -8,6 +8,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
 import { use, useState, useEffect, useRef } from 'react'
+import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
@@ -16,7 +17,22 @@ import { supabase } from '@/lib/supabase'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
-import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
+import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+
+// Helper to abbreviate names for mobile (e.g., "Maria Auxiliadora de Araújo Honório" -> "Maria A. de A. Honório")
+function abbreviateName(name: string): string {
+  if (!name) return '';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 2) return name;
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const middle = parts.slice(1, -1).map(p => {
+    if (['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase())) return p;
+    return p.charAt(0).toUpperCase() + '.';
+  }).join(' ');
+  return `${first} ${middle} ${last}`;
+}
 
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoData: any) => {
@@ -49,7 +65,7 @@ const getAnexoType = (anexoStr: string) => {
   if (name.startsWith('Formulário:')) {
     return { label: 'Formulário', icon: <FileText size={16} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
-  if (name.startsWith('Relatório:')) {
+  if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
     return { label: 'Relatório', icon: <FileBarChart size={16} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
@@ -79,12 +95,13 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const turmaNome = turmaObj?.nome || rawTurma
 
   const [limit, setLimit] = useState(6)
-  const endpoint = aluno?.id ? `comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : 'comunicados'
-  const [comunicados, , { loading }] = useSupabaseArray<any>(endpoint)
-  const [localComunicados, setLocalComunicados] = useState<any[]>([])
+  const endpoint = aluno?.id ? `/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : '/api/comunicados'
+  
+  const { data: comunicados = [], isLoading: loading } = useQueryComunicados(false, endpoint)
+  const [localComunicados, setLocalComunicados] = useState<any[]>(comunicados)
 
   useEffect(() => {
-    if (comunicados) {
+    if (comunicados && comunicados.length > 0) {
       setLocalComunicados(comunicados)
     }
   }, [comunicados])
@@ -97,44 +114,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
     comunicadosRef.current = localComunicados
   }, [localComunicados])
 
-  useAgendaRealtime({
-    table: 'comunicados',
-    toastConfig: {
-      enabled: true,
-      insertMessage: (doc) => `Novo comunicado: ${doc.titulo || 'Sem título'}`,
-      updateMessage: (doc) => `Comunicado atualizado: ${doc.titulo || 'Sem título'}`,
-      icon: <Bell size={18} color="#00D2FF" />
-    },
-    onInsert: ({ new: newCom }) => {
-      const com = { ...newCom, _isNew: true };
-      setLocalComunicados(prev => {
-        if (prev.some((c: any) => c.id === com.id)) return prev;
-        const newFeed = [com, ...prev].sort((a: any, b: any) => new Date(b.data || b.created_at).getTime() - new Date(a.data || a.created_at).getTime());
-        return newFeed;
-      });
-      setTimeout(() => {
-        setLocalComunicados(curr => curr.map(c => c.id === com.id ? { ...c, _isNew: false } : c));
-      }, 5000);
-      window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
-    },
-    onUpdate: ({ new: updatedCom }) => {
-      setLocalComunicados(prev => prev.map(c => c.id === updatedCom.id ? { ...c, ...updatedCom } : c));
-      if (selectedComunicado?.id === updatedCom.id) {
-        setSelectedComunicado((prev: any) => ({ ...prev, ...updatedCom }));
-      }
-    },
-    onDelete: ({ old }) => {
-      setLocalComunicados(prev => prev.filter(c => c.id !== old?.id));
-      if (selectedComunicado?.id === old?.id) {
-        setSelectedComunicado(null);
-      }
-    }
-  });
-
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
+  const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
   const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
@@ -483,29 +467,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           const paginatedComunicados = filteredComunicados.slice(0, limit);
           
           if (loading || !aluno) {
-            return [1, 2, 3].map((idx) => (
-            <motion.div 
-              key={idx} 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-              style={{ display: 'flex', position: 'relative', paddingBottom: 12 }}
-            >
-              <div style={{ marginRight: 32, paddingTop: 24, width: 88 }}>
-                <div style={{ width: 72, textAlign: 'right', paddingRight: 16 }}>
-                  <div style={{ width: 40, height: 24, background: '#e2e8f0', borderRadius: 6, marginLeft: 'auto', marginBottom: 6, animation: 'pulse 1.5s infinite' }} />
-                  <div style={{ width: 30, height: 12, background: '#e2e8f0', borderRadius: 4, marginLeft: 'auto', animation: 'pulse 1.5s infinite' }} />
-                </div>
-              </div>
-              <div className="card ad-feed-card" style={{ flex: 1, padding: '24px 28px', borderRadius: 24, background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 16 }}>
-                <div style={{ width: 62, height: 62, borderRadius: 16, background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ width: '60%', height: 20, background: '#e2e8f0', borderRadius: 6, marginBottom: 12, animation: 'pulse 1.5s infinite' }} />
-                  <div style={{ width: '40%', height: 14, background: '#e2e8f0', borderRadius: 6, animation: 'pulse 1.5s infinite' }} />
-                </div>
-              </div>
-            </motion.div>
-          ));
+            return <ComunicadoSkeleton count={3} />
           }
           
           if (paginatedComunicados.length === 0) {
@@ -675,8 +637,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                           {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
                           <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
-                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', lineHeight: 1.2 }}>
-                          <span>Enviado por <strong style={{ color: '#334155', fontWeight: 600 }}>{c.autor}</strong></span>
+                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Enviado por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
                         </div>
                       </div>
                     </div>
@@ -794,12 +756,17 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}
               setMaximizedVideoStr={setMaximizedVideoStr}
+              setOpenedReportPayload={setOpenedReportPayloadStr}
             />
           )}
         </AnimatePresence>
       </div>
 
-
+      <ReportPayloadView
+        isOpen={!!openedReportPayloadStr}
+        onClose={() => setOpenedReportPayloadStr(null)}
+        attachmentString={openedReportPayloadStr || ''}
+      />
 
       <AnimatePresence>
 {/* Formulário/Relatório Simulado */}
