@@ -1808,26 +1808,6 @@ export default function AgendaDigitalFamilyLayout({
       </div>
 
 
-      {/* Mobile Navigation Bottom Bar */}
-      <nav className="ad-mobile-nav ad-mobile-nav-bar">
-        {filteredNavItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-          return (
-            <Link 
-              key={item.href}
-              href={item.href}
-              className="ad-mobile-nav-item"
-              style={{
-                color: isActive ? 'hsl(var(--primary))' : 'hsl(var(--text-muted))',
-                opacity: isActive ? 1 : 0.7
-              }}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </Link>
-          )
-        })}
-      </nav>
 
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
