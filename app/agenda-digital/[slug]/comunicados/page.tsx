@@ -636,15 +636,15 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                           {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
                           <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
+                          {/* Status Badge */}
+                          {!isRead ? (
+                            <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                          ) : (
+                            <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
+                          )}
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
                           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
-                          {/* Status Badge moved here */}
-                          {!isRead ? (
-                            <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5, marginLeft: 4 }}>NOVO</span>
-                          ) : (
-                            <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600, marginLeft: 4 }}>Lido</span>
-                          )}
                         </div>
                       </div>
                     </div>
