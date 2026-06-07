@@ -684,7 +684,8 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                        )}
                     </div>
                   </div>
-                  
+                </div>
+
                   {/* Hover Action Overlay */}
                   <div className="card-hover-overlay" style={{
                     position: 'absolute', bottom: 24, right: 28, opacity: 0,
