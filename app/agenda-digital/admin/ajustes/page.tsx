@@ -22,35 +22,73 @@ export default function ADAdminAjustes() {
     setLocalBanner(bannerUrl)
   }, [bannerUrl])
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (file: File, maxWidth: number, quality: number = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new globalThis.Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(img.src);
+            return;
+          }
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Otimização agressiva: WebP com compressão ou JPEG fallback
+          const dataUrl = canvas.toDataURL('image/webp', quality);
+          resolve(dataUrl);
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setLocalBanner(event.target.result as string)
-        }
+      try {
+        // Banner panorâmico: 1600px de largura com 70% de qualidade WebP
+        const compressedBase64 = await compressImage(file, 1600, 0.7)
+        setLocalBanner(compressedBase64)
+      } catch (err) {
+        console.error("Erro ao comprimir imagem:", err)
       }
-      reader.readAsDataURL(file)
     }
   }
 
-  const handleSaudacaoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSaudacaoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setLocalConfig(p => ({
-            ...p, 
-            saudacao: {
-              ...(p.saudacao || {ativa:true, titulo:'', mensagem:''}), 
-              imagemUrl: event.target?.result as string
-            }
-          }))
-        }
+      try {
+        // Imagem de saudação: 800px de largura com 70% de qualidade WebP
+        const compressedBase64 = await compressImage(file, 800, 0.7)
+        setLocalConfig(p => ({
+          ...p, 
+          saudacao: {
+            ...(p.saudacao || {ativa:true, titulo:'', mensagem:''}), 
+            imagemUrl: compressedBase64
+          }
+        }))
+      } catch (err) {
+        console.error("Erro ao comprimir imagem:", err)
       }
-      reader.readAsDataURL(file)
     }
   }
 
