@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -17,9 +18,12 @@ function brDateToISO(d: string): string {
 }
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
-  const { data: { user }, error: authErr } = await supabase.auth.getUser()
-  console.log(`[DRE-AUTH] DRE API Hit. User: ${user?.id}, AuthError: ${authErr?.message}`)
+  const { data: { user: currentUser }, error: authErr } = await supabase.auth.getUser()
+  console.log(`[DRE-AUTH] DRE API Hit. User: ${currentUser?.id}, AuthError: ${authErr?.message}`)
   
   try {
     const { searchParams } = new URL(request.url)

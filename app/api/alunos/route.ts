@@ -3,12 +3,15 @@ import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-
+import { requireAuth } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 // ─── GET: Listar alunos ──────────────────────────────────────────────────────
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const url = new URL(request.url)
     const pageParam = url.searchParams.get('page')
@@ -256,6 +259,9 @@ export async function GET(request: Request) {
 
 // ─── POST: Criar ou atualizar aluno e seus responsáveis ──────────────────────────
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     
@@ -468,6 +474,9 @@ export async function POST(request: Request) {
 
 // ─── PUT: Atualizar aluno ───────────────────────────────────────────────────
 export async function PUT(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const { searchParams } = new URL(request.url)
@@ -668,6 +677,9 @@ export async function PUT(request: Request) {
 // ─── DELETE: Remover aluno ───────────────────────────────────────────────────
 // ─── DELETE: Remover aluno ou todos os alunos ─────────────────────────────────
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

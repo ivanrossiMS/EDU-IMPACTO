@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 // GET — listar recibos com filtros e paginação server-side
 export async function GET(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     const { searchParams } = new URL(req.url)

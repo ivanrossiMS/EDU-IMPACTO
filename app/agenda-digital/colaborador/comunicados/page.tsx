@@ -27,6 +27,20 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 
+// Helper to abbreviate names for mobile
+function abbreviateName(name: string): string {
+  if (!name) return '';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length <= 2) return name;
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const middle = parts.slice(1, -1).map(p => {
+    if (['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase())) return p;
+    return p.charAt(0).toUpperCase() + '.';
+  }).join(' ');
+  return `${first} ${middle} ${last}`;
+}
+
 // Helper parsers for attachments formatted as "name|url|mime"
 const parseAnexo = (anexoStr: any) => {
   if (!anexoStr) return null;
@@ -851,8 +865,8 @@ export default function ColaboradorComunicadosPage() {
                           {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
                           <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
-                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', lineHeight: 1.2 }}>
-                          <span>Enviado por <strong style={{ color: '#334155', fontWeight: 600 }}>{c.autor}</strong></span>
+                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
                         </div>
                       </div>
                     </div>
@@ -970,7 +984,6 @@ export default function ColaboradorComunicadosPage() {
                     position: 'absolute', bottom: 24, right: 28, opacity: 0,
                     transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', gap: 8, zIndex: 2
                   }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5' }}>Abrir Comunicado</span>
                     <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#4f46e5', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,0.3)' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </div>

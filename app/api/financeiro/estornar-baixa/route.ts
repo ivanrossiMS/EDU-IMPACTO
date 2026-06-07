@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 
@@ -18,6 +19,9 @@ const ZodEstorno = z.object({
  *  2. Deleta as movimentações do caixa cujo ID começa com o código de baixa (padrão CODXXX-PNN)
  */
 export async function POST(request: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const { aluno_id, parcela_nums, cod_baixa_codes } = ZodEstorno.parse(body)

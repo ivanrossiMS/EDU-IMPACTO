@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { data, error } = await supabase
     .from('mantenedores').select('*').order('nome')
@@ -17,6 +21,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     const body = await request.json()

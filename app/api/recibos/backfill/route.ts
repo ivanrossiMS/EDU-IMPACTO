@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { randomUUID } from 'crypto'
 import { createHash } from 'crypto'
@@ -37,6 +38,9 @@ function generateHash(data: {
  *   evento_id, evento_descricao, dados_bancarios
  */
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = getSupabase()
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || ''
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
+import { DEFAULT_PERFIS } from '@/lib/dataContext'
 
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
 
@@ -39,6 +40,7 @@ function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 export default function LoginPage() {
   const router = useRouter()
   const { setCurrentUser } = useApp()
+  const [showBlockModal, setShowBlockModal] = useState(false)
 
   // ── step manager
   const [step, setStep] = useState<Step>('login')
@@ -734,8 +736,29 @@ export default function LoginPage() {
 
       <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
         <button type="button" 
-          onClick={() => {
+          onClick={async () => {
              const p = pendingAuth?.perfil;
+             
+             // Buscar perfis do backend via API, pois o localStorage não armazena mais esses dados
+             let perfisList = DEFAULT_PERFIS;
+             try {
+               const res = await fetch('/api/configuracoes/perfis');
+               if (res.ok) {
+                 const data = await res.json();
+                 if (Array.isArray(data) && data.length > 0) {
+                   perfisList = data;
+                 }
+               }
+             } catch (e) {
+               console.error('Erro ao verificar bloqueio de perfil:', e);
+             }
+             
+             const perfilObj = perfisList?.find(x => x.nome === p);
+             if (perfilObj?.bloqueadoGestaoEscolar) {
+               setShowBlockModal(true);
+               return;
+             }
+             
              if (p === 'Professor') window.location.href = '/professor';
              else window.location.href = '/dashboard';
           }}
@@ -837,6 +860,27 @@ export default function LoginPage() {
             {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
           </>
         )}
+        
+        {/* Modal de bloqueio */}
+        {showBlockModal && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(20px)', animation: 'fadeIn 0.3s ease-out' }} onClick={() => setShowBlockModal(false)} />
+            <div style={{ position: 'relative', background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 100%)', padding: 40, borderRadius: 24, border: '1px solid rgba(139,92,246,0.3)', boxShadow: '0 32px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1)', maxWidth: 440, width: '100%', textAlign: 'center', animation: 'scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', border: '1px solid rgba(239,68,68,0.2)', boxShadow: '0 0 40px rgba(239,68,68,0.2)' }}>
+                <span style={{ fontSize: 36 }}>🔒</span>
+              </div>
+              <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 26, fontWeight: 900, color: '#fff', marginBottom: 12, letterSpacing: '-0.02em' }}>Acesso Restrito</h3>
+              <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, marginBottom: 32 }}>
+                Seu perfil atual (<strong style={{ color: '#fff' }}>{pendingAuth?.perfil}</strong>) não possui permissão para acessar o Sistema de Gestão Escolar. <br/><br/>
+                Caso precise de acesso, entre em contato com a diretoria ou a equipe de TI.
+              </p>
+              <button onClick={() => setShowBlockModal(false)} style={{ width: '100%', padding: '16px', borderRadius: 14, background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 24px rgba(59,130,246,0.3)' }}>
+                Entendi, voltar
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ position:'absolute', bottom:24, right:32, display:'flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:100, background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)' }}>
           <div style={{ width:5, height:5, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981' }} />
           <span style={{ fontSize:10, color:'rgba(16,185,129,0.7)', fontWeight:700, letterSpacing:'0.06em' }}>SISTEMA SEGURO</span>
@@ -845,6 +889,8 @@ export default function LoginPage() {
       <style>{`
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes spin  { to{transform:rotate(360deg)} }
+        @keyframes scaleUp { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
         @keyframes floatOrb1 { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-18px) scale(1.15)} }
         @keyframes floatOrb2 { 0%,100%{transform:translateY(0) translateX(0)} 33%{transform:translateY(-12px) translateX(8px)} 66%{transform:translateY(6px) translateX(-5px)} }
         @keyframes floatOrb3 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(14px)} }

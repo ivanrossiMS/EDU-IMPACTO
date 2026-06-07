@@ -175,6 +175,7 @@ export interface Mantenedor {
 export interface Perfil {
   id: string; nome: string; cor: string
   permissoes: string[]; descricao: string
+  bloqueadoGestaoEscolar?: boolean
 }
 
 // ─── AGENDA ESCOLAR ───────────────────────────────────────────────

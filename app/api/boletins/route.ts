@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -7,6 +8,9 @@ import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const turma_id = searchParams.get('turma_id')
@@ -43,6 +47,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const id = `BL-${Math.random().toString(36).substring(2, 11)}`
@@ -77,6 +84,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

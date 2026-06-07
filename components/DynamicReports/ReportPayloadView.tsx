@@ -98,7 +98,7 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: "100%", opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="relative w-full h-full sm:h-[90vh] sm:max-h-[800px] max-w-[420px] bg-white sm:rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex flex-col hide-scrollbar overflow-hidden"
+            className="relative w-full h-full md:w-[420px] md:h-auto md:max-h-[85vh] bg-white md:rounded-[24px] shadow-2xl flex flex-col hide-scrollbar overflow-hidden"
           >
             {/* Header */}
             <motion.div 

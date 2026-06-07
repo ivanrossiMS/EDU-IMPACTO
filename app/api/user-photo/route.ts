@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     // First, verify the user is logged in using the protected client (local JWT check for performance)
     const protectedClient = await createProtectedClient()
@@ -45,6 +49,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const protectedClient = await createProtectedClient()
     const { data: sessionData } = await protectedClient.auth.getSession()

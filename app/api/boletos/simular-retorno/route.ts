@@ -5,12 +5,16 @@
  * Útil antes de ter acesso real ao banco
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { gerarRetornoSimulado400 } from '@/lib/banking/cnab400'
 import type { TituloCobranca, ConvenioBancario } from '@/lib/banking/types'
 
 const OCORRENCIAS_VALIDAS = ['02', '03', '06', '09', '14', '25']
 
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json() as {
       titulos: TituloCobranca[]

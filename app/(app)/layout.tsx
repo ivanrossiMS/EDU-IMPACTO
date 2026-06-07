@@ -19,10 +19,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isMobile = useIsMobile()
 
-  // 3 estados de auth: 'checking' | 'authorized' | 'unauthorized'
-  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'unauthorized'>('checking')
+  // 4 estados de auth: 'checking' | 'authorized' | 'unauthorized' | 'blocked'
+  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'unauthorized' | 'blocked'>('checking')
 
-  // EFFECT 1: Check Auth On Mount ONLY
+  // EFFECT 1: Check Auth On Mount ONLY — SECURE VERSION
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -31,9 +31,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         })
 
+        // ✅ CORREÇÃO DE SEGURANÇA: Qualquer falha → redirecionar para login
+        // Antes: erros de rede/4xx resultavam em setAuthState('authorized')
         if (!res.ok) {
-          console.warn('Auth check failed, trusting localStorage session temporarily.')
-          setAuthState('authorized') // Assume authorized if we have localStorage data
+          if (res.status === 401 || res.status === 403) {
+            // Sessão inválida ou expirada — ir para login
+            router.replace('/login')
+            return
+          }
+          // Erro de servidor (5xx) — pode ser temporário, mostrar erro mas não autorizar
+          setAuthState('unauthorized')
+          router.replace('/login')
           return
         }
 
@@ -41,16 +49,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const serverUser: any = data.user
 
         if (!serverUser) {
-          console.warn('No server user, trusting localStorage session temporarily.')
-          setAuthState('authorized')
+          // Resposta 200 mas sem usuário — sessão incoerente
+          router.replace('/login')
+          return
+        }
+
+        if (serverUser.status === 'inativo' || serverUser.status === 'bloqueado') {
+          setCurrentUser(serverUser)
+          setAuthState('blocked')
           return
         }
 
         setCurrentUser(serverUser)
         setAuthState('authorized')
       } catch (err) {
-        console.error('Fetch auth error:', err)
-        setAuthState('authorized') // Trust local storage on network error
+        // ✅ CORREÇÃO DE SEGURANÇA: Erro de rede → ir para login (não autorizar)
+        // Antes: erro resultava em setAuthState('authorized')
+        console.warn('[Auth] Network error checking session, redirecting to login.')
+        router.replace('/login')
       }
     }
 
@@ -115,6 +131,89 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
           </main>
         </div>
+      </div>
+    )
+  }
+
+  if (authState === 'blocked') {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: '#030712', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden'
+      }}>
+        {/* Background Effects */}
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          width: '80vw', height: '80vw', maxWidth: 800, maxHeight: 800,
+          background: 'radial-gradient(circle, rgba(220,38,38,0.15) 0%, transparent 60%)',
+          filter: 'blur(60px)', zIndex: 0
+        }} />
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+          backgroundSize: '40px 40px', zIndex: 0, opacity: 0.5
+        }} />
+
+        {/* Modal Content */}
+        <div style={{
+          position: 'relative', zIndex: 1,
+          background: 'rgba(17, 24, 39, 0.7)',
+          backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(220, 38, 38, 0.3)',
+          borderRadius: 24, padding: '48px 40px',
+          maxWidth: 480, width: '90%', textAlign: 'center',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(220, 38, 38, 0.1)',
+          animation: 'modalSlideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1)'
+        }}>
+          <div style={{
+            width: 80, height: 80, margin: '0 auto 24px',
+            background: 'linear-gradient(135deg, rgba(220,38,38,0.2) 0%, rgba(153,27,27,0.2) 100%)',
+            border: '1px solid rgba(220,38,38,0.4)', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 30px rgba(220,38,38,0.2), inset 0 0 20px rgba(220,38,38,0.2)'
+          }}>
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          
+          <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 700, margin: '0 0 12px', letterSpacing: '-0.02em' }}>
+            Acesso Bloqueado
+          </h1>
+          <p style={{ color: '#9ca3af', fontSize: 16, lineHeight: 1.6, margin: '0 0 32px' }}>
+            O seu perfil de acesso à plataforma foi desativado temporariamente. Entre em contato com a administração escolar para reativar sua conta.
+          </p>
+
+          <button 
+            onClick={() => {
+              // Sign out using the API to clear cookies
+              fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
+                window.location.href = '/login'
+              })
+            }}
+            style={{
+              background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',
+              color: '#fff', border: 'none', borderRadius: 12,
+              padding: '14px 24px', fontSize: 16, fontWeight: 600,
+              width: '100%', cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+          >
+            Sair e voltar ao Login
+          </button>
+        </div>
+
+        <style>{`
+          @keyframes modalSlideUp {
+            from { opacity: 0; transform: translateY(40px) scale(0.95); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+        `}</style>
       </div>
     )
   }

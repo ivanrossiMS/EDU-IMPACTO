@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveReportData } from '@/lib/reports/reportEngine'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json()
     const { source, filters = {}, page = 1, pageSize = 50, sortField, sortDir } = body

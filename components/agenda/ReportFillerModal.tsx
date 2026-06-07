@@ -230,7 +230,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,
-        exigeCiencia: true,
+        exigeCiencia: false,
         permiteResposta: true,
         dataEnvio: new Date().toISOString(),
         dataAgendamento: null,

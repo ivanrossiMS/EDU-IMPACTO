@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     const url = new URL(request.url)
@@ -81,6 +85,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
@@ -137,6 +144,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
@@ -175,6 +185,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabase = await createProtectedClient()
     const url = new URL(request.url)

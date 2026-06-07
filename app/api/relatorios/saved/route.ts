@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -7,6 +8,9 @@ const supabase = createClient(
 )
 
 export async function GET() {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { data, error } = await supabase.from('saved_reports').select('*').order('updated_at', { ascending: false }).limit(100)
     if (error) throw error
@@ -17,6 +21,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json()
     const { id, user_id, nome, descricao, tipo_relatorio, subtipo, configuracao, filtros, favorito, compartilhado } = body
@@ -40,6 +47,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')

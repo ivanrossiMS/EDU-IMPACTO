@@ -517,7 +517,7 @@ export default function AgendaDigitalFamilyLayout({
         }
 
         .ad-premium-card-wrapper {
-          margin-top: -16px;
+          margin-top: 0px;
           position: relative;
           z-index: 1;
           width: 100%;
@@ -646,7 +646,7 @@ export default function AgendaDigitalFamilyLayout({
         
         @media (max-width: 640px) {
           .ad-premium-card-wrapper {
-            margin-top: 65px !important;
+            margin-top: 0px !important;
           }
           .ad-main-grid {
             margin-top: 8px !important;

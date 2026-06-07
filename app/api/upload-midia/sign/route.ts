@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createAdminClient } from '@/lib/server/supabaseServerFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { bucket, fileName, folder = 'uploads' } = await request.json()
 

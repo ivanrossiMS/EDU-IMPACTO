@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { db } from '@/lib/mockDb'
 
 export async function PUT(request: Request, context: any) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const id = context.params.id;
   const updates = await request.json()
   const index = db.lancamentosNota.findIndex((c: any) => c.id === id)
@@ -11,6 +15,9 @@ export async function PUT(request: Request, context: any) {
 }
 
 export async function DELETE(request: Request, context: any) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const id = context.params.id;
   const index = db.lancamentosNota.findIndex((c: any) => c.id === id)
   if (index === -1) return NextResponse.json({ error: 'Not found' }, { status: 404 })

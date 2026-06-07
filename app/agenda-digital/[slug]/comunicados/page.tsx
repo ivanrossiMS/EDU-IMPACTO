@@ -688,7 +688,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                     position: 'absolute', bottom: 24, right: 28, opacity: 0,
                     transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', gap: 8, zIndex: 2
                   }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5' }}>Abrir Comunicado</span>
                     <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#4f46e5', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(79,70,229,0.3)' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </div>
@@ -697,7 +696,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                   {/* Text sneak peek removed by user request */}
 
                   {/* Exige Ciência Box */}
-                  {c.exigeCiencia && (
+                  {c.exigeCiencia && !c.titulo?.toLowerCase().includes('relatório') && (
                     <div style={{ 
                       background: isCiencia ? 'linear-gradient(to right, rgba(34,197,94,0.05), transparent)' : 'linear-gradient(to right, rgba(245,158,11,0.05), transparent)', 
                       padding: '14px 18px', 

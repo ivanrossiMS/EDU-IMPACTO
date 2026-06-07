@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,7 +9,14 @@ export const dynamic = 'force-dynamic'
 // GET /api/configuracoes                        → all keys
 // GET /api/configuracoes?chaves=k1,k2,k3       → bulk fetch (NEW — eliminates 16 separate requests)
 export async function GET(request: Request) {
-  const supabase = await createProtectedClient();
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  // Usa o Service Role para ler configurações globais, garantindo acesso a famílias sem barreiras de RLS
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   const { searchParams } = new URL(request.url)
   const chave = searchParams.get('chave')
   const chaves = searchParams.get('chaves')  // comma-separated bulk
@@ -51,6 +60,9 @@ export async function GET(request: Request) {
 
 // POST /api/configuracoes  { chave: 'cfgDisciplinas', valor: [...] }
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     const { chave, valor } = await request.json()

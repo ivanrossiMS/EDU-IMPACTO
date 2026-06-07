@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { id } = await context.params
   const { data, error } = await supabase.from('leads').select('*').eq('id', id).single()
@@ -12,6 +16,9 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { id } = await context.params
   try {
@@ -35,6 +42,9 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 }
 
 export async function DELETE(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { id } = await context.params
   const { error } = await supabase.from('leads').delete().eq('id', id)

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     console.log('API Route: Recebendo requisição com pdf2json')
     const formData = await request.formData()

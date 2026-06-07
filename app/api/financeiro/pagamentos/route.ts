@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 import { randomUUID } from 'crypto'
@@ -57,6 +58,9 @@ async function getNextReceiptNumber(supabase: any): Promise<string> {
 }
 
 export async function POST(request: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const payload = ZodPagamentoPayload.parse(body)

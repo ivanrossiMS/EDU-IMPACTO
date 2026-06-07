@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
 import { POST as webhookPOST } from '../../webhook/route'
@@ -16,6 +17,9 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
  * - Retorna ao final: total na catraca, já existentes, novos inseridos
  */
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const { searchParams } = new URL(req.url)
   const dispositivoId = searchParams.get('id')
   const host = req.headers.get('host') || 'localhost:3000'

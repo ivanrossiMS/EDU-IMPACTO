@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 
@@ -50,6 +51,9 @@ const ZodBaixaResponsavel = z.object({
  * O DRE e o Caixa recebem uma linha por parcela, permitindo rastreabilidade granular.
  */
 export async function POST(request: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const payload = ZodBaixaResponsavel.parse(body)

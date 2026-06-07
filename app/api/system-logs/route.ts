@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const modulo = searchParams.get('modulo')
@@ -34,6 +38,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     const body = await request.json()
@@ -75,6 +82,9 @@ export async function POST(request: Request) {
 
 // GET /api/system-logs?limit=500 — also accepts DELETE for cleanup
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const olderThanDays = parseInt(searchParams.get('olderThanDays') || '90')

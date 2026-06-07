@@ -171,12 +171,15 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
           .ad-banner-global {
             width: 100%;
-            height: 240px;
             position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
           }
 
           .ad-content-inner.ad-has-banner {
-            margin-top: -80px;
+            margin-top: 0px;
+            padding-top: 0px !important;
           }
 
           .ad-fin-sticky-footer {
@@ -203,9 +206,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               display: block !important;
               width: 100% !important;
               height: auto !important;
-              max-height: 350px !important;
+              max-height: 400px !important;
               object-fit: contain !important;
-              object-position: top center !important;
               margin: 0 !important;
             }
             .ad-fin-sticky-footer {
@@ -217,7 +219,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               padding-bottom: 100px !important;
             }
             .ad-content-inner.ad-has-banner {
-              margin-top: 0 !important;
+              margin-top: 0px !important;
+              padding-top: 0px !important;
             }
           }
         `}} />
@@ -231,15 +234,11 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="ad-main-scroll no-scrollbar">
           {bannerUrl && (
             <div className="ad-banner-global">
-              <Image 
+              <img 
                 src={bannerUrl} 
                 alt="Cover Banner" 
-                fill 
-                priority={true} 
-                quality={90} 
-                style={{ objectFit: 'cover', objectPosition: 'center' }} 
+                style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} 
               />
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #f8fafc, transparent)' }} />
             </div>
           )}
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
+import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
@@ -26,6 +27,9 @@ function normalizeRow(row: any) {
   return merged
 }
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const authClient = await createProtectedClient();
   const supabase = supabaseServer;
   const { searchParams } = new URL(request.url);
@@ -91,11 +95,11 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: { user } } = await authClient.auth.getUser();
+  const { data: { user: currentUser } } = await authClient.auth.getUser();
   let isFamilyOrStudent = false;
-  if (user) {
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
+  if (currentUser) {
+    const perfil = currentUser.user_metadata?.perfil || '';
+    const cargo = currentUser.user_metadata?.cargo || '';
     if (
       perfil === 'Família' || 
       perfil === 'Responsável' || 
@@ -134,6 +138,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const authClient = await createProtectedClient();
   const supabase = supabaseServer;
   console.log("==> POST /api/comunicados CALLED!");
@@ -200,6 +207,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const authClient = await createProtectedClient();
   const supabase = supabaseServer;
   const { searchParams } = new URL(request.url)

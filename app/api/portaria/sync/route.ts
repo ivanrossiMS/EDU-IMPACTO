@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
 
@@ -10,6 +11,9 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
  * Body: { dispositivo_id, aluno_id? (opcional, se omitido sincroniza todos) }
  */
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json()
     const { dispositivo_id, aluno_id } = body
@@ -139,6 +143,9 @@ export async function POST(req: NextRequest) {
 
 /** GET: buscar status de sync de alunos com dispositivo */
 export async function GET(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const url = new URL(req.url)
     const dispositivo_id = url.searchParams.get('dispositivo_id')

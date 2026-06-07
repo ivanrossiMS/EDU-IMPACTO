@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal } from 'lucide-react'
 import Image from 'next/image'
@@ -97,6 +97,37 @@ export function ComunicadoViewModal({
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
+
+  const adminThreads = useMemo(() => {
+    if (!isAdminMode) return []
+    const threadsMap = new Map<string, { studentId: string, studentName: string, messages: ChatMessage[], lastMessageAt: string }>()
+    
+    messages.forEach(msg => {
+      const threadId = msg.remetente_id;
+      if (!threadsMap.has(threadId)) {
+        threadsMap.set(threadId, {
+          studentId: threadId,
+          studentName: msg.is_admin ? 'Usuário (Mensagem Global)' : msg.remetente_nome,
+          messages: [],
+          lastMessageAt: msg.created_at
+        })
+      }
+      const thread = threadsMap.get(threadId)!
+      thread.messages.push(msg)
+      if (new Date(msg.created_at) > new Date(thread.lastMessageAt)) {
+        thread.lastMessageAt = msg.created_at
+      }
+      if (!msg.is_admin) {
+        thread.studentName = msg.remetente_nome
+      }
+    })
+    
+    return Array.from(threadsMap.values()).sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+  }, [messages, isAdminMode])
+  
+  const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
+
   const fetchMessages = async () => {
     try {
       const url = isAdminMode 
@@ -129,7 +160,7 @@ export function ComunicadoViewModal({
     try {
       const payload = {
         comunicado_id: comunicado.id,
-        remetente_id: currentUserSlug,
+        remetente_id: isAdminMode ? (selectedThreadId || currentUserSlug) : currentUserSlug,
         remetente_nome: currentUserName,
         conteudo: newMessage.trim(),
         anexos: pendingAnexos,
@@ -419,7 +450,7 @@ export function ComunicadoViewModal({
 
             {/* Attachments - Visual Order */}
             {comunicado.anexos && comunicado.anexos.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 {comunicado.anexos.map((anexo: string, idx: number) => {
                   const parsed = parseAnexo(anexo)
                   if (!parsed) return null
@@ -434,21 +465,35 @@ export function ComunicadoViewModal({
                   if (isImg || isVid) {
                     // Modern Image/Video Card immediately following text
                     return (
-                      <div key={idx} style={{ width: '100%', borderRadius: 24, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 12px 32px rgba(0,0,0,0.08)', cursor: 'pointer', maxWidth: 800 }} onClick={() => {
+                      <div key={idx} style={{ width: '100%', borderRadius: 24, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 12px 32px rgba(0,0,0,0.08)', cursor: 'pointer', maxWidth: 800, background: '#f1f5f9', display: 'flex', justifyContent: 'center' }} onClick={() => {
                         if (isImg && setMaximizedImageStr) setMaximizedImageStr(parsed.url)
                         if (isVid && setMaximizedVideoStr) setMaximizedVideoStr(parsed.url)
                       }}>
                         {isImg ? (
-                          <img src={parsed.url} alt={parsed.name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 500, objectFit: 'cover' }} />
+                          <img src={parsed.url} alt={parsed.name} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 500, objectFit: 'contain' }} />
                         ) : (
-                          <video src={parsed.url} style={{ width: '100%', maxHeight: 500, objectFit: 'cover', display: 'block' }} controls preload="metadata" onClick={e => e.stopPropagation()} />
+                          <video src={parsed.url} style={{ width: '100%', maxHeight: 500, objectFit: 'contain', display: 'block' }} controls preload="metadata" onClick={e => e.stopPropagation()} />
                         )}
                       </div>
                     )
                   } else {
+                    let studentIdForCiencia = null;
+                    if (isReportPayload && parsed.url.startsWith('payload:')) {
+                      try {
+                        const pay = JSON.parse(parsed.url.substring(8));
+                        studentIdForCiencia = pay?.studentInfo?.id;
+                      } catch(e) {}
+                    }
+                    const studentCienciaIso = studentIdForCiencia && comunicado.ciencias ? comunicado.ciencias[studentIdForCiencia] : null;
+                    let cienciaString = '';
+                    if (studentCienciaIso) {
+                      const cDate = new Date(studentCienciaIso);
+                      cienciaString = cDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' às ' + cDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    }
+
                     // Document Card
                     return (
-                      <div key={idx} style={{ maxWidth: 800, padding: '16px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} 
+                      <div key={idx} style={{ maxWidth: 800, width: '100%', padding: '16px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} 
                            onClick={() => {
                              if (isReportTask && setOpenedReportTask) setOpenedReportTask(anexo)
                              else if (isReportPayload && setOpenedReportPayload) setOpenedReportPayload(anexo)
@@ -458,9 +503,15 @@ export function ComunicadoViewModal({
                         <div style={{ width: 48, height: 48, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                            <FileText size={24} />
                         </div>
-                        <div>
+                        <div style={{ flex: 1 }}>
                            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '')}</div>
                            <div style={{ fontSize: 13, color: '#64748b' }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : 'Documento anexo'}</div>
+                           {isAdminMode && cienciaString && (
+                             <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                               <CheckCircle2 size={14} />
+                               Ciência confirmada em {cienciaString}
+                             </div>
+                           )}
                         </div>
                       </div>
                     )
@@ -470,10 +521,10 @@ export function ComunicadoViewModal({
             )}
 
             {/* Ciência */}
-            {comunicado.exigeCiencia && (
+            {comunicado.exigeCiencia && !isAdminMode && (
               <div style={{ 
                 background: !!(comunicado.ciencias || {})[currentUserSlug] ? '#f0fdf4' : '#eff6ff', 
-                padding: '24px', borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, border: !!(comunicado.ciencias || {})[currentUserSlug] ? '1px solid #bbf7d0' : '1px solid #bfdbfe', maxWidth: 800
+                padding: '24px', borderRadius: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, border: !!(comunicado.ciencias || {})[currentUserSlug] ? '1px solid #bbf7d0' : '1px solid #bfdbfe', maxWidth: 800, width: '100%', margin: '0 auto'
               }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                   {!!(comunicado.ciencias || {})[currentUserSlug] ? <CheckCircle2 size={28} color="#16a34a" /> : <ShieldAlert size={28} color="#3b82f6" />}
@@ -495,13 +546,36 @@ export function ComunicadoViewModal({
 
             {/* Comments Feed Area */}
             {canReply && (
-              <div style={{ marginTop: 24, maxWidth: 800 }}>
-                {messages.length > 0 ? (
+              <div style={{ marginTop: 24, maxWidth: 800, width: '100%', margin: '0 auto' }}>
+                {isAdminMode && !selectedThreadId ? (
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                     <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversas Privadas ({adminThreads.length})</h3>
+                     {adminThreads.map(thread => (
+                        <div key={thread.studentId} onClick={() => setSelectedThreadId(thread.studentId)} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
+                            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{thread.messages.length} mensagens com este usuário</div>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                            {timeAgoShort(thread.lastMessageAt)}
+                          </div>
+                        </div>
+                     ))}
+                     {adminThreads.length === 0 && (
+                       <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8', fontSize: 13, fontWeight: 500 }}>Nenhuma conversa iniciada.</div>
+                     )}
+                   </div>
+                ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    {isAdminMode && (
+                      <button onClick={() => setSelectedThreadId(null)} style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+                        &larr; Voltar para conversas
+                      </button>
+                    )}
                     <div style={{ height: 1, background: '#e2e8f0', margin: '8px 0' }} />
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>Respostas</h3>
-                    {messages.map((msg, idx) => {
-                      const isMe = msg.remetente_id === currentUserSlug && msg.is_admin === isAdminMode
+                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>{isAdminMode ? `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}` : 'Respostas Privadas ao Envio'}</h3>
+                    {messagesToShow.length > 0 ? messagesToShow.map((msg, idx) => {
+                      const isMe = isAdminMode ? msg.is_admin : (msg.remetente_id === currentUserSlug && !msg.is_admin)
                       const avatarToUse = (!isMe && isAdminMode && msg.is_admin) ? undefined : (isMe && currentUserAvatar ? currentUserAvatar : undefined)
                       
                       return (
@@ -529,11 +603,11 @@ export function ComunicadoViewModal({
                           </div>
                         </div>
                       )
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>Nenhum comentário ainda.</div>
+                    }) : (
+                      <div style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>Nenhum comentário ainda.</div>
+                      </div>
+                    )}
                   </div>
                 )}
                 <div ref={messagesEndRef} style={{ height: 20 }} />
@@ -543,7 +617,7 @@ export function ComunicadoViewModal({
           </div>
 
           {/* FOOTER - FIXED INPUT */}
-          {canReply && (
+          {canReply && (!isAdminMode || selectedThreadId) && (
             <div className="cvm-footer">
               <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: '50%', background: '#f8fafc', color: '#64748b' }}>
                 <input type="file" style={{ display: 'none' }} multiple onChange={handleFileUpload} disabled={isUploading} />

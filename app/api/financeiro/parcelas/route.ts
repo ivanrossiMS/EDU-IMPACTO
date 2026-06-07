@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { z } from 'zod'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -6,6 +7,9 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const aluno_id = searchParams.get('aluno_id')

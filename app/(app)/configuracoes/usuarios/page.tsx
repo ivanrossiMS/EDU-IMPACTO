@@ -199,7 +199,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [] })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
 
   /* ── User actions ── */
@@ -264,8 +264,8 @@ export default function UsuariosPage() {
   }
 
   /* ── Perfil actions ── */
-  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [] }); setPerfilModal('add') }
-  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: [...p.permissoes] }); setEditingPerfilId(p.id); setPerfilModal('edit') }
+  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false }); setPerfilModal('add') }
+  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: [...p.permissoes], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
   const savePerfil = () => {
     if (!perfilForm.nome.trim()) return
     if (perfilModal === 'add') {
@@ -564,6 +564,25 @@ export default function UsuariosPage() {
               <div><label className="form-label">Cor</label><input type="color" value={perfilForm.cor} onChange={e => setPerfilForm(p => ({ ...p, cor: e.target.value }))} style={{ width: 48, height: 40, borderRadius: 8, border: 'none', cursor: 'pointer', padding: 2, background: 'transparent' }} /></div>
             </div>
             <div><label className="form-label">Descrição</label><input className="form-input" value={perfilForm.descricao} onChange={e => setPerfilForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Resumo das permissões..." /></div>
+            
+            {/* Toggle de Acesso ao Gestão Escolar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.3)' }}>
+                  🏢
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Gestão Escolar (ERP)</div>
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Se desativado, o colaborador não poderá acessar o sistema principal.</div>
+                </div>
+              </div>
+              <ModernSwitch
+                checked={!perfilForm.bloqueadoGestaoEscolar}
+                onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoEscolar: !p.bloqueadoGestaoEscolar }))}
+                color="#10b981"
+              />
+            </div>
+
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className="form-label">Permissões por Módulo e Página</label>

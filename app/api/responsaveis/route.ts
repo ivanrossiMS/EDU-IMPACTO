@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 // ─── GET: Listar responsáveis com alunos vinculados ──────────────────────────
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const pageParam = searchParams.get('page')
@@ -114,6 +118,9 @@ export async function GET(request: Request) {
 
 // ─── POST: Criar ou atualizar responsável ─────────────────────────────────────
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
 
@@ -189,6 +196,9 @@ export async function POST(request: Request) {
 
 // ─── PUT: Atualizar responsável ──────────────────────────────────────────────
 export async function PUT(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const { searchParams } = new URL(request.url)
@@ -283,6 +293,9 @@ export async function PUT(request: Request) {
 
 // ─── DELETE: Remover responsável ──────────────────────────────────────────────
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

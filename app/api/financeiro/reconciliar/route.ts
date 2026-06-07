@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
@@ -11,6 +12,9 @@ export const maxDuration = 60
  * Usa MÚLTIPLAS fontes de verdade para identificar codBaixas válidos.
  */
 export async function POST() {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     const codBaixasPagos = new Set<string>()
@@ -101,6 +105,9 @@ export async function POST() {
  * Use somente se a reconciliação normal falhar.
  */
 export async function DELETE() {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   const supabase = await createProtectedClient();
   try {
     // Busca todas as movimentacoes com origem de baixa automática

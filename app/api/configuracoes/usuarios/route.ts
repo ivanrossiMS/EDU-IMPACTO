@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
@@ -6,6 +7,9 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const url = new URL(req.url)
     
@@ -100,6 +104,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json()
     

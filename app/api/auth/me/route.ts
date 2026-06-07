@@ -42,6 +42,7 @@ export async function GET() {
     foto: dbUser?.foto || dbUser?.dados?.foto || user.user_metadata?.foto || null,
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
+    status: dbUser?.status || 'ativo',
   };
 
   return NextResponse.json({ user: userData }, {

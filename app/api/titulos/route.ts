@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { APIListQuerySchema, ZodTituloFinanceiro } from '@/lib/server/zodSchemas'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -6,6 +7,9 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
@@ -61,6 +65,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await request.json()
     const supabase = await createProtectedClient()
@@ -133,6 +140,9 @@ function buildRowAuth(t: any) {
 }
 
 export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

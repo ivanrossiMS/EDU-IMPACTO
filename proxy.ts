@@ -76,10 +76,58 @@ export async function proxy(request: NextRequest) {
 
   // ── Sem sessão → redireciona para login ───────────────────────────────────
   if (!user) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Não autorizado. Faça login para continuar.' },
+        { status: 401 }
+      )
+    }
     const loginUrl = new URL('/login', request.url)
     // Guarda a URL que o usuário tentou acessar para redirecionar após login
     loginUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(loginUrl)
+  }
+
+  // ── Usuário autenticado: verificar se não é família/aluno tentando acessar rotas do ERP ──
+  const perfil = user.user_metadata?.perfil || ''
+  const cargo = user.user_metadata?.cargo || ''
+  const isFamilyOrStudent = (
+    perfil === 'Família' ||
+    perfil === 'Responsável' ||
+    perfil === 'Aluno' ||
+    cargo === 'Responsável' ||
+    cargo === 'Aluno'
+  )
+
+  // Família/Aluno só pode acessar /agenda-digital e suas APIs
+  if (isFamilyOrStudent) {
+    const allowedForFamily = [
+      '/agenda-digital',
+      '/api/comunicados',
+      '/api/agenda',
+      '/api/aluno-responsavel',
+      '/api/auth',
+      '/api/financeiro/baixar-por-responsavel',
+      '/api/financeiro/titulos',
+      '/api/upload-midia',
+      '/api/comunicados_respostas',
+      '/api/configuracoes',
+      '/favicon.ico'
+    ]
+
+    const isAllowed = allowedForFamily.some(
+      p => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?')
+    )
+
+    if (!isAllowed) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Acesso negado. Seu perfil não tem permissão para esta operação.' },
+          { status: 403 }
+        )
+      }
+      return NextResponse.redirect(new URL('/agenda-digital', request.url))
+    }
   }
 
   // ── Com sessão → adiciona headers de segurança extras ────────────────────

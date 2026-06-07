@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
 
@@ -29,6 +30,9 @@ if (!globalThis.idfaceSyncProgress) {
  * Retorna o progresso atualizado da sincronização em andamento.
  */
 export async function GET() {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   if (!globalThis.idfaceSyncProgress) {
     globalThis.idfaceSyncProgress = {
       processed: 0,
@@ -45,6 +49,9 @@ export async function GET() {
  * Sincroniza em lote as fotos dos alunos registradas na catraca física iDFace para o banco de dados do ERP.
  */
 export async function POST(req: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const url = new URL(req.url)
     const isPreview = url.searchParams.get('preview') !== 'false'

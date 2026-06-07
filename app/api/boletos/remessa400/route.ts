@@ -4,11 +4,15 @@
  * Gera arquivo de remessa CNAB 400 completo — SERVER-SIDE ONLY
  */
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/server/authGuard'
 import { gerarArquivoRemessa400 } from '@/lib/banking/cnab400'
 import { validarEmissao } from '@/lib/banking/validacao'
 import type { TituloCobranca, ConvenioBancario } from '@/lib/banking/types'
 
 export async function POST(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const body = await req.json() as {
       titulos: TituloCobranca[]
