@@ -201,7 +201,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             }
             .ad-banner-global img {
               display: block !important;
-              position: relative !important;
               width: 100% !important;
               height: auto !important;
               max-height: 350px !important;
