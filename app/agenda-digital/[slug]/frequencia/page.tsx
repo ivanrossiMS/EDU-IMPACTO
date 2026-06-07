@@ -59,6 +59,22 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     setSelectedDate(null)
   }, [resolvedParams.slug])
 
+  // Fetch real student attendance logs from database based on turma and alunoId
+  const { data: frequenciasDb = [], isLoading: isLoadingFrequencias } = useApiQuery<any[]>(
+    ['frequencias-aluno', resolvedParams.slug, aluno?.turma],
+    '/api/academico/frequencias',
+    { aluno_id: resolvedParams.slug, turma_id: aluno?.turma || '' },
+    { enabled: !!resolvedParams.slug && !!aluno?.turma }
+  )
+
+  // Fallback para eventos de portaria
+  const { data: eventosPortaria = [] } = useApiQuery<any[]>(
+    ['portaria-eventos-aluno', resolvedParams.slug],
+    '/api/portaria/eventos',
+    { aluno_id: resolvedParams.slug },
+    { enabled: !!resolvedParams.slug }
+  )
+
   // Find unread items and mark as read
   React.useEffect(() => {
     if (!frequenciasDb || frequenciasDb.length === 0 || !resolvedParams.slug) return;
@@ -80,22 +96,6 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
       }).catch(console.error);
     }
   }, [frequenciasDb, resolvedParams.slug]);
-
-  // Fetch real student attendance logs from database based on turma and alunoId
-  const { data: frequenciasDb = [], isLoading: isLoadingFrequencias } = useApiQuery<any[]>(
-    ['frequencias-aluno', resolvedParams.slug, aluno?.turma],
-    '/api/academico/frequencias',
-    { aluno_id: resolvedParams.slug, turma_id: aluno?.turma || '' },
-    { enabled: !!resolvedParams.slug && !!aluno?.turma }
-  )
-
-  // Fallback para eventos de portaria
-  const { data: eventosPortaria = [] } = useApiQuery<any[]>(
-    ['portaria-eventos-aluno', resolvedParams.slug],
-    '/api/portaria/eventos',
-    { aluno_id: resolvedParams.slug },
-    { enabled: !!resolvedParams.slug }
-  )
 
   const entradaCatracaMap = useMemo(() => {
     const map: Record<string, string> = {}

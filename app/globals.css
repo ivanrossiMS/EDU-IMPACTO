@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Outfit:wght@300;400;600;800&display=swap');
 /* Google Fonts are loaded non-blocking via <link> tags in app/layout.tsx */
 @import "tailwindcss";
 
@@ -1174,7 +1175,6 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
 /* ESTILOS ESPECÍFICOS DA PÁGINA "MOMENTOS" (AGENDA DIGITAL) */
 /* ========================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Outfit:wght@300;400;600;800&display=swap');
 
 @keyframes floatRandom {
   0% { transform: translateY(0px) rotate(0deg) scale(1); }
