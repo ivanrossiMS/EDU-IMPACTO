@@ -36,11 +36,13 @@ export async function POST(request: Request) {
         // Enviar notificação para o aluno correspondente
         const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
         if (targetIds.length > 0) {
+          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
+          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
           await sendAgendaPushNotification({
             type: 'frequencia',
             itemId: String(row.id),
-            title: 'Atualização de frequência',
-            message: `Há uma nova atualização de frequência disponível.`,
+            title: '✋ Atualização de Frequência',
+            message: `Foi feito um novo registro de frequência para ${nomeAluno}.`,
             targetUserIds: targetIds,
             targetUrl: `/agenda-digital/frequencia`
           }).catch(err => console.error('Frequencia Push Error:', err))
@@ -55,11 +57,13 @@ export async function POST(request: Request) {
 
     const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
     if (targetIds.length > 0) {
+      const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
+      const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
       sendAgendaPushNotification({
         type: 'frequencia',
         itemId: String(data.id),
-        title: 'Atualização de frequência',
-        message: `Há uma nova atualização de frequência disponível.`,
+        title: '✋ Atualização de Frequência',
+        message: `Foi feito um novo registro de frequência para ${nomeAluno}.`,
         targetUserIds: targetIds,
         targetUrl: `/agenda-digital/frequencia`
       }).catch(err => console.error('Frequencia Push Error:', err))

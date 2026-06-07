@@ -20,7 +20,8 @@ export async function POST(request: Request) {
       'momento': 'momentos',
       'evento': 'eventos_agenda',
       'ocorrencia': 'ocorrencias',
-      'nota': 'boletins'
+      'nota': 'boletins',
+      'frequencia': 'frequencias'
     }
 
     const table = tableMap[tipo]

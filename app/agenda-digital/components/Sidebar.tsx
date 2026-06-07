@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { compressImage } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { 
@@ -68,7 +68,7 @@ export function ADSidebar() {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0 })
+  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0, unreadFrequencia: 0 })
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,7 +130,10 @@ export function ADSidebar() {
         const contentType = res.headers.get("content-type");
         if (res.ok && isMounted && contentType?.includes("application/json")) {
           const data = await res.json()
-          setUnreadStats(data)
+          setUnreadStats(prev => {
+            if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
+            return data;
+          })
         }
       } catch (e) {}
     }
@@ -182,7 +185,7 @@ export function ADSidebar() {
 
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos`, badgeVal: unreadStats.unreadMomentos || undefined },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario`, badgeVal: unreadStats.unreadCalendario || undefined },
-        { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
+        { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia`, badgeVal: unreadStats.unreadFrequencia || undefined },
         { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias`, badgeVal: unreadStats.unreadOcorrencias || undefined },
         { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas`, badgeVal: unreadStats.unreadNotas || undefined },
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
@@ -233,12 +236,13 @@ export function ADSidebar() {
             gap: 0,
             scrollSnapType: 'x mandatory'
           }}>
+            <LayoutGroup id="ad-mobile-tabs">
             {mobileTabs.map((item, idx) => {
               const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
               const badge = item.badgeVal !== undefined ? item.badgeVal : getBadgeValue(item.id)
               
               return (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', minWidth: '76px', scrollSnapAlign: 'start', zIndex: 1, position: 'relative' }}>
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', minWidth: '76px', scrollSnapAlign: 'start', zIndex: 1, position: 'relative' }}>
                   {idx > 0 && (
                     <div style={{ position: 'absolute', left: 0, width: 1, height: 28, background: 'rgba(255,255,255,0.15)' }} />
                   )}
@@ -302,6 +306,7 @@ export function ADSidebar() {
                 </div>
               )
             })}
+            </LayoutGroup>
           </div>
         </div>
       </div>

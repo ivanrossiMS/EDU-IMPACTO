@@ -154,6 +154,18 @@ export async function GET(request: Request) {
       return !leituras[alunoId];
     }).length || 0;
 
+    // 7. Unread Frequencia
+    let freqQuery = supabase.from('frequencias').select('id, dados, leituras').eq('aluno_id', alunoId);
+    if (accessStartDate) {
+      freqQuery = freqQuery.gte('created_at', accessStartDate.toISOString());
+    }
+    const { data: frequencias, error: freqError } = await freqQuery;
+    if (freqError) throw new Error(`Frequencias error: ${freqError.message}`);
+    const unreadFrequencia = frequencias?.filter((f: any) => {
+      const leituras = f.leituras || f.dados?.leituras || {};
+      return !leituras[alunoId];
+    }).length || 0;
+
     let unreadChat = 0;
 
     return NextResponse.json({
@@ -162,10 +174,11 @@ export async function GET(request: Request) {
       unreadCalendario,
       unreadOcorrencias,
       unreadNotas,
+      unreadFrequencia,
       unreadChat
     })
   } catch (err: any) {
     console.error("Erro ao buscar notificações unread:", err);
-    return NextResponse.json({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0 })
+    return NextResponse.json({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0, unreadFrequencia: 0 })
   }
 }

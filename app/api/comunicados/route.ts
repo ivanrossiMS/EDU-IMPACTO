@@ -161,8 +161,8 @@ export async function POST(request: Request) {
           await sendAgendaPushNotification({
             type: 'comunicados',
             itemId: String(row.id),
-            title: `Novo Comunicado: ${row.titulo}`,
-            message: `Um novo comunicado foi enviado por ${row.autor}.`,
+            title: `📢 Comunicado: ${row.titulo}`,
+            message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
             targetUserIds: targetIds,
             targetUrl: '/agenda-digital/comunicados'
           }).catch(err => console.error("Push Error:", err))
@@ -185,8 +185,8 @@ export async function POST(request: Request) {
       await sendAgendaPushNotification({
         type: 'comunicados',
         itemId: String(data.id),
-        title: `Novo Comunicado: ${data.titulo}`,
-        message: `Um novo comunicado foi enviado por ${data.autor}.`,
+        title: `📢 Comunicado: ${data.titulo}`,
+        message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
         targetUserIds: targetIds,
         targetUrl: '/agenda-digital/comunicados'
       }).catch(err => console.error("Push Error:", err))

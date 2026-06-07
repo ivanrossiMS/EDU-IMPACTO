@@ -41,11 +41,13 @@ export async function POST(request: Request) {
       for (const row of rows) {
         const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
         if (targetIds.length > 0) {
+          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
+          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
           await sendAgendaPushNotification({
             type: 'ocorrencias',
             itemId: String(row.id),
-            title: 'Nova ocorrência registrada',
-            message: `Uma nova ocorrência foi registrada na agenda.`,
+            title: '⚠️ Aviso de Ocorrência',
+            message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
             targetUserIds: targetIds,
             targetUrl: `/agenda-digital/ocorrencias`
           }).catch(err => console.error('Ocorrencia Push Error:', err))
@@ -60,11 +62,13 @@ export async function POST(request: Request) {
 
     const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
     if (targetIds.length > 0) {
+      const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
+      const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
       sendAgendaPushNotification({
         type: 'ocorrencias',
         itemId: String(data.id),
-        title: 'Nova ocorrência registrada',
-        message: `Uma nova ocorrência foi registrada na agenda.`,
+        title: '⚠️ Aviso de Ocorrência',
+        message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
         targetUserIds: targetIds,
         targetUrl: `/agenda-digital/ocorrencias`
       }).catch(err => console.error('Ocorrencia Push Error:', err))

@@ -53,14 +53,35 @@ export async function POST(request: Request) {
       for (const row of rows) {
         const targetIds = await getResponsavelIdsForTargets({ targetClasses: row.turmas })
         if (targetIds.length > 0) {
+          // Notificação Imediata
           await sendAgendaPushNotification({
             type: 'calendario',
             itemId: String(row.id),
-            title: 'Novo evento no calendário',
-            message: `Um novo evento (${row.titulo}) foi adicionado à sua agenda.`,
+            title: '📅 Novo Evento!',
+            message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
             targetUserIds: targetIds,
             targetUrl: '/agenda-digital/calendario'
           }).catch(err => console.error('Evento Push Error:', err))
+
+          // Lembrete Agendado para 1 dia antes às 20h
+          if (row.data) {
+            const eventDate = new Date(`${row.data}T12:00:00Z`);
+            eventDate.setUTCDate(eventDate.getUTCDate() - 1);
+            const sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
+            const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
+            
+            if (sendAfterDate > new Date()) {
+              await sendAgendaPushNotification({
+                type: 'calendario',
+                itemId: `${row.id}-reminder`,
+                title: '⏰ Lembrete: Amanhã!',
+                message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
+                targetUserIds: targetIds,
+                targetUrl: '/agenda-digital/calendario',
+                sendAfter: sendAfterStr
+              }).catch(err => console.error('Evento Reminder Error:', err))
+            }
+          }
         }
       }
 
@@ -74,14 +95,35 @@ export async function POST(request: Request) {
     // Disparar Push (Background)
     const targetIds = await getResponsavelIdsForTargets({ targetClasses: data.turmas })
     if (targetIds.length > 0) {
+      // Notificação Imediata
       sendAgendaPushNotification({
         type: 'calendario',
         itemId: String(data.id),
-        title: 'Novo evento no calendário',
-        message: `Um novo evento (${data.titulo}) foi adicionado à sua agenda.`,
+        title: '📅 Novo Evento!',
+        message: `O evento "${data.titulo}" foi adicionado à sua agenda.`,
         targetUserIds: targetIds,
         targetUrl: '/agenda-digital/calendario'
       }).catch(err => console.error('Evento Push Error:', err))
+
+      // Lembrete Agendado
+      if (data.data) {
+        const eventDate = new Date(`${data.data}T12:00:00Z`);
+        eventDate.setUTCDate(eventDate.getUTCDate() - 1);
+        const sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
+        const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
+        
+        if (sendAfterDate > new Date()) {
+          sendAgendaPushNotification({
+            type: 'calendario',
+            itemId: `${data.id}-reminder`,
+            title: '⏰ Lembrete: Amanhã!',
+            message: `Amanhã temos o evento: ${data.titulo}. Não se esqueça!`,
+            targetUserIds: targetIds,
+            targetUrl: '/agenda-digital/calendario',
+            sendAfter: sendAfterStr
+          }).catch(err => console.error('Evento Reminder Error:', err))
+        }
+      }
     }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })

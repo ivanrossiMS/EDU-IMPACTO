@@ -4,6 +4,7 @@ export async function sendPushNotification(params: {
   targetUserIds: string[]
   url?: string
   data?: any
+  sendAfter?: string
 }) {
   try {
     const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || ''
@@ -21,6 +22,7 @@ export async function sendPushNotification(params: {
       contents: { en: params.body, pt: params.body },
       url: params.url, // Deep link que abre quando clica na notificação
       data: params.data,
+      ...(params.sendAfter && { send_after: params.sendAfter })
     }
 
     if (isMockMode) {

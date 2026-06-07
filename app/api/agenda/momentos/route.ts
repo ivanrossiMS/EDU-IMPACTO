@@ -54,8 +54,8 @@ export async function POST(request: Request) {
            sendAgendaPushNotification({
               type: 'momentos',
               itemId: String(row.id),
-              title: 'Novo momento publicado',
-              message: `Há novas fotos ou vídeos disponíveis na sua agenda.`,
+              title: '📸 Novo Momento Publicado!',
+              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
               targetUserIds: targetIds,
               targetUrl: '/agenda-digital/momentos'
            }).catch(err => console.error('Momento Push Error:', err))
@@ -77,8 +77,8 @@ export async function POST(request: Request) {
          sendAgendaPushNotification({
             type: 'momentos',
             itemId: String(data.id),
-            title: 'Novo momento publicado',
-            message: `Há novas fotos ou vídeos disponíveis na sua agenda.`,
+            title: '📸 Novo Momento Publicado!',
+            message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
             targetUserIds: targetIds,
             targetUrl: '/agenda-digital/momentos'
          }).catch(err => console.error('Momento Push Error:', err))

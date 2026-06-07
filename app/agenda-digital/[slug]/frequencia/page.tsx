@@ -59,6 +59,28 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     setSelectedDate(null)
   }, [resolvedParams.slug])
 
+  // Find unread items and mark as read
+  React.useEffect(() => {
+    if (!frequenciasDb || frequenciasDb.length === 0 || !resolvedParams.slug) return;
+    
+    const unreadIds = frequenciasDb
+      .filter((item: any) => {
+        const leituras = item.leituras || item.dados?.leituras || {};
+        return !leituras[resolvedParams.slug];
+      })
+      .map((item: any) => item.id);
+      
+    if (unreadIds.length > 0) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo: 'frequencia', ids: unreadIds, alunoId: resolvedParams.slug })
+      }).then(res => {
+        if (res.ok) window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+      }).catch(console.error);
+    }
+  }, [frequenciasDb, resolvedParams.slug]);
+
   // Fetch real student attendance logs from database based on turma and alunoId
   const { data: frequenciasDb = [], isLoading: isLoadingFrequencias } = useApiQuery<any[]>(
     ['frequencias-aluno', resolvedParams.slug, aluno?.turma],

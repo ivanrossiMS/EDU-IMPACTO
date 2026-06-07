@@ -12,6 +12,7 @@ interface SendAgendaPushParams {
   targetUserIds: string[]
   senderUserId?: string
   metadata?: any
+  sendAfter?: string
 }
 
 /**
@@ -26,7 +27,8 @@ export async function sendAgendaPushNotification({
   targetUrl,
   targetUserIds,
   senderUserId,
-  metadata
+  metadata,
+  sendAfter
 }: SendAgendaPushParams) {
   try {
     if (!targetUserIds || targetUserIds.length === 0) {
@@ -56,7 +58,8 @@ export async function sendAgendaPushNotification({
       body: message,
       targetUserIds,
       url: targetUrl,
-      data: metadata
+      data: metadata,
+      sendAfter
     })
 
     // 3. Salvar no Log de Auditoria

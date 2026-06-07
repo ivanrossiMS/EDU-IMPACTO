@@ -57,11 +57,13 @@ export async function POST(request: Request) {
     if (data && data.length > 0) {
       const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data[0].aluno_id] })
       if (targetIds.length > 0) {
+        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data[0].aluno_id).single()
+        const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
         sendAgendaPushNotification({
           type: 'notas',
           itemId: String(data[0].id),
-          title: 'Nova nota disponível',
-          message: `Uma nova nota foi publicada na agenda.`,
+          title: '🏆 Novas Notas Lançadas!',
+          message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
           targetUserIds: targetIds,
           targetUrl: `/agenda-digital/notas`
         }).catch(err => console.error('Boletins Push Error:', err))
