@@ -188,6 +188,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
           
           @media (max-width: 768px) {
+            .ad-main-scroll {
+              padding-top: max(env(safe-area-inset-top), 48px) !important;
+            }
             .ad-banner-global {
               position: relative !important;
               width: 100% !important;
@@ -198,6 +201,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             }
             .ad-banner-global img {
               display: block !important;
+              position: relative !important;
               width: 100% !important;
               height: auto !important;
               max-height: 350px !important;
