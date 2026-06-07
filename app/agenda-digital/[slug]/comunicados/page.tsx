@@ -299,7 +299,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           .ad-com-actions { width: auto !important; justify-content: flex-end !important; margin-top: 0 !important; align-self: center !important; }
           .ad-com-search { width: auto !important; justify-content: flex-end !important; }
           .ad-com-search input { 
-            width: 140px !important; 
+            width: 120px !important; 
             max-width: 100% !important; 
             height: 36px !important; 
             padding-left: 32px !important; 
@@ -311,7 +311,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             color: #0f172a !important;
           }
           .ad-com-search input:focus {
-            width: 150px !important;
+            width: 130px !important;
             border-color: #cbd5e1 !important;
             background: #ffffff !important;
           }
@@ -410,7 +410,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                 placeholder="Buscar..." 
                 style={{
                   paddingLeft: 40,
-                  width: 260,
+                  width: 220,
                   height: 44,
                   borderRadius: 14,
                   border: '1px solid rgba(99, 102, 241, 0.15)',
@@ -638,7 +638,13 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                           <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
-                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Enviado por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
+                          {/* Status Badge moved here */}
+                          {!isRead ? (
+                            <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5, marginLeft: 4 }}>NOVO</span>
+                          ) : (
+                            <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600, marginLeft: 4 }}>Lido</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -648,13 +654,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                          {/* Priority badges */}
                          {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
                          {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
-                         
-                         {/* Status Badge */}
-                         {!isRead ? (
-                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
-                         ) : (
-                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
-                         )}
                        </div>
 
                        {/* Attachments Section */}
