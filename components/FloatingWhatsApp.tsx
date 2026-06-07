@@ -251,17 +251,17 @@ export function FloatingWhatsApp() {
                   <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Phone size={20} />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b' }}>{contato.nome}</div>
-                      {contato.setor && (
-                        <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: '#e0e7ff', color: '#4338ca', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {contato.setor}
-                        </span>
-                      )}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#1e293b', marginBottom: contato.setor ? 4 : (contato.descricao ? 2 : 0) }}>
+                      {contato.nome}
                     </div>
+                    {contato.setor && (
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 10, background: '#e0e7ff', color: '#4338ca', fontWeight: 600, whiteSpace: 'nowrap', marginBottom: contato.descricao ? 4 : 0 }}>
+                        {contato.setor}
+                      </span>
+                    )}
                     {contato.descricao && (
-                      <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{contato.descricao}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{contato.descricao}</div>
                     )}
                   </div>
                   <ChevronRight size={18} color="#cbd5e1" />
