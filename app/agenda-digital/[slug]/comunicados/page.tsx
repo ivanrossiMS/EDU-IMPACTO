@@ -629,30 +629,28 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                     }} />
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                      {!isRead ? (
-                        <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
-                      ) : (
-                        <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                        <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={62} />
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                            {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
-                            <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
-                          </div>
-                          <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
-                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
-                          </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+                    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={62} />
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
+                          <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
+                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
+                        </div>
+                      </div>
                     </div>
                     
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                         {/* Status Badge */}
+                         {!isRead ? (
+                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                         ) : (
+                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
+                         )}
                          {/* Priority badges */}
                          {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
                          {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
@@ -684,8 +682,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                        )}
                     </div>
                   </div>
-                </div>
-
+                  
                   {/* Hover Action Overlay */}
                   <div className="card-hover-overlay" style={{
                     position: 'absolute', bottom: 24, right: 28, opacity: 0,
