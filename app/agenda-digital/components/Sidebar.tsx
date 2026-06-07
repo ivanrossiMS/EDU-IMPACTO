@@ -204,8 +204,7 @@ export function ADSidebar() {
           borderRadius: '24px 24px 0 0',
           zIndex: 9999,
           boxShadow: '0 -4px 30px rgba(0, 102, 255, 0.3)',
-          display: 'flex',
-          alignItems: 'center',
+          display: 'block',
           overflow: 'hidden',
           paddingBottom: 'env(safe-area-inset-bottom)'
         }}>
@@ -229,7 +228,7 @@ export function ADSidebar() {
             display: 'flex',
             alignItems: 'center',
             overflowX: 'auto',
-            padding: '10px 16px',
+            padding: '12px 16px 8px 16px',
             width: '100%',
             gap: 0,
             scrollSnapType: 'x mandatory'
