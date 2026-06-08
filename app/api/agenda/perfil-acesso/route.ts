@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     // 1. Buscar os dados essenciais do aluno
     const { data: aluno, error: errorAluno } = await supabase
       .from('alunos')
-      .select('id, nome, foto, turma, turno, status, matricula')
+      .select('id, nome, foto, turma, turno, status, matricula, dados')
       .eq('id', slug)
       .maybeSingle()
 

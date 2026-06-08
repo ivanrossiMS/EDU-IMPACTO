@@ -101,6 +101,24 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
   }
   
+  const todasTurmasDoAluno = useMemo(() => {
+    const list = []
+    if (aluno?.turma) list.push(String(aluno.turma).toLowerCase())
+    if (nomeTurmaDoAluno) list.push(nomeTurmaDoAluno.toLowerCase())
+    
+    if (aluno?.dados?.historicoTurmas) {
+      aluno.dados.historicoTurmas.forEach((ht: any) => {
+        if (ht.serieTurma) {
+          list.push(String(ht.serieTurma).toLowerCase())
+          const tObj = turmas.find((t: any) => String(t.id) === String(ht.serieTurma) || String(t.codigo) === String(ht.serieTurma))
+          if (tObj?.nome) list.push(String(tObj.nome).toLowerCase())
+        }
+      })
+    }
+    return list.filter(Boolean)
+  }, [aluno, nomeTurmaDoAluno, turmas])
+
+  // Filtrar momentos aprovados
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
   const meusMomentos = React.useMemo(() => {
     return momentosFeed.filter(m => {
@@ -116,18 +134,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
       // Se tiver targetClasses e a turma corresponder
       if (targetClasses.length > 0) {
-        const rawTurma = String(aluno?.turma || '').toLowerCase()
         return targetClasses.some((tc: string) => {
           const tcl = tc.toLowerCase()
           if (tcl === 'todos' || tcl === 'toda a escola' || tcl === 'todas') return true
           
-          // Match by class name (resolved)
-          if (nomeTurmaDoAluno.toLowerCase().includes(tcl) || tcl.includes(nomeTurmaDoAluno.toLowerCase())) return true
-          
-          // Match by class ID
-          if (rawTurma && (tcl === rawTurma || tcl.includes(rawTurma) || rawTurma.includes(tcl))) return true
-          
-          return false
+          // Check if it matches any of the student's classes (current or historical)
+          return todasTurmasDoAluno.some(minhaTurma => 
+            minhaTurma.includes(tcl) || tcl.includes(minhaTurma)
+          )
         })
       }
 
@@ -141,7 +155,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       const dateB = new Date((b as any).date || 0).getTime()
       return dateB - dateA
     })
-  }, [momentosFeed, aluno?.turma, aluno?.id, nomeTurmaDoAluno])
+  }, [momentosFeed, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno])
 
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;

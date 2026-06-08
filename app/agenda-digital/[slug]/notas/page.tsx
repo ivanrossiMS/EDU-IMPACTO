@@ -1,6 +1,7 @@
 'use client'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useEffect } from 'react'
 import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
@@ -25,6 +26,7 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
   }
 
   const { aluno } = useSelectedStudent()
+  const { turmas = [] } = useData()
 
   // Fetch real data
   const { data: responseData, isLoading } = useApiQuery<any>(
@@ -55,7 +57,40 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
     }
   });
 
-  const boletins = responseData?.data || []
+  
+  const turmasIds = useMemo(() => {
+    const ids = [aluno?.turma];
+    if (aluno?.dados?.historicoTurmas) {
+      aluno.dados.historicoTurmas.forEach((ht: any) => {
+        if (ht.serieTurma) ids.push(ht.serieTurma);
+      });
+    }
+    return ids.filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+  }, [aluno]);
+
+  const turmasDisponiveis = useMemo(() => {
+    return turmasIds.map(id => {
+      const t = turmas.find(t => String(t.id) === String(id) || String(t.codigo) === String(id) || String(t.nome) === String(id));
+      return { id, nome: t?.nome || id };
+    });
+  }, [turmasIds, turmas]);
+
+  const [selectedTurmaId, setSelectedTurmaId] = useState<string>('');
+
+  useEffect(() => {
+    if (turmasDisponiveis.length > 0 && !selectedTurmaId) {
+      const current = turmasDisponiveis.find(t => String(t.id) === String(aluno?.turma)) || turmasDisponiveis[0];
+      setSelectedTurmaId(current.id);
+    }
+  }, [turmasDisponiveis, selectedTurmaId, aluno?.turma]);
+
+  // Filter boletins per selected turma
+  const boletins = useMemo(() => {
+    const raw = responseData?.data || []
+    if (!selectedTurmaId) return raw
+    return raw.filter((b: any) => String(b.turma_id) === String(selectedTurmaId) || String(b.turma) === String(selectedTurmaId) || !b.turma_id) // loose match
+  }, [responseData, selectedTurmaId])
+
 
   // Extract periods (bimestres) available
   const bimestresDisponiveis = useMemo(() => {
@@ -171,11 +206,30 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif', margin: 0, color: '#0f172a' }}>Boletim e Notas</h2>
-        <button className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#0f172a', fontWeight: 600, padding: '8px 16px', borderRadius: 12 }}>
-          <Download size={16} /> <span className="hide-on-mobile">Baixar PDF</span>
-        </button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {/* Turma Selector */}
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <select 
+              value={selectedTurmaId} 
+              onChange={(e) => setSelectedTurmaId(e.target.value)}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', zIndex: 2 }}
+            >
+              {turmasDisponiveis.map(t => (
+                <option key={t.id} value={t.id}>{t.nome}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '8px 16px', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+              <span>{turmasDisponiveis.find(t => t.id === selectedTurmaId)?.nome || 'Sem Turma'}</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+          </div>
+          
+          <button className="btn btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#0f172a', fontWeight: 600, padding: '8px 16px', borderRadius: 12 }}>
+            <Download size={16} /> <span className="hide-on-mobile">Baixar PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Seletor de Bimestre Ultra Moderno */}
