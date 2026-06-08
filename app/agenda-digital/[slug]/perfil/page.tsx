@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useParams } from 'next/navigation'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { use } from 'react'
 import { 
   UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
@@ -13,12 +13,14 @@ import { getInitials, formatDate } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 
 export default function ADPerfilPage() {
-  const paramsHook = useParams()
-  const slug = paramsHook?.slug as string
+  const { aluno: basicAluno } = useSelectedStudent()
+  const slug = basicAluno?.id
   
-  const { data: responseData, isLoading } = useApiQuery<any>(
+  const { data: responseData, isLoading, error } = useApiQuery<any>(
     ['aluno', slug], 
-    slug ? `/api/alunos/${slug}` : ''
+    slug ? `/api/alunos/${slug}` : '',
+    undefined,
+    { enabled: !!slug }
   )
   const aluno = responseData?.data || null
 
@@ -39,7 +41,13 @@ export default function ADPerfilPage() {
     }
   }, [aluno?.email, aluno?.telefone])
 
-  if (!aluno) return (
+  if (error) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: 100, color: '#ef4444' }}>
+      Erro ao carregar perfil: {(error as Error).message}
+    </div>
+  )
+
+  if (isLoading || !aluno) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: 100, color: 'hsl(var(--text-muted))' }}>
       Carregando perfil do aluno...
     </div>
