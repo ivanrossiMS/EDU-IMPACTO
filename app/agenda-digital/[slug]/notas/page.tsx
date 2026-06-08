@@ -66,7 +66,7 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
       
       const turmaRef = b.turma_id || b.turma;
       const tObj = turmas.find((t: any) => String(t.id) === String(turmaRef) || String(t.codigo) === String(turmaRef) || String(t.nome) === String(turmaRef));
-      const nomeTurma = tObj?.nome || b.turma || 'Sem Turma';
+      const nomeTurma = b.turmaNome || tObj?.nome || b.turma || 'Sem Turma';
       
       return { ...b, parsedDados: dados, anoStr: String(ano), nomeTurma };
     });

@@ -40,7 +40,28 @@ export async function GET(request: Request) {
     const { data, error } = await query
     
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ data })
+    
+    const boletinsData = data || []
+    
+    // Buscar nomes das turmas com supabaseServer para contornar RLS de Família
+    const turmaIds = [...new Set(boletinsData.map((b: any) => b.turma_id || b.turma).filter(Boolean))]
+    let turmasDict: Record<string, string> = {}
+    if (turmaIds.length > 0) {
+      const { data: turmasData } = await supabase.from('turmas').select('id, nome').in('id', turmaIds)
+      if (turmasData) {
+        turmasData.forEach(t => { turmasDict[t.id] = t.nome })
+      }
+    }
+    
+    const enrichedData = boletinsData.map(b => {
+      const tId = b.turma_id || b.turma
+      return {
+        ...b,
+        turmaNome: tId && turmasDict[tId] ? turmasDict[tId] : tId
+      }
+    })
+
+    return NextResponse.json({ data: enrichedData })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
