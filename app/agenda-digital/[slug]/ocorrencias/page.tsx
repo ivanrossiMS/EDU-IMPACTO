@@ -115,24 +115,14 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
     }
   }, [anosDisponiveis, selectedYear])
 
-  // Filtra as ocorrências pelo ano selecionado
+  // Filtra as ocorrências pelo ano selecionado (independente da turma)
   const ocorrenciasFiltradas = useMemo(() => {
-    if (!selectedYear || !selectedTurmaId) return []
+    if (!selectedYear) return []
     return ocorrenciasDoAluno.filter(o => {
       const ano = o.ano || (o.data ? o.data.substring(0, 4) : new Date().getFullYear().toString())
-      // Check if this occurrence belongs to the selected turma.
-      // Usually o.turma or o.turma_id could match selectedTurmaId or the name of the selected turma
-      const selectedT = turmasDisponiveis.find(t => t.id === selectedTurmaId);
-      const isTurmaMatch = String(o.turma) === String(selectedTurmaId) || 
-                           String(o.turma) === String(selectedT?.nome) ||
-                           String(o.turma_id) === String(selectedTurmaId) || 
-                           (!o.turma && !o.turma_id); // If no turma recorded, show it anyway? Actually we should match. Let's just do a loose match or show if no class specified.
-      
-      const actuallyMatches = o.turma ? isTurmaMatch : true; // fallback if older occurrences don't have turma
-      
-      return ano === selectedYear && actuallyMatches;
+      return ano === selectedYear;
     })
-  }, [ocorrenciasDoAluno, selectedYear, selectedTurmaId, turmasDisponiveis])
+  }, [ocorrenciasDoAluno, selectedYear])
 
 
 
@@ -224,6 +214,13 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
       setSigningIds(prev => ({ ...prev, [id]: false }))
     }
   }
+
+  const getNomeTurmaOcorrencia = (o: any) => {
+    if (!o.turma && !o.turma_id) return 'Sem turma vinculada';
+    const idOrName = o.turma_id || o.turma;
+    const tObj = turmas.find(t => String(t.id) === String(idOrName) || String(t.codigo) === String(idOrName) || String(t.nome) === String(idOrName));
+    return tObj?.nome || o.turma || 'Turma desconhecida';
+  };
 
   // Formatador de data e hora para exibição completa
   const formatDateTime = (dateStr: string, fallbackDate: string) => {
