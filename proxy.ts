@@ -116,6 +116,7 @@ export async function proxy(request: NextRequest) {
       '/api/boletins',
       '/api/academico/frequencias',
       '/api/portaria/eventos',
+      '/api/turmas',
       '/favicon.ico'
     ]
 

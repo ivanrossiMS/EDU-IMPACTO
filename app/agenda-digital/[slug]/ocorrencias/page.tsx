@@ -638,10 +638,7 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                             </div>
                             <span style={{ color: '#94a3b8', fontSize: 12 }}>|</span>
                             <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
-                              Turma: <span style={{ color: '#475569', fontWeight: 600 }}>{(() => {
-                                const tId = o.dados?.turma || aluno?.turma;
-                                return turmas.find(t => String(t.id) === String(tId))?.nome || tId || 'Não informada';
-                              })()}</span>
+                              Turma: <span style={{ color: '#475569', fontWeight: 600 }}>{o.turmaNome || o.dados?.turma || aluno?.turma || 'Não informada'}</span>
                             </div>
                             <span style={{ color: '#94a3b8', fontSize: 12 }}>|</span>
                             <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>

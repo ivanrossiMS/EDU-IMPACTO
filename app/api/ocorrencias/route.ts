@@ -29,7 +29,34 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((data || []).map(row => ({ ...row, ...(row.dados || {}) })))
+
+  const ocorrencias = data || [];
+  
+  // Buscar nomes das turmas com supabaseServer (ignora RLS que bloqueia Família)
+  const turmaIds = [...new Set(ocorrencias.map(o => o.dados?.turma).filter(Boolean))];
+  let turmasDict: Record<string, string> = {};
+  if (turmaIds.length > 0) {
+    const { supabaseServer } = await import('@/lib/supabaseServer');
+    const { data: turmasData } = await supabaseServer
+      .from('turmas')
+      .select('id, nome')
+      .in('id', turmaIds);
+      
+    if (turmasData) {
+      turmasData.forEach(t => {
+        turmasDict[t.id] = t.nome;
+      });
+    }
+  }
+
+  return NextResponse.json(ocorrencias.map(row => {
+    const turmaId = row.dados?.turma;
+    return { 
+      ...row, 
+      ...(row.dados || {}),
+      turmaNome: turmaId && turmasDict[turmaId] ? turmasDict[turmaId] : turmaId
+    };
+  }))
 }
 
 export async function POST(request: Request) {
