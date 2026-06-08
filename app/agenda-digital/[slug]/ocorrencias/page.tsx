@@ -67,7 +67,11 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
   const ocorrenciasDoAluno = useMemo(() => {
     return ocorrencias
       .filter(o => String(o.aluno_id) === String(aluno?.id) || String(o.alunoId) === String(aluno?.id))
-      .sort((a, b) => (b.data || '').localeCompare(a.data || ''))
+      .sort((a, b) => {
+        const dateCompare = (b.data || '').localeCompare(a.data || '')
+        if (dateCompare !== 0) return dateCompare
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
   }, [ocorrencias, aluno?.id])
 
   // Extrair anos disponíveis dinamicamente
@@ -557,7 +561,13 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.4, delay: idx * 0.05 }}
-                    style={{ display: 'flex', alignItems: 'stretch', gap: 0, position: 'relative' }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'stretch', 
+                      gap: 0, 
+                      position: 'relative',
+                      paddingLeft: viewMode === 'timeline' ? 56 : 0
+                    }}
                   >
                     {/* Timeline bullet dot */}
                     {viewMode === 'timeline' && (
@@ -576,41 +586,19 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
 
                     {/* Occurrence Card */}
                     <div className="occurrence-card" style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                        {/* Icon Block */}
-                        {isAdvertencia ? (
-                          <div style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: 18,
-                            background: '#fef2f2',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <AlertTriangle size={28} color="#dc2626" />
-                          </div>
-                        ) : (
-                          <div style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: 18,
-                            background: '#fff7ed',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <AlertCircle size={28} color="#f97316" />
-                          </div>
-                        )}
-
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                         {/* Occurrence Content */}
                         <div style={{ flex: 1, minWidth: 260 }}>
-                          <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px 0', color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
-                            {o.tipo}
-                          </h3>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            {isAdvertencia ? (
+                              <AlertTriangle size={20} color="#dc2626" />
+                            ) : (
+                              <AlertCircle size={20} color="#f97316" />
+                            )}
+                            <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                              {o.tipo}
+                            </h3>
+                          </div>
 
                           {/* Metadata row with badge and registered by info */}
                           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
@@ -862,8 +850,8 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
         .occurrence-card {
           background: #ffffff;
           border: 1px solid #f1f5f9;
-          border-radius: 20px;
-          padding: 24px;
+          border-radius: 16px;
+          padding: 16px 20px;
           transition: transform 0.2s ease, box-shadow 0.2s ease;
           box-shadow: 0 4px 15px rgba(0, 0, 0, 0.008);
         }
