@@ -41,8 +41,9 @@ export function useApiQuery<T>(
     gcTime,
     queryFn: async () => {
       // noCache só para módulos que exigem dados absolutamente ao vivo (ex: caixa, PDV)
+      const hasQuery = url.includes('?') || queryStr.includes('?');
       const cacheBuster = noCache
-        ? (queryStr ? `&_t=${Date.now()}` : `?_t=${Date.now()}`)
+        ? (hasQuery ? `&_t=${Date.now()}` : `?_t=${Date.now()}`)
         : ''
 
       const fetchOptions: RequestInit = noCache
