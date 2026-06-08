@@ -103,6 +103,7 @@ export async function proxy(request: NextRequest) {
   if (isFamilyOrStudent) {
     const allowedForFamily = [
       '/agenda-digital',
+      '/api/alunos',
       '/api/comunicados',
       '/api/agenda',
       '/api/aluno-responsavel',
