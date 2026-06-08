@@ -303,7 +303,7 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
                  </div>
                  
                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
-                   Referente ao {boletimAtual.nome} {boletimAtual.dados.ano ? `de ${boletimAtual.dados.ano}` : ''}
+                   Referente ao {boletimAtual.originalTitle} {boletimAtual.dados.ano ? `de ${boletimAtual.dados.ano}` : ''} {boletimAtual.nomeTurma ? `| Turma: ${boletimAtual.nomeTurma}` : ''}
                  </div>
                </div>
 
