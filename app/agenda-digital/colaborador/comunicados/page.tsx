@@ -130,6 +130,7 @@ export default function ColaboradorComunicadosPage() {
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   
   const [alunos] = useSupabaseArray<any>('alunos?lightweight=true')
+  const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const turmaOptions = useMemo(() => {
     if (!currentUser?.id) return [];
@@ -197,6 +198,8 @@ export default function ColaboradorComunicadosPage() {
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
+        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados'
       };
       
@@ -223,6 +226,8 @@ export default function ColaboradorComunicadosPage() {
         autorFoto: currentUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
+        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,
@@ -1024,6 +1029,7 @@ export default function ColaboradorComunicadosPage() {
             setOpenedReportTask={setOpenedReportTaskStr}
             setOpenedReportPayload={setOpenedReportPayloadStr}
             alunos={alunos}
+            colaboradores={colaboradores}
           />
         )}
       </AnimatePresence>

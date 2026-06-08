@@ -71,6 +71,7 @@ interface ComunicadoViewModalProps {
   setOpenedReportTask?: (anexo: string) => void
   setOpenedReportPayload?: (anexo: string) => void
   alunos?: any[]
+  colaboradores?: any[]
 }
 
 export function ComunicadoViewModal({
@@ -86,7 +87,8 @@ export function ComunicadoViewModal({
   setMaximizedVideoStr,
   setOpenedReportTask,
   setOpenedReportPayload,
-  alunos = []
+  alunos = [],
+  colaboradores = []
 }: ComunicadoViewModalProps) {
   const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
@@ -137,18 +139,28 @@ export function ComunicadoViewModal({
 
   const destinatariosStr = useMemo(() => {
     if (!isAdminMode) return null;
-    const destTurmas = comunicado.turmas || [];
-    let destAlunosIds = comunicado.alunosIds || [];
+    const destTurmas = comunicado.turmas || comunicado.dados?.turmas || [];
+    let destAlunosIds = comunicado.alunosIds || comunicado.dados?.alunosIds || [];
+    const destGrupos = comunicado.grupos || comunicado.dados?.grupos || [];
+    let destFuncIds = comunicado.funcionariosIds || comunicado.dados?.funcionariosIds || [];
     
     const alunosNames = destAlunosIds.map((id: string) => {
       const cleanId = id.replace(/^_*(ALU)?/, '');
       const found = alunos.find((a: any) => a.id.replace(/^_*(ALU)?/, '') === cleanId);
       return found ? found.nome : `Aluno(a) ID: ${id}`;
     });
+
+    const funcNames = destFuncIds.map((id: string) => {
+      const cleanId = id.replace(/^_*(FUNC)?/, '');
+      const found = colaboradores.find((c: any) => c.id.replace(/^_*(FUNC)?/, '') === cleanId);
+      return found ? found.nome : `Funcionário ID: ${id}`;
+    });
     
     const parts = [];
     if (destTurmas.length > 0) parts.push(`Turmas: ${destTurmas.join(', ')}`);
+    if (destGrupos.length > 0) parts.push(`Grupos: ${destGrupos.join(', ')}`);
     if (alunosNames.length > 0) parts.push(`Alunos: ${alunosNames.join(', ')}`);
+    if (funcNames.length > 0) parts.push(`Colaboradores: ${funcNames.join(', ')}`);
     
     if (parts.length === 0) return 'Geral (Todos)';
     
