@@ -1023,6 +1023,7 @@ export default function ColaboradorComunicadosPage() {
             setMaximizedVideoStr={setMaximizedVideoStr}
             setOpenedReportTask={setOpenedReportTaskStr}
             setOpenedReportPayload={setOpenedReportPayloadStr}
+            alunos={alunos}
           />
         )}
       </AnimatePresence>

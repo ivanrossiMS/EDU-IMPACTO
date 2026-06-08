@@ -68,9 +68,9 @@ interface ComunicadoViewModalProps {
   isAdminMode?: boolean
   setOpenedFormStr?: (anexo: string) => void
   setMaximizedImageStr?: (url: string) => void
-  setMaximizedVideoStr?: (url: string) => void
   setOpenedReportTask?: (anexo: string) => void
   setOpenedReportPayload?: (anexo: string) => void
+  alunos?: any[]
 }
 
 export function ComunicadoViewModal({
@@ -85,7 +85,8 @@ export function ComunicadoViewModal({
   setMaximizedImageStr,
   setMaximizedVideoStr,
   setOpenedReportTask,
-  setOpenedReportPayload
+  setOpenedReportPayload,
+  alunos = []
 }: ComunicadoViewModalProps) {
   const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
@@ -133,6 +134,24 @@ export function ComunicadoViewModal({
   }, [messages, isAdminMode])
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
+
+  const destinatariosStr = useMemo(() => {
+    if (!isAdminMode) return null;
+    const destTurmas = comunicado.turmas || [];
+    let destAlunosIds = comunicado.alunosIds || [];
+    
+    const alunosNames = destAlunosIds.map((id: string) => {
+      const cleanId = id.replace(/^_*(ALU)?/, '');
+      const found = alunos.find((a: any) => a.id.replace(/^_*(ALU)?/, '') === cleanId);
+      return found ? found.nome : `Aluno(a) ID: ${id}`;
+    });
+    
+    const parts = [];
+    if (destTurmas.length > 0) parts.push(`Turmas: ${destTurmas.join(', ')}`);
+    if (alunosNames.length > 0) parts.push(`Alunos: ${alunosNames.join(', ')}`);
+    
+    return parts.join(' | ');
+  }, [comunicado, isAdminMode, alunos]);
 
   const fetchMessages = async () => {
     try {
@@ -434,16 +453,36 @@ export function ComunicadoViewModal({
                 <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', color: '#fff', borderRadius: 16, padding: 12, flexShrink: 0, boxShadow: '0 8px 16px rgba(79,70,229,0.2)' }}>
                   📣
                 </div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3, marginBottom: 8 }}>
                     {comunicado.titulo}
                   </h1>
                   
                   {/* Prioridade */}
                   {(comunicado.prioridade === 'alta' || comunicado.prioridade === 'urgente') && (
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       {comunicado.prioridade === 'alta' && <span style={{ background: '#fee2e2', color: '#ef4444', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fca5a5' }}>Prioridade Alta</span>}
                       {comunicado.prioridade === 'urgente' && <span style={{ background: '#ffedd5', color: '#f97316', padding: '4px 12px', borderRadius: 20, fontWeight: 700, fontSize: 12, border: '1px solid #fdba74' }}>Urgente</span>}
+                    </div>
+                  )}
+
+                  {/* Destinatários */}
+                  {destinatariosStr && (
+                    <div style={{ 
+                      marginTop: 12,
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 12,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      color: '#475569',
+                      maxHeight: 80,
+                      overflowY: 'auto',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: '#cbd5e1 transparent',
+                      wordBreak: 'break-word'
+                    }}>
+                      <strong style={{ color: '#0f172a' }}>Enviado para:</strong> {destinatariosStr}
                     </div>
                   )}
                 </div>
