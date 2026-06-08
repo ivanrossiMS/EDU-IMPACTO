@@ -73,11 +73,36 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const id = `BL-${Math.random().toString(36).substring(2, 11)}`
+    
+    let targetId = `BL-${Math.random().toString(36).substring(2, 11)}`
+    
+    const aluno_id = body.aluno_id;
+    const turma_id = body.turma_id;
+    const bimestre = body.bimestre || body.dados?.bimestre;
+    const ano = body.dados?.ano;
+    
+    if (aluno_id && turma_id && bimestre && ano) {
+      const { data: existing } = await supabase
+        .from('boletins')
+        .select('id, dados')
+        .eq('aluno_id', aluno_id)
+        .eq('turma_id', turma_id)
+        .eq('bimestre', bimestre);
+        
+      if (existing && existing.length > 0) {
+        const match = existing.find((e: any) => {
+           const d = typeof e.dados === 'string' ? JSON.parse(e.dados) : (e.dados || {});
+           return String(d.ano) === String(ano);
+        });
+        if (match) {
+           targetId = match.id;
+        }
+      }
+    }
     
     const { data, error } = await supabase
       .from('boletins')
-      .insert({ id, ...body })
+      .upsert({ id: targetId, ...body })
       .select()
       
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
