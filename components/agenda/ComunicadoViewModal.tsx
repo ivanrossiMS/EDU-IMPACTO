@@ -108,7 +108,7 @@ export function ComunicadoViewModal({
       if (!threadsMap.has(threadId)) {
         threadsMap.set(threadId, {
           studentId: threadId,
-          studentName: msg.is_admin ? 'Usuário (Mensagem Global)' : msg.remetente_nome,
+          studentName: msg.remetente_nome || 'Usuário',
           messages: [],
           lastMessageAt: msg.created_at
         })
