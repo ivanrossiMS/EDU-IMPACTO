@@ -118,12 +118,18 @@ export function ComunicadoViewModal({
       if (new Date(msg.created_at) > new Date(thread.lastMessageAt)) {
         thread.lastMessageAt = msg.created_at
       }
-      if (!msg.is_admin) {
+      if (!msg.is_admin && msg.remetente_nome) {
         thread.studentName = msg.remetente_nome
       }
     })
     
-    return Array.from(threadsMap.values()).sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
+    // Filter out threads that don't have any message from a student/parent
+    // These are usually phantom "global" messages sent by admins before the UI was restricted.
+    const validThreads = Array.from(threadsMap.values()).filter(t => 
+      t.messages.some(m => !m.is_admin)
+    )
+    
+    return validThreads.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
   }, [messages, isAdminMode])
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
