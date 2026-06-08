@@ -456,44 +456,7 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
           </div>
 
 
-          {/* Class Pill Dropdown (Turma) */}
-          <div style={{ position: 'relative', display: 'inline-block' }}>
-            <select 
-              value={selectedTurmaId} 
-              onChange={(e) => setSelectedTurmaId(e.target.value)}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                opacity: 0,
-                cursor: 'pointer',
-                zIndex: 2
-              }}
-            >
-              {turmasDisponiveis.map(t => (
-                <option key={t.id} value={t.id}>{t.nome}</option>
-              ))}
-            </select>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              background: '#fff',
-              border: '1px solid #e2e8f0',
-              borderRadius: 14,
-              padding: '8px 16px',
-              fontSize: 13,
-              fontWeight: 700,
-              color: '#1e293b',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.01)'
-            }}>
-              <School size={15} style={{ color: '#64748b' }} />
-              <span>{turmasDisponiveis.find(t => t.id === selectedTurmaId)?.nome || turmaDoAluno}</span>
-              <ChevronDown size={14} style={{ color: '#64748b' }} />
-            </div>
-          </div>
+
 
         </div>
 

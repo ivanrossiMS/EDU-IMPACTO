@@ -585,7 +585,7 @@ export default function OcorrenciasPage() {
     setMetaConfirmacao(confirmadoLine)
     
     setForm({ 
-      alunoId: oc.alunoId, 
+      alunoId: oc.alunoId || oc.aluno_id || '', 
       alunoNome: oc.alunoNome, 
       turma: oc.turma, 
       tipo: oc.tipo, 
@@ -759,9 +759,11 @@ export default function OcorrenciasPage() {
     const reincidentes = (() => {
       const map: Record<string, { id: string; nome: string; turma: string; count: number; graves: number }> = {}
       ocorrencias.forEach(o => {
-        if (!map[o.alunoId]) map[o.alunoId] = { id: o.alunoId, nome: o.alunoNome, turma: o.turma, count: 0, graves: 0 }
-        map[o.alunoId].count++
-        if (o.gravidade === 'grave') map[o.alunoId].graves++
+        const aId = o.alunoId || o.aluno_id;
+        if (!aId) return;
+        if (!map[aId]) map[aId] = { id: aId, nome: o.alunoNome || 'Sem Nome', turma: o.turma, count: 0, graves: 0 }
+        map[aId].count++
+        if (o.gravidade === 'grave') map[aId].graves++
       })
       return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 5)
     })()
@@ -787,7 +789,7 @@ export default function OcorrenciasPage() {
       const filteredAlunos = buscaAlunoHome.trim().length > 0
         ? todosMapped.filter((a: any) => a.nome.toLowerCase().includes(buscaAlunoHome.toLowerCase())).slice(0,12)
         : []
-      const ocDoAluno = alunoSel ? ocorrencias.filter(o => o.alunoId === alunoSel.id).sort((a,b) => {
+      const ocDoAluno = alunoSel ? ocorrencias.filter(o => o.alunoId === alunoSel.id || o.aluno_id === alunoSel.id).sort((a,b) => {
         const dateA = a.createdAt || a.created_at || ''
         const dateB = b.createdAt || b.created_at || ''
         return dateB.localeCompare(dateA)
