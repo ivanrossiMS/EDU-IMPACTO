@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useParams } from 'next/navigation'
 import { use } from 'react'
 import { 
@@ -12,11 +11,16 @@ import {
 } from 'lucide-react'
 import { getInitials, formatDate } from '@/lib/utils'
 
+import { useApiQuery } from '@/hooks/useApi'
+
 export default function ADPerfilPage({ params }: { params: Promise<{ slug: string }>}) {
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos')
   const resolvedParams = use(params as Promise<{ slug: string }>)
-  const alunosList = Array.isArray(alunos) ? alunos : []
-  const aluno = alunosList.find(a => a.id === resolvedParams.slug)
+  
+  const { data: responseData, isLoading } = useApiQuery<any>(
+    ['aluno', resolvedParams.slug], 
+    `/api/alunos/${resolvedParams.slug}`
+  )
+  const aluno = responseData?.data || null
 
   const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'saude'>('geral')
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
