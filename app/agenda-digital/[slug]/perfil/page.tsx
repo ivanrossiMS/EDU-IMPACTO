@@ -10,15 +10,15 @@ import {
   Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays
 } from 'lucide-react'
 import { getInitials, formatDate } from '@/lib/utils'
-
 import { useApiQuery } from '@/hooks/useApi'
 
-export default function ADPerfilPage({ params }: { params: Promise<{ slug: string }>}) {
-  const resolvedParams = use(params as Promise<{ slug: string }>)
+export default function ADPerfilPage() {
+  const paramsHook = useParams()
+  const slug = paramsHook?.slug as string
   
   const { data: responseData, isLoading } = useApiQuery<any>(
-    ['aluno', resolvedParams.slug], 
-    `/api/alunos/${resolvedParams.slug}`
+    ['aluno', slug], 
+    slug ? `/api/alunos/${slug}` : ''
   )
   const aluno = responseData?.data || null
 
