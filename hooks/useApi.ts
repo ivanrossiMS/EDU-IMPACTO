@@ -50,7 +50,10 @@ export function useApiQuery<T>(
         : { cache: 'default' }
 
       const res = await fetch(`${url}${queryStr}${cacheBuster}`, fetchOptions)
-      if (!res.ok) throw new Error('Falha ao processar os dados.')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Falha (${res.status}) ao processar os dados.`)
+      }
       return res.json()
     }
   })
