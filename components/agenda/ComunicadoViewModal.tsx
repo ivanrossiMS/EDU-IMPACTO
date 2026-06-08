@@ -150,6 +150,8 @@ export function ComunicadoViewModal({
     if (destTurmas.length > 0) parts.push(`Turmas: ${destTurmas.join(', ')}`);
     if (alunosNames.length > 0) parts.push(`Alunos: ${alunosNames.join(', ')}`);
     
+    if (parts.length === 0) return 'Geral (Todos)';
+    
     return parts.join(' | ');
   }, [comunicado, isAdminMode, alunos]);
 
