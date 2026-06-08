@@ -504,6 +504,10 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
         </div>
       ) : ocorrenciasFiltradas.length === 0 ? (
         <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}>
+          {/* MODO DIAGNOSTICO */}
+          <div style={{ background: '#fee2e2', color: '#ef4444', padding: 10, borderRadius: 8, marginBottom: 15, fontSize: 12, textAlign: 'center' }}>
+             ⚙️ Modo Diagnóstico: rawOcorrencias={ocorrencias?.length} | Filtradas={ocorrenciasFiltradas?.length} | Ano={selectedYear} | ID={aluno?.id} | isLoading={isLoading ? 'sim' : 'nao'}
+          </div>
           <div style={{ background: '#fff', padding: '56px 40px', borderRadius: 28, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.01)' }}>
              <div style={{ width: 80, height: 80, borderRadius: 40, background: '#f0fdf4', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
                 <Heart size={40} />
