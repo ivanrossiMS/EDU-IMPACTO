@@ -112,6 +112,10 @@ export async function proxy(request: NextRequest) {
       '/api/upload-midia',
       '/api/comunicados_respostas',
       '/api/configuracoes',
+      '/api/ocorrencias',
+      '/api/boletins',
+      '/api/academico/frequencias',
+      '/api/portaria/eventos',
       '/favicon.ico'
     ]
 
