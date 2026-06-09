@@ -13,7 +13,7 @@ const BLANK_RESPONSAVEL: Responsavel = { nome: '', cpf: '', autorizacao: '', ass
 export const BLANK_UNIDADE: Omit<Unidade, 'id' | 'mantenedorId'> = {
   codigo: '',
   razaoSocial: '', nomeFantasia: '', cnpj: '', inep: '',
-  codigoMec: '', idCenso: '',
+  codigoMec: '',
   endereco: '', numero: '', complemento: '', bairro: '',
   cidade: '', estado: 'SP', cep: '',
   telefone: '', email: '',
@@ -254,9 +254,7 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
                 <Field label="Código MEC">
                   <input className="form-input" value={data.codigoMec} onChange={f('codigoMec')} placeholder="Ex: 35012345" />
                 </Field>
-                <Field label="ID Censo (INEP)">
-                  <input className="form-input" value={data.idCenso || data.inep} onChange={e => { set('idCenso', e.target.value); set('inep', e.target.value) }} placeholder="Ex: 35123456" />
-                </Field>
+                {/* Censo removido */}
               </div>
 
               <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
@@ -316,13 +314,13 @@ export default function UnidadeWizard({ initial, codigoExistente, onSave, onClos
                   style={{ resize: 'vertical', fontFamily: 'Georgia, serif', fontSize: 13, lineHeight: 1.8 }}
                   value={data.cabecalhoDocumentos}
                   onChange={f('cabecalhoDocumentos')}
-                  placeholder={`Estado de São Paulo\nMunicípio de São Paulo - Secretaria Municipal de Educação\n\n${data.razaoSocial || 'NOME DA INSTITUIÇÃO'}\n${data.nomeFantasia || 'Nome Fantasia'}\nCNPJ: ${data.cnpj || '00.000.000/0001-00'}\n${data.endereco}${data.numero ? ', ' + data.numero : ''}, ${data.bairro} - ${data.cidade}/${data.estado}\nTel: ${data.telefone} | ${data.email}\nCódigo MEC: ${data.codigoMec || '—'} | INEP: ${data.idCenso || '—'}`}
+                  placeholder={`Estado de São Paulo\nMunicípio de São Paulo - Secretaria Municipal de Educação\n\n${data.razaoSocial || 'NOME DA INSTITUIÇÃO'}\n${data.nomeFantasia || 'Nome Fantasia'}\nCNPJ: ${data.cnpj || '00.000.000/0001-00'}\n${data.endereco}${data.numero ? ', ' + data.numero : ''}, ${data.bairro} - ${data.cidade}/${data.estado}\nTel: ${data.telefone} | ${data.email}\nCódigo MEC: ${data.codigoMec || '—'}`}
                 />
               </Field>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => set('cabecalhoDocumentos', `Estado de São Paulo\nMunicípio de ${data.cidade || 'São Paulo'} — Secretaria de Educação\n\n${data.razaoSocial}\n${data.nomeFantasia}\nCNPJ: ${data.cnpj}\n${data.endereco}${data.numero ? ', nº ' + data.numero : ''}${data.complemento ? ' - ' + data.complemento : ''}, ${data.bairro ? data.bairro + ', ' : ''}${data.cidade}/${data.estado} — CEP ${data.cep}\nTel: ${data.telefone} | E-mail: ${data.email}\nCódigo MEC: ${data.codigoMec} | INEP/Censo: ${data.idCenso}`)}
+                onClick={() => set('cabecalhoDocumentos', `Estado de São Paulo\nMunicípio de ${data.cidade || 'São Paulo'} — Secretaria de Educação\n\n${data.razaoSocial}\n${data.nomeFantasia}\nCNPJ: ${data.cnpj}\n${data.endereco}${data.numero ? ', nº ' + data.numero : ''}${data.complemento ? ' - ' + data.complemento : ''}, ${data.bairro ? data.bairro + ', ' : ''}${data.cidade}/${data.estado} — CEP ${data.cep}\nTel: ${data.telefone} | E-mail: ${data.email}\nCódigo MEC: ${data.codigoMec}`)}
               >
                 ✨ Gerar cabeçalho automático com os dados cadastrados
               </button>

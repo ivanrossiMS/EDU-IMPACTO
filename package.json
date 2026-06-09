@@ -82,6 +82,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
+    "ts-morph": "^28.0.0",
     "typescript": "^5"
   }
 }

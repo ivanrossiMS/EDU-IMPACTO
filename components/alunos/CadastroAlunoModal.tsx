@@ -280,7 +280,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
   const seq0 = proximoSeqAluno(alunos)
   const [dadosAluno, setDadosAluno] = useState({
     codigo: gerarCodigo(seq0),
-    cpf: '', nome: '', idCenso: '',
+    cpf: '', nome: '',
     rga: `${anoAtual}${gerarCodigo(seq0)}`,
     dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
     naturalidade: '', uf: 'SP', corRaca: '', outros: '',
@@ -365,7 +365,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
     setStep(1)
     const seq = proximoSeqAluno(alunos)
     setDadosAluno({
-      codigo: gerarCodigo(seq), cpf: '', nome: '', idCenso: '',
+      codigo: gerarCodigo(seq), cpf: '', nome: '',
       rga: `${anoAtual}${gerarCodigo(seq)}`,
       dataNasc: '', sexo: '', estadoCivil: '', nacionalidade: 'Brasileiro(a)',
       naturalidade: '', uf: 'SP', corRaca: '', outros: '',
@@ -513,7 +513,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
                 <div><label className="form-label">Codigo</label><input className="form-input" value={dadosAluno.codigo} readOnly style={{ color: '#60a5fa', fontWeight: 700 }} /></div>
                 <div><label className="form-label">Nome Completo *</label><input className="form-input" value={dadosAluno.nome} onChange={e => setDadosAluno(p => ({ ...p, nome: e.target.value }))} placeholder="Nome do aluno" /></div>
                 <div><label className="form-label">CPF</label><input className="form-input" value={dadosAluno.cpf} onChange={e => setDadosAluno(p => ({ ...p, cpf: e.target.value }))} placeholder="000.000.000-00" /></div>
-                <div><label className="form-label">ID Censo</label><input className="form-input" value={dadosAluno.idCenso} onChange={e => setDadosAluno(p => ({ ...p, idCenso: e.target.value }))} /></div>
+                {/* Censo removido */}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>

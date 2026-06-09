@@ -151,7 +151,7 @@ export interface Unidade {
   id: string; mantenedorId: string
   codigo: string
   razaoSocial: string; nomeFantasia: string; cnpj: string; inep: string
-  codigoMec: string; idCenso: string
+  codigoMec: string;
   endereco: string; numero: string; complemento: string; bairro: string
   cidade: string; estado: string; cep: string
   telefone: string; email: string
@@ -879,221 +879,6 @@ export interface SystemLog {
   detalhesDepois?: any
 }
 
-// ─── CENSO ESCOLAR ────────────────────────────────────────────────
-export interface CensoConfig {
-  anoCensitario: number
-  etapaAtiva: '1-matricula' | '2-situacao'
-  layoutVersion: string
-  responsavel: string
-  escopo: 'total' | 'parcial'
-  unidadeId?: string // Selecionada na UI
-  updatedAt: string
-}
-
-export type CensoPendenciaTipo = 'critica' | 'alta' | 'media' | 'baixa' | 'informativa'
-export type CensoPendenciaStatus = 'aberta' | 'em_tratamento' | 'corrigida' | 'ignorada' | 'reaberta'
-export type CensoPendenciaCategoria = 'aluno' | 'turma' | 'escola' | 'profissional'
-
-export interface CensoPendencia {
-  id: string
-  tipo: CensoPendenciaTipo
-  categoria: CensoPendenciaCategoria
-  nivel: number           // 1=obrigatoriedade, 2=consistência, 3=regra negócio
-  registroId: string
-  registroNome: string
-  campo: string
-  valorAtual: string
-  valorEsperado: string
-  descricao: string
-  sugestao: string
-  status: CensoPendenciaStatus
-  responsavel?: string
-  justificativaIgnore?: string
-  comentarios?: string[]
-  criadoEm: string
-  resolvidoEm?: string
-  revalidadoEm?: string
-  anoCensitario: number
-  etapa: string
-}
-
-export interface CensoExport {
-  id: string
-  anoCensitario: number
-  etapa: string
-  layoutVersion: string
-  dataGeracao: string
-  usuarioGerou: string
-  totalRegistros: number
-  totalAlunos: number
-  totalTurmas: number
-  totalProfissionais: number
-  hash: string
-  nomeArquivo: string
-  conteudo?: string     // base64 do arquivo gerado
-  status: 'gerado' | 'baixado' | 'enviado' | 'rejeitado'
-  pendenciasNaMomento: number
-  observacoes?: string
-}
-
-export interface CensoAuditLog {
-  id: string
-  dataHora: string
-  usuario: string
-  perfil: string
-  acao: string
-  modulo: string
-  tela?: string
-  registroId?: string
-  registroNome?: string
-  valorAnterior?: string
-  valorNovo?: string
-  justificativa?: string
-  ip?: string
-  anoCensitario?: number
-  etapa?: string
-}
-
-export interface CensoChecklistItem {
-  id: string
-  descricao: string
-  concluido: boolean
-  obrigatorio: boolean
-  ordem: number
-}
-
-export interface CensoOperacaoEnvio {
-  id: string
-  exportId: string
-  anoCensitario: number
-  etapa: string
-  dataOperacao: string
-  usuario: string
-  checklist: Record<string, boolean>
-  protocolo?: string
-  resultado: 'enviado' | 'rejeitado' | 'pendente' | 'aguardando' | 'enviado_com_alerta'
-  observacoes?: string
-  comprovante?: string
-  linkEducacenso?: string
-}
-
-export interface CensoAlunoData {
-  alunoId: string
-  sexo: '1' | '2'                    // 1=Masculino 2=Feminino (código INEP)
-  corRaca: '0'|'1'|'2'|'3'|'4'|'5'  // 0=NID 1=Branca 2=Preta 3=Parda 4=Amarela 5=Indígena
-  nacionalidade: '1'|'2'|'3'         // 1=Brasileira 2=Naturalizada 3=Estrangeira
-  naturalidadeUF: string              // UF de nascimento
-  naturalidadeMunicipio: string
-  deficiencia: boolean
-  tiposDeficiencia: string[]          // Ex: ['01','02'] → códigos INEP
-  tipoAtendimento: '1'|'2'|'3'|'4'|'5'|'6'  // 1=Regular 4=AEE 5=AEE+Regular
-  etapaModalidade: string             // Ex: 'EI','EF1','EF2','EM','EJA'
-  situacaoCenso: '1'|'2'|'3'|'4'|'5'|'6'|'7'|'8'|'9'  // situação final Etapa 2
-  dataMatricula: string               // YYYY-MM-DD
-  tipoMatricula: '1'|'2'|'3'         // 1=Regular 2=Rematrícula 3=Novo
-  updatedAt: string
-}
-
-export interface CensoTurmaData {
-  turmaId: string
-  etapaModalidade: string             // Código INEP da etapa
-  codigoINEP: string                  // Código da turma no Educacenso
-  tipoAtendimento: '0'|'1'|'2'|'3'|'4'|'5'|'6'
-  tipoMediacaoDidatica: '1'|'2'|'3'  // 1=Presencial 2=Semipresencial 3=EAD
-  localizacaoDiferenciada: '0'|'1'|'2'|'3'  // 0=Não 1=Área de Assentamento etc.
-  updatedAt: string
-}
-
-export interface CensoProfissionalData {
-  funcionarioId: string
-  cpf: string
-  funcaoDocente: string               // Código da função INEP
-  escolaridade: '1'|'2'|'3'|'4'|'5'|'6'|'7'  // Nível INEP
-  turmasVinculadas: {
-    turmaId: string
-    turmaNome: string
-    disciplinaId: string
-    disciplinaNome: string
-    cargaHoraria: number
-  }[]
-  updatedAt: string
-}
-
-// ─── Tabelas de Referência INEP (exportadas para uso em toda a aplicação) ──
-export const INEP_ETAPAS: { codigo: string; nome: string; grupo: string }[] = [
-  { codigo: 'EI01', nome: 'Creche', grupo: 'Educação Infantil' },
-  { codigo: 'EI02', nome: 'Pré-Escola', grupo: 'Educação Infantil' },
-  { codigo: 'EF01', nome: '1º Ano EF', grupo: 'EF Anos Iniciais' },
-  { codigo: 'EF02', nome: '2º Ano EF', grupo: 'EF Anos Iniciais' },
-  { codigo: 'EF03', nome: '3º Ano EF', grupo: 'EF Anos Iniciais' },
-  { codigo: 'EF04', nome: '4º Ano EF', grupo: 'EF Anos Iniciais' },
-  { codigo: 'EF05', nome: '5º Ano EF', grupo: 'EF Anos Iniciais' },
-  { codigo: 'EF06', nome: '6º Ano EF', grupo: 'EF Anos Finais' },
-  { codigo: 'EF07', nome: '7º Ano EF', grupo: 'EF Anos Finais' },
-  { codigo: 'EF08', nome: '8º Ano EF', grupo: 'EF Anos Finais' },
-  { codigo: 'EF09', nome: '9º Ano EF', grupo: 'EF Anos Finais' },
-  { codigo: 'EM01', nome: '1ª Série EM', grupo: 'Ensino Médio' },
-  { codigo: 'EM02', nome: '2ª Série EM', grupo: 'Ensino Médio' },
-  { codigo: 'EM03', nome: '3ª Série EM', grupo: 'Ensino Médio' },
-  { codigo: 'EJA01', nome: 'EJA EF Fase Inicial', grupo: 'EJA' },
-  { codigo: 'EJA02', nome: 'EJA EF Fase Final', grupo: 'EJA' },
-  { codigo: 'EJA03', nome: 'EJA EM', grupo: 'EJA' },
-]
-
-export const INEP_SITUACOES_CENSO: { codigo: string; nome: string }[] = [
-  { codigo: '1', nome: 'Aprovado' },
-  { codigo: '2', nome: 'Reprovado' },
-  { codigo: '3', nome: 'Transferido' },
-  { codigo: '4', nome: 'Deixou de frequentar (Abandono)' },
-  { codigo: '5', nome: 'Falecido' },
-  { codigo: '6', nome: 'Aprovado pelo Conselho' },
-  { codigo: '7', nome: 'Reprovado por Falta' },
-  { codigo: '8', nome: 'Ainda matriculado' },
-  { codigo: '9', nome: 'Cursando (EJA)' },
-]
-
-export const INEP_FUNCOES_DOCENTES: { codigo: string; nome: string }[] = [
-  { codigo: '1', nome: 'Docente' },
-  { codigo: '2', nome: 'Docente – Atividade Complementar' },
-  { codigo: '3', nome: 'Docente – AEE' },
-  { codigo: '67', nome: 'Auxiliar / Assistente Educacional' },
-  { codigo: '68', nome: 'Profissional de Apoio Escolar' },
-]
-
-export const INEP_COR_RACA: { codigo: string; nome: string }[] = [
-  { codigo: '0', nome: 'Não declarado' },
-  { codigo: '1', nome: 'Branca' },
-  { codigo: '2', nome: 'Preta' },
-  { codigo: '3', nome: 'Parda' },
-  { codigo: '4', nome: 'Amarela' },
-  { codigo: '5', nome: 'Indígena' },
-]
-
-export const INEP_DEFICIENCIAS: { codigo: string; nome: string }[] = [
-  { codigo: '01', nome: 'Cegueira' },
-  { codigo: '02', nome: 'Baixa Visão' },
-  { codigo: '03', nome: 'Surdez' },
-  { codigo: '04', nome: 'Deficiência Auditiva' },
-  { codigo: '05', nome: 'Surdocegueira' },
-  { codigo: '06', nome: 'Deficiência Física' },
-  { codigo: '07', nome: 'Deficiência Intelectual' },
-  { codigo: '08', nome: 'Deficiência Múltipla' },
-  { codigo: '09', nome: 'Autismo Infantil (TEA)' },
-  { codigo: '10', nome: 'Síndrome de Asperger' },
-  { codigo: '11', nome: 'Síndrome de Rett' },
-  { codigo: '12', nome: 'Transtorno Desintegrativo da Infância' },
-  { codigo: '13', nome: 'Altas Habilidades / Superdotação' },
-]
-
-export const INEP_TIPO_ATENDIMENTO: { codigo: string; nome: string }[] = [
-  { codigo: '1', nome: 'Escolarização (Classe Comum)' },
-  { codigo: '2', nome: 'Escolarização (Classe Especial EE)' },
-  { codigo: '3', nome: 'Atividade Complementar' },
-  { codigo: '4', nome: 'AEE' },
-  { codigo: '5', nome: 'Escolarização e AEE na mesma escola' },
-  { codigo: '6', nome: 'Escolarização e AEE em escola diferente' },
-]
-
 // ─── localStorage keys ────────────────────────────────────────────
 const KEYS = {
   version: 'edu-data-version',
@@ -1149,16 +934,6 @@ const KEYS = {
   advertencias: 'edu-rh-advertencias',
   adiantamentos: 'edu-rh-adiantamentos',
   systemLogs: 'edu-data-system-logs',
-  // Censo Escolar
-  censoConfig: 'edu-censo-config',
-  censoPendencias: 'edu-censo-pendencias',
-  censoExports: 'edu-censo-exports',
-  censoAuditLogs: 'edu-censo-audit-logs',
-  censoOperacoes: 'edu-censo-operacoes',
-  // Dados de Enriquecimento Censitário (camada separada do ERP)
-  censoAlunosData: 'edu-censo-alunos-data',
-  censoTurmasData: 'edu-censo-turmas-data',
-  censoProfsData: 'edu-censo-profs-data',
 }
 
 // ─── Padrões de Níveis de Ensino MEC ─────────────────────────────
@@ -1362,20 +1137,17 @@ interface DataState {
   adiantamentos: Adiantamento[]; setAdiantamentos: Setter<Adiantamento[]>
   wipeAll: () => void
   logSystemAction: (modulo: string, acao: string, descricao: string, payload?: any) => void
-  // Censo Escolar
-  censoConfig: CensoConfig; setCensoConfig: (v: CensoConfig) => void
-  logCensoAction: (acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => void
   // Enriquecimento Censitário
   perfis: Perfil[]; setPerfis: Setter<Perfil[]>
   perfisLoading: boolean
 }
 
 export const DEFAULT_PERFIS: Perfil[] = [
-  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/relatorios/censo','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
+  { id: 'P1', nome: 'Diretor Geral', cor: '#ef4444', descricao: 'Acesso total ao sistema', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/crm/rematricula','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','/crm/leads','/crm/agendamentos','/crm/retencao','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','/administrativo/demonstracao-relatorios','/administrativo/fornecedores','/administrativo/caixa','/administrativo/patrimonio','/administrativo/almoxarifado','/administrativo/pedidos-livros','/administrativo/manutencao','/configuracoes/pedagogico/turnos','/configuracoes/pedagogico/situacao-aluno','/configuracoes/pedagogico/grupo-alunos','/configuracoes/pedagogico/disciplinas','/configuracoes/pedagogico/niveis-ensino','/configuracoes/pedagogico/tipo-ocorrencias','/configuracoes/pedagogico/horario','/configuracoes/pedagogico/documentos','/configuracoes/financeiro/centro-custo','/configuracoes/financeiro/cartoes','/configuracoes/financeiro/eventos','/configuracoes/financeiro/grupo-desconto','/configuracoes/financeiro/metodos-pagamento','/configuracoes/financeiro/padrao-pagamento','/configuracoes/financeiro/plano-contas','/configuracoes/financeiro/tipo-documentos','/configuracoes/financeiro/dre-config','/bi','/relatorios/mec','/configuracoes/unidades','/configuracoes/usuarios','/configuracoes/integracoes','/configuracoes','/configuracoes/logs','/ajuda'] },
   { id: 'P2', nome: 'Coordenador', cor: '#f59e0b', descricao: 'Área pedagógica e RH', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','rh','/rh/funcionarios','/rh/folha','/rh/adiantamentos','/rh/ponto','/rh/ferias','/rh/advertencias','agenda-digital','/agenda-digital'] },
   { id: 'P3', nome: 'Secretária', cor: '#3b82f6', descricao: 'Secretaria e acadêmico', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/alunos','/academico/alunos/ficha','/academico/responsaveis','/academico/transferencias','/academico/turmas','/academico/grade','/academico/ensalamento','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/conselho','/secretaria/documentos','/secretaria','agenda-digital','/agenda-digital'] },
   { id: 'P4', nome: 'Professor', cor: '#10b981', descricao: 'Diário, notas e frequência', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','academico','/academico/frequencia','/academico/notas','/academico/ocorrencias','/academico/grade','agenda-digital','/agenda-digital'] },
-  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','relatorios','/bi','/relatorios/censo','/relatorios/mec','agenda-digital','/agenda-digital'] },
+  { id: 'P5', nome: 'Financeiro', cor: '#8b5cf6', descricao: 'Módulo financeiro e relatórios', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','financeiro','/financeiro/receber','/financeiro/inadimplencia','/financeiro/renegociacao','/financeiro/pagar','/financeiro/movimentacoes','/financeiro/boletos','/financeiro/nf','/financeiro/banking','/financeiro/dre','/financeiro/custos','relatorios','/bi','/relatorios/mec','agenda-digital','/agenda-digital'] },
   { id: 'P6', nome: 'Portaria & Segurança', cor: '#64748b', descricao: 'Controle de acesso e saída', permissoes: ['dashboard','/dashboard','/alertas','/tarefas','/calendario','principal','portaria','/painel-tablet','/saida-alunos/monitor','/saida-alunos/chamadas','/saida-alunos/relatorios','/saida-alunos/configuracoes','agenda-digital','/agenda-digital'] },
   { id: 'P7', nome: 'Administrador', cor: '#4b5563', descricao: 'Acesso administrativo completo', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital'] },
   { id: 'P8', nome: 'TI', cor: '#1e3a8a', descricao: 'Suporte e gerenciamento de TI', permissoes: ['principal','agenda-digital','academico','financeiro','rh','crm','portaria','administrativo','bi','relatorios','multiUnidades','configuracoes','/dashboard','/alertas','/tarefas','/calendario','/agenda-digital'] },
@@ -1434,16 +1206,6 @@ const DataContext = createContext<DataState>({
   systemLogs: [], setSystemLogs: NOOP,
   perfis: [], setPerfis: NOOP,
   perfisLoading: false,
-  censoAuditLogs: [], setCensoAuditLogs: NOOP,
-  censoOperacoes: [], setCensoOperacoes: NOOP,
-  censoAlunosData: [], setCensoAlunosData: NOOP,
-  censoTurmasData: [], setCensoTurmasData: NOOP,
-  censoProfsData: [], setCensoProfsData: NOOP,
-  censoPendencias: [], setCensoPendencias: NOOP,
-  censoExports: [], setCensoExports: NOOP,
-  // Non-arrays with safe defaults
-
-  censoConfig: {} as any, setCensoConfig: NOOP,  logCensoAction: NOOP,
   wipeAll: NOOP,
 } as unknown as DataState)
 
@@ -1566,46 +1328,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const [perfis, setPerfisRaw, { loading: perfisLoading }] = useSupabaseArray<Perfil>('configuracoes/perfis', DEFAULT_PERFIS)
 
-  // Censo Escolar
-  const CENSO_CONFIG_DEFAULT: CensoConfig = {
-    anoCensitario: new Date().getFullYear(),
-    etapaAtiva: '1-matricula',
-    layoutVersion: '2024',
-    responsavel: '',
-    escopo: 'total',
-    updatedAt: new Date().toISOString(),
-  }
-  const [censoConfig, setCensoConfigRaw] = useLocalStorage<CensoConfig>(KEYS.censoConfig, CENSO_CONFIG_DEFAULT)
-  const setCensoConfig = useCallback((v: CensoConfig) => setCensoConfigRaw(v), [setCensoConfigRaw])
-  const [ setCensoPendencias] = useSupabaseArray<CensoPendencia>('censo/pendencias')
-  const [ setCensoExports] = useSupabaseArray<CensoExport>('censo/exports')
-  const [ setCensoAuditLogs] = useSupabaseArray<CensoAuditLog>('censo/auditoria')
-  const [ setCensoOperacoes] = useSupabaseArray<CensoOperacaoEnvio>('censo/operacoes')
-  // Enriquecimento Censitário
-  const [ setCensoAlunosData] = useSupabaseArray<CensoAlunoData>('censo/escola/alunos')
-  const [ setCensoTurmasData] = useSupabaseArray<CensoTurmaData>('censo/escola/turmas')
-  const [ setCensoProfsData] = useSupabaseArray<CensoProfissionalData>('censo/escola/profs')
-
-  const logCensoAction = useCallback((acao: string, modulo: string, payload?: Partial<CensoAuditLog>) => {
-    let userName = 'Admin Local'
-    let userPerfil = 'Administrador'
-    if (typeof window !== 'undefined') {
-      try {
-        const u = JSON.parse(window.localStorage.getItem('edu-current-user') || 'null')
-        if (u && u.nome) { userName = u.nome; userPerfil = u.perfil || 'Usuário' }
-      } catch (e) {}
-    }
-    const log: CensoAuditLog = {
-      id: `CENSO-LOG-${Date.now()}`,
-      dataHora: new Date().toISOString(),
-      usuario: userName,
-      perfil: userPerfil,
-      acao,
-      modulo,
-      ...payload,
-    }
-    
-  }, [setCensoAuditLogs])
 
   const logSystemAction = useCallback((modulo: string, acao: string, descricao: string, payload?: Partial<SystemLog>) => {
     let userName = 'Admin Local';
@@ -1847,17 +1569,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     adiantamentos, ...{ setAdiantamentos: trackedSetters.setAdiantamentos },
       logSystemAction,
     wipeAll,
-    // Censo Escolar
-    censoConfig, setCensoConfig,
-     setCensoPendencias,
-     setCensoExports,
-     setCensoAuditLogs,
-     setCensoOperacoes,
-    logCensoAction,
-    // Enriquecimento Censitário
-     setCensoAlunosData,
-     setCensoTurmasData,
-     setCensoProfsData,
+    // Censo removido
     perfisLoading,
     perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
     setPerfis: (val: any) => {
@@ -1877,8 +1589,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     cfgCalendarioLetivo, movimentacoesManuais,
      notasFiscais, advertencias, adiantamentos,
      logSystemAction, wipeAll,
-    censoConfig,   
-     logCensoAction,
+
        perfis,
     perfisLoading,
     trackedSetters,
