@@ -256,7 +256,10 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       
       cat.turmas.forEach((t: any) => {
         const tAlunos = getTurmaAlunos(t)
-        const payloads = tAlunos.map(a => ({ id: `a_${a.id}`, name: a.nome, type: 'aluno' }))
+        const payloads = tAlunos.map(a => {
+          const anoLetivo = t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+          return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t.nome, anoLetivo };
+        })
         
         payloads.forEach(p => {
           leafIds.add(p.id)
@@ -315,8 +318,12 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
       
       const payloads = [
-        ...gAlunos.map((a: any) => ({ id: `a_${a.id}`, name: a.nome, type: 'aluno' })),
-        ...gColabs.map((c: any) => ({ id: `f_${c.id}`, name: c.nome, type: 'funcionario' }))
+        ...gAlunos.map((a: any) => {
+          const t = turmas.find((tx: any) => String(tx.id) === String(a.turma) || String(tx.codigo) === String(a.turma) || String(tx.nome) === String(a.turma));
+          const anoLetivo = t ? (t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) : '';
+          return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t?.nome || '', anoLetivo };
+        }),
+        ...gColabs.map((c: any) => ({ id: `f_${c.id}`, name: c.nome, type: 'funcionario', funcao: c.funcao || c.cargo || c.perfil || c.dados?.funcao || c.dados?.cargo || c.dados?.perfil || '' }))
       ]
       
       payloads.forEach(p => leafIds.add(p.id))
@@ -624,7 +631,13 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                       <span style={{ fontSize: 15, fontWeight: 600, color: '#0F172A' }}>{person.name}</span>
-                                      <span style={{ fontSize: 12, color: '#64748B', textTransform: 'capitalize' }}>{person.type}</span>
+                                      <span style={{ fontSize: 12, color: '#64748B', textTransform: 'capitalize' }}>
+                                        {person.type === 'aluno' 
+                                          ? `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}` 
+                                          : person.type === 'funcionario' 
+                                            ? `Funcionário${person.funcao ? ` • ${person.funcao}` : ''}`
+                                            : person.type}
+                                      </span>
                                     </div>
                                  </div>
                                )
@@ -741,7 +754,16 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                               }}>
                                                 {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
                                               </div>
-                                              <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{person.name}</span>
+                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{person.name}</span>
+                                                <span style={{ fontSize: 11, color: '#64748B' }}>
+                                                  {person.type === 'aluno' 
+                                                    ? `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}` 
+                                                    : person.type === 'funcionario' 
+                                                      ? `Funcionário${person.funcao ? ` • ${person.funcao}` : ''}`
+                                                      : person.type}
+                                                </span>
+                                              </div>
                                             </div>
                                           )
                                         })}
