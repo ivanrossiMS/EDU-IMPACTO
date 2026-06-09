@@ -1,9 +1,26 @@
 'use client'
 
-import { useEffect } from 'react'
+/**
+ * AgendaRealtimeProvider.tsx
+ * 
+ * Provedor central de notificações em tempo real para a Agenda Digital.
+ * 
+ * Responsabilidades:
+ * 1. Inicializar o OneSignal v16 (web push) ou cordova-plugin (nativo)
+ * 2. Identificar o usuário logado no OneSignal via External User ID
+ * 3. Atribuir tags de segmentação (perfil, turma, aluno_id, escola_id)
+ * 4. Escutar eventos Supabase Realtime e exibir toast notifications in-app
+ * 5. Deep linking: clique na notificação abre a página correta
+ * 
+ * SEGURANÇA:
+ * - A REST API Key do OneSignal NUNCA é usada aqui (apenas App ID público)
+ * - Usuário não autenticado não recebe dados sensíveis
+ */
+
+import { useEffect, useRef } from 'react'
 import Script from 'next/script'
 import { useRouter, useParams } from 'next/navigation'
-import { BellRing, Calendar, FileText, Image as ImageIcon, CheckCircle, ShieldAlert, Megaphone, X } from 'lucide-react'
+import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
@@ -21,393 +38,597 @@ declare global {
   interface Window {
     OneSignalDeferred?: any[]
     OneSignal?: any
+    /** Flag para evitar dupla inicialização do OneSignal (React Strict Mode) */
+    __OS_INIT__?: boolean
+    /** Flag para evitar duplo login do OneSignal */
+    __OS_USER_ID__?: string
   }
 }
 
-export function AgendaRealtimeProvider({
-  children
-}: RealtimeProviderProps) {
+export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
   const params = useParams<{ slug: string }>()
   const { currentUser } = useApp()
+  const osInitialized = useRef(false)
 
-  const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+  const isFamily =
+    currentUser?.perfil === 'Família' ||
+    currentUser?.cargo === 'Aluno' ||
+    currentUser?.cargo === 'Responsável'
+
   const responsavelId = currentUser?.id ? String(currentUser.id) : null
   const alunoId = params?.slug ? String(params.slug) : null
 
-  // Tenta puxar o contexto do aluno selecionado se estivermos numa rota de família/aluno
-  let alunoObj: any = null;
-  let turmasArray: any[] = [];
-  try {
-    const selected = useSelectedStudent();
-    if (selected && selected.aluno) alunoObj = selected.aluno;
-  } catch(e) {}
-  
-  let agendaCtx: any = null;
-  try {
-    agendaCtx = useAgendaDigital();
-  } catch(e) {}
-  
-  try {
-    const dataCtx = useData();
-    if (dataCtx && dataCtx.turmas) turmasArray = dataCtx.turmas;
-  } catch(e) {}
+  // Contextos opcionais — envoltos em try/catch para suportar rotas sem provider
+  let alunoObj: any = null
+  let turmasArray: any[] = []
+  let agendaCtx: any = null
 
-  const rawTurma = alunoObj?.turma;
-  const resolvedTurmaObj = turmasArray.find(t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma));
-  const turmaNome = resolvedTurmaObj?.nome || rawTurma;
+  try {
+    const selected = useSelectedStudent()
+    if (selected?.aluno) alunoObj = selected.aluno
+  } catch {}
 
+  try {
+    agendaCtx = useAgendaDigital()
+  } catch {}
+
+  try {
+    const dataCtx = useData()
+    if (dataCtx?.turmas) turmasArray = dataCtx.turmas
+  } catch {}
+
+  const rawTurma = alunoObj?.turma
+  const resolvedTurmaObj = turmasArray.find(
+    t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma)
+  )
+  const turmaNome = resolvedTurmaObj?.nome || rawTurma
+
+  // ── OneSignal Initialization ──────────────────────────────────────────────
   useEffect(() => {
     let isMounted = true
+    if (typeof window === 'undefined') return
 
-    // 1. Setup OneSignal (Push Notifications Native)
     const initOneSignal = async () => {
       try {
         const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
-        if (!appId) return
-
-        // Capacitor Native Check
-        let isNative = false;
-        try {
-          const { Capacitor } = require('@capacitor/core');
-          isNative = Capacitor.isNativePlatform();
-        } catch (e) {}
-
-        if (isNative) {
-          console.log('📱 Rodando em ambiente Mobile Nativo via Capacitor');
-          try {
-            const OneSignalNative = require('onesignal-cordova-plugin').default;
-            
-            OneSignalNative.initialize(appId);
-            OneSignalNative.Notifications.requestPermission(true);
-            
-            if (currentUser?.id) {
-              OneSignalNative.login(String(currentUser.id));
-              console.log(`✅ OneSignal Nativo logado para o Usuário: ${currentUser.id}`);
-            }
-
-            // Handle push deep linking natively
-            OneSignalNative.Notifications.addEventListener('click', (event: any) => {
-              const data = event.notification.additionalData;
-              if (data && data.rota) {
-                const alunoPushId = data.aluno_id || alunoId;
-                if (alunoPushId) {
-                  router.push(`/agenda-digital/${alunoPushId}/${data.rota}`);
-                }
-              }
-            });
-          } catch (nativeErr) {
-            console.error('Erro ao inicializar OneSignal Nativo:', nativeErr);
-          }
-          return; // Skip the web setup
+        if (!appId) {
+          console.warn('[OneSignal] NEXT_PUBLIC_ONESIGNAL_APP_ID não configurado. Push desativado.')
+          return
         }
 
-        // Vanilla OneSignal v16 Setup (Evita bugs do react-onesignal e Strict Mode)
-        window.OneSignalDeferred = window.OneSignalDeferred || []
-        window.OneSignalDeferred.push(async function(OneSignal: any) {
+        // ── Verificar ambiente nativo (Capacitor) ─────────────────────────
+        let isNative = false
+        try {
+          const { Capacitor } = require('@capacitor/core')
+          isNative = Capacitor.isNativePlatform()
+        } catch {}
+
+        if (isNative) {
+          console.log('📱 [OneSignal] Ambiente nativo detectado (Capacitor)')
           try {
-            if (!(window as any).__OS_INIT__) {
-              // 1. Marca imediatamente como inicializado ANTES do await (resolve Race Condition do React Strict Mode)
-              ;(window as any).__OS_INIT__ = true
-              
+            const OneSignalNative = require('onesignal-cordova-plugin').default
+            OneSignalNative.initialize(appId)
+            OneSignalNative.Notifications.requestPermission(true)
+
+            if (currentUser?.id) {
+              OneSignalNative.login(String(currentUser.id))
+              console.log(`✅ [OneSignal] Usuário nativo identificado: ${currentUser.id}`)
+            }
+
+            // Deep link nativo
+            OneSignalNative.Notifications.addEventListener('click', (event: any) => {
+              const data = event.notification.additionalData
+              if (data?.rota) {
+                const alunoPushId = data.aluno_id || alunoId
+                const route = alunoPushId
+                  ? `/agenda-digital/${alunoPushId}/${data.rota}`
+                  : `/agenda-digital/${data.rota}`
+                router.push(route)
+                console.log(`[OneSignal] Deep link nativo → ${route}`)
+              }
+            })
+          } catch (nativeErr: any) {
+            console.error('[OneSignal] Erro no plugin nativo:', nativeErr.message)
+          }
+          return
+        }
+
+        // ── Web Push (v16) ────────────────────────────────────────────────
+        // Inicializa apenas UMA vez (resolve bug do React Strict Mode)
+        window.OneSignalDeferred = window.OneSignalDeferred || []
+        window.OneSignalDeferred.push(async function (OneSignal: any) {
+          try {
+            if (!window.__OS_INIT__) {
+              window.__OS_INIT__ = true
               try {
                 await OneSignal.init({
                   appId,
                   allowLocalhostAsSecureOrigin: true,
-                  notifyButton: { enable: true },
+                  // Botão de sino do OneSignal — ativado para facilitar permissão
+                  notifyButton: {
+                    enable: true,
+                    size: 'medium',
+                    position: 'bottom-right',
+                    offset: { bottom: '80px', right: '20px' },
+                    colors: {
+                      'circle.background': '#4f46e5',
+                      'circle.foreground': 'white',
+                      'badge.background': '#fe5062',
+                      'badge.foreground': 'white',
+                    },
+                  },
+                  // Service worker na raiz do domínio
+                  serviceWorkerParam: { scope: '/' },
                 })
-                console.log('🔔 OneSignal Inicializado com Sucesso!')
+                console.log('🔔 [OneSignal] Inicializado com sucesso!')
               } catch (initErr: any) {
-                // Se já estiver inicializado por vias obscuras ou timeout, apenas logamos sem erro fatal
-                if (initErr?.message?.includes('already initialized') || initErr?.message?.includes('Timeout')) {
-                  console.warn('⚠️ OneSignal:', initErr.message)
+                const msg = initErr?.message || ''
+                if (msg.includes('already initialized') || msg.includes('Timeout')) {
+                  console.warn('[OneSignal] SDK já inicializado (ignorar):', msg)
                 } else {
-                  console.error('OneSignal Init Error:', initErr)
-                  // Libera para tentar de novo no futuro se foi outro erro que não already initialized
-                  ;(window as any).__OS_INIT__ = false
+                  console.error('[OneSignal] Erro na inicialização:', initErr)
+                  window.__OS_INIT__ = false // Permite nova tentativa
                 }
               }
             }
 
+            // ── Identificar usuário no OneSignal ──────────────────────────
+            if (currentUser?.id && isMounted) {
+              const userId = String(currentUser.id)
 
-            if (currentUser?.id && isMounted && typeof window !== 'undefined' && window.OneSignal) {
-              try {
-                // Em algumas versões do v16 o login pode falhar se o init não terminou 100%
-                if (typeof window.OneSignal.login === 'function') {
-                  await window.OneSignal.login(String(currentUser.id))
-                  console.log(`✅ OneSignal logado para o Usuário: ${currentUser.id}`)
+              // Evitar duplicar o login se o mesmo usuário já foi identificado
+              if (window.__OS_USER_ID__ !== userId) {
+                try {
+                  if (typeof window.OneSignal?.login === 'function') {
+                    await window.OneSignal.login(userId)
+                    window.__OS_USER_ID__ = userId
+                    console.log(`✅ [OneSignal] Usuário identificado: ${userId} (perfil: ${currentUser.perfil})`)
+                  }
+                } catch (loginErr: any) {
+                  console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)
                 }
-              } catch (loginErr: any) {
-                console.warn('⚠️ OneSignal Login Error (Ignorável):', loginErr?.message || loginErr)
+
+                // ── Tags de segmentação ───────────────────────────────────
+                // Permite filtrar destinatários por turma, perfil, aluno_id
+                try {
+                  const tags: Record<string, string> = {
+                    perfil: currentUser.perfil || '',
+                    cargo: currentUser.cargo || '',
+                  }
+                  if (alunoId) tags['aluno_id'] = alunoId
+                  if (turmaNome) tags['turma'] = String(turmaNome)
+                  if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
+
+                  if (typeof window.OneSignal?.User?.addTags === 'function') {
+                    await window.OneSignal.User.addTags(tags)
+                    console.log('[OneSignal] Tags de segmentação atribuídas:', tags)
+                  }
+                } catch (tagsErr: any) {
+                  console.warn('[OneSignal] Erro ao atribuir tags:', tagsErr?.message)
+                }
               }
             }
+
+            // ── Listener de clique nas notificações ───────────────────────
+            if (typeof window.OneSignal?.Notifications?.addEventListener === 'function') {
+              window.OneSignal.Notifications.addEventListener('click', (event: any) => {
+                const data = event?.notification?.additionalData || {}
+                console.log('[OneSignal] Notificação clicada:', data)
+
+                if (data?.rota || data?.type) {
+                  const slug = data.aluno_id || alunoId
+                  let route = ''
+
+                  if (slug) {
+                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                  } else {
+                    route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                  }
+
+                  if (route) {
+                    console.log(`[OneSignal] Deep link → ${route}`)
+                    router.push(route)
+                  }
+                }
+              })
+            }
+
           } catch (e: any) {
             const msg = e?.message || String(e)
             if (msg.includes('already initialized') || msg.includes('Timeout')) {
-              console.warn('⚠️ Aviso OneSignal:', msg)
+              console.warn('[OneSignal] Aviso esperado:', msg)
             } else {
-              console.error('OneSignal falhou na inicialização interna:', e)
+              console.error('[OneSignal] Erro interno:', e)
             }
           }
         })
-      } catch (err) {
-        console.error('Falha ao inicializar OneSignal:', err)
+      } catch (err: any) {
+        console.error('[OneSignal] Falha crítica na inicialização:', err.message)
       }
     }
-    
-    // Chama o init (deixando em background para não travar o React)
-    initOneSignal()
 
+    // Pequeno delay para garantir que o SDK foi carregado pelo <Script>
+    const timer = setTimeout(initOneSignal, 500)
     return () => {
       isMounted = false
+      clearTimeout(timer)
     }
-  }, [responsavelId, isFamily])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [responsavelId, alunoId, turmaNome])
 
+  // ── Supabase Realtime (In-App Toasts) ────────────────────────────────────
   useEffect(() => {
-    // 2. Setup Supabase Realtime (In-App Toast Notifications)
     if (!currentUser?.id) return
 
-    const isAdminOrColab = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Colaborador'
-    const identifier = alunoId || currentUser.id
+    const identifier = alunoId || String(currentUser.id)
+    console.log('🎧 [Realtime] Iniciando escuta de eventos para:', identifier)
 
-    console.log('🎧 Iniciando Supabase Realtime para notificações locais...')
-    
-    // Obtem metodo do store de notificacoes (sem destructuring reativo para evitar loops no useEffect)
-    const addNotification = useAgendaNotifications.getState().addNotification;
+    const addNotification = useAgendaNotifications.getState().addNotification
 
-    // Função auxiliar para verificar se o evento é para este aluno
-    const isTargetingAluno = (dados: any, turmasStringArray?: string[]) => {
+    /**
+     * Verifica se um evento Supabase é destinado ao usuário atual.
+     * Lógica por perfil:
+     * - Admin: recebe tudo
+     * - Família/Aluno: filtra por turma ou aluno_id
+     * - Colaborador: filtra por turmas que ministra aula
+     */
+    const isTargetingAluno = (dados: any): boolean => {
       if (!dados) return false
-      
-      // Helper para garantir que é array de strings
-      const ensureStringArray = (val: any) => {
+
+      const ensureStringArray = (val: any): string[] => {
         if (!val) return []
         if (Array.isArray(val)) return val.map(String)
         return [String(val)]
       }
 
-      const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses || turmasStringArray)
+      const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
+      const destino = String(dados.destino || '').toLowerCase().trim()
 
-      // Se for ADMIN, recebe tudo! (Eles monitoram o fluxo da escola toda)
+      // Admin recebe tudo
       if (currentUser?.perfil === 'Administrador') return true
 
-      // Lógica de visualização baseada no Aluno/Turma selecionada (Família/Aluno)
+      // Família/Aluno: filtra por turma ou aluno específico
       if (alunoId) {
         const alunoStr = String(alunoId)
-        const turmaNomeStr = String(turmaNome)
-        const rawTurmaStr = String(rawTurma)
 
-        const dest = String(dados.destino || '').toLowerCase()
-
-        // Todos / Toda a Escola
+        // Todos/Escola toda
         if (
-          dest === 'todos' ||
-          alvoTurmas.some(t => {
-            const tl = t.toLowerCase()
-            return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
-          })
+          destino === 'todos' ||
+          alvoTurmas.some(t => ['todos', 'toda a escola', 'todas', 'all'].includes(t.toLowerCase().trim()))
         ) return true
 
-        // Turma Específica
+        // Turma específica
         const tNomeStr = turmaNome ? String(turmaNome).toLowerCase() : ''
         const rTurmaStr = rawTurma ? String(rawTurma).toLowerCase() : ''
 
-        if (alvoTurmas.some(t => {
-          const tl = t.toLowerCase()
-          if (tNomeStr && (tl.includes(tNomeStr) || tNomeStr.includes(tl))) return true
-          if (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl))) return true
-          return false
-        })) return true
+        if (tNomeStr || rTurmaStr) {
+          if (alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return (tNomeStr && (tl === tNomeStr || tl.includes(tNomeStr) || tNomeStr.includes(tl))) ||
+              (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl)))
+          })) return true
 
-        if (alvoTurmasIds.some(t => {
-          const tl = t.toLowerCase()
-          if (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl))) return true
-          return false
-        })) return true
+          if (alvoTurmasIds.some(t => {
+            const tl = t.toLowerCase().trim()
+            return (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl)))
+          })) return true
+        }
 
-        // Aluno Específico
+        // Aluno específico (suporta prefixos legados)
         if (
-          alvoAlunos.includes(alunoStr) || 
-          alvoAlunos.includes(`a_${alunoStr}`) || 
+          alvoAlunos.includes(alunoStr) ||
+          alvoAlunos.includes(`a_${alunoStr}`) ||
           alvoAlunos.includes(`_ALU${alunoStr}`)
         ) return true
 
         return false
       }
 
-      // Lógica de visualização de Colaborador (Valida as turmas que o colaborador dá aula)
+      // Colaborador: filtra por turmas que ministra
       if (currentUser?.perfil === 'Colaborador') {
-        const dest = String(dados.destino || '').toLowerCase()
         if (
-          dest === 'todos' ||
-          alvoTurmas.some(t => {
-            const tl = t.toLowerCase()
-            return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
-          })
+          destino === 'todos' ||
+          alvoTurmas.some(t => ['todos', 'toda a escola', 'todas'].includes(t.toLowerCase().trim()))
         ) return true
 
         const userGroups = agendaCtx?.chatGroups || []
-        const userTurmas = turmasArray.filter(t => {
-           return userGroups.some((g: any) => {
-             let colabs = g.colaboradoresIds;
-             if (typeof colabs === 'string') {
-               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
-             }
-             if (!Array.isArray(colabs)) colabs = [];
-             if (!colabs.some((id: any) => String(id) === String(currentUser.id))) return false;
-             return String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase()
-           })
-        })
+        const userTurmas = turmasArray.filter(t =>
+          userGroups.some((g: any) => {
+            let colabs = g.colaboradoresIds
+            if (typeof colabs === 'string') {
+              try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+            }
+            if (!Array.isArray(colabs)) colabs = []
+            return (
+              colabs.some((id: any) => String(id) === String(currentUser.id)) &&
+              (String(g.id) === `sync-${t.id}` ||
+                String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+            )
+          })
+        )
 
         return userTurmas.some(t => {
-           const tNome = String(t.nome).toLowerCase()
-           const tId = String(t.id).toLowerCase()
-           const tCod = String(t.codigo).toLowerCase()
-           
-           return alvoTurmas.some(alvo => {
-             const al = alvo.toLowerCase()
-             return al === tNome || al.includes(tNome) || tNome.includes(al) ||
-                    al === tId || al === tCod
-           }) || alvoTurmasIds.some(alvo => {
-             const al = alvo.toLowerCase()
-             return al === tId || al === tCod
-           })
+          const tNome = String(t.nome || '').toLowerCase()
+          const tId = String(t.id).toLowerCase()
+          const tCod = String(t.codigo || '').toLowerCase()
+
+          return (
+            alvoTurmas.some(alvo => {
+              const al = alvo.toLowerCase().trim()
+              return al === tNome || al.includes(tNome) || tNome.includes(al) || al === tId || al === tCod
+            }) ||
+            alvoTurmasIds.some(alvo => {
+              const al = alvo.toLowerCase().trim()
+              return al === tId || al === tCod
+            })
+          )
         })
       }
 
       return false
     }
 
-    // Usa um nome único para o canal para evitar erro de reaproveitar canal já inscrito (Strict Mode)
-    const channelName = `agenda-realtime-events-${identifier}-${Date.now()}`
-    const channel = supabase.channel(channelName)
-      // --- COMUNICADOS ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comunicados' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        
-        const newCom = { ...row, ...(row.dados || {}) }
-        const isTarget = eventType === 'DELETE' ? true : isTargetingAluno(newCom);
+    // Canal único por sessão (evita conflitos do React Strict Mode)
+    const channelName = `agenda-rt-${identifier}-${Date.now()}`
+    const channel = supabase
+      .channel(channelName)
 
-        if (isTarget) {
-          window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }));
-          
-          if (eventType === 'INSERT' && (row.status === 'enviado' || row.dados?.status === 'enviado')) {
-            const isMe = (newCom.autorId && String(newCom.autorId) === String(currentUser?.id)) || 
-                         (newCom.autor && currentUser?.nome && String(newCom.autor).trim().toLowerCase() === String(currentUser?.nome).trim().toLowerCase());
-            
+      // ── COMUNICADOS ──────────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comunicados' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+        const merged = { ...row, ...(row.dados || {}) }
+
+        if (eventType === 'DELETE' || isTargetingAluno(merged)) {
+          window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
+
+          if (
+            eventType === 'INSERT' &&
+            (merged.status === 'enviado' || merged.dados?.status === 'enviado')
+          ) {
+            const isMe =
+              (merged.autorId && String(merged.autorId) === String(currentUser?.id)) ||
+              (merged.autor && currentUser?.nome &&
+                String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
+
             if (!isMe) {
-              addNotification({ id: newCom.id, type: 'comunicado', title: newCom.titulo, createdAt: newCom.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/comunicados` });
-              toast.custom((t) => (
-              <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
-                <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
-                  <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
-                  <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full"></span>
+              addNotification({
+                id: merged.id,
+                type: 'comunicado',
+                title: merged.titulo,
+                createdAt: merged.created_at || new Date().toISOString(),
+                read: false,
+                link: `/agenda-digital/${alunoId}/comunicados`,
+              })
+
+              toast.custom(t => (
+                <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
+                  <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
+                    <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
+                    <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full" />
+                  </div>
+                  <div className="flex-1 min-w-0 pr-1 sm:pr-2">
+                    <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
+                      Novo comunicado disponível!
+                    </h4>
+                    <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
+                      Acesse agora para não perder nenhuma novidade.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      toast.dismiss(t)
+                      router.push(`/agenda-digital/${alunoId}/comunicados`)
+                    }}
+                    className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
+                  >
+                    Ver agora
+                  </button>
+                  <button
+                    onClick={() => toast.dismiss(t)}
+                    className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
+                  >
+                    <X size={20} strokeWidth={2} />
+                  </button>
                 </div>
-                <div className="flex-1 min-w-0 pr-1 sm:pr-2">
-                  <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">Novo comunicado disponível!</h4>
-                  <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">Acesse agora para não perder nenhuma novidade.</p>
-                </div>
-                <button onClick={() => { toast.dismiss(t); router.push(`/agenda-digital/${alunoId}/comunicados`); }} className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]">Ver agora</button>
-                <button onClick={() => toast.dismiss(t)} className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"><X size={20} strokeWidth={2} /></button>
-              </div>
-            ), { duration: 10000, position: 'top-center' });
+              ), { duration: 10000, position: 'top-center' })
             }
           }
         }
       })
-      // --- EVENTOS DE AGENDA (CALENDÁRIO) ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_agenda' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        
-        if (eventType === 'DELETE' || isTargetingAluno(row.dados, row.turmas)) {
-          window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }));
-          
+
+      // ── CALENDÁRIO ───────────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_agenda' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+
+        if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas })) {
+          window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
+
           if (eventType === 'INSERT') {
-            addNotification({ id: row.id, type: 'evento', title: row.titulo, createdAt: row.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/calendario` });
-            toast('Novo Evento no Calendário', { description: row.titulo, icon: <Calendar size={20} className="text-emerald-500" />, action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/calendario`) } })
+            addNotification({
+              id: row.id,
+              type: 'evento',
+              title: row.titulo || 'Novo Evento',
+              createdAt: row.created_at || new Date().toISOString(),
+              read: false,
+              link: `/agenda-digital/${alunoId}/calendario`,
+            })
+            toast('Novo Evento no Calendário', {
+              description: row.titulo,
+              icon: <Calendar size={20} className="text-emerald-500" />,
+              action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/calendario`) },
+            })
           }
         }
       })
-      // --- OCORRÊNCIAS ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ocorrencias' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        
-        if (eventType === 'DELETE' || String(row.aluno_id) === String(alunoId) || String(row.dados?.aluno_id) === String(alunoId) || String(row.dados?.alunoId) === String(alunoId)) {
-          window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }));
-          
+
+      // ── OCORRÊNCIAS ──────────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ocorrencias' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+
+        const isForAluno =
+          eventType === 'DELETE' ||
+          String(row.aluno_id) === String(alunoId) ||
+          String(row.dados?.aluno_id) === String(alunoId) ||
+          String(row.dados?.alunoId) === String(alunoId)
+
+        if (isForAluno) {
+          window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
+
           if (eventType === 'INSERT') {
-            addNotification({ id: row.id, type: 'ocorrencia', title: `Nova ocorrência: ${row.tipo}`, createdAt: row.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/ocorrencias` });
-            toast('Nova Ocorrência', { description: `Foi registrada uma nova ocorrência: ${row.tipo}`, icon: <ShieldAlert size={20} className="text-red-500" />, action: { label: 'Abrir', onClick: () => router.push(`/agenda-digital/${alunoId}/ocorrencias`) } })
+            addNotification({
+              id: row.id,
+              type: 'ocorrencia',
+              title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
+              createdAt: row.created_at || new Date().toISOString(),
+              read: false,
+              link: `/agenda-digital/${alunoId}/ocorrencias`,
+            })
+            toast('Nova Ocorrência', {
+              description: `Foi registrada uma nova ocorrência.`,
+              icon: <ShieldAlert size={20} className="text-red-500" />,
+              action: { label: 'Abrir', onClick: () => router.push(`/agenda-digital/${alunoId}/ocorrencias`) },
+            })
           }
         }
       })
-      // --- BOLETINS (NOTAS) ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'boletins' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        const alunoStr = String(alunoId);
-        const alunoSemZero = alunoStr.replace(/^0+/, '');
-        
-        if (eventType === 'DELETE' || String(row.aluno_id) === alunoStr || String(row.aluno_id) === alunoSemZero) {
-          window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }));
-          
+
+      // ── BOLETINS (NOTAS) ─────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'boletins' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+        const alunoStr = String(alunoId)
+        const alunoSemZero = alunoStr.replace(/^0+/, '')
+
+        if (
+          eventType === 'DELETE' ||
+          String(row.aluno_id) === alunoStr ||
+          String(row.aluno_id) === alunoSemZero
+        ) {
+          window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
+
           if (eventType === 'INSERT') {
-            addNotification({ id: row.id, type: 'nota', title: 'Boletim de notas atualizado', createdAt: row.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/notas` });
-            toast('Novas Notas Lançadas', { description: `O boletim de notas foi atualizado.`, icon: <FileText size={20} className="text-indigo-500" />, action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) } })
+            addNotification({
+              id: row.id,
+              type: 'nota',
+              title: 'Boletim de notas atualizado',
+              createdAt: row.created_at || new Date().toISOString(),
+              read: false,
+              link: `/agenda-digital/${alunoId}/notas`,
+            })
+            toast('Novas Notas Lançadas', {
+              description: 'O boletim de notas foi atualizado.',
+              icon: <FileText size={20} className="text-indigo-500" />,
+              action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) },
+            })
           }
         }
       })
-      // --- FREQUÊNCIAS ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'frequencias' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        
-        if (eventType === 'DELETE' || String(row.aluno_id) === String(alunoId) || String(row.dados?.aluno_id) === String(alunoId)) {
-          window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }));
-          
+
+      // ── FREQUÊNCIAS ──────────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+
+        if (
+          eventType === 'DELETE' ||
+          String(row.aluno_id) === String(alunoId) ||
+          String(row.dados?.aluno_id) === String(alunoId)
+        ) {
+          window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
+
           if (eventType === 'INSERT') {
-            addNotification({ id: row.id, type: 'frequencia', title: 'Nova falta registrada', createdAt: row.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/frequencia` });
-            toast('Nova Falta Registrada', { description: `Uma nova falta foi lançada no sistema.`, icon: <Calendar size={20} className="text-orange-500" />, action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) } })
+            addNotification({
+              id: row.id,
+              type: 'frequencia',
+              title: 'Nova falta registrada',
+              createdAt: row.created_at || new Date().toISOString(),
+              read: false,
+              link: `/agenda-digital/${alunoId}/frequencia`,
+            })
+            toast('Nova Falta Registrada', {
+              description: 'Uma nova falta foi lançada no sistema.',
+              icon: <Calendar size={20} className="text-orange-500" />,
+              action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) },
+            })
           }
         }
       })
-      // --- MOMENTOS ---
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'momentos' }, (payload) => {
-        const { eventType, old, new: newRow } = payload;
-        const row = eventType === 'DELETE' ? old : newRow;
-        const newCom = { ...row, ...(row.dados || {}) }
-        
-        if (eventType === 'DELETE' || isTargetingAluno(newCom)) {
-          window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }));
-          
+
+      // ── MOMENTOS ─────────────────────────────────────────────────────────
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'momentos' }, payload => {
+        const { eventType, old, new: newRow } = payload
+        const row = eventType === 'DELETE' ? old : newRow
+        const merged = { ...row, ...(row.dados || {}) }
+
+        if (eventType === 'DELETE' || isTargetingAluno(merged)) {
+          window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
+
           if (eventType === 'INSERT') {
-            addNotification({ id: newCom.id, type: 'momento', title: newCom.titulo || 'Novo Momento', createdAt: newCom.created_at || new Date().toISOString(), read: false, link: `/agenda-digital/${alunoId}/momentos` });
-            toast('Novas Fotos/Vídeos', { description: newCom.titulo || 'Um novo momento foi compartilhado', icon: <ImageIcon size={20} className="text-pink-500" />, action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) } })
+            addNotification({
+              id: merged.id,
+              type: 'momento',
+              title: merged.titulo || 'Novo Momento',
+              createdAt: merged.created_at || new Date().toISOString(),
+              read: false,
+              link: `/agenda-digital/${alunoId}/momentos`,
+            })
+            toast('Novas Fotos/Vídeos', {
+              description: merged.titulo || 'Um novo momento foi compartilhado',
+              icon: <ImageIcon size={20} className="text-pink-500" />,
+              action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) },
+            })
           }
         }
       })
-      .subscribe((status) => {
+
+      .subscribe(status => {
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Conectado ao Supabase Realtime (Notificações In-App)')
+          console.log(`✅ [Realtime] Conectado ao canal: ${channelName}`)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`❌ [Realtime] Erro no canal: ${channelName}`)
         }
       })
 
     return () => {
       supabase.removeChannel(channel)
+      console.log(`🔌 [Realtime] Canal desconectado: ${channelName}`)
     }
-  }, [alunoId, isFamily, router, currentUser?.id, currentUser?.perfil, turmaNome, rawTurma])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alunoId, currentUser?.id, currentUser?.perfil, turmaNome, rawTurma])
 
   return (
     <>
-      <Script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" strategy="afterInteractive" />
+      {/* SDK do OneSignal v16 — carregado após interação do usuário */}
+      <Script
+        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+        strategy="afterInteractive"
+      />
       <PushPermissionBanner />
       <Toaster position="top-right" richColors />
       {children}
     </>
   )
+}
+
+/**
+ * Mapeia o tipo de push para a rota correta da agenda.
+ * Usado no deep link ao clicar na notificação.
+ */
+function typeToRoute(type: string): string {
+  const map: Record<string, string> = {
+    comunicados: 'comunicados',
+    momentos: 'momentos',
+    calendario: 'calendario',
+    frequencia: 'frequencia',
+    ocorrencias: 'ocorrencias',
+    notas: 'notas',
+    cobrancas: 'financeiro',
+  }
+  return map[type] || ''
 }

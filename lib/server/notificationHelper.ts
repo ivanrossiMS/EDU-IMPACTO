@@ -1,61 +1,168 @@
+/**
+ * notificationHelper.ts — Resolução de Destinatários para Push Notifications
+ * 
+ * Responsável por resolver quais usuários (responsáveis) devem receber
+ * notificações com base nos destinatários de comunicados, momentos, eventos, etc.
+ * 
+ * Estratégias de segmentação:
+ * - "Todos" → Todos os responsáveis cadastrados
+ * - Turma específica → Responsáveis dos alunos dessa turma
+ * - Aluno específico → Responsáveis desse aluno
+ * - Colaborador → IDs diretos quando passados
+ * 
+ * LGPD: Retorna apenas IDs de usuário, sem dados pessoais.
+ */
+
 import { supabaseServer } from '@/lib/supabaseServer'
 
-export async function getResponsavelIdsForTargets(dados: any): Promise<string[]> {
+interface TargetParams {
+  /** Nomes ou IDs das turmas destinatárias */
+  turmas?: string[]
+  /** Alias para turmas */
+  targetClasses?: string[]
+  /** IDs dos alunos destinatários */
+  alunosIds?: string[]
+  /** Alias para alunosIds */
+  targetStudents?: string[]
+  /** Destino geral: "todos", "selecionados", etc. */
+  destino?: string
+  /** IDs diretos de colaboradores/funcionários a incluir */
+  colaboradoresIds?: string[]
+}
+
+/**
+ * Resolve a lista de External User IDs (IDs dos responsáveis no banco)
+ * que devem receber uma notificação push baseado nos parâmetros do comunicado.
+ * 
+ * Os IDs retornados devem corresponder ao que foi passado no OneSignal.login()
+ * no frontend durante o login do usuário.
+ */
+export async function getResponsavelIdsForTargets(dados: TargetParams | null | undefined): Promise<string[]> {
+  if (!dados) return []
+
   try {
     const supabase = supabaseServer
-    const turmas = dados.turmas || dados.targetClasses || []
-    const alunosIds = dados.alunosIds || dados.targetStudents || []
-    const isTodos = turmas.includes('Todos') || turmas.includes('Toda a Escola') || turmas.includes('TODOS') || dados.destino === 'todos'
 
+    const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
+    const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
+    const destino = String(dados.destino || '').toLowerCase().trim()
+
+    const isTodos =
+      destino === 'todos' ||
+      destino === 'toda a escola' ||
+      destino === 'all' ||
+      turmas.some(t => {
+        const tl = t.toLowerCase().trim()
+        return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
+      })
+
+    // ── Modo "Todos" ──────────────────────────────────────────────────────
     if (isTodos) {
-      const { data } = await supabase.from('aluno_responsavel').select('responsavel_id')
-      if (!data) return []
-      const ids = Array.from(new Set(data.map(d => d.responsavel_id).filter(Boolean)))
-      return ids as string[]
+      const { data, error } = await supabase
+        .from('aluno_responsavel')
+        .select('responsavel_id')
+
+      if (error) {
+        console.error('[NotifHelper] Erro ao buscar todos os responsáveis:', error.message)
+        return []
+      }
+
+      const ids = Array.from(new Set(
+        (data || []).map(d => d.responsavel_id).filter(Boolean).map(String)
+      ))
+      console.log(`[NotifHelper] Modo "Todos": ${ids.length} responsáveis encontrados`)
+      return ids
     }
 
-    let targetAlunos = new Set<string>(alunosIds)
+    // ── Resolver alunos por turma ─────────────────────────────────────────
+    let targetAlunosSet = new Set<string>()
+
+    // Adicionar alunos explicitamente listados (limpar prefixos como "a_" ou "_ALU")
+    alunosIds.forEach(id => {
+      const cleanId = id.replace(/^(a_|_ALU)/, '')
+      if (cleanId) targetAlunosSet.add(cleanId)
+    })
 
     if (turmas.length > 0) {
-      // Tentar pegar os alunos que tem a turma (por ID, código ou Nome)
-      // Primeiro resolvemos o nome/id das turmas
-      const { data: resolvedTurmas } = await supabase
+      // Resolver nomes/IDs de turmas para IDs reais no banco
+      const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
         .select('id, nome, codigo')
-      
-      const matchedTurmaIds = resolvedTurmas
-        ?.filter(t => turmas.includes(t.nome) || turmas.includes(t.id) || turmas.includes(t.codigo))
-        .map(t => t.id) || []
 
-      // Se não achou na tabela de turmas, usamos os próprios nomes/ids (backward compatibility)
-      const turmasBusca = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+      if (turmasError) {
+        console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
+      } else {
+        const matchedTurmaIds = (allTurmas || [])
+          .filter(t => {
+            const tId = String(t.id).toLowerCase()
+            const tNome = String(t.nome || '').toLowerCase()
+            const tCod = String(t.codigo || '').toLowerCase()
+            return turmas.some(turma => {
+              const tl = turma.toLowerCase().trim()
+              return tl === tId || tl === tNome || tl === tCod ||
+                tNome.includes(tl) || tl.includes(tNome)
+            })
+          })
+          .map(t => String(t.id))
 
-      if (turmasBusca.length > 0) {
-        const { data: alunosTurma } = await supabase
-          .from('alunos')
-          .select('id')
-          .in('turma', turmasBusca)
+        // Busca por ID e por nome (backward compatibility)
+        const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
 
-        alunosTurma?.forEach(a => targetAlunos.add(a.id))
+        if (allSearchTerms.length > 0) {
+          const { data: alunosTurma, error: alunosError } = await supabase
+            .from('alunos')
+            .select('id')
+            .in('turma', allSearchTerms)
+
+          if (alunosError) {
+            console.error('[NotifHelper] Erro ao buscar alunos por turma:', alunosError.message)
+          } else {
+            ;(alunosTurma || []).forEach(a => targetAlunosSet.add(String(a.id)))
+          }
+        }
       }
     }
 
-    const finalAlunosIds = Array.from(targetAlunos).map(id => id.replace('a_', '').replace('_ALU', ''))
+    const finalAlunosIds = Array.from(targetAlunosSet).filter(Boolean)
 
-    if (finalAlunosIds.length === 0) return []
+    // ── Buscar responsáveis dos alunos ────────────────────────────────────
+    let allResponsavelIds = new Set<string>()
 
-    // Obter todos os responsaveis ligados a esses alunos
-    const { data: vinculados } = await supabase
-      .from('aluno_responsavel')
-      .select('responsavel_id')
-      .in('aluno_id', finalAlunosIds)
+    if (finalAlunosIds.length > 0) {
+      const { data: vinculados, error: vincError } = await supabase
+        .from('aluno_responsavel')
+        .select('responsavel_id')
+        .in('aluno_id', finalAlunosIds)
 
-    if (!vinculados) return []
+      if (vincError) {
+        console.error('[NotifHelper] Erro ao buscar vínculos:', vincError.message)
+      } else {
+        ;(vinculados || []).forEach(v => {
+          if (v.responsavel_id) allResponsavelIds.add(String(v.responsavel_id))
+        })
+      }
+    }
 
-    const uniqueResponsaveis = Array.from(new Set(vinculados.map(v => v.responsavel_id).filter(Boolean)))
-    return uniqueResponsaveis as string[]
-  } catch (err) {
-    console.error('Erro ao resolver targets para Push Notification:', err)
+    // ── Adicionar colaboradores diretos ───────────────────────────────────
+    colaboradoresIds.forEach(id => allResponsavelIds.add(id))
+
+    const result = Array.from(allResponsavelIds)
+    console.log(`[NotifHelper] ${result.length} destinatário(s) resolvido(s) | turmas=${turmas.length} | alunos=${finalAlunosIds.length}`)
+    return result
+
+  } catch (err: any) {
+    console.error('[NotifHelper] Erro crítico ao resolver destinatários:', err.message)
     return []
   }
+}
+
+/**
+ * Resolve os IDs de colaboradores para push direto.
+ * Útil quando a notificação é endereçada diretamente a colaboradores,
+ * sem necessidade de passar pelos responsáveis de alunos.
+ */
+export async function getColaboradorIds(colaboradoresIds: string[]): Promise<string[]> {
+  if (!colaboradoresIds || colaboradoresIds.length === 0) return []
+  return colaboradoresIds.map(String).filter(Boolean)
 }
