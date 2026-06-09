@@ -42,7 +42,6 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
           return [payload.new, ...old];
         });
       }
-    },)
     },
     onUpdate: (payload) => {
       if (payload && payload.new) {
@@ -51,7 +50,6 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
           return old.map((item: any) => item.id === payload.new.id ? payload.new : item);
         });
       }
-    },)
     },
     onDelete: (payload) => {
       if (payload && payload.old) {
@@ -60,7 +58,6 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
           return old.filter((item: any) => item.id !== payload.old.id);
         });
       }
-    })
     }
   });
 

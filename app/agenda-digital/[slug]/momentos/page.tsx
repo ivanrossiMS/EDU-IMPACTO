@@ -45,14 +45,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   })()
   
   const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, '/api/agenda/momentos')
-  const [fetchMomentos, setMomentosFeed] = useState<any[]>(fetchMomentos)
 
-  // Sync state with fetched data
-  useEffect(() => {
-    if (fetchMomentos && fetchMomentos.length > 0) {
-      setMomentosFeed(fetchMomentos)
-    }
-  }, [fetchMomentos])
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
