@@ -68,6 +68,7 @@ interface ComunicadoViewModalProps {
   isAdminMode?: boolean
   setOpenedFormStr?: (anexo: string) => void
   setMaximizedImageStr?: (url: string) => void
+  setMaximizedVideoStr?: (url: string) => void
   setOpenedReportTask?: (anexo: string) => void
   setOpenedReportPayload?: (anexo: string) => void
   alunos?: any[]
