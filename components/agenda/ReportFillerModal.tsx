@@ -18,7 +18,7 @@ interface ReportFillerModalProps {
 
 export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alunos, turmas: propTurmas }: ReportFillerModalProps) {
   const { templates = [] } = useRelatorios()
-  const { adAlert } = useAgendaDigital()
+  const { adAlert, setComunicadosLocally } = useAgendaDigital()
   const { turmas: contextTurmas = [] } = useData()
 
   const turmas = propTurmas || contextTurmas;
@@ -287,6 +287,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
 
 
     try {
+      setComunicadosLocally?.((prev: any) => [...newComunicados, ...prev]);
+
       await fetch('/api/comunicados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
