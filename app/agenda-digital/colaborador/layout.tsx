@@ -200,10 +200,10 @@ export default function AgendaDigitalColaboradorLayout({
         
         @media (max-width: 640px) {
           .ad-premium-card-wrapper {
-            margin-top: 64px !important;
+            margin-top: 0px !important;
           }
           .ad-main-grid {
-            margin-top: 2px !important;
+            margin-top: 8px !important;
           }
           .ad-premium-card {
             padding: 14px 12px 10px 12px !important;
