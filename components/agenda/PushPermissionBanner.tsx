@@ -112,17 +112,17 @@ export function PushPermissionBanner() {
     <AnimatePresence>
       <motion.div
         key="push-banner"
-        initial={{ opacity: 0, y: -60, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+        initial={{ opacity: 0, y: -60 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
         transition={{ type: 'spring', stiffness: 280, damping: 24 }}
         style={{
           position: 'fixed',
           top: 16,
-          left: '50%',
-          transform: 'translateX(-50%)',
+          left: 16,
+          right: 16,
+          margin: '0 auto',
           zIndex: 9999,
-          width: '90%',
           maxWidth: 440,
         }}
       >
