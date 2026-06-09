@@ -319,7 +319,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       
       const payloads = [
         ...gAlunos.map((a: any) => {
-          const t = turmas.find((tx: any) => String(tx.id) === String(a.turma) || String(tx.codigo) === String(a.turma) || String(tx.nome) === String(a.turma));
+          const t = turmas.find((tx: any) => String(tx.id) === String(a.turma) || String(tx.codigo) === String(a.turma) || String(tx.nome) === String(a.turma)) as any;
           const anoLetivo = t ? (t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) : '';
           return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t?.nome || '', anoLetivo };
         }),
