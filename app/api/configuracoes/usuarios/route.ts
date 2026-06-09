@@ -26,8 +26,8 @@ export async function GET(req: Request) {
     if (errorResponse) return errorResponse
 
     const supabase = await createProtectedClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    if (!supabaseUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { data: sysUsers, error: sysErr } = await supabase.from('system_users').select('*')
     if (sysErr) return NextResponse.json({ error: sysErr.message }, { status: 500 })
