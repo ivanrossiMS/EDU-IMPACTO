@@ -258,6 +258,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
        return `Relatório Personalizado: ${aluno.nome.split(' ')[0]} ${aluno.nome.split(' ')[1] || ''}|payload:${JSON.stringify(studentPayload)}|report-payload`
     })
     
+    const uniqueTurmas = Array.from(new Set(activeStudents.map(a => getTurmaName(a)))).filter(Boolean) as string[];
+
     newComunicados.push({
         id: `AD-COM-REL-COLAB-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         titulo: `Cópia do Relatório: ${template.name}`,
@@ -267,8 +269,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Colaborador',
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
-        turmas: [],
-        alunosIds: [],
+        turmas: uniqueTurmas.length > 0 ? uniqueTurmas : (payload.turmaId ? [payload.turmaId] : []),
+        alunosIds: fillMode === 'especifico' ? activeStudents.map(a => a.id.replace(/^a_?/, '')) : [],
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,
