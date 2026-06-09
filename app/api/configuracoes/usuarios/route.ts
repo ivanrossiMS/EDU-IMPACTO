@@ -7,9 +7,6 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
-
   try {
     const url = new URL(req.url)
     
@@ -24,6 +21,9 @@ export async function GET(req: Request) {
       const { data } = await supabaseAdmin.from('system_users').select('id').eq('email', 'direcao@colegioimpacto.net').maybeSingle()
       return NextResponse.json({ masterExists: !!data })
     }
+
+    const { user, errorResponse } = await requireAuth()
+    if (errorResponse) return errorResponse
 
     const supabase = await createProtectedClient()
     const { data: { user } } = await supabase.auth.getUser()
