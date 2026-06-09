@@ -93,12 +93,10 @@ export async function POST(req: Request) {
       console.warn(`[Sync Fotos] Conexão física com leitor iDFace falhou. Ativando Modo Simulado de Portaria. Detalhe: ${err.message}`)
       isSimulated = true
       
-      // Buscar alunos ativos diretamente para gerar os dados simulados
       const { data: allActiveStudents } = await supabase
         .from('alunos')
         .select('matricula, nome')
         .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
-        .limit(100)
 
       usersRes = {
         users: (allActiveStudents || []).map((s, idx) => ({
@@ -124,21 +122,42 @@ export async function POST(req: Request) {
       })
     }
 
-    // Mapeamento das matrículas de forma segura
-    const deviceUserIds = deviceUsers.map((u: any) => String(u.registration || u.id))
-
-    // 3. Buscar alunos ativos correspondentes no banco
-    const { data: students } = await supabase
+    // 3. Buscar alunos ativos no banco para cruzar os dados
+    const { data: activeStudents } = await supabase
       .from('alunos')
       .select('id, nome, matricula, foto')
-      .in('matricula', deviceUserIds)
+      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
 
-    if (!students || students.length === 0) {
+    if (!activeStudents || activeStudents.length === 0) {
       return NextResponse.json({
         success: true,
         count: 0,
         preview: isPreview,
-        message: 'Nenhum aluno ativo correspondente encontrado no ERP.'
+        message: 'Nenhum aluno ativo encontrado no ERP.'
+      })
+    }
+
+    // Filtrar apenas alunos que possuem correspondência na catraca
+    const students = activeStudents.filter(student => {
+      return deviceUsers.some((u: any) => {
+        const dReg = u.registration ? String(u.registration) : null;
+        const dId = u.id ? String(u.id) : null;
+        const sMat = student.matricula ? String(student.matricula) : null;
+        const sId = student.id ? String(student.id) : null;
+        
+        return (dReg && sMat && dReg === sMat) ||
+               (dId && sMat && dId === sMat) ||
+               (dId && sId && dId === sId) ||
+               (dReg && sId && dReg === sId);
+      });
+    });
+
+    if (students.length === 0) {
+      return NextResponse.json({
+        success: true,
+        count: 0,
+        preview: isPreview,
+        message: 'Nenhum aluno ativo correspondente encontrado na catraca.'
       })
     }
 
@@ -160,7 +179,9 @@ export async function POST(req: Request) {
         count, // fallback de compatibilidade
         totalDeviceUsers: deviceUsers.length,
         preview: true,
-        isSimulated
+        isSimulated,
+        studentsAll: students.map(s => ({ id: s.id, nome: s.nome, matricula: s.matricula })),
+        studentsMissing: studentsWithoutPhoto.map(s => ({ id: s.id, nome: s.nome, matricula: s.matricula }))
       })
     }
 
@@ -178,20 +199,31 @@ export async function POST(req: Request) {
       let processedCount = 0
 
       for (const student of targetStudents) {
-        const numericId = parseInt(student.matricula.replace(/\D/g, ''), 10)
-        if (isNaN(numericId)) {
+        const deviceUser = deviceUsers.find((u: any) => {
+          const dReg = u.registration ? String(u.registration) : null;
+          const dId = u.id ? String(u.id) : null;
+          const sMat = student.matricula ? String(student.matricula) : null;
+          const sId = student.id ? String(student.id) : null;
+          
+          return (dReg && sMat && dReg === sMat) ||
+                 (dId && sMat && dId === sMat) ||
+                 (dId && sId && dId === sId) ||
+                 (dReg && sId && dReg === sId);
+        });
+
+        if (!deviceUser) {
           processedCount++
-          if (globalThis.idfaceSyncProgress) {
-            globalThis.idfaceSyncProgress.processed = processedCount
-          }
+          if (globalThis.idfaceSyncProgress) globalThis.idfaceSyncProgress.processed = processedCount
           continue
         }
+        
+        const deviceId = deviceUser.id
 
         try {
           // Se for modo simulado, gera uma foto fake em base64 e salva
           const base64Image = isSimulated
             ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="%236366f1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14">${student.nome.slice(0, 2).toUpperCase()}</text></svg>`
-            : await client.getUserImage(numericId)
+            : await client.getUserImage(deviceId)
 
           if (base64Image && base64Image.length > 50) {
             await supabase

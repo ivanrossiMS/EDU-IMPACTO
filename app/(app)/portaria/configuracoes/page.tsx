@@ -49,6 +49,8 @@ export default function PortariaConfigPage() {
   const [syncMode, setSyncMode] = useState<'only_missing' | 'all'>('only_missing')
   const [syncPreviewAll, setSyncPreviewAll] = useState(0)
   const [syncPreviewMissing, setSyncPreviewMissing] = useState(0)
+  const [syncPreviewAllList, setSyncPreviewAllList] = useState<any[]>([])
+  const [syncPreviewMissingList, setSyncPreviewMissingList] = useState<any[]>([])
 
   // Fetch config from the configuracoes table
   const { data: configRes, isLoading } = useApiQuery<any>(
@@ -115,6 +117,8 @@ export default function PortariaConfigPage() {
       
       setSyncPreviewAll(totalAll)
       setSyncPreviewMissing(missing)
+      setSyncPreviewAllList(data.studentsAll || [])
+      setSyncPreviewMissingList(data.studentsMissing || [])
       setAffectedCount(missing)
       setSyncMode('only_missing')
       setSyncStep('preview')
@@ -589,6 +593,36 @@ export default function PortariaConfigPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+                
+                {/* Lista de Alunos a serem sincronizados */}
+                <div style={{
+                  maxHeight: 180, overflowY: 'auto', marginBottom: 24,
+                  background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))',
+                  borderRadius: 12, padding: '8px 0', textAlign: 'left'
+                }}>
+                  <div style={{ padding: '0 16px 8px', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', borderBottom: '1px solid hsl(var(--border-subtle))', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Alunos a serem sincronizados
+                  </div>
+                  {(syncMode === 'only_missing' ? syncPreviewMissingList : syncPreviewAllList).length === 0 ? (
+                    <div style={{ padding: '16px', fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center' }}>
+                      Nenhum aluno para sincronizar.
+                    </div>
+                  ) : (
+                    (syncMode === 'only_missing' ? syncPreviewMissingList : syncPreviewAllList).map((student, idx) => (
+                      <div key={idx} style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'hsl(var(--bg-elevated))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: ACCENT }}>
+                            {student.nome.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{student.nome}</div>
+                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>ID: {student.matricula}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
                 
                 {affectedCount === 0 ? (
