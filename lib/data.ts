@@ -51,6 +51,7 @@ export const OCUPACAO_SEGMENTOS = [
 
 export const UNIDADES: any[] = []
 
+export const CENSO_DATA = {
   ano_ref: 2026,
   prazo: '2026-04-14',
   status: 'em_andamento',
