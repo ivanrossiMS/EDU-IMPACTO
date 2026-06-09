@@ -118,6 +118,9 @@ export async function proxy(request: NextRequest) {
       '/api/academico/frequencias',
       '/api/portaria/eventos',
       '/api/turmas',
+      '/api/saida/guardians',
+      '/api/saida/rfid',
+      '/api/saida/student_guardians',
       '/favicon.ico'
     ]
 
