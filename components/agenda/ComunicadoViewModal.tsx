@@ -51,6 +51,7 @@ interface ChatMessage {
   id: string
   comunicado_id: string
   remetente_id: string
+  destinatario_id?: string
   remetente_nome: string
   conteudo: string
   anexos: string[]

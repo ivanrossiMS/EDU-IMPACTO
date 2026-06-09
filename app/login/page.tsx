@@ -223,7 +223,19 @@ export default function LoginPage() {
            perfil: perfilReal
         })
         setHasDualRole(isAlsoFamily)
-        setStep('choose_system')
+        setHasDualRole(isAlsoFamily)
+
+        const isApp = typeof window !== 'undefined' && !!(window as any).Capacitor;
+        if (isApp) {
+          if (perfilReal === 'Diretor Geral' || cargoReal === 'Administrador Master') {
+            router.push('/agenda-digital/selecionar-perfil-admin');
+          } else {
+            router.push('/agenda-digital/selecionar-aluno');
+          }
+        } else {
+          setStep('choose_system')
+        }
+        
         setLoginLoading(false)
         return;
       }
