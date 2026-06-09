@@ -20,8 +20,8 @@ const securityHeaders = [
       "default-src 'self'",
       // Em prod não precisamos de unsafe-eval (apenas Next.js dev mode)
       process.env.NODE_ENV === 'development'
-        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.onesignal.com"
-        : "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com",
+        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.onesignal.com https://api.onesignal.com"
+        : "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://api.onesignal.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob: https:",
