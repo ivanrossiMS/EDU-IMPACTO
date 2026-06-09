@@ -81,9 +81,8 @@ export function PushPermissionBanner() {
     try {
       window.OneSignalDeferred = window.OneSignalDeferred || []
       window.OneSignalDeferred.push(async function(OneSignal: any) {
-        if (OneSignal.Slidedown?.promptPush) {
-          await OneSignal.Slidedown.promptPush()
-        } else if (OneSignal.Notifications?.requestPermission) {
+        // Vai direto para o prompt nativo do navegador, pulando o Slidedown do OneSignal
+        if (OneSignal.Notifications?.requestPermission) {
           await OneSignal.Notifications.requestPermission()
         } else {
           const result = await Notification.requestPermission()
