@@ -35,14 +35,32 @@ export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: 
       updateMessage: (doc) => `Ocorrência atualizada!`,
       icon: <AlertTriangle size={18} color="#ef4444" />
     },
-    onInsert: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    onInsert: (payload) => {
+      if (payload && payload.new) {
+        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+          if (!old) return [payload.new];
+          return [payload.new, ...old];
+        });
+      }
+    },)
     },
-    onUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    onUpdate: (payload) => {
+      if (payload && payload.new) {
+        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+          if (!old) return old;
+          return old.map((item: any) => item.id === payload.new.id ? payload.new : item);
+        });
+      }
+    },)
     },
-    onDelete: () => {
-      queryClient.invalidateQueries({ queryKey: ['ocorrencias', aluno?.id] })
+    onDelete: (payload) => {
+      if (payload && payload.old) {
+        queryClient.setQueryData(['ocorrencias', aluno?.id], (old: any) => {
+          if (!old) return old;
+          return old.filter((item: any) => item.id !== payload.old.id);
+        });
+      }
+    })
     }
   });
 

@@ -8,6 +8,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
 import { use, useState, useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -84,6 +85,7 @@ const getAnexoType = (anexoStr: string) => {
 };
 
 export default function ADComunicadosPage({ params }: { params: Promise<{ slug: string }>}) {
+  const queryClient = useQueryClient()
   const { adAlert } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   const resolvedParams = use(params as Promise<{ slug: string }>)
@@ -98,21 +100,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const endpoint = aluno?.id ? `/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : '/api/comunicados'
   
   const { data: comunicados = [], isLoading: loading } = useQueryComunicados(false, endpoint)
-  const [localComunicados, setLocalComunicados] = useState<any[]>(comunicados)
-
-  useEffect(() => {
-    if (comunicados && comunicados.length > 0) {
-      setLocalComunicados(comunicados)
-    }
-  }, [comunicados])
   
-  const [newComunicadosBuffer, setNewComunicadosBuffer] = useState<any[]>([])
-  const comunicadosRef = useRef(localComunicados)
-  const isPollingRef = useRef(false)
   
-  useEffect(() => {
-    comunicadosRef.current = localComunicados
-  }, [localComunicados])
+  
+  
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
@@ -132,16 +123,22 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   
   const handleCiencia = async (comunicadoId: string) => {
     const nowIso = new Date().toISOString()
-    setLocalComunicados(prev => prev.map(c => {
-      if (c.id === comunicadoId) {
-        const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
-        if (selectedComunicado && selectedComunicado.id === comunicadoId) {
-          setSelectedComunicado(updated)
+    
+    // Update React Query Cache directly
+    queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
+      if (!old) return old;
+      return old.map((c: any) => {
+        if (c.id === comunicadoId) {
+          const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
+          if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+            setSelectedComunicado(updated)
+          }
+          return updated
         }
-        return updated
-      }
-      return c
-    }))
+        return c
+      })
+    })
+
     try {
       const { data: dbCom } = await supabase.from('comunicados').select('dados').eq('id', comunicadoId).single();
       if (dbCom) {
@@ -451,7 +448,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          const filteredComunicados = (localComunicados || []).filter((c: any) => {
+          const filteredComunicados = (comunicados || []).filter((c: any) => {
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';

@@ -60,29 +60,13 @@ export function useAgendaRealtime<T = any>({
     window.addEventListener(`${eventPrefix}update`, handleLocalUpdate)
     window.addEventListener(`${eventPrefix}delete`, handleLocalDelete)
 
-    // 2. Conectar de verdade no Supabase Realtime para recebimento automático entre devices
-    let channelParams: any = { event: '*', schema: 'public', table: table }
-    if (filter) {
-      channelParams.filter = filter
-    }
-
-    const channel = supabase.channel(`realtime:public:${table}`)
-      .on('postgres_changes', channelParams, (payload) => {
-        if (payload.eventType === 'INSERT' && onInsertRef.current) {
-          onInsertRef.current({ new: payload.new as T, old: null })
-        } else if (payload.eventType === 'UPDATE' && onUpdateRef.current) {
-          onUpdateRef.current({ new: payload.new as T, old: payload.old as T })
-        } else if (payload.eventType === 'DELETE' && onDeleteRef.current) {
-          onDeleteRef.current({ new: null, old: payload.old as T })
-        }
-      })
-      .subscribe()
+    
 
     return () => {
       window.removeEventListener(`${eventPrefix}insert`, handleLocalInsert)
       window.removeEventListener(`${eventPrefix}update`, handleLocalUpdate)
       window.removeEventListener(`${eventPrefix}delete`, handleLocalDelete)
-      supabase.removeChannel(channel)
+      
     }
   }, [table, filter])
 }

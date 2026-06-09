@@ -1,4 +1,5 @@
 'use client'
+import { useQueryClient } from '@tanstack/react-query'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
@@ -16,7 +17,8 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
-  // removido const { momentosFeed } = useAgendaDigital()
+  const queryClient = useQueryClient()
+  // removido const { fetchMomentos } = useAgendaDigital()
   const { aluno: contextAluno } = useSelectedStudent()
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
   const [dbTurmas = []] = useSupabaseArray<any>('turmas', [])
@@ -43,7 +45,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   })()
   
   const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, '/api/agenda/momentos')
-  const [momentosFeed, setMomentosFeed] = useState<any[]>(fetchMomentos)
+  const [fetchMomentos, setMomentosFeed] = useState<any[]>(fetchMomentos)
 
   // Sync state with fetched data
   useEffect(() => {
@@ -74,30 +76,36 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
 
   const handleLike = (momentId: number | string) => {
-    setMomentosFeed(prev => prev.map(m => {
-      if (m.id !== momentId) return m
-      const myName = currentUser?.nome || 'Você'
-      const likesArray = m.likes || []
-      const isLiked = likesArray.includes(myName)
-      return {
-        ...m,
-        likes: isLiked ? likesArray.filter((name: string) => name !== myName) : [...likesArray, myName]
-      }
-    }))
+    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
+      if (!old) return old;
+      return old.map((m: any) => {
+        if (m.id !== momentId) return m;
+        const myName = currentUser?.nome || 'Você'
+        const likesArray = m.likes || []
+        const isLiked = likesArray.includes(myName)
+        return {
+          ...m,
+          likes: isLiked ? likesArray.filter((name: string) => name !== myName) : [...likesArray, myName]
+        }
+      });
+    });
   }
 
   const handlePublishComment = (momentId: number | string) => {
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 
-    setMomentosFeed(prev => prev.map(m => {
-      if (m.id !== momentId) return m
-      const commentsArray = m.comments || []
-      return {
-        ...m,
-        comments: [...commentsArray, { id: Date.now().toString(), author: currentUser?.nome || 'Você', text, time: 'Agora' }]
-      }
-    }))
+    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
+      if (!old) return old;
+      return old.map((m: any) => {
+        if (m.id !== momentId) return m;
+        const commentsArray = m.comments || []
+        return {
+          ...m,
+          comments: [...commentsArray, { id: Date.now().toString(), author: currentUser?.nome || 'Você', text, time: 'Agora' }]
+        }
+      });
+    });
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
   }
   
@@ -121,7 +129,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   // Filtrar momentos aprovados
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
   const meusMomentos = React.useMemo(() => {
-    return momentosFeed.filter(m => {
+    return fetchMomentos.filter(m => {
       const targetClasses = m.targetClasses || []
       const targetAlunos = m.alunosIds || []
 
@@ -155,7 +163,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       const dateB = new Date((b as any).date || 0).getTime()
       return dateB - dateA
     })
-  }, [momentosFeed, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno])
+  }, [fetchMomentos, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno])
 
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;

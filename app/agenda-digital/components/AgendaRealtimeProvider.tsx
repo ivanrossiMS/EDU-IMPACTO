@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import Script from 'next/script'
 import { useRouter, useParams } from 'next/navigation'
 import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } from 'lucide-react'
@@ -47,6 +48,7 @@ declare global {
 
 export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const params = useParams<{ slug: string }>()
   const { currentUser } = useApp()
   const osInitialized = useRef(false)
