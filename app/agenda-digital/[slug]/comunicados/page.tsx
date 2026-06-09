@@ -580,7 +580,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
                     setSelectedComunicado(updatedComunicado)
                     
                     if (!isRead) {
-                      setLocalComunicados(prev => prev.map(x => x.id === c.id ? updatedComunicado : x))
+                      queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
+                        if (!old) return old;
+                        return old.map((x: any) => x.id === c.id ? updatedComunicado : x);
+                      })
                       fetch('/api/agenda/notificacoes/marcar-lido', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
