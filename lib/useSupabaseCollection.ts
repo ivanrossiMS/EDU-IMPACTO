@@ -151,7 +151,12 @@ export function useSupabaseCollection<T>(
                 console.error(`[useSupabaseCollection] Endpoint /${endpoint} returned HTML on success (likely auth redirect).`)
                 throw new Error(`Auth Redirect`)
               }
-              if (!r.ok) throw new Error(`HTTP ${r.status}`)
+              if (!r.ok) {
+                let errText = '';
+                try { errText = await r.text(); } catch(e) {}
+                console.error(`[useSupabaseCollection] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
+                throw new Error(`HTTP ${r.status} - ${errText}`);
+              }
               const text = await r.text()
               if (!text) return initialValueRef.current
               try {
@@ -364,7 +369,10 @@ export function useSupabaseArray<T>(
                 console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
                 return [];
               }
-              throw new Error(`HTTP ${r.status}`);
+              let errText = '';
+              try { errText = await r.text(); } catch(e) {}
+              console.error(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
+              throw new Error(`HTTP ${r.status} - ${errText}`);
             }
             const text = await r.text();
             if (!text) return [];
