@@ -2078,6 +2078,10 @@ export default function FrequenciaPage() {
         onClose={() => setShowAcessosModal(false)}
         initialStartDate={today}
         initialEndDate={today}
+        onSuccess={() => {
+          if (refetchAllFreqs) refetchAllFreqs()
+          if (turmaSel && refetchFreq) refetchFreq()
+        }}
       />
     </div>
   )

@@ -10,9 +10,10 @@ interface SyncAcessosModalProps {
   onClose: () => void
   initialStartDate?: string
   initialEndDate?: string
+  onSuccess?: () => void
 }
 
-export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEndDate }: SyncAcessosModalProps) {
+export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEndDate, onSuccess }: SyncAcessosModalProps) {
   const [acessosStartDate, setAcessosStartDate] = useState(() => {
     if (initialStartDate) return initialStartDate
     const d = new Date()
@@ -132,6 +133,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
               setAcessosSyncAlreadyExisting(data.alreadyExisting || 0)
               setAcessosSyncNewInserted(data.newInserted || 0)
               setAcessosSyncStep('completed')
+              if (onSuccess) onSuccess()
             } else if (data.status === 'error') {
               setAcessosSyncStep('error')
               setAcessosSyncError(data.error)
