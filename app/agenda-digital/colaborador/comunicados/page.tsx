@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Trash2, Edit2 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -295,6 +295,37 @@ export default function ColaboradorComunicadosPage() {
     
     setSelectedDest([])
     setShowComposer(true)
+  }
+
+  const handleEditComunicado = (c: any) => {
+    setEditComId(c.id)
+    
+    const dests: any[] = []
+    if (c.turmas) c.turmas.forEach((t: string) => dests.push({ type: 'turma', name: t }))
+    if (c.alunosIds) c.alunosIds.forEach((id: string) => {
+       const al = alunosAtivos.find((a: any) => a.id.replace(/^a_?/, '') === id.replace(/^a_?/, ''))
+       if (al) dests.push({ type: 'aluno', id: al.id, name: al.nome })
+    })
+    if (c.grupos) c.grupos.forEach((g: string) => dests.push({ type: 'grupo', name: g }))
+    if (c.funcionariosIds) c.funcionariosIds.forEach((id: string) => {
+       const col = colaboradores.find((colItem: any) => colItem.id.replace(/^f_?/, '') === id.replace(/^f_?/, ''))
+       if (col) dests.push({ type: 'funcionario', id: col.id, name: col.nome })
+    })
+    setSelectedDest(dests)
+    setShowComposer(true)
+  }
+
+  const handleDeleteComunicado = async (cId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este comunicado?')) return;
+    
+    setComunicadosLocally?.((prev: any) => prev.filter((c: any) => c.id !== cId));
+    if (selectedComunicado?.id === cId) setSelectedComunicado(null);
+
+    try {
+      fetch(`/api/comunicados?id=${cId}`, { method: 'DELETE' }).catch(console.error);
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   
@@ -678,9 +709,37 @@ export default function ColaboradorComunicadosPage() {
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
+          const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora') || currentUser?.perfil === 'administrador' || currentUser?.perfil === 'admin';
+          const myTurmaNames = turmaOptions.map((t: any) => t.nome);
+          const myGroups = (chatGroups || []).filter((g: any) => {
+            let colabs = g.colaboradoresIds;
+            if (typeof colabs === 'string') {
+              try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+            }
+            if (!Array.isArray(colabs)) colabs = [];
+            return colabs.some((id: any) => String(id) === String(currentUser?.id));
+          }).map((g: any) => g.nome);
+
           const filteredComunicados = (comunicados || []).filter((c: any) => {
             if (c.id?.startsWith('AD-COM-REL-STU')) return false;
             
+            if (!isMaster) {
+              const isAuthor = String(c.autorId) === String(currentUser?.id) || c.autor === currentUser?.nome;
+              const isTodos = c.destino === 'todos';
+              
+              const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
+              const targetGrupos = c.grupos || (c.dados?.grupos) || [];
+              const targetTurmas = c.turmas || (c.dados?.turmas) || [];
+              
+              const inFuncs = targetFuncs.some((id: any) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`);
+              const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
+              const inTurmas = targetTurmas.some((t: string) => myTurmaNames.includes(t));
+              
+              if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
+                return false;
+              }
+            }
+
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';
@@ -1030,6 +1089,15 @@ export default function ColaboradorComunicadosPage() {
             setOpenedReportPayload={setOpenedReportPayloadStr}
             alunos={alunos}
             colaboradores={colaboradores}
+            turmas={turmas}
+            onEdit={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === currentUser?.id) ? (c) => {
+               setSelectedComunicado(null);
+               handleEditComunicado(c);
+            } : undefined}
+            onDelete={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === currentUser?.id) ? (id) => {
+               setSelectedComunicado(null);
+               handleDeleteComunicado(id);
+            } : undefined}
           />
         )}
       </AnimatePresence>

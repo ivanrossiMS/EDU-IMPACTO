@@ -182,7 +182,6 @@ export const ZodAlunoStepDados = z.object({
   naturalidade: z.string().nullable().optional(),
   uf: z.string().nullable().optional(),
   cor_raca: z.string().nullable().optional(),
-  id_censo: z.string().nullable().optional(),
   dados: z.record(z.string(), z.any()).optional()
 }).passthrough()
 

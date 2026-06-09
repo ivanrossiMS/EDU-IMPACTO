@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -73,6 +73,9 @@ interface ComunicadoViewModalProps {
   setOpenedReportPayload?: (anexo: string) => void
   alunos?: any[]
   colaboradores?: any[]
+  turmas?: any[]
+  onEdit?: (comunicado: any) => void
+  onDelete?: (id: string) => void
 }
 
 export function ComunicadoViewModal({
@@ -89,7 +92,10 @@ export function ComunicadoViewModal({
   setOpenedReportTask,
   setOpenedReportPayload,
   alunos = [],
-  colaboradores = []
+  colaboradores = [],
+  turmas = [],
+  onEdit,
+  onDelete
 }: ComunicadoViewModalProps) {
   const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
@@ -105,24 +111,38 @@ export function ComunicadoViewModal({
 
   const adminThreads = useMemo(() => {
     if (!isAdminMode) return []
-    const threadsMap = new Map<string, { studentId: string, studentName: string, messages: ChatMessage[], lastMessageAt: string }>()
+    const threadsMap = new Map<string, { studentId: string, studentName: string, studentFoto?: string, messages: ChatMessage[], lastMessageAt: string }>()
     
     messages.forEach(msg => {
-      const threadId = msg.remetente_id;
+      // In admin mode, messages are grouped by the non-admin participant (student/parent)
+      const threadId = msg.is_admin ? (msg.destinatario_id || msg.remetente_id) : msg.remetente_id
+      if (!threadId) return
+      
+      let alunoObj = alunos.find((a: any) => {
+        if (!a || !a.id) return false;
+        const aIdStr = String(a.id);
+        const rIdStr = String(threadId);
+        return aIdStr === rIdStr || aIdStr === `a_${rIdStr}` || aIdStr.replace(/^_*(ALU)?/, '') === rIdStr.replace(/^_*(ALU)?/, '');
+      });
+
       if (!threadsMap.has(threadId)) {
         threadsMap.set(threadId, {
           studentId: threadId,
-          studentName: msg.remetente_nome || 'Usuário',
+          studentName: alunoObj?.nome || (!msg.is_admin ? msg.remetente_nome : 'Aluno') || 'Usuário',
+          studentFoto: alunoObj?.foto,
           messages: [],
           lastMessageAt: msg.created_at
         })
       }
+      
       const thread = threadsMap.get(threadId)!
       thread.messages.push(msg)
       if (new Date(msg.created_at) > new Date(thread.lastMessageAt)) {
         thread.lastMessageAt = msg.created_at
       }
-      if (!msg.is_admin && msg.remetente_nome) {
+      
+      // Se não achou alunoObj no map, mas a mensagem é do responsável/aluno, atualiza o nome (fallback)
+      if (!msg.is_admin && msg.remetente_nome && !alunoObj) {
         thread.studentName = msg.remetente_nome
       }
     })
@@ -134,7 +154,7 @@ export function ComunicadoViewModal({
     )
     
     return validThreads.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime())
-  }, [messages, isAdminMode])
+  }, [messages, isAdminMode, alunos])
   
   const messagesToShow = isAdminMode ? (selectedThreadId ? adminThreads.find(t => t.studentId === selectedThreadId)?.messages || [] : []) : messages;
 
@@ -156,6 +176,17 @@ export function ComunicadoViewModal({
       const found = colaboradores.find((c: any) => c.id.replace(/^_*(FUNC)?/, '') === cleanId);
       return found ? found.nome : `Funcionário ID: ${id}`;
     });
+    
+    // Suporte específico para relatórios gerados a partir de uma turma única (turmaId)
+    const singleTurmaId = comunicado.turmaId || comunicado.dados?.turmaId;
+    if (singleTurmaId && !destTurmas.includes(singleTurmaId)) {
+      const foundTurma = turmas?.find((t: any) => String(t.id) === String(singleTurmaId));
+      if (foundTurma) {
+        destTurmas.push(foundTurma.nome);
+      } else {
+        destTurmas.push(`Turma ID: ${singleTurmaId}`);
+      }
+    }
     
     const parts = [];
     if (destTurmas.length > 0) parts.push(`Turmas: ${destTurmas.join(', ')}`);
@@ -440,11 +471,34 @@ export function ComunicadoViewModal({
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, zIndex: 1, position: 'relative' }}>
-              <button className="cvm-icon-btn" onClick={onClose}>
+            <div style={{ display: 'flex', alignItems: 'center', zIndex: 1, position: 'relative' }}>
+              <button className="cvm-icon-btn" onClick={onClose} title="Fechar">
                 <X size={24} />
               </button>
             </div>
+
+            {(onEdit || onDelete) && (
+              <div style={{ position: 'absolute', bottom: 12, right: 24, display: 'flex', gap: 6, zIndex: 2 }}>
+                {onEdit && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
+                    title="Editar Comunicado"
+                    style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
+                {onDelete && (
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                    title="Excluir Comunicado"
+                    style={{ background: 'rgba(239,68,68,0.25)', color: '#fca5a5', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* BODY */}
@@ -612,9 +666,14 @@ export function ComunicadoViewModal({
                      <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>Conversas Privadas ({adminThreads.length})</h3>
                      {adminThreads.map(thread => (
                         <div key={thread.studentId} onClick={() => setSelectedThreadId(thread.studentId)} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                          <div>
-                            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
-                            <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{thread.messages.length} mensagens com este usuário</div>
+                          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#dbeafe', color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, overflow: 'hidden', flexShrink: 0 }}>
+                              {thread.studentFoto ? <img src={thread.studentFoto} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : thread.studentName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
+                              <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{thread.messages.length} mensagens com este usuário</div>
+                            </div>
                           </div>
                           <div style={{ fontSize: 12, color: '#94a3b8' }}>
                             {timeAgoShort(thread.lastMessageAt)}
@@ -636,17 +695,60 @@ export function ComunicadoViewModal({
                     <h3 style={{ fontSize: 14, fontWeight: 700, color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: 0.5 }}>{isAdminMode ? `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}` : 'Respostas Privadas ao Envio'}</h3>
                     {messagesToShow.length > 0 ? messagesToShow.map((msg, idx) => {
                       const isMe = isAdminMode ? msg.is_admin : (msg.remetente_id === currentUserSlug && !msg.is_admin)
-                      const avatarToUse = (!isMe && isAdminMode && msg.is_admin) ? undefined : (isMe && currentUserAvatar ? currentUserAvatar : undefined)
+                      
+                      let alunoObj = alunos.find((a: any) => {
+                        if (!a || !a.id) return false;
+                        const aIdStr = String(a.id);
+                        const rIdStr = String(msg.remetente_id);
+                        return aIdStr === rIdStr || aIdStr === `a_${rIdStr}` || aIdStr.replace(/^_*(ALU)?/, '') === rIdStr.replace(/^_*(ALU)?/, '');
+                      });
+                      
+                      // Check if it's from responsavel. If we don't have alunoObj (maybe the array wasn't passed properly), we can fallback to checking if isAdminMode is false and this message's remetente_nome is different from the first message's remetente_nome, or just assume if it's not the student.
+                      // Wait, we have currentUserName passed down.
+                      let isFromResponsavel = alunoObj && msg.remetente_nome && msg.remetente_nome.trim().toLowerCase() !== alunoObj.nome.trim().toLowerCase();
+                      
+                      // Fallback: If we couldn't find alunoObj, but we know the student's name from the parent component (in parent app, currentUserName is passed but actually we want student's name. Wait, the modal title is `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}`).
+                      const threadStudentName = isAdminMode ? adminThreads.find(t => t.studentId === selectedThreadId)?.studentName : null;
+                      if (!alunoObj && msg.remetente_nome) {
+                         if (threadStudentName && msg.remetente_nome.trim().toLowerCase() !== threadStudentName.trim().toLowerCase()) {
+                            isFromResponsavel = true;
+                            alunoObj = { nome: threadStudentName };
+                         } else if (!isAdminMode) {
+                            // in parent app, if we still don't have alunoObj, let's look at the first message in the thread to get the student's name, or just use the fact that if it's me, and msg.remetente_nome != adminThreads... wait, in parent app adminThreads is not used for title.
+                            // The easiest is just rely on the fixed find().
+                         }
+                      }
+
+                      let avatarToUse = undefined;
+                      if (!msg.is_admin) {
+                        if (alunoObj?.foto) {
+                          avatarToUse = alunoObj.foto;
+                        }
+                        // Se for uma mensagem de familiar/aluno e não tiver foto do aluno, não usar a foto do responsável.
+                        // Vai cair no fallback de usar a primeira letra do nome.
+                      } else if (isMe && currentUserAvatar) {
+                        avatarToUse = currentUserAvatar;
+                      }
+                      
+                      const msgDate = new Date(msg.created_at);
+                      const msgTimeStr = msgDate.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' às ' + msgDate.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
                       
                       return (
                         <div key={msg.id} style={{ display: 'flex', gap: 12 }}>
                           <div style={{ width: 36, height: 36, borderRadius: '50%', background: isMe ? '#e2e8f0' : '#dbeafe', color: isMe ? '#475569' : '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, overflow: 'hidden', flexShrink: 0 }}>
-                            {avatarToUse ? <img src={avatarToUse} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : msg.remetente_nome.charAt(0).toUpperCase()}
+                            {avatarToUse ? <img src={avatarToUse} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : (alunoObj?.nome || msg.remetente_nome).charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{msg.remetente_nome}</span>
-                              <span style={{ fontSize: 12, color: '#94a3b8' }}>{timeAgoShort(msg.created_at)}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 6 }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                {isFromResponsavel && (
+                                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
+                                    Enviado por: {msg.remetente_nome} &bull;
+                                  </span>
+                                )}
+                                <span style={{ fontSize: 12, color: '#94a3b8' }}>{msgTimeStr}</span>
+                              </div>
                             </div>
                             <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.5, background: isMe ? '#f1f5f9' : '#ffffff', padding: '8px 16px', borderRadius: '0 16px 16px 16px', border: isMe ? 'none' : '1px solid #e2e8f0', display: 'inline-block' }}>
                               {msg.conteudo}

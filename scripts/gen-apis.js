@@ -11,11 +11,6 @@ const routes = [
   { p: 'app/api/financeiro/unidades-fiscais/route.ts', t: 'unidades_fiscais' },
   { p: 'app/api/financeiro/notas-fiscais/route.ts', t: 'notas_fiscais' },
   { p: 'app/api/configuracoes/perfis/route.ts', t: 'perfis' },
-  { p: 'app/api/censo/pendencias/route.ts', t: 'censo_pendencias' },
-  { p: 'app/api/censo/exports/route.ts', t: 'censo_exports' },
-  { p: 'app/api/censo/auditoria/route.ts', t: 'censo_audit_logs' },
-  { p: 'app/api/censo/operacoes/route.ts', t: 'censo_operacoes' },
-  { p: 'app/api/censo/escola/route.ts', t: 'censo_escola_data' },
 ]
 
 const template = (table) => `import { NextResponse } from 'next/server'

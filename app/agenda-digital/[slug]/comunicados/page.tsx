@@ -84,12 +84,15 @@ const getAnexoType = (anexoStr: string) => {
   return { label: 'Anexo', icon: <Paperclip size={16} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
 };
 
+import { useApp } from '@/lib/context'
+
 export default function ADComunicadosPage({ params }: { params: Promise<{ slug: string }>}) {
   const queryClient = useQueryClient()
   const { adAlert } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   const resolvedParams = use(params as Promise<{ slug: string }>)
   
+  const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
@@ -748,9 +751,10 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
               onClose={() => setSelectedComunicado(null)}
               onCiencia={handleCiencia}
               currentUserSlug={resolvedParams.slug}
-              currentUserName={aluno?.nome || 'Familiar / Aluno'}
-              currentUserAvatar={aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
+              currentUserName={currentUser?.nome || aluno?.nome || 'Familiar / Aluno'}
+              currentUserAvatar={currentUser?.foto || aluno?.foto || aluno?.fotoUrl || aluno?.foto_url}
               isAdminMode={false}
+              alunos={aluno ? [aluno] : []}
               setOpenedFormStr={setOpenedFormStr}
               setMaximizedImageStr={setMaximizedImageStr}
               setMaximizedVideoStr={setMaximizedVideoStr}
