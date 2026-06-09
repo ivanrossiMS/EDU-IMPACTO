@@ -73,11 +73,19 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
     if (temp) {
       temp.sections?.forEach((sec: any) => {
         sec.fields?.forEach((field: any) => {
-           const val = studentValues[field.id] || 'Não preenchido';
-           if (field.label.toLowerCase().includes('obs') || field.label.toLowerCase().includes('observação')) {
-              obsValue = val;
-           } else {
-              fields.push({ label: field.label, value: val, id: field.id });
+           const rawVal = studentValues[field.id];
+           const isEmpty = rawVal === undefined || rawVal === null || rawVal === '' || rawVal === 'Não preenchido' || (Array.isArray(rawVal) && rawVal.length === 0);
+           
+           if (!isEmpty) {
+               if (field.label.toLowerCase().includes('obs') || field.label.toLowerCase().includes('observação')) {
+                  obsValue = rawVal;
+               } else {
+                  let displayVal = rawVal;
+                  if (Array.isArray(rawVal)) {
+                      displayVal = rawVal.join(', ');
+                  }
+                  fields.push({ label: field.label, value: displayVal, id: field.id });
+               }
            }
         });
       });
