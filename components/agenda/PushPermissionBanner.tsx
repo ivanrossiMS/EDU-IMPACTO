@@ -79,16 +79,19 @@ export function PushPermissionBanner() {
   const handleActivate = async () => {
     setBannerState('hidden')
     try {
-      if (window.OneSignal?.Slidedown?.promptPush) {
-        await window.OneSignal.Slidedown.promptPush()
-      } else if (window.OneSignal?.Notifications?.requestPermission) {
-        await window.OneSignal.Notifications.requestPermission()
-      } else {
-        const result = await Notification.requestPermission()
-        if (result === 'granted') {
-          console.log('✅ [PushBanner] Permissão concedida via API nativa')
+      window.OneSignalDeferred = window.OneSignalDeferred || []
+      window.OneSignalDeferred.push(async function(OneSignal: any) {
+        if (OneSignal.Slidedown?.promptPush) {
+          await OneSignal.Slidedown.promptPush()
+        } else if (OneSignal.Notifications?.requestPermission) {
+          await OneSignal.Notifications.requestPermission()
+        } else {
+          const result = await Notification.requestPermission()
+          if (result === 'granted') {
+            console.log('✅ [PushBanner] Permissão concedida via API nativa')
+          }
         }
-      }
+      })
     } catch (e: any) {
       console.error('[PushBanner] Erro ao solicitar permissão:', e?.message)
     }

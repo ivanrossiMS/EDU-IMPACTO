@@ -180,8 +180,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               // Evitar duplicar o login se o mesmo usuário já foi identificado
               if (window.__OS_USER_ID__ !== userId) {
                 try {
-                  if (typeof window.OneSignal?.login === 'function') {
-                    await window.OneSignal.login(userId)
+                  if (typeof OneSignal?.login === 'function') {
+                    await OneSignal.login(userId)
                     window.__OS_USER_ID__ = userId
                     console.log(`✅ [OneSignal] Usuário identificado: ${userId} (perfil: ${currentUser.perfil})`)
                   }
@@ -200,8 +200,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   if (turmaNome) tags['turma'] = String(turmaNome)
                   if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
 
-                  if (typeof window.OneSignal?.User?.addTags === 'function') {
-                    await window.OneSignal.User.addTags(tags)
+                  if (typeof OneSignal?.User?.addTags === 'function') {
+                    await OneSignal.User.addTags(tags)
                     console.log('[OneSignal] Tags de segmentação atribuídas:', tags)
                   }
                 } catch (tagsErr: any) {
@@ -211,8 +211,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             }
 
             // ── Listener de clique nas notificações ───────────────────────
-            if (typeof window.OneSignal?.Notifications?.addEventListener === 'function') {
-              window.OneSignal.Notifications.addEventListener('click', (event: any) => {
+            if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
+              OneSignal.Notifications.addEventListener('click', (event: any) => {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação clicada:', data)
 
