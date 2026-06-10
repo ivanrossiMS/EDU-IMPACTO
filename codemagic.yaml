@@ -34,6 +34,6 @@ workflows:
       - name: Build iOS App (Simulator)
         script: |
           cd ios/App
-          xcodebuild build -workspace App.xcworkspace -scheme App -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO
+          xcodebuild build -project App.xcodeproj -scheme App -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO
     artifacts:
       - ios/App/build/Build/Products/*-iphonesimulator/*.app
