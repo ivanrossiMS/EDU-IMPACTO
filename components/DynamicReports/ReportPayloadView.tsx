@@ -11,9 +11,12 @@ interface ReportPayloadViewProps {
   isOpen: boolean;
   onClose: () => void;
   attachmentString: string;
+  targetStudentId?: string;
+  targetStudentName?: string;
+  targetStudentAvatar?: string;
 }
 
-export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportPayloadViewProps) {
+export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStudentId, targetStudentName, targetStudentAvatar }: ReportPayloadViewProps) {
   const [mounted, setMounted] = useState(false);
   const { turmas = [] } = useData();
 
@@ -53,8 +56,11 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
       }
     }
 
+    const firstStudentId = Object.keys(payload.values || {})[0];
+    const studentIdToUse = targetStudentId || firstStudentId;
+    
     const info = { 
-        ...(payload.studentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null }), 
+        ...(payload.studentInfo || { id: studentIdToUse || 'unknown', name: targetStudentName || 'Aluno(a)', avatarUrl: targetStudentAvatar || null }), 
         turma: displayTurma 
     };
 
@@ -64,13 +70,12 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
        sections: payload.template?.sections || []
     };
 
-    const firstStudentId = Object.keys(payload.values || {})[0];
-    const studentValues = firstStudentId ? payload.values[firstStudentId] : {};
+    const studentValues = studentIdToUse ? payload.values[studentIdToUse] : {};
 
     let obsValue = '';
     const fields: { label: string; value: string; id: string }[] = [];
 
-    if (temp) {
+    if (temp && studentValues) {
       temp.sections?.forEach((sec: any) => {
         sec.fields?.forEach((field: any) => {
            const rawVal = studentValues[field.id];
@@ -92,7 +97,7 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString }: ReportP
     }
 
     return { resolvedStudentInfo: info, resolvedTemplate: temp, observacaoValue: obsValue, standardFields: fields };
-  }, [payload, attachmentString, turmas]);
+  }, [payload, attachmentString, turmas, targetStudentId, targetStudentName, targetStudentAvatar]);
 
   const studentInfo = resolvedStudentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null, turma: '' };
   const template = resolvedTemplate;

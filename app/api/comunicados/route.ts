@@ -131,7 +131,7 @@ export async function GET(request: Request) {
 
   const normalized = (data || []).map(normalizeRow);
   const filtered = isFamilyOrStudent
-    ? normalized
+    ? normalized.filter((c: any) => c.destino !== 'interno')
     : normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
 
   return NextResponse.json(filtered)
@@ -163,6 +163,7 @@ export async function POST(request: Request) {
       // Disparar Pushes para cada comunicado (em background)
       // Disparar Pushes para cada comunicado
       for (const row of rows) {
+        if (row.destino === 'interno') continue;
         const targetIds = await getResponsavelIdsForTargets(row.dados)
         if (targetIds.length > 0) {
           await sendAgendaPushNotification({
@@ -187,16 +188,18 @@ export async function POST(request: Request) {
     
     // Disparar Push (em background)
     // Disparar Push
-    const targetIds = await getResponsavelIdsForTargets(data.dados);
-    if (targetIds.length > 0) {
-      await sendAgendaPushNotification({
-        type: 'comunicados',
-        itemId: String(data.id),
-        title: `📢 Comunicado: ${data.titulo}`,
-        message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
-        targetUserIds: targetIds,
-        targetUrl: '/agenda-digital/comunicados'
-      }).catch(err => console.error("Push Error:", err))
+    if (data.destino !== 'interno') {
+      const targetIds = await getResponsavelIdsForTargets(data.dados);
+      if (targetIds.length > 0) {
+        await sendAgendaPushNotification({
+          type: 'comunicados',
+          itemId: String(data.id),
+          title: `📢 Comunicado: ${data.titulo}`,
+          message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
+          targetUserIds: targetIds,
+          targetUrl: '/agenda-digital/comunicados'
+        }).catch(err => console.error("Push Error:", err))
+      }
     }
 
     return NextResponse.json(normalizeRow(data), { status: 201 })

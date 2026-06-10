@@ -271,7 +271,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
         autorFoto: currentUser?.foto || null,
         turmas: uniqueTurmas.length > 0 ? uniqueTurmas : (payload.turmaId ? [payload.turmaId] : []),
         alunosIds: fillMode === 'especifico' ? activeStudents.map(a => a.id.replace(/^a_?/, '')) : [],
-        destino: 'selecionados',
+        destino: 'interno',
         prioridade: 'normal',
         fixado: false,
         exigeCiencia: false,
@@ -283,6 +283,54 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
         ciencias: {},
         status: 'enviado'
     })
+
+    // Integração Automática com Conteúdos e Tarefas (Diário Digital)
+    try {
+      const conteudoField = allFields.find(f => f.label?.toLowerCase().includes('conteúdo') || f.label?.toLowerCase().includes('conteudo'));
+      const tarefaField = allFields.find(f => f.label?.toLowerCase().includes('tarefa'));
+
+      if (conteudoField || tarefaField) {
+        // Pega as respostas (seja GLOBAL ou do primeiro aluno selecionado)
+        const sampleStudentId = fillMode === 'igual' ? 'GLOBAL' : (activeStudents[0]?.id || 'GLOBAL');
+        const sampleAnswer = answers[sampleStudentId] || {};
+        
+        const valConteudo = sampleAnswer[conteudoField?.id || ''] || '';
+        const valTarefa = sampleAnswer[tarefaField?.id || ''] || '';
+
+        if (valConteudo || valTarefa) {
+          const textFinal = [];
+          if (valConteudo) textFinal.push(`**Conteúdo:**\n${valConteudo}`);
+          if (valTarefa) textFinal.push(`**Tarefa:**\n${valTarefa}`);
+
+          // Enviar um registro para cada turma única envolvida neste relatório
+          const turmasParaLancar = uniqueTurmas.length > 0 ? uniqueTurmas : (payload.turmaId ? [payload.turmaId] : []);
+          
+          for (const turmaName of turmasParaLancar) {
+            const turmaObj = turmas?.find((t: any) => String(t.nome) === String(turmaName) || String(t.id) === String(turmaName));
+            const turmaAno = turmaObj?.ano || turmaObj?.dados?.anoLetivo || new Date().getFullYear().toString();
+
+            const payloadDiario = {
+              turma_id: turmaName,
+              ano: turmaAno,
+              data: new Date().toISOString().split('T')[0],
+              disciplina: 'Rotina / Relatório Diário',
+              conteudo: textFinal.join('\n\n'),
+              observacoes: `[Lançado por: ${currentUser?.nome || 'Usuário'} via Relatório em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}]`,
+              aulas: 1,
+              tipo: 'conteudo'
+            };
+
+            fetch('/api/conteudos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payloadDiario)
+            }).catch(err => console.error('Erro ao integrar com Diario Digital', err));
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Erro na integração do diário digital:', e);
+    }
 
 
 

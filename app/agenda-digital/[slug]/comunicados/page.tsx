@@ -452,6 +452,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
           const filteredComunicados = (comunicados || []).filter((c: any) => {
+            // Esconder comunicados internos (para staff) e relatórios mestre (COLAB) do feed dos pais/alunos
+            if (c.destino === 'interno' || c.destino === 'funcionarios') return false;
+            if (c.id && c.id.startsWith('AD-COM-REL-COLAB')) return false;
+            if (c.tipo === 'AD-COM-REL-TURMA' || (c.id && c.id.startsWith('AD-COM-REL-TURMA'))) return false;
+
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';

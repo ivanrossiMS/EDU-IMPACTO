@@ -232,6 +232,20 @@ export default function ConteudosTarefasPage() {
   const totalPages = Math.ceil(registrosOrdenados.length / itensPorPagina)
   const paginatedItems = registrosOrdenados.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina)
 
+  const renderConteudo = (text: string) => {
+    if (!text) return null;
+    return text.split('\n').map((line, i) => (
+      <span key={i}>
+        {line.split(/(\*\*.*?\*\*)/g).map((part, j) => 
+          part.startsWith('**') && part.endsWith('**') 
+            ? <strong key={j}>{part.slice(2, -2)}</strong> 
+            : part
+        )}
+        <br />
+      </span>
+    ));
+  }
+
   return (
     <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
@@ -448,7 +462,7 @@ export default function ConteudosTarefasPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '120px' }}>
                           <Calendar size={16} style={{ color: '#2563eb' }} />
-                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>{new Date(r.data).toLocaleDateString('pt-BR')}</span>
+                          <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>{r.data.split('T')[0].split('-').reverse().join('/')}</span>
                         </div>
                         
                         <div style={{ fontSize: '13px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -634,7 +648,7 @@ export default function ConteudosTarefasPage() {
                   </div>
                   <div>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Data</span>
-                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{new Date(registroSelecionado.data).toLocaleDateString('pt-BR')}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{registroSelecionado.data.split('T')[0].split('-').reverse().join('/')}</div>
                   </div>
                 </div>
 
@@ -691,7 +705,7 @@ export default function ConteudosTarefasPage() {
                       <div>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Conteúdo e Tarefa</span>
                         <div style={{ fontSize: '14px', color: '#334155', background: '#f8fafc', padding: '16px', borderRadius: '10px', border: '1px solid #e2e8f0', whiteSpace: 'pre-wrap', marginTop: '4px', lineHeight: 1.5 }}>
-                          {registroSelecionado.conteudo}
+                          {renderConteudo(registroSelecionado.conteudo)}
                         </div>
                       </div>
 

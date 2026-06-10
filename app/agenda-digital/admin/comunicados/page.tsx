@@ -20,9 +20,17 @@ import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
+import { createPortal } from 'react-dom';
 import { UserAvatar } from '@/components/UserAvatar'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+
+const ClientPortal = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? createPortal(children, document.body) : null;
+};
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
@@ -100,6 +108,21 @@ export default function ADAdminComunicados() {
   const [authorFilter, setAuthorFilter] = useState<string>('todos');
   const [attachmentFilter, setAttachmentFilter] = useState<string>('todos');
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
+
+  const [visibleCount, setVisibleCount] = useState(10);
+
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [tab, search, authorFilter, attachmentFilter]);
+
+  useEffect(() => {
+    if (viewingCom || viewingDestCom || viewingReportPayload || selectedCom) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; }
+  }, [viewingCom, viewingDestCom, viewingReportPayload, selectedCom]);
 
   // Extração Dinâmica de Autores e Cargos
   const availableRoles = Array.from(new Set(comunicados.map(c => c.autorCargo || (c as any).dados?.autorCargo).filter(Boolean))) as string[];
@@ -289,6 +312,9 @@ export default function ADAdminComunicados() {
       return titleMatch || contentMatch
     }
     
+    // Ocultar envios individuais de relatórios do Feed (Mostrando apenas a Cópia-Resumo da Turma)
+    if (c.id?.startsWith('AD-COM-REL-STU-')) return false
+    
     return true
   }).sort((a,b) => {
     const timeA = new Date(a.dataEnvio || (a as any).data || (a as any).created_at || 0).getTime();
@@ -368,65 +394,70 @@ export default function ADAdminComunicados() {
               <p style={{ color: 'hsl(var(--text-muted))', fontSize: 16, fontWeight: 500 }}>Nenhum comunicado encontrado nesta aba.</p>
             </div>
           )}
-          {filtered.map(c => {
+          {filtered.slice(0, visibleCount).map(c => {
+             const isGlobal = !c.turmas?.length && !c.alunosIds?.length;
+             const targets = isGlobal 
+                ? alunosAtivos 
+                : alunosAtivos.filter(a => c.turmas?.includes(a.turma) || c.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === a.id.replace(/^_*(ALU)?/, '')));
+             const targetCount = targets.length;
              const lidas = Object.keys(c.leituras || {}).length
-             const progresso = alunosAtivos.length > 0 ? (lidas / alunosAtivos.length) * 100 : 0
+             const progresso = targetCount > 0 ? (lidas / targetCount) * 100 : 0
              const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
 
              return (
               <motion.div 
                 key={c.id}
                 layout
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
                 onClick={() => setViewingCom(c)}
                 style={{ 
-                  background: 'white',
-                  borderRadius: 16,
-                  border: '1px solid hsl(var(--border-subtle))',
-                  padding: '16px 24px',
+                  background: '#ffffff',
+                  borderRadius: 20,
+                  border: '1px solid #e2e8f0',
+                  padding: '20px 24px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 24,
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = '#4f46e5'
-                  e.currentTarget.style.boxShadow = '0 10px 20px -10px rgba(79, 70, 229, 0.1)'
-                  e.currentTarget.style.transform = 'translateX(4px)'
+                  e.currentTarget.style.borderColor = '#818cf8'
+                  e.currentTarget.style.boxShadow = '0 12px 24px -10px rgba(99, 102, 241, 0.15)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)'
-                  e.currentTarget.style.transform = 'translateX(0)'
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)'
+                  e.currentTarget.style.transform = 'translateY(0)'
                 }}
               >
                 {/* Content Column */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
                       {c.titulo}
                     </h3>
-                    {c.fixado && <Pin size={12} fill="#f59e0b" color="#f59e0b" />}
+                    {c.fixado && <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 6px', borderRadius: 6, display: 'flex', alignItems: 'center' }}><Pin size={12} fill="#f59e0b" /></span>}
                   </div>
                   
-                  <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <p style={{ margin: 0, fontSize: 14, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
                     {(c.conteudo || (c as any).texto || '').replace(/<[^>]*>/g, '').replace(/[\*\#\_]/g, '')}
                   </p>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'hsl(var(--primary)/0.05)', border: '1px solid hsl(var(--primary)/0.1)', padding: '4px 10px', borderRadius: 12 }}>
-                      <User size={12} color="hsl(var(--primary))" />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--primary))' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '4px 12px', borderRadius: 12 }}>
+                      <User size={13} color="#64748b" />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
                         {c.autor || 'Sistema'}
-                        {(c.autorCargo || (c as any).dados?.autorCargo) && <span style={{ fontWeight: 500, opacity: 0.8 }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>}
+                        {(c.autorCargo || (c as any).dados?.autorCargo) && <span style={{ fontWeight: 500, color: '#94a3b8' }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>}
                       </span>
                     </div>
                     {c.destino === 'todos' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700, color: '#10b981' }}>
-                        <Users size={12} /> Toda a Escola
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 700, color: '#059669' }}>
+                        <Users size={13} /> Toda a Escola
                       </div>
                     ) : (
                       ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0)) && (
@@ -436,66 +467,99 @@ export default function ADAdminComunicados() {
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 6,
-                            background: 'none',
-                            border: 'none',
-                            padding: 0,
+                            background: 'rgba(79, 70, 229, 0.05)',
+                            border: '1px solid rgba(79, 70, 229, 0.15)',
+                            padding: '4px 12px',
+                            borderRadius: 12,
                             fontSize: 12,
                             fontWeight: 700,
                             color: '#4f46e5',
                             cursor: 'pointer',
-                            textDecoration: 'underline',
-                            transition: 'color 0.2s',
+                            transition: 'all 0.2s',
                           }}
-                          onMouseEnter={e => e.currentTarget.style.color = '#3730a3'}
-                          onMouseLeave={e => e.currentTarget.style.color = '#4f46e5'}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(79, 70, 229, 0.1)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79, 70, 229, 0.05)' }}
                         >
-                          <Menu size={14} style={{ flexShrink: 0 }} />
+                          <Menu size={13} />
                           Ver Destinatários ({c.turmas?.length || 0})
                         </button>
                       )
                     )}
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={13} />
                       {dateObj ? `${dateObj.toLocaleDateString('pt-BR')} às ${dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '--'}
                     </div>
                   </div>
                 </div>
 
                 {/* Column: Stats */}
-                <div style={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 12, borderLeft: '1px solid rgba(0,0,0,0.05)', paddingLeft: 20 }}>
+                <div style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 16, borderLeft: '1px solid #e2e8f0', paddingLeft: 24 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Leitura</span>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: progresso > 80 ? '#10b981' : '#4f46e5' }}>{Math.round(progresso)}%</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Leitura</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: progresso >= 100 ? '#059669' : '#4f46e5' }}>{Math.round(progresso)}%</span>
                     </div>
-                    <div style={{ height: 6, background: '#f1f5f9', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ height: 8, background: '#f1f5f9', borderRadius: 10, overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' }}>
                       <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${progresso}%` }}
-                        style={{ height: '100%', background: progresso > 80 ? '#10b981' : 'linear-gradient(90deg, #6366f1, #4f46e5)', borderRadius: 10 }} 
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        style={{ height: '100%', background: progresso >= 100 ? '#10b981' : 'linear-gradient(90deg, #6366f1, #4f46e5)', borderRadius: 10 }} 
                       />
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', background: '#f8fafc', padding: '4px 8px', borderRadius: 8, minWidth: 45, textAlign: 'center' }}>
-                    {lidas}/{alunosAtivos.length}
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#475569', background: '#f8fafc', padding: '6px 12px', borderRadius: 10, minWidth: 54, textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                    {lidas}/{targetCount}
                   </div>
                 </div>
 
                 {/* Column: Actions */}
-                <div style={{ display: 'flex', gap: 4, paddingLeft: 12 }}>
-                   <button className="btn btn-ghost btn-sm" style={{ padding: 6 }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={14} /></button>
-                   <button className="btn btn-primary btn-sm" style={{ padding: '6px 12px', borderRadius: 10, fontSize: 11, fontWeight: 700 }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
-                      Relatório
+                <div style={{ display: 'flex', gap: 8, paddingLeft: 12 }}>
+                   <button className="btn btn-ghost btn-sm" style={{ width: 36, height: 36, padding: 0, borderRadius: 12, color: '#64748b' }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={16} /></button>
+                   <button className="btn btn-primary btn-sm" style={{ padding: '0 16px', height: 36, borderRadius: 12, fontSize: 12, fontWeight: 800, background: '#0f172a', borderColor: '#0f172a' }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
+                      Detalhes
                    </button>
                 </div>
               </motion.div>
              )
           })}
+
+          {filtered.length > visibleCount && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
+              <button 
+                onClick={() => setVisibleCount(prev => prev + 10)}
+                style={{
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #e2e8f0',
+                  padding: '10px 24px',
+                  borderRadius: 20,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#e2e8f0'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = '#f1f5f9'
+                }}
+              >
+                Carregar Mais Comunicados
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       <AnimatePresence>
 {/* Drawer: Comunicado Details */}
       {selectedCom && (
+        <ClientPortal>
 <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', top: 0, right: 0, bottom: 0, width: 450,
           backgroundColor: '#ffffff', boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
@@ -541,11 +605,48 @@ export default function ADAdminComunicados() {
                     const name = parts[0];
                     const isForm = name.startsWith('Formulário:')
                     const isRel = name.startsWith('Relatório:')
+                    let payloadData = null;
+                    if (isRel && parts.length > 1 && parts[1].startsWith('payload:')) {
+                      try {
+                        payloadData = JSON.parse(parts[1].substring(8));
+                      } catch(e) {}
+                    }
+                    
                     return (
-                      <span key={idx} className="badge" style={{ background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))', fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', padding: '4px 8px' }}>
-                        {isForm ? <FileText size={12} color="#3b82f6" /> : isRel ? <FileBarChart size={12} color="#8b5cf6" /> : <Paperclip size={12} color="#64748b" />}
+                      <button 
+                        key={idx} 
+                        onClick={() => {
+                          if (isRel && payloadData) {
+                            const stringAnexo = typeof anexo === 'string' ? anexo : String(anexo);
+                            setViewingReportPayload({
+                              string: stringAnexo
+                            });
+                          }
+                        }}
+                        style={{ 
+                          background: isRel ? 'rgba(139, 92, 246, 0.1)' : 'hsl(var(--bg-overlay))', 
+                          color: isRel ? '#7c3aed' : 'hsl(var(--text-secondary))', 
+                          fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', padding: '6px 12px', 
+                          borderRadius: 8, border: `1px solid ${isRel ? 'rgba(139, 92, 246, 0.2)' : 'hsl(var(--border-subtle))'}`,
+                          cursor: isRel ? 'pointer' : 'default', fontWeight: 600,
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => {
+                          if (isRel) {
+                            e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (isRel) {
+                            e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                          }
+                        }}
+                      >
+                        {isForm ? <FileText size={14} color="#3b82f6" /> : isRel ? <FileBarChart size={14} color="#7c3aed" /> : <Paperclip size={14} color="#64748b" />}
                         {name}
-                      </span>
+                      </button>
                     )
                   })}
                 </div>
@@ -565,14 +666,33 @@ export default function ADAdminComunicados() {
                 
                 return targets.map(a => {
                   const leu = !!(selectedCom.leituras && selectedCom.leituras[a.id])
+                  const hasReportAnexo = selectedCom.anexos?.find((anx: string) => typeof anx === 'string' && anx.startsWith('Relatório:'));
                   return (
                     <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'hsl(var(--bg-surface))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{a.nome} <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginLeft: 8 }}>{a.turma}</span></div>
-                      {leu ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 11, fontWeight: 600 }}><CheckCircle2 size={14}/> Lido</span>
-                      ) : (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', fontSize: 11, fontWeight: 600 }}><XCircle size={14}/> Não lido</span>
-                      )}
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {hasReportAnexo && (
+                          <button 
+                            onClick={() => {
+                               setViewingReportPayload({
+                                 string: typeof hasReportAnexo === 'string' ? hasReportAnexo : String(hasReportAnexo),
+                                 studentId: a.id,
+                                 studentName: a.nome,
+                                 studentAvatar: a.avatarUrl
+                               });
+                            }}
+                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', border: 'none', cursor: 'pointer' }}
+                          >
+                            Ver Relatório
+                          </button>
+                        )}
+                        {leu ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 11, fontWeight: 600 }}><CheckCircle2 size={14}/> Lido</span>
+                        ) : (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', fontSize: 11, fontWeight: 600 }}><XCircle size={14}/> Não lido</span>
+                        )}
+                      </div>
                     </div>
                   )
                 })
@@ -582,7 +702,7 @@ export default function ADAdminComunicados() {
           </div>
         
 </motion.div>
-)}</AnimatePresence>
+</ClientPortal>)}</AnimatePresence>
 
       
       {/* Modal Composer */}
@@ -733,6 +853,7 @@ export default function ADAdminComunicados() {
       <AnimatePresence>
         {/* View Communication Modal */}
         {viewingCom && (
+          <ClientPortal>
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
@@ -819,48 +940,37 @@ export default function ADAdminComunicados() {
                           try {
                             const payloadStr = url.startsWith('payload:') ? url.substring(8) : url;
                             parsedPayload = JSON.parse(payloadStr);
-                          } catch(e) {
-                            console.error("Failed to parse report payload", e);
-                          }
+                          } catch(e) {}
 
                           return (
-                            <div key={i} style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', border: '1px solid #cbd5e1', borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3b82f612', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  <FileBarChart size={18} />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 900, color: '#1e293b' }}>{name}</div>
-                                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Relatório Individual com campos preenchidos por aluno</div>
-                                </div>
-                              </div>
-                              
-                              {parsedPayload && parsedPayload.values && (
-                                <button 
-                                  className="btn" 
-                                  onClick={() => {
-                                    setViewingReportPayload({
-                                      name,
-                                      payload: parsedPayload
-                                    });
-                                    // Set the first student as active preview
-                                    const firstStudentId = Object.keys(parsedPayload.values)[0];
-                                    if (firstStudentId) {
-                                      const st = (alunos || []).find(s => String(s.id) === String(firstStudentId));
-                                      setActivePreviewStudent(st || { id: firstStudentId, nome: `Aluno #${firstStudentId}` });
-                                    }
-                                  }}
-                                  style={{ 
-                                    background: '#fff', border: '1px solid #cbd5e1', borderRadius: 12, height: 38, fontSize: 12, fontWeight: 800, color: '#475569',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                                >
-                                  🔍 Visualizar Relatórios Preenchidos por Aluno
-                                </button>
-                              )}
-                            </div>
+                            <button 
+                              key={i} 
+                              onClick={() => {
+                                if (parsedPayload) {
+                                  setViewingReportPayload(`Relatório: ${name}|${url}`);
+                                }
+                              }}
+                              style={{ 
+                                background: 'rgba(139, 92, 246, 0.1)', 
+                                color: '#7c3aed', 
+                                fontSize: 13, display: 'inline-flex', gap: 6, alignItems: 'center', padding: '8px 14px', 
+                                borderRadius: 10, border: '1px solid rgba(139, 92, 246, 0.2)',
+                                cursor: 'pointer', fontWeight: 700,
+                                transition: 'all 0.2s',
+                                marginBottom: 6, marginRight: 6
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                              }}
+                            >
+                              <FileBarChart size={16} />
+                              {name}
+                            </button>
                           );
                         }
 
@@ -925,147 +1035,25 @@ export default function ADAdminComunicados() {
               </div>
             </motion.div>
           </div>
+          </ClientPortal>
         )}
       </AnimatePresence>
 
-      {/* Viewing Custom Report Payload Modal */}
-      <AnimatePresence>
-        {viewingReportPayload && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 10003, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 850, height: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 40px 100px rgba(0,0,0,0.3)' }}
-            >
-              {/* Header */}
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                <div>
-                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>📋 Relatórios Individuais Enviados</h3>
-                  <p style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{viewingReportPayload.name}</p>
-                </div>
-                <button 
-                  className="btn btn-ghost" 
-                  onClick={() => { setViewingReportPayload(null); setActivePreviewStudent(null); }}
-                  style={{ width: 36, height: 36, borderRadius: '50%', padding: 0 }}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Body split pane */}
-              <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-                {/* Left side: Students List */}
-                <div style={{ width: 260, borderRight: '1px solid #f1f5f9', background: '#f8fafc', overflowY: 'auto', padding: 12 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {Object.keys(viewingReportPayload.payload.values).map(studentId => {
-                      const st = (alunos || []).find(s => String(s.id) === String(studentId)) || { id: studentId, nome: `Aluno #${studentId}` };
-                      const isActive = activePreviewStudent?.id === st.id;
-                      return (
-                        <button
-                          key={studentId}
-                          onClick={() => setActivePreviewStudent(st)}
-                          style={{
-                            width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
-                            background: isActive ? '#fff' : 'transparent',
-                            boxShadow: isActive ? '0 4px 10px rgba(0,0,0,0.03)' : 'none',
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          <div style={{ 
-                            width: 32, height: 32, borderRadius: '50%', background: isActive ? '#3b82f6' : '#cbd5e1', color: '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900
-                          }}>
-                            {st.nome?.charAt(0)}
-                          </div>
-                          <div style={{ flex: 1, overflow: 'hidden' }}>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: isActive ? '#0f172a' : '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.nome}</div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Right side: Report card display */}
-                <div style={{ flex: 1, background: '#fff', overflowY: 'auto', padding: 32 }}>
-                  {activePreviewStudent ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderBottom: '1px solid #f1f5f9', paddingBottom: 16 }}>
-                        <div style={{ 
-                          width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #4f46e5)', color: '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900
-                        }}>
-                          {activePreviewStudent.nome?.charAt(0)}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{activePreviewStudent.nome}</div>
-                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{activePreviewStudent.turma || 'Sem turma'}</div>
-                        </div>
-                      </div>
-
-                      {/* Display field values */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        {(() => {
-                          const studentValues = viewingReportPayload.payload.values[activePreviewStudent.id] || {};
-                          const templateId = viewingReportPayload.payload.templateId;
-                          const template = (relatoriosTemplates || []).find(t => t.id === templateId);
-                          const fields = template ? template.sections.flatMap(s => s.fields) : [];
-
-                          if (fields.length === 0) {
-                            return <div style={{ fontSize: 13, color: '#64748b' }}>Nenhum campo definido.</div>;
-                          }
-
-                          return fields.map(field => {
-                            const val = studentValues[field.id];
-                            return (
-                              <div key={field.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 20px', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
-                                <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{field.label}</div>
-                                <div style={{ fontSize: 15, fontWeight: 800, color: val ? '#1e293b' : '#94a3b8' }}>
-                                  {val ? (
-                                    field.type === 'unica-escolha' ? (
-                                      <span style={{ background: '#3b82f612', color: '#3b82f6', padding: '4px 10px', borderRadius: 8, fontSize: 13, fontWeight: 900 }}>
-                                        {val}
-                                      </span>
-                                    ) : val
-                                  ) : '—'}
-                                </div>
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#94a3b8' }}>
-                      <FileBarChart size={48} style={{ marginBottom: 16, opacity: 0.5 }} />
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>Selecione um aluno para visualizar</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div style={{ padding: '16px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => { setViewingReportPayload(null); setActivePreviewStudent(null); }}
-                  style={{ fontWeight: 800, padding: '10px 24px', borderRadius: 12 }}
-                >
-                  Fechar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <ReportPayloadView
+        isOpen={!!viewingReportPayload}
+        onClose={() => setViewingReportPayload(null)}
+        attachmentString={typeof viewingReportPayload === 'string' ? viewingReportPayload : (viewingReportPayload?.string || '')}
+        targetStudentId={viewingReportPayload?.studentId}
+        targetStudentName={viewingReportPayload?.studentName}
+        targetStudentAvatar={viewingReportPayload?.studentAvatar}
+      />
 
       
 
       {/* Drawer para ver destinatários */}
       <AnimatePresence>
         {viewingDestCom && (
+          <ClientPortal>
           <div 
             style={{
               position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
@@ -1134,12 +1122,14 @@ export default function ADAdminComunicados() {
               </div>
             </motion.div>
           </div>
+          </ClientPortal>
         )}
       </AnimatePresence>
 
       {/* Drawer do Relatório Mensal */}
       <AnimatePresence>
         {showMonthlyReport && (
+          <ClientPortal>
           <div 
             style={{
               position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
@@ -1203,6 +1193,7 @@ export default function ADAdminComunicados() {
                   
                   const enviosPorDia: Record<number, number> = {};
                   comunicados.forEach(c => {
+                    if (c.id?.startsWith('AD-COM-REL-STU-')) return;
                     let valid = true;
                     if (attachmentFilter !== 'todos') {
                       const anexosList = c.anexos || [];
@@ -1341,6 +1332,7 @@ export default function ADAdminComunicados() {
               </div>
             </motion.div>
           </div>
+          </ClientPortal>
         )}
       </AnimatePresence>
     </div>
