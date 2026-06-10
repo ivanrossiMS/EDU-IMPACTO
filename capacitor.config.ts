@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Impacto Edu',
   webDir: 'out',
   server: {
-    url: 'https://resilient-cuchufli-2b4125.netlify.app/',
+    url: 'https://impacto-edu-vy5f1l1.netlify.app',
     cleartext: true,
   },
 };
