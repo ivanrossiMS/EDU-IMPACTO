@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -60,6 +60,9 @@ export function ADSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(true)
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
@@ -152,6 +155,25 @@ export function ADSidebar() {
     }
   }, [isFamily, alunoId])
 
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollContainerRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current
+        setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5)
+      }
+    }
+    
+    const el = scrollContainerRef.current
+    if (el) {
+      el.addEventListener('scroll', handleScroll, { passive: true })
+      // Pequeno delay para garantir que a renderização dos itens terminou
+      setTimeout(handleScroll, 100) 
+    }
+    return () => {
+      if (el) el.removeEventListener('scroll', handleScroll)
+    }
+  }, [mobileTabs])
+
   const getBadgeValue = (id: string) => {
     if (id === 'comunicados') {
       return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
@@ -227,7 +249,38 @@ export function ADSidebar() {
             zIndex: 0
           }} />
 
-          <div className="no-scrollbar" style={{
+          {/* Indicador de Mais Ícones */}
+          <AnimatePresence>
+            {canScrollRight && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  position: 'absolute',
+                  top: 0, bottom: 0, right: 0,
+                  width: '50px',
+                  background: 'linear-gradient(to right, transparent, rgba(0, 191, 255, 0.9))',
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  paddingRight: '6px'
+                }}
+              >
+                <motion.div
+                  animate={{ x: [0, 5, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                  style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.8))' }}
+                >
+                  <ChevronRight size={20} color="white" strokeWidth={3} />
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div ref={scrollContainerRef} className="no-scrollbar" style={{
             display: 'flex',
             alignItems: 'center',
             overflowX: 'auto',
