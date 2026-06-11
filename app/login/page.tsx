@@ -483,7 +483,7 @@ export default function LoginPage() {
           <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
               <Label text="Senha" />
-              <button type="button" style={{ fontSize:11, color:'#60a5fa', background:'none', border:'none', cursor:'pointer', fontWeight:600 }}>Esqueci minha senha</button>
+              <button type="button" onClick={() => router.push('/esqueci-senha')} style={{ fontSize:11, color:'#60a5fa', background:'none', border:'none', cursor:'pointer', fontWeight:600 }}>Esqueci minha senha</button>
             </div>
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>🔒</span>
