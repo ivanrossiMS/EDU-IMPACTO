@@ -8,6 +8,12 @@ const config: CapacitorConfig = {
     url: 'https://resilient-cuchufli-2b4125.netlify.app',
     cleartext: true,
   },
+  plugins: {
+    StatusBar: {
+      overlaysWebView: true,
+      style: 'DARK'
+    }
+  }
 };
 
 export default config;
