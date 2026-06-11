@@ -4,7 +4,7 @@ android {
     namespace = "br.com.impactoedu.agenda"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "br.com.impactoedu.agendateste"
+        applicationId "br.com.impactoedu.agenda"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
