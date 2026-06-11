@@ -405,8 +405,8 @@ export default function ADMomentosPage() {
           margin: '24px 16px 32px 16px',
           padding: '24px 32px',
           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.85))',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
           borderRadius: '24px',
           border: '1px solid rgba(255, 255, 255, 0.9)',
           boxShadow: '0 20px 40px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,1)',
@@ -471,7 +471,7 @@ export default function ADMomentosPage() {
                         fontSize: '14px', fontWeight: 600,
                         outline: 'none', cursor: 'pointer', appearance: 'none',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                        backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'14\\\' height=\\\'14\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'rgba(0,0,0,0.5)\\\' stroke-width=\\\'2\\\' stroke-linecap=\\\'round\\\' stroke-linejoin=\\\'round\\\'%3E%3Cpath d=\\\'m6 9 6 6 6-6\\\'/%3E%3C/svg%3E")',
+                        backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'14\\\' height=\\\'14\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'rgba(15,23,42,0.85)\\\' stroke-width=\\\'2\\\' stroke-linecap=\\\'round\\\' stroke-linejoin=\\\'round\\\'%3E%3Cpath d=\\\'m6 9 6 6 6-6\\\'/%3E%3C/svg%3E")',
                         backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center'
                       }}
                     >
@@ -636,7 +636,7 @@ export default function ADMomentosPage() {
                                   }}
                                 />
                               )}
-                              <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+                              <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>
                                 <Maximize2 color="white" size={32} />
                               </div>
                             </div>
@@ -645,21 +645,21 @@ export default function ADMomentosPage() {
                             <>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex > 0 ? activeIndex - 1 : mediaList.length - 1 })) }} 
-                                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
+                                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}
                               >
                                 <ChevronLeft size={20} />
                               </button>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex < mediaList.length - 1 ? activeIndex + 1 : 0 })) }} 
-                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
+                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}
                               >
                                 <ChevronRight size={20} />
                               </button>
-                              <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 10, background: 'rgba(0,0,0,0.4)', padding: '4px 8px', borderRadius: 12 }}>
+                              <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 10, background: 'rgba(15,23,42,0.85)', padding: '4px 8px', borderRadius: 12 }}>
                                 {mediaList.map((_: any, idx: number) => (
                                   <div key={idx} style={{ width: 6, height: 6, borderRadius: '50%', background: idx === activeIndex ? 'white' : 'rgba(255,255,255,0.4)', transition: 'background 0.3s' }} />
                                 ))}
@@ -763,7 +763,7 @@ export default function ADMomentosPage() {
               style={{ 
                 position: 'fixed', inset: 0, zIndex: 999999, 
                 background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                backdropFilter: 'blur(10px)' 
+                backdropFilter: 'none' 
               }}
               onClick={() => setLightboxOpen(false)}
             >
@@ -832,13 +832,13 @@ export default function ADMomentosPage() {
                       <video 
                         src={lightboxMedia[lightboxIndex].url} 
                         controls 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', outline: 'none' }} 
+                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', outline: 'none' }} 
                       />
                     ) : (
                       <img 
                         src={lightboxMedia[lightboxIndex].url} 
                         alt="Ampliado" 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', objectFit: 'contain' }} 
+                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', objectFit: 'contain' }} 
                       />
                     )}
                   </motion.div>
@@ -873,12 +873,12 @@ export default function ADMomentosPage() {
         <AnimatePresence>
           {showModal && (
           <motion.div className="ad-momento-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'none', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div className="ad-momento-content" initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               style={{ background: '#fff', width: '100%', maxWidth: 540, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 32px 64px rgba(0,0,0,0.3)' }}>
 
               {isSubmitting && (
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'none', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
                   <div style={{ position: 'relative', width: 80, height: 80 }}>
                     <Loader2 size={80} color="#7c3aed" style={{ animation: 'spin 1.5s linear infinite', opacity: 0.2 }} />
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#7c3aed', fontSize: 18 }}>
@@ -927,7 +927,7 @@ export default function ADMomentosPage() {
                     {newPost.mediaFiles.map((file, i) => (
                       <div key={i} style={{ width: 76, height: 76, borderRadius: 12, background: '#f3f4f6', border: '1px solid #e5e7eb', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <button onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
-                          style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                          style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
                           <X size={10} />
                         </button>
                         {file.type.includes('video')

@@ -139,9 +139,8 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
           backgroundSize: '200% 200%',
           border: 'none',
           color: 'white',
-          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.4)',
+          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)',
           cursor: 'default',
-          animation: 'shimmerYellow 2s linear infinite',
           padding: '0 12px',
         }}>
           <Loader2 size={18} className="spin-anim" style={{ flexShrink: 0 }} />
@@ -155,11 +154,6 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes spin-anim { 100% { transform: rotate(360deg); } }
           .spin-anim { animation: spin-anim 1s linear infinite; }
-          @keyframes shimmerYellow {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
         `}} />
       </div>
     )
@@ -350,49 +344,28 @@ export default function AgendaDigitalFamilyLayout({
         fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       }}>
         <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin-gradient {
+          @keyframes spin-simple {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
           }
-          @keyframes pulse-glow {
-            0%, 100% { opacity: 0.7; transform: scale(0.96); filter: drop-shadow(0 0 12px rgba(0, 210, 255, 0.3)); }
-            50% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 25px rgba(121, 40, 202, 0.6)); }
-          }
           .loader-ring {
-            width: 72px;
-            height: 72px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
-            padding: 4px;
-            background: linear-gradient(135deg, #00D2FF, #7928CA, #FF0080);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            animation: spin-gradient 1.2s linear infinite;
-          }
-          .pulse-logo {
-            animation: pulse-glow 2s ease-in-out infinite;
+            border: 3px solid rgba(99, 102, 241, 0.1);
+            border-top-color: #6366f1;
+            animation: spin-simple 1s linear infinite;
           }
         `}} />
         
-        <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {/* Animated gradient spinning loader ring */}
-          <div className="loader-ring" style={{ position: 'absolute' }} />
-          
-          {/* Pulsing inner glow logo / icon */}
-          <div className="pulse-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF' }}>
-            <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-              <path d="M10 32L18 8L26 32" stroke="#FF0080" strokeWidth="4.5" strokeLinecap="round" />
-              <path d="M24 32L32 8L40 32" stroke="#00D2FF" strokeWidth="4.5" strokeLinecap="round" />
-            </svg>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="loader-ring" />
         </div>
         
         <p style={{
           fontSize: '15px',
           fontWeight: 600,
-          background: 'linear-gradient(135deg, #ffffff, rgba(255,255,255,0.7))',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
+          color: '#64748b',
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           margin: 0
@@ -459,7 +432,7 @@ export default function AgendaDigitalFamilyLayout({
 {/* Student Switcher Overlay */}
     {switcherOpen && (
 <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
-        width: '100vw', bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
+        width: '100vw', bottom: 0, background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
         <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
@@ -529,7 +502,7 @@ export default function AgendaDigitalFamilyLayout({
         .ad-premium-card {
           background: #ffffff;
           border-radius: 24px;
-          box-shadow: 0 12px 40px rgba(15, 12, 36, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+          box-shadow: 0 4px 16px rgba(15, 12, 36, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
           border: 1px solid rgba(0, 0, 0, 0.04);
           padding: 24px 32px;
           display: grid;
@@ -537,19 +510,13 @@ export default function AgendaDigitalFamilyLayout({
           gap: 24px;
           align-items: center;
           position: relative;
-          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.3s ease;
         }
 
         .ad-premium-card:hover {
-          transform: translateY(-5px) scale(1.005);
-          box-shadow: 0 30px 60px rgba(99, 102, 241, 0.12), 0 10px 20px rgba(0, 0, 0, 0.04);
-          border-color: rgba(99, 102, 241, 0.2);
-        }
-
-        @keyframes neonSlide {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
+          transform: translateY(-2px);
+          box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08), 0 4px 10px rgba(0, 0, 0, 0.02);
+          border-color: rgba(99, 102, 241, 0.15);
         }
 
         .ad-premium-card::before {
@@ -558,11 +525,10 @@ export default function AgendaDigitalFamilyLayout({
           top: 0;
           left: 0;
           right: 0;
-          height: 6px;
-          background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899, #3b82f6, #6366f1);
-          background-size: 200% 100%;
-          animation: neonSlide 3s linear infinite;
-          box-shadow: 0 0 12px rgba(168, 85, 247, 0.6), inset 0 0 8px rgba(99, 102, 241, 0.4);
+          height: 4px;
+          background: linear-gradient(90deg, #6366f1, #a855f7, #3b82f6);
+          border-top-left-radius: 24px;
+          border-top-right-radius: 24px;
         }
 
         .ad-mini-cards-grid {

@@ -314,8 +314,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           margin: '24px 16px 32px 16px',
           padding: '24px 32px',
           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.85))',
-          backdropFilter: 'blur(24px)',
-          WebkitBackdropFilter: 'blur(24px)',
+          backdropFilter: 'none',
+          WebkitBackdropFilter: 'none',
           borderRadius: '24px',
           border: '1px solid rgba(255, 255, 255, 0.9)',
           boxShadow: '0 20px 40px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,1)',
@@ -496,7 +496,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                                 }}
                               />
                             )}
-                            <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
+                            <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>
                               <Maximize2 color="white" size={32} />
                             </div>
                           </div>
@@ -505,21 +505,21 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                             <>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex > 0 ? activeIndex - 1 : mediaList.length - 1 })) }} 
-                                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
+                                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}
                               >
                                 <ChevronLeft size={20} />
                               </button>
                               <button 
                                 onClick={(e) => { e.stopPropagation(); setCurrentMediaIndex(p => ({ ...p, [m.id]: activeIndex < mediaList.length - 1 ? activeIndex + 1 : 0 })) }} 
-                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
+                                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'rgba(15,23,42,0.85)', color: 'white', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, transition: 'background 0.2s' }}
                                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.5)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(15,23,42,0.85)'}
                               >
                                 <ChevronRight size={20} />
                               </button>
-                              <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 10, background: 'rgba(0,0,0,0.4)', padding: '4px 8px', borderRadius: 12 }}>
+                              <div style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6, zIndex: 10, background: 'rgba(15,23,42,0.85)', padding: '4px 8px', borderRadius: 12 }}>
                                 {mediaList.map((_: any, idx: number) => (
                                   <div key={idx} style={{ width: 6, height: 6, borderRadius: '50%', background: idx === activeIndex ? 'white' : 'rgba(255,255,255,0.4)', transition: 'background 0.3s' }} />
                                 ))}
@@ -623,7 +623,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               style={{ 
                 position: 'fixed', inset: 0, zIndex: 999999, 
                 background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                backdropFilter: 'blur(10px)' 
+                backdropFilter: 'none' 
               }}
               onClick={() => setLightboxOpen(false)}
             >
@@ -692,13 +692,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                       <video 
                         src={lightboxMedia[lightboxIndex].url} 
                         controls 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', outline: 'none' }} 
+                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', outline: 'none' }} 
                       />
                     ) : (
                       <img 
                         src={lightboxMedia[lightboxIndex].url} 
                         alt="Ampliado" 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(0,0,0,0.5)', objectFit: 'contain' }} 
+                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', objectFit: 'contain' }} 
                       />
                     )}
                   </motion.div>

@@ -144,7 +144,7 @@ export default function NovoComunicadoModal({
       position: 'fixed',
       inset: 0,
       background: 'rgba(15, 23, 42, 0.4)',
-      backdropFilter: 'blur(8px)',
+      backdropFilter: 'none',
       zIndex: 999999,
       display: 'flex',
       alignItems: 'center',
@@ -436,7 +436,7 @@ export default function NovoComunicadoModal({
               width: 40, height: 40, borderRadius: 20, border: 'none', 
               background: 'rgba(255,255,255,0.2)', color: '#fff', display: 'flex', 
               alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              transition: 'all 0.2s', backdropFilter: 'blur(4px)'
+              transition: 'all 0.2s', backdropFilter: 'none'
             }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
             onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}

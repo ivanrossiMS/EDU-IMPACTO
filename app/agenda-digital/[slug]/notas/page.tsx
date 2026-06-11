@@ -307,7 +307,7 @@ export default function ADNotasPage({ params }: { params: Promise<{ slug: string
                  </div>
                </div>
 
-               <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.9)', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+               <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, backdropFilter: 'none', border: '1px solid rgba(255,255,255,0.9)', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
                  {isAcima ? <TrendingUp size={24} color="#10b981"/> : <TrendingDown size={24} color="#ef4444"/>}
                  <span style={{ fontSize: 12, fontWeight: 700, color: isAcima ? '#059669' : '#b91c1c', textAlign: 'center', maxWidth: 120, lineHeight: 1.2 }}>
                    {isAcima ? 'Desempenho esperado' : 'Requer atenção'}

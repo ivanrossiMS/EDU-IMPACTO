@@ -728,8 +728,8 @@ export default function ADAdminComunicados() {
       <AnimatePresence>
         {/* Cobranca Modal */}
         {showCobrancaModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(0,0,0,0.4)', borderRadius: 20 }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'none', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: 480, padding: 24, boxShadow: '0 40px 100px rgba(15,23,42,0.85)', borderRadius: 20 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <h3 style={{ fontSize: 18, fontWeight: 800 }}>Criar Nova Cobrança</h3>
@@ -800,8 +800,8 @@ export default function ADAdminComunicados() {
       <AnimatePresence>
         {/* Forms Selection Modal */}
         {showFormsModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="card" style={{ width: '100%', maxWidth: 550, padding: 40, borderRadius: 40, boxShadow: '0 50px 100px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(15,23,42,0.85)', backdropFilter: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 30 }} transition={{ type: "spring", stiffness: 400, damping: 30 }} className="card" style={{ width: '100%', maxWidth: 550, padding: 40, borderRadius: 40, boxShadow: '0 50px 100px rgba(15,23,42,0.85)', border: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
                 <div>
                   <h3 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', marginBottom: 8 }}>📝 Anexar Formulário</h3>
@@ -854,7 +854,7 @@ export default function ADAdminComunicados() {
         {/* View Communication Modal */}
         {viewingCom && (
           <ClientPortal>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'none', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -990,7 +990,7 @@ export default function ADAdminComunicados() {
                               preload="metadata"
                               style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600 }} 
                             />
-                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(0,0,0,0.5)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>{name}</div>
+                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(15,23,42,0.85)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>{name}</div>
                           </div>
                         );
 
@@ -1056,7 +1056,7 @@ export default function ADAdminComunicados() {
           <ClientPortal>
           <div 
             style={{
-              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
+              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'none',
               zIndex: 10005, display: 'flex', justifyContent: 'flex-end'
             }} 
             onClick={() => setViewingDestCom(null)}
@@ -1132,7 +1132,7 @@ export default function ADAdminComunicados() {
           <ClientPortal>
           <div 
             style={{
-              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(4px)',
+              position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'none',
               zIndex: 10005, display: 'flex', justifyContent: 'center', alignItems: 'center'
             }} 
             onClick={() => setShowMonthlyReport(false)}

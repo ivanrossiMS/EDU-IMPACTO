@@ -108,7 +108,7 @@ export function FloatingNotificationBadge() {
                 bottom: 0,
                 zIndex: 999998,
                 background: 'rgba(15, 23, 42, 0.4)',
-                backdropFilter: 'blur(8px)'
+                backdropFilter: 'none'
               }}
             />
             <motion.div
@@ -122,7 +122,7 @@ export function FloatingNotificationBadge() {
                 width: 380,
                 maxHeight: '70vh',
                 background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(20px)',
+                backdropFilter: 'none',
                 borderRadius: 24,
                 boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05)',
                 zIndex: 999999,

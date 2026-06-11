@@ -331,7 +331,7 @@ export default function ADFinanceiroPageMock() {
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             style={{ 
               position: 'fixed', left: 0, right: 0, margin: '0 auto', maxWidth: 800,
-              background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+              background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'none', WebkitBackdropFilter: 'none',
               borderRadius: 24, padding: '16px 24px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               boxShadow: '0 20px 40px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.5) inset',

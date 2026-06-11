@@ -72,7 +72,7 @@ export function AgendaNotificationCenter() {
                 bottom: 0,
                 zIndex: 999998,
                 background: 'rgba(15, 23, 42, 0.2)',
-                backdropFilter: 'blur(4px)'
+                backdropFilter: 'none'
               }}
             />
             <motion.div
@@ -86,7 +86,7 @@ export function AgendaNotificationCenter() {
                 width: 380,
                 maxHeight: '80vh',
                 background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(20px)',
+                backdropFilter: 'none',
                 borderRadius: 24,
                 boxShadow: '0 20px 40px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05)',
                 zIndex: 999999,

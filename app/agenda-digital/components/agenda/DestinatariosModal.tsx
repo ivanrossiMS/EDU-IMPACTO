@@ -498,7 +498,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={onClose}
-                style={{ width: 48, height: 48, position: 'absolute', right: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer' }}
+                style={{ width: 48, height: 48, position: 'absolute', right: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer' }}
               >
                 <X size={24} />
               </motion.button>
@@ -784,7 +784,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
             <div style={{ 
               position: 'absolute', bottom: 0, left: 0, right: 0, padding: '24px', 
-              background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)',
+              background: 'rgba(255,255,255,0.85)', backdropFilter: 'none',
               borderTop: '1px solid rgba(0,0,0,0.05)',
               display: 'flex', justifyContent: 'flex-end', gap: 12, zIndex: 10
             }}>
