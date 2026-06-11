@@ -109,7 +109,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (isNative) {
           console.log('📱 [OneSignal] Ambiente nativo detectado (Capacitor)')
           try {
-            const OneSignalNative = require('onesignal-cordova-plugin').default
+            const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
             OneSignalNative.initialize(appId)
             OneSignalNative.Notifications.requestPermission(true)
 
