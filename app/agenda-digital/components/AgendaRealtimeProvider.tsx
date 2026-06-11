@@ -142,6 +142,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         window.OneSignalDeferred.push(async function (OneSignal: any) {
           try {
             if (!window.__OS_INIT__) {
+              if (window.location.hostname === 'localhost') {
+                console.log('Push notifications Web desativadas no localhost (evita erro do OneSignal).')
+                return
+              }
               window.__OS_INIT__ = true
               try {
                 await OneSignal.init({

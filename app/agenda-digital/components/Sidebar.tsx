@@ -155,24 +155,7 @@ export function ADSidebar() {
     }
   }, [isFamily, alunoId])
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (scrollContainerRef.current) {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current
-        setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5)
-      }
-    }
-    
-    const el = scrollContainerRef.current
-    if (el) {
-      el.addEventListener('scroll', handleScroll, { passive: true })
-      // Pequeno delay para garantir que a renderização dos itens terminou
-      setTimeout(handleScroll, 100) 
-    }
-    return () => {
-      if (el) el.removeEventListener('scroll', handleScroll)
-    }
-  }, [mobileTabs])
+
 
   const getBadgeValue = (id: string) => {
     if (id === 'comunicados') {
@@ -217,7 +200,27 @@ export function ADSidebar() {
         }
         return true
       })
-    }    return (
+    }
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (scrollContainerRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current
+        setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5)
+      }
+    }
+    
+    const el = scrollContainerRef.current
+    if (el) {
+      el.addEventListener('scroll', handleScroll, { passive: true })
+      setTimeout(handleScroll, 100) 
+    }
+    return () => {
+      if (el) el.removeEventListener('scroll', handleScroll)
+    }
+  }, [mobileTabs])
+
+    return (
       <>
       <div className="ad-nav-mobile-wrapper">
         <div style={{
