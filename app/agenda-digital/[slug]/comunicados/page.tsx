@@ -107,7 +107,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const [limit, setLimit] = useState(6)
   const endpoint = aluno?.id ? `/api/comunicados?aluno_id=${aluno.id}&turma_id=${encodeURIComponent(turmaNome || '')}` : '/api/comunicados'
   
-  const { data: comunicados = [], isLoading: loading } = useQueryComunicados(false, endpoint)
+  const { data: comunicados = [], isLoading: loading, refetch } = useQueryComunicados(false, endpoint)
   
   
   
