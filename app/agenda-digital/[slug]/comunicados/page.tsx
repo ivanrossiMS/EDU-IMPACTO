@@ -217,7 +217,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   }
 
   return (
-    <PullToRefresh onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] }) }}>
     <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
@@ -385,8 +384,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-
-
+        <PullToRefresh onRefresh={async () => { await refetch() }}>
         <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="ad-com-header-icon-box" style={{
@@ -452,6 +450,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
             </button>
           </div>
         </div>
+        </PullToRefresh>
 
 
 
@@ -962,6 +961,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       `}</style>
       </div>
     </div>
-    </PullToRefresh>
   )
 }
+

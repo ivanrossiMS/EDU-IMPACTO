@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
 import { FloatingNotificationBadge } from '../components/notifications/FloatingNotificationBadge';
+import { PullToRefresh } from '@/components/PullToRefresh';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useData } from '@/lib/dataContext'
 import { useSaida } from '@/lib/saidaContext'
@@ -208,6 +210,7 @@ export default function AgendaDigitalFamilyLayout({
   children: React.ReactNode, 
   params: Promise<{ slug: string }>
 }) {
+  const queryClient = useQueryClient();
   const [profileData, setProfileData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -1555,6 +1558,7 @@ export default function AgendaDigitalFamilyLayout({
         }
       `}} />
       {/* Dynamic Header floating profile card */}
+      <PullToRefresh onRefresh={async () => { await queryClient.refetchQueries({ queryKey: ['agenda'] }) }}>
       <div className="ad-premium-card-wrapper">
         <div className="ad-premium-card">
           {/* AREA 1: PERFIL ALUNO (À esquerda) */}
@@ -1793,6 +1797,7 @@ export default function AgendaDigitalFamilyLayout({
           )}
         </div>
       </div>
+      </PullToRefresh>
 
 
       {/* Main Grid containing Page Content */}
