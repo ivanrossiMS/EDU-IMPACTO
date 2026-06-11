@@ -19,8 +19,9 @@ export function useQueryComunicados(
     },
     staleTime: 1000 * 60 * 5, // 5 min de cache fresco
     gcTime: 1000 * 60 * 10, // 10 min na memória
-    refetchOnWindowFocus: false, // Evita flash da tela ao trocar de abas
-    refetchOnMount: false,
+    refetchOnWindowFocus: true, // Recarrega ao voltar pro app
+    refetchInterval: 15000, // Atualiza automaticamente a cada 15 segundos
+    refetchOnMount: true,
     enabled: !isFamily
   })
 

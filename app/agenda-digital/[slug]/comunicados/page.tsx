@@ -20,6 +20,7 @@ import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+import { PullToRefresh } from '@/components/PullToRefresh'
 
 // Helper to abbreviate names for mobile (e.g., "Maria Auxiliadora de Araújo Honório" -> "Maria A. de A. Honório")
 function abbreviateName(name: string): string {
@@ -96,7 +97,11 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
-  const turmaObj = turmas.find((t: any) => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
+  const turmaObj = turmas.find((t: any) => 
+    String(t.id) === String(rawTurma) || 
+    String(t.codigo) === String(rawTurma) ||
+    (t.nome && typeof rawTurma === 'string' && t.nome.toLowerCase().includes(rawTurma.toLowerCase()))
+  )
   const turmaNome = turmaObj?.nome || rawTurma
 
   const [limit, setLimit] = useState(6)
@@ -449,6 +454,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
 
 
+      <PullToRefresh onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] }) }}>
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
           const filteredComunicados = (comunicados || []).filter((c: any) => {
@@ -768,6 +774,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           )}
         </AnimatePresence>
       </div>
+      </PullToRefresh>
 
       <ReportPayloadView
         isOpen={!!openedReportPayloadStr}
