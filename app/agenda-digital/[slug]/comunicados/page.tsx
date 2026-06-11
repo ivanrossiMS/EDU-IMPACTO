@@ -217,6 +217,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   }
 
   return (
+    <PullToRefresh onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] }) }}>
     <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
@@ -454,7 +455,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
 
 
 
-      <PullToRefresh onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] }) }}>
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
           const filteredComunicados = (comunicados || []).filter((c: any) => {
@@ -774,7 +774,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
           )}
         </AnimatePresence>
       </div>
-      </PullToRefresh>
 
       <ReportPayloadView
         isOpen={!!openedReportPayloadStr}
@@ -963,5 +962,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
       `}</style>
       </div>
     </div>
+    </PullToRefresh>
   )
 }
