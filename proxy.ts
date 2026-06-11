@@ -18,6 +18,8 @@ import { createServerClient } from '@supabase/ssr'
 // ── Rotas que NÃO precisam de autenticação ─────────────────────────────────
 const PUBLIC_PATHS = [
   '/login',
+  '/esqueci-senha',
+  '/atualizar-senha',
   '/api/auth',          // endpoints de login/logout/me
   '/api/agenda',        // endpoints da agenda que o aluno acessa sem auth do supabase
   '/api/test',
