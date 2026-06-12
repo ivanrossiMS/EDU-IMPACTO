@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    const isFamily = user.perfil === 'Família' || user.cargo === 'Aluno' || user.cargo === 'Responsável'
+    const isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
     const readerId = isFamily ? alunoId : user.id
 
     if (!tipo || !ids || !readerId || !Array.isArray(ids) || ids.length === 0) {
