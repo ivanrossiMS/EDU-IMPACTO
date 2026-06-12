@@ -203,10 +203,106 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
   )
 }
 
+function ModernSplashScreen({ isFading }: { isFading: boolean }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 99999,
+      background: '#0A0F24',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+      opacity: isFading ? 0 : 1,
+      transition: 'opacity 0.5s ease',
+      pointerEvents: isFading ? 'none' : 'auto'
+    }}>
+      {/* Background Orbs */}
+      <div style={{
+        position: 'absolute', top: '20%', left: '20%', width: '40vw', height: '40vw',
+        background: 'radial-gradient(circle, rgba(121,40,202,0.15) 0%, transparent 70%)',
+        filter: 'blur(40px)', animation: 'float 6s infinite ease-in-out'
+      }} />
+      <div style={{
+        position: 'absolute', bottom: '20%', right: '20%', width: '50vw', height: '50vw',
+        background: 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%)',
+        filter: 'blur(40px)', animation: 'float 8s infinite ease-in-out reverse'
+      }} />
+
+      {/* Glassmorphism Container */}
+      <div style={{
+        position: 'relative', zIndex: 10,
+        width: 140, height: 140,
+        background: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: 30,
+        border: '1px solid rgba(255, 255, 255, 0.05)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(20px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        animation: 'pulseGlow 2s infinite alternate'
+      }}>
+        {/* Animated Rings */}
+        <div style={{
+          position: 'absolute', inset: -2, borderRadius: 32,
+          border: '2px solid transparent',
+          borderTopColor: '#3b82f6', borderBottomColor: '#7928ca',
+          animation: 'spin 1.5s linear infinite'
+        }} />
+        <div style={{
+          position: 'absolute', inset: 8, borderRadius: 22,
+          border: '2px solid transparent',
+          borderLeftColor: '#00d2ff', borderRightColor: '#ff0080',
+          animation: 'spin 2s linear infinite reverse', opacity: 0.7
+        }} />
+        
+        {/* Central Logo */}
+        <img src="/logo-impacto.png" alt="Impacto Edu" style={{ width: 60, height: 60, objectFit: 'contain', animation: 'float 3s infinite ease-in-out' }} />
+      </div>
+
+      <div style={{ marginTop: 40, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: 'white', letterSpacing: '0.05em' }}>IMPACTO EDU</h1>
+         <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Educação que transforma</p>
+      </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-10px); }
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes pulseGlow {
+          0% { box-shadow: 0 0 20px rgba(59,130,246,0.1); }
+          100% { box-shadow: 0 0 40px rgba(121,40,202,0.3); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { currentUser, hydrated } = useApp()
   const router = useRouter()
+
+  const [showSplash, setShowSplash] = useState(true)
+  const [isFading, setIsFading] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasSeenSplash = sessionStorage.getItem('edu_has_seen_splash')
+      if (hasSeenSplash) {
+        setShowSplash(false)
+        return
+      }
+      sessionStorage.setItem('edu_has_seen_splash', 'true')
+    }
+
+    const timer = setTimeout(() => {
+      setIsFading(true)
+      setTimeout(() => setShowSplash(false), 500)
+    }, 1800)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     if (hydrated && currentUser && pathname === '/') {
@@ -219,19 +315,47 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
     }
   }, [hydrated, currentUser, pathname, router])
 
-  if (!hydrated) return <>{children}</>
+  if (!hydrated) {
+    return (
+      <>
+        {showSplash && <ModernSplashScreen isFading={false} />}
+      </>
+    )
+  }
 
   const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
   if (isFamilyOrStudent) {
     const isAllowedPath = pathname === '/' || pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/esqueci-senha') || pathname.startsWith('/atualizar-senha')
     if (!isAllowedPath) {
-      return <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
+      return (
+        <>
+          {showSplash && <ModernSplashScreen isFading={isFading} />}
+          <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
+        </>
+      )
     }
-    if (pathname === '/') return null // Aguarda o redirecionamento
+    if (pathname === '/') {
+      return (
+        <>
+          {showSplash && <ModernSplashScreen isFading={isFading} />}
+        </>
+      )
+    }
   }
 
-  if (currentUser && pathname === '/') return null // Aguarda o redirecionamento
+  if (currentUser && pathname === '/') {
+    return (
+      <>
+        {showSplash && <ModernSplashScreen isFading={isFading} />}
+      </>
+    )
+  }
 
-  return <>{children}</>
+  return (
+    <>
+      {showSplash && <ModernSplashScreen isFading={isFading} />}
+      {children}
+    </>
+  )
 }
