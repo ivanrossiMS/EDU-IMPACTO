@@ -82,7 +82,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "ts-morph": "^28.0.0",
     "typescript": "^5"
-  }
+  },
+  "browserslist": [
+    "chrome >= 69",
+    "safari >= 12",
+    "ios >= 12",
+    "> 0.5%",
+    "not dead"
+  ]
 }
