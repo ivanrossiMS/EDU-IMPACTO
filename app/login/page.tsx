@@ -959,9 +959,7 @@ export default function LoginPage() {
           .login-wrapper {
             flex-direction: column !important;
             overflow-y: auto !important;
-            background: linear-gradient(-45deg, #050a18, #0a0f2e, #111424, #08101e) !important;
-            background-size: 400% 400% !important;
-            animation: gradientBG 15s ease infinite !important;
+            background: #0A0F24 !important;
           }
           .login-left-panel {
             display: none !important;
