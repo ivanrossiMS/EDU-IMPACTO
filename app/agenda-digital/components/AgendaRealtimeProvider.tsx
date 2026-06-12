@@ -119,6 +119,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             try {
               const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
               OneSignalNative.initialize(appId)
+              ;(window as any).__OS_NATIVE_READY__ = true
               
               // Deep link nativo
               OneSignalNative.Notifications.addEventListener('click', (event: any) => {
@@ -245,6 +246,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         let OS: any = null
         if (isNative) {
+          // Aguarda a inicialização nativa completar (appId) antes de logar
+          if (!(window as any).__OS_NATIVE_READY__) {
+             setTimeout(() => gerenciarUsuarioPush(), 200)
+             return
+          }
           const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
           OS = OneSignalNative
         } else {
