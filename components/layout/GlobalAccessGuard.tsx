@@ -206,17 +206,32 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
 export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { currentUser, hydrated } = useApp()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (hydrated && currentUser && pathname === '/') {
+      const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+      if (isFamilyOrStudent) {
+        router.replace('/agenda-digital')
+      } else {
+        router.replace('/dashboard')
+      }
+    }
+  }, [hydrated, currentUser, pathname, router])
 
   if (!hydrated) return <>{children}</>
 
   const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
   if (isFamilyOrStudent) {
-    const isAllowedPath = pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/esqueci-senha') || pathname.startsWith('/atualizar-senha')
+    const isAllowedPath = pathname === '/' || pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/esqueci-senha') || pathname.startsWith('/atualizar-senha')
     if (!isAllowedPath) {
       return <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
     }
+    if (pathname === '/') return null // Aguarda o redirecionamento
   }
+
+  if (currentUser && pathname === '/') return null // Aguarda o redirecionamento
 
   return <>{children}</>
 }
