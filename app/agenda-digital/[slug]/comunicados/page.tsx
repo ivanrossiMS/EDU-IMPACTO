@@ -109,9 +109,20 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   
   const { data: comunicados = [], isLoading: loading, refetch } = useQueryComunicados(false, endpoint)
   
-  
-  
-  
+  useEffect(() => {
+    const handleUpdate = () => {
+      refetch()
+    }
+    window.addEventListener('ad:comunicados-insert', handleUpdate)
+    window.addEventListener('ad:comunicados-update', handleUpdate)
+    window.addEventListener('ad:comunicados-delete', handleUpdate)
+    
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleUpdate)
+      window.removeEventListener('ad:comunicados-update', handleUpdate)
+      window.removeEventListener('ad:comunicados-delete', handleUpdate)
+    }
+  }, [refetch])
 
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
