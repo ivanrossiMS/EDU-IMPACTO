@@ -862,16 +862,12 @@ export default function LoginPage() {
       <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 40px', background:'linear-gradient(160deg,#08101e 0%,#090d1f 50%,#0a0e1c 100%)', position:'relative', overflow:'hidden', overflowY:'auto' }}>
         <div style={{ position:'absolute', top:'20%', right:'10%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(139,92,246,0.06) 0%,transparent 70%)', pointerEvents:'none' }} />
         <div style={{ position:'absolute', bottom:'15%', left:'5%', width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%)', pointerEvents:'none' }} />
-        {mounted && step === 'login'                && LoginContent}
-        {mounted && step === 'first_access_verify'  && FirstAccessVerify}
-        {mounted && (
-          <>
-            {step === 'first_access_create' && FirstAccessCreate}
-            {step === 'setup_master' && SetupMasterContent}
-            {step === 'choose_system' && ChooseSystemContent}
-            {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
-          </>
-        )}
+        {step === 'login'                && LoginContent}
+        {step === 'first_access_verify'  && FirstAccessVerify}
+        {step === 'first_access_create' && FirstAccessCreate}
+        {step === 'setup_master' && SetupMasterContent}
+        {step === 'choose_system' && ChooseSystemContent}
+        {step === 'choose_agenda_role' && ChooseAgendaRoleContent}
         
         {/* Modal de bloqueio */}
         {showBlockModal && (

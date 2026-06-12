@@ -25,7 +25,6 @@ import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } fro
 import { useApp } from '@/lib/context'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 import { PullToRefresh } from '@/components/PullToRefresh'
-import { Capacitor } from '@capacitor/core'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -111,7 +110,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         // ── Verificar ambiente nativo (Capacitor) ─────────────────────────
         let isNative = false
         try {
-          isNative = Capacitor.isNativePlatform()
+          isNative = !!(window as any).Capacitor?.isNativePlatform()
         } catch {}
 
         if (isNative) {
@@ -242,7 +241,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       try {
         let isNative = false
         try {
-          isNative = Capacitor.isNativePlatform()
+          isNative = !!(window as any).Capacitor?.isNativePlatform()
         } catch {}
 
         let OS: any = null
