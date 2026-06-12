@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   
   // Se não foi passado aluno_id e o usuário é família/aluno, retorna 0 (precisa saber qual aluno).
   // Se for admin/colaborador, usamos o próprio user.id para as leituras.
-  const isFamily = user.perfil === 'Família' || user.cargo === 'Aluno' || user.cargo === 'Responsável'
+  const isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
   if (isFamily && !queryAlunoId) {
     return NextResponse.json({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0 })
   }
