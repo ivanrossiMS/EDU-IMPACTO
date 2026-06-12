@@ -23,6 +23,9 @@ import Script from 'next/script'
 import { useRouter, useParams } from 'next/navigation'
 import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
+import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+import { PullToRefresh } from '@/components/PullToRefresh'
+import { Capacitor } from '@capacitor/core'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -108,7 +111,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         // ── Verificar ambiente nativo (Capacitor) ─────────────────────────
         let isNative = false
         try {
-          const { Capacitor } = require('@capacitor/core')
           isNative = Capacitor.isNativePlatform()
         } catch {}
 
@@ -240,7 +242,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       try {
         let isNative = false
         try {
-          const { Capacitor } = require('@capacitor/core')
           isNative = Capacitor.isNativePlatform()
         } catch {}
 

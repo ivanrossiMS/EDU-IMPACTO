@@ -16,6 +16,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Capacitor } from '@capacitor/core'
 import { Bell, BellOff, BellRing, X, Smartphone, Settings, Shield } from 'lucide-react'
 
 type PermissionStatus = 'default' | 'granted' | 'denied' | 'unsupported' | 'ios-pwa'
@@ -37,7 +38,6 @@ export function PushPermissionBanner() {
 
       let isNative = false
       try {
-        const { Capacitor } = require('@capacitor/core')
         isNative = Capacitor.isNativePlatform()
       } catch {}
 
@@ -105,7 +105,6 @@ export function PushPermissionBanner() {
     try {
       let isNative = false
       try {
-        const { Capacitor } = require('@capacitor/core')
         isNative = Capacitor.isNativePlatform()
       } catch {}
 
