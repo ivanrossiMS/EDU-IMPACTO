@@ -395,7 +395,9 @@ export default function LoginPage() {
       {/* Logo */}
       <div style={{ position:'relative', zIndex:2 }}>
         <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ width:46, height:46, borderRadius:14, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, boxShadow:'0 8px 24px rgba(59,130,246,0.4)' }}>⚡</div>
+          <div style={{ width:46, height:46, borderRadius:14, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 24px rgba(59,130,246,0.4)', overflow: 'hidden' }}>
+            <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
           <div>
             <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:20, fontWeight:900, color:'#fff', letterSpacing:'-0.02em' }}>IMPACTO <span style={{ background:'linear-gradient(90deg,#60a5fa,#a78bfa)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>EDU</span></div>
             <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Enterprise Learning Suite</div>
@@ -464,8 +466,8 @@ export default function LoginPage() {
       {/* HEADER MOBILE (logo, title, subtitle) */}
       <div className="mobile-only" style={{ display:'none', flexDirection:'column', alignItems:'center', marginTop: 10, marginBottom: 16, zIndex: 10 }}>
         {/* Glow behind logo */}
-        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:16 }}>
-          <span style={{ fontSize:38, color:'#fff' }}>⚡</span>
+        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:16, overflow: 'hidden' }}>
+          <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
         <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:4 }}>IMPACTO <span style={{ color:'#8b5cf6' }}>EDU</span></div>
         <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:8 }}>Enterprise Learning Suite</div>
