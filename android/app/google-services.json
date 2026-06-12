@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "200614290645",
+    "project_id": "impacto-edu-1c655",
+    "storage_bucket": "impacto-edu-1c655.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:200614290645:android:7a49573fd179b3d5632e5c",
+        "android_client_info": {
+          "package_name": "br.com.impactoedu.agenda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA50wadoyJURyZ1q9AxoMzCv8OTUMzEeqM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
