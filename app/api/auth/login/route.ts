@@ -97,7 +97,9 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
         .then(r => r.data || null)
         
+      console.log('[login trace] Awaiting Promise.all for email format')
       const [alunoByEmail, respByEmail, sysUserByEmail] = await Promise.all([alunoPromise, respPromise, sysUserPromise])
+      console.log('[login trace] Fetched email format')
       
       if (alunoByEmail) {
         alunoRecord   = alunoByEmail
@@ -112,7 +114,11 @@ export async function POST(request: NextRequest) {
         resolvedEmail     = loginInput
       }
     }
+    
+    console.log('[login trace] Resolved userType:', userType)
+    
     if (userType === 'responsavel' && responsavelRecord) {
+      console.log('[login trace] Checking responsavel links')
       const { data: links } = await supabaseAdmin
         .from('aluno_responsavel')
         .select('resp_financeiro, resp_pedagogico')
@@ -129,7 +135,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    console.log('[login trace] Awaiting cookies')
     const cookieStore = await cookies()
+    console.log('[login trace] Got cookies')
 
     console.log('[login debug] env vars:', { url: process.env.NEXT_PUBLIC_SUPABASE_URL, keyLen: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length })
     const supabase = createServerClient(
@@ -177,8 +185,10 @@ export async function POST(request: NextRequest) {
       console.log('[login debug] Final auth error:', error?.message)
       
       const isNetworkError = error?.message?.toLowerCase().includes('fetch') || error?.message?.toLowerCase().includes('timed out') || error?.status === 522;
-      if (isNetworkError) {
-        return NextResponse.json({ error: 'Erro de conexão com o banco de dados (Timeout). Tente novamente em alguns instantes.' }, { status: 504 })
+      const isHtmlError = error?.message?.includes('Unexpected token') || error?.message?.includes('is not valid JSON');
+      
+      if (isNetworkError || isHtmlError) {
+        return NextResponse.json({ error: 'Erro de conexão: O banco de dados está indisponível ou "dormindo" (Timeout). Se você usa o plano gratuito, ele pode estar acordando. Tente novamente em 1 minuto.' }, { status: 504 })
       }
 
       // Friendly messages per user type
