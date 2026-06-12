@@ -66,7 +66,9 @@ export default function EsqueciSenha() {
         {/* Logo Section */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '32px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <BookOpen size={36} color="#3b82f6" strokeWidth={2} />
+            <div style={{ width:36, height:36, borderRadius:12, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 24px rgba(59,130,246,0.4)', overflow: 'hidden' }}>
+              <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
             <span style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '1px', color: '#ffffff', fontFamily: 'var(--font-outfit), sans-serif', margin: 0, lineHeight: 1 }}>
               IMPACTO <span style={{ color: '#3b82f6' }}>EDU</span>
             </span>
