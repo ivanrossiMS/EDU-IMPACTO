@@ -953,40 +953,36 @@ export default function LoginPage() {
           .login-wrapper {
             flex-direction: column !important;
             overflow-y: auto !important;
+            background: #0b0d19 !important;
           }
           .login-left-panel {
-            padding: 32px 24px !important;
-            flex: none !important;
+            display: none !important;
           }
           .login-right-panel {
-            padding: 24px 20px 48px 20px !important;
+            padding: 16px 20px 48px 20px !important;
             justify-content: flex-start !important;
+            background: transparent !important;
+            align-items: stretch !important;
           }
           .hide-on-mobile {
             display: none !important;
           }
-          .login-headline-wrapper {
-            padding-top: 24px !important;
-            padding-bottom: 0px !important;
+          .mobile-only {
+            display: flex !important;
           }
-          .login-title {
-            font-size: 32px !important;
-            min-height: auto !important;
-            margin-bottom: 12px !important;
-          }
-          .login-subtitle {
-            font-size: 14px !important;
-            margin-bottom: 0px !important;
+          .login-card {
+            padding: 24px 20px !important;
+            border-radius: 20px !important;
+            background: #111424 !important;
+            border: 1px solid rgba(255,255,255,0.04) !important;
+            box-shadow: none !important;
+            backdrop-filter: none !important;
           }
           .login-header-group {
             margin-bottom: 24px !important;
           }
           .login-h2 {
-            font-size: 26px !important;
-          }
-          .login-card {
-            padding: 24px 20px !important;
-            border-radius: 16px !important;
+            font-size: 28px !important;
           }
         }
       `}</style>
