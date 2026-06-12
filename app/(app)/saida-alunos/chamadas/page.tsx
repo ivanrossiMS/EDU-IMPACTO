@@ -923,10 +923,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', lineHeight: 1.2 }}>
                   {l.studentName}
                 </div>
-                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.3 }}>
                   retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
                 </div>
                 <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
