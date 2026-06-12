@@ -14,47 +14,61 @@ export async function GET(request: Request) {
   const supabase = supabaseServer;
   
   const { searchParams } = new URL(request.url)
-  const alunoId = searchParams.get('aluno_id')
+  const queryAlunoId = searchParams.get('aluno_id')
   
-  if (!alunoId) {
+  // Se não foi passado aluno_id e o usuário é família/aluno, retorna 0 (precisa saber qual aluno).
+  // Se for admin/colaborador, usamos o próprio user.id para as leituras.
+  const isFamily = user.perfil === 'Família' || user.cargo === 'Aluno' || user.cargo === 'Responsável'
+  if (isFamily && !queryAlunoId) {
     return NextResponse.json({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0 })
   }
+
+  // O identificador de leitura será o alunoId (se família) ou o próprio user.id (se admin/colab)
+  const readerId = isFamily ? queryAlunoId : user.id
 
   try {
     const accessStartDate = await getLoggedUserAccessStartDate()
 
-    // 1. Resolve Turma from 'alunos' and 'turmas' tables (since 'vinculos' table does not exist)
     let resolvedTurma = null;
     let turmaId = null;
-    const { data: student } = await supabase.from('alunos').select('turma').eq('id', alunoId).maybeSingle();
-    if (student?.turma) {
-      turmaId = student.turma;
-      const { data: tData } = await supabase.from('turmas').select('nome').eq('id', student.turma).maybeSingle();
-      if (tData && tData.nome) {
-        resolvedTurma = tData.nome;
-      } else {
-        const { data: cData } = await supabase.from('turmas').select('nome').eq('codigo', student.turma).maybeSingle();
-        if (cData && cData.nome) {
-          resolvedTurma = cData.nome;
+
+    if (isFamily && queryAlunoId) {
+      // 1. Resolve Turma do Aluno
+      const { data: student } = await supabase.from('alunos').select('turma').eq('id', queryAlunoId).maybeSingle();
+      if (student?.turma) {
+        turmaId = student.turma;
+        const { data: tData } = await supabase.from('turmas').select('nome').eq('id', student.turma).maybeSingle();
+        if (tData && tData.nome) {
+          resolvedTurma = tData.nome;
         } else {
-          resolvedTurma = student.turma;
+          const { data: cData } = await supabase.from('turmas').select('nome').eq('codigo', student.turma).maybeSingle();
+          if (cData && cData.nome) {
+            resolvedTurma = cData.nome;
+          } else {
+            resolvedTurma = student.turma;
+          }
         }
       }
     }
 
     // 2. Unread Comunicados (Mural)
-    const conditions = [`destino.eq.todos`];
-    if (resolvedTurma) {
-      conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
-      if (resolvedTurma !== turmaId) {
-         conditions.push(`dados->turmas.cs.["${turmaId}"]`);
-      }
-    }
-    conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
-    conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
-    conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
+    let comQuery = supabase.from('comunicados').select('id, dados, autorId, status');
     
-    let comQuery = supabase.from('comunicados').select('id, dados').or(conditions.join(','));
+    if (isFamily && queryAlunoId) {
+      const conditions = [`destino.eq.todos`];
+      if (resolvedTurma) {
+        conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
+        if (resolvedTurma !== turmaId) {
+           conditions.push(`dados->turmas.cs.["${turmaId}"]`);
+        }
+      }
+      conditions.push(`dados->alunosIds.cs.["${queryAlunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["a_${queryAlunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["_ALU${queryAlunoId}"]`);
+      comQuery = comQuery.or(conditions.join(','));
+    }
+    // Admin/Colab buscam tudo (ou baseado no app deles), faremos filtro via JS pra simplificar leitura do JSON.
+    
     if (accessStartDate) {
       comQuery = comQuery.gte('data', accessStartDate.toISOString());
     }
@@ -63,24 +77,27 @@ export async function GET(request: Request) {
     if (comError) throw new Error(`Comunicados error: ${comError.message}`);
 
     const unreadMural = comunicados?.filter(c => {
-      const mergedStatus = (c as any).status || c.dados?.status || 'enviado';
+      const mergedStatus = c.status || c.dados?.status || 'enviado';
       if (mergedStatus === 'rascunho' || mergedStatus === 'agendado') return false;
+      // Não conta se fui eu mesmo que mandei
+      if (String(c.autorId) === String(user.id)) return false;
+      
       const leituras = (c as any).leituras || c.dados?.leituras || {};
-      return !leituras[alunoId];
+      return !leituras[readerId as string];
     }).length || 0;
 
     // 3. Unread Momentos
-    const momentosConditions = [`dados->targetClasses.cs.["TODOS"]`, `dados->targetClasses.cs.["Toda a Escola"]`, `dados->targetClasses.cs.["Toda a escola"]`];
-    if (resolvedTurma) {
-       momentosConditions.push(`dados->targetClasses.cs.["${resolvedTurma}"]`);
-       if (resolvedTurma !== turmaId) {
-          momentosConditions.push(`dados->targetClasses.cs.["${turmaId}"]`);
-       }
+    let momQuery = supabase.from('momentos').select('id, dados, autorId, created_at').eq('dados->>status', 'approved');
+    if (isFamily && queryAlunoId) {
+      const momentosConditions = [`dados->targetClasses.cs.["TODOS"]`, `dados->targetClasses.cs.["Toda a Escola"]`, `dados->targetClasses.cs.["Toda a escola"]`];
+      if (resolvedTurma) {
+         momentosConditions.push(`dados->targetClasses.cs.["${resolvedTurma}"]`);
+         if (resolvedTurma !== turmaId) {
+            momentosConditions.push(`dados->targetClasses.cs.["${turmaId}"]`);
+         }
+      }
+      momQuery = momQuery.or(momentosConditions.join(','));
     }
-    let momQuery = supabase.from('momentos')
-       .select('id, dados')
-       .eq('dados->>status', 'approved')
-       .or(momentosConditions.join(','));
        
     if (accessStartDate) {
       momQuery = momQuery.gte('created_at', accessStartDate.toISOString());
@@ -90,21 +107,23 @@ export async function GET(request: Request) {
     if (momError) throw new Error(`Momentos error: ${momError.message}`);
        
     const unreadMomentos = momentos?.filter(m => {
+      if (String(m.autorId) === String(user.id)) return false;
       const leituras = (m as any).leituras || m.dados?.leituras || {};
-      return !leituras[alunoId];
+      return !leituras[readerId as string];
     }).length || 0;
 
     // 4. Unread Calendario (eventos_agenda)
-    const eventosConditions = [`turmas.cs.["Todos"]`, `turmas.cs.["Toda a escola"]`, `turmas.cs.["Toda a Escola"]`];
-    if (resolvedTurma) {
-       eventosConditions.push(`turmas.cs.["${resolvedTurma}"]`);
-       if (resolvedTurma !== turmaId) {
-          eventosConditions.push(`turmas.cs.["${turmaId}"]`);
-       }
+    let evQuery = supabase.from('eventos_agenda').select('id, dados, turmas');
+    if (isFamily && queryAlunoId) {
+      const eventosConditions = [`turmas.cs.["Todos"]`, `turmas.cs.["Toda a escola"]`, `turmas.cs.["Toda a Escola"]`];
+      if (resolvedTurma) {
+         eventosConditions.push(`turmas.cs.["${resolvedTurma}"]`);
+         if (resolvedTurma !== turmaId) {
+            eventosConditions.push(`turmas.cs.["${turmaId}"]`);
+         }
+      }
+      evQuery = evQuery.or(eventosConditions.join(','));
     }
-    let evQuery = supabase.from('eventos_agenda')
-       .select('id, dados')
-       .or(eventosConditions.join(','));
        
     if (accessStartDate) {
       const accessStartDateStr = accessStartDate.toISOString().substring(0, 10);
@@ -116,13 +135,14 @@ export async function GET(request: Request) {
        
     const unreadCalendario = eventos?.filter((e: any) => {
       const leituras = e.leituras || e.dados?.leituras || {};
-      return !leituras[alunoId];
+      return !leituras[readerId as string];
     }).length || 0;
 
     // 5. Unread Ocorrencias
-    let ocQuery = supabase.from('ocorrencias')
-       .select('id, dados')
-       .or(`aluno_id.eq.${alunoId},dados->>aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`);
+    let ocQuery = supabase.from('ocorrencias').select('id, dados, aluno_id');
+    if (isFamily && queryAlunoId) {
+      ocQuery = ocQuery.or(`aluno_id.eq.${queryAlunoId},dados->>aluno_id.eq.${queryAlunoId},dados->>alunoId.eq.${queryAlunoId}`);
+    }
        
     if (accessStartDate) {
       ocQuery = ocQuery.gte('created_at', accessStartDate.toISOString());
@@ -132,18 +152,21 @@ export async function GET(request: Request) {
     if (ocError) throw new Error(`Ocorrencias error: ${ocError.message}`);
        
     const unreadOcorrencias = ocorrencias?.filter((o: any) => {
+      if (String(o.dados?.autorId) === String(user.id)) return false;
       const leituras = o.leituras || o.dados?.leituras || {};
-      return !leituras[alunoId];
+      return !leituras[readerId as string];
     }).length || 0;
 
     // 6. Unread Notas (boletins)
-    const alunoStr = String(alunoId)
-    const alunoSemZero = alunoStr.replace(/^0+/, '')
-    let bolQuery = supabase.from('boletins').select('id, dados');
-    if (alunoStr !== alunoSemZero) {
-       bolQuery = bolQuery.or(`aluno_id.eq.${alunoStr},aluno_id.eq.${alunoSemZero}`)
-    } else {
-       bolQuery = bolQuery.eq('aluno_id', alunoId)
+    let bolQuery = supabase.from('boletins').select('id, dados, aluno_id');
+    if (isFamily && queryAlunoId) {
+      const alunoStr = String(queryAlunoId)
+      const alunoSemZero = alunoStr.replace(/^0+/, '')
+      if (alunoStr !== alunoSemZero) {
+         bolQuery = bolQuery.or(`aluno_id.eq.${alunoStr},aluno_id.eq.${alunoSemZero}`)
+      } else {
+         bolQuery = bolQuery.eq('aluno_id', queryAlunoId)
+      }
     }
     
     if (accessStartDate) {
@@ -155,22 +178,10 @@ export async function GET(request: Request) {
        
     const unreadNotas = notas?.filter((b: any) => {
       const leituras = b.leituras || b.dados?.leituras || {};
-      return !leituras[alunoId];
+      return !leituras[readerId as string];
     }).length || 0;
 
-    // 7. Unread Frequencia
-    let freqQuery = supabase.from('frequencias').select('id, dados, leituras').eq('aluno_id', alunoId);
-    if (accessStartDate) {
-      freqQuery = freqQuery.gte('created_at', accessStartDate.toISOString());
-    }
-    const { data: frequencias, error: freqError } = await freqQuery;
-    if (freqError) throw new Error(`Frequencias error: ${freqError.message}`);
-    const unreadFrequencia = frequencias?.filter((f: any) => {
-      const leituras = f.leituras || f.dados?.leituras || {};
-      return !leituras[alunoId];
-    }).length || 0;
-
-    let unreadChat = 0;
+    // FREQUENCIA REMOVIDA INTENCIONALMENTE (NÃO DEVE TER BADGE)
 
     return NextResponse.json({
       unreadMural,
@@ -178,8 +189,8 @@ export async function GET(request: Request) {
       unreadCalendario,
       unreadOcorrencias,
       unreadNotas,
-      unreadFrequencia,
-      unreadChat
+      unreadFrequencia: 0, // mantido 0 por compatibilidade
+      unreadChat: 0
     })
   } catch (err: any) {
     console.error("Erro ao buscar notificações unread:", err);

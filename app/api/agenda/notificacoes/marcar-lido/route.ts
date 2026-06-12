@@ -14,7 +14,10 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    if (!tipo || !ids || !alunoId || !Array.isArray(ids) || ids.length === 0) {
+    const isFamily = user.perfil === 'Família' || user.cargo === 'Aluno' || user.cargo === 'Responsável'
+    const readerId = isFamily ? alunoId : user.id
+
+    if (!tipo || !ids || !readerId || !Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: 'Parâmetros incompletos' }, { status: 400 })
     }
 
@@ -52,14 +55,14 @@ export async function POST(request: Request) {
       const dados = typeof row.dados === 'object' && row.dados !== null ? { ...row.dados } : {}
       
       const leiturasInDados = typeof dados.leituras === 'object' && dados.leituras !== null ? { ...dados.leituras } : {}
-      leiturasInDados[alunoId] = now
+      leiturasInDados[readerId as string] = now
       dados.leituras = leiturasInDados
 
       // If the root level "leituras" exists in the table structure (some tables like comunicados might have it or use "dados")
       let rootLeituras = null
       if (row.leituras !== undefined) {
          rootLeituras = typeof row.leituras === 'object' && row.leituras !== null ? { ...row.leituras } : {}
-         rootLeituras[alunoId] = now
+         rootLeituras[readerId as string] = now
       }
 
       const updateObj: any = {
@@ -82,8 +85,8 @@ export async function POST(request: Request) {
     // --- NOVA LÓGICA DE NOTIFICATIONS CENTER ---
     try {
       const readRecords = ids.map((id: string) => ({
-        usuario_id: alunoId, // Aqui na agenda alunoId é usado como identificador
-        perfil: 'aluno', // Pode ser familia dependendo, mas para simplificar
+        usuario_id: readerId, // Aqui na agenda readerId é usado como identificador
+        perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
         content_id: id,
         read_at: now

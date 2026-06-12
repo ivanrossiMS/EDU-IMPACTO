@@ -35,6 +35,30 @@ export function PushPermissionBanner() {
       const dismissed = localStorage.getItem('edu_push_dismissed_v2')
       if (dismissed === 'true') return
 
+      let isNative = false
+      try {
+        const { Capacitor } = require('@capacitor/core')
+        isNative = Capacitor.isNativePlatform()
+      } catch {}
+
+      if (isNative) {
+        try {
+          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+          const hasPerm = await OneSignalNative.Notifications.hasPermission()
+          if (hasPerm) return // Já tem permissão
+          
+          const canRequest = await OneSignalNative.Notifications.canRequestPermission()
+          if (!hasPerm && !canRequest) {
+             setBannerState('blocked')
+             return
+          }
+        } catch (e) {
+          console.error('[PushBanner] Erro ao verificar permissão nativa', e)
+        }
+        setBannerState('prompt')
+        return
+      }
+
       // Verifica suporte geral a notificações
       if (!('Notification' in window)) {
         setBannerState('unsupported')
@@ -79,6 +103,19 @@ export function PushPermissionBanner() {
   const handleActivate = async () => {
     setBannerState('hidden')
     try {
+      let isNative = false
+      try {
+        const { Capacitor } = require('@capacitor/core')
+        isNative = Capacitor.isNativePlatform()
+      } catch {}
+
+      if (isNative) {
+        const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+        await OneSignalNative.Notifications.requestPermission(true)
+        console.log('✅ [PushBanner] Permissão solicitada via API nativa')
+        return
+      }
+
       window.OneSignalDeferred = window.OneSignalDeferred || []
       window.OneSignalDeferred.push(async function(OneSignal: any) {
         // Vai direto para o prompt nativo do navegador, pulando o Slidedown do OneSignal

@@ -39,6 +39,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useAgendaBadges } from '../hooks/useAgendaBadges'
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -71,7 +72,7 @@ export function ADSidebar() {
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  const [unreadStats, setUnreadStats] = useState({ unreadMural: 0, unreadChat: 0, unreadMomentos: 0, unreadCalendario: 0, unreadOcorrencias: 0, unreadNotas: 0, unreadFrequencia: 0 })
+  const unreadStats = useAgendaBadges(alunoId)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,48 +124,12 @@ export function ADSidebar() {
     }
   }
 
-  // usando useEffect do top-level (já deve estar importado ou usamos o top level)
-  useEffect(() => {
-    if (!isFamily || !alunoId || alunoId === 'colaborador') return
-    let isMounted = true
-    const fetchUnread = async () => {
-      try {
-        const res = await fetch(`/api/agenda/notificacoes/unread?aluno_id=${alunoId}`)
-        const contentType = res.headers.get("content-type");
-        if (res.ok && isMounted && contentType?.includes("application/json")) {
-          const data = await res.json()
-          setUnreadStats(prev => {
-            if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-            return data;
-          })
-        }
-      } catch (e) {}
-    }
-    fetchUnread()
-
-    const handleUpdate = () => {
-      fetchUnread()
-    }
-    window.addEventListener('agenda-digital:unread-updated', handleUpdate)
-
-    const interval = setInterval(fetchUnread, 30000)
-    return () => { 
-      isMounted = false
-      clearInterval(interval)
-      window.removeEventListener('agenda-digital:unread-updated', handleUpdate)
-    }
-  }, [isFamily, alunoId])
-
-
-
   const getBadgeValue = (id: string) => {
-    if (id === 'comunicados') {
-      return (comunicados || []).filter(c => c.status === 'rascunho' || c.status === 'agendado').length || undefined
-    }
-
-    if (id === 'momentos') {
-      return (momentosFeed || []).filter(m => m.status === 'pending').length || undefined
-    }
+    if (id === 'comunicados') return unreadStats.unreadMural || undefined
+    if (id === 'momentos') return unreadStats.unreadMomentos || undefined
+    if (id === 'calendario') return unreadStats.unreadCalendario || undefined
+    if (id === 'ocorrencias') return unreadStats.unreadOcorrencias || undefined
+    if (id === 'notas') return unreadStats.unreadNotas || undefined
     return undefined
   }
 

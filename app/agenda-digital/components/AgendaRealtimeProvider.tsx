@@ -86,7 +86,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   )
   const turmaNome = resolvedTurmaObj?.nome || rawTurma
 
+  const alunoIdRef = useRef(alunoId)
+  useEffect(() => {
+    alunoIdRef.current = alunoId
+  }, [alunoId])
+
   // ── OneSignal Initialization ──────────────────────────────────────────────
+  // 1. Inicializa o SDK (apenas uma vez)
   useEffect(() => {
     let isMounted = true
     if (typeof window === 'undefined') return
@@ -107,37 +113,42 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         } catch {}
 
         if (isNative) {
-          console.log('📱 [OneSignal] Ambiente nativo detectado (Capacitor)')
-          try {
-            const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-            OneSignalNative.initialize(appId)
-            OneSignalNative.Notifications.requestPermission(true)
+          if (!window.__OS_INIT__) {
+            console.log('📱 [OneSignal] Ambiente nativo detectado (Capacitor)')
+            window.__OS_INIT__ = true
+            try {
+              const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+              OneSignalNative.initialize(appId)
+              
+              // Deep link nativo
+              OneSignalNative.Notifications.addEventListener('click', (event: any) => {
+                const data = event?.notification?.additionalData || {}
+                console.log('[OneSignal] Notificação nativa clicada:', data)
+                
+                if (data?.rota || data?.type) {
+                  const slug = data.aluno_id || alunoIdRef.current
+                  let route = ''
 
-            if (currentUser?.id) {
-              OneSignalNative.login(String(currentUser.id))
-              console.log(`✅ [OneSignal] Usuário nativo identificado: ${currentUser.id}`)
+                  if (slug) {
+                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                  } else {
+                    route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                  }
+
+                  if (route) {
+                    console.log(`[OneSignal] Deep link nativo → ${route}`)
+                    router.push(route)
+                  }
+                }
+              })
+            } catch (nativeErr: any) {
+              console.error('[OneSignal] Erro no plugin nativo:', nativeErr.message)
             }
-
-            // Deep link nativo
-            OneSignalNative.Notifications.addEventListener('click', (event: any) => {
-              const data = event.notification.additionalData
-              if (data?.rota) {
-                const alunoPushId = data.aluno_id || alunoId
-                const route = alunoPushId
-                  ? `/agenda-digital/${alunoPushId}/${data.rota}`
-                  : `/agenda-digital/${data.rota}`
-                router.push(route)
-                console.log(`[OneSignal] Deep link nativo → ${route}`)
-              }
-            })
-          } catch (nativeErr: any) {
-            console.error('[OneSignal] Erro no plugin nativo:', nativeErr.message)
           }
           return
         }
 
         // ── Web Push (v16) ────────────────────────────────────────────────
-        // Inicializa apenas UMA vez (resolve bug do React Strict Mode)
         window.OneSignalDeferred = window.OneSignalDeferred || []
         window.OneSignalDeferred.push(async function (OneSignal: any) {
           try {
@@ -168,6 +179,30 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   serviceWorkerParam: { scope: '/' },
                 })
                 console.log('🔔 [OneSignal] Inicializado com sucesso!')
+                
+                // Listener de clique nas notificações Web
+                if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
+                  OneSignal.Notifications.addEventListener('click', (event: any) => {
+                    const data = event?.notification?.additionalData || {}
+                    console.log('[OneSignal] Notificação web clicada:', data)
+
+                    if (data?.rota || data?.type) {
+                      const slug = data.aluno_id || alunoIdRef.current
+                      let route = ''
+
+                      if (slug) {
+                        route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                      } else {
+                        route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                      }
+
+                      if (route) {
+                        console.log(`[OneSignal] Deep link web → ${route}`)
+                        router.push(route)
+                      }
+                    }
+                  })
+                }
               } catch (initErr: any) {
                 const msg = initErr?.message || ''
                 if (msg.includes('already initialized') || msg.includes('Timeout')) {
@@ -178,75 +213,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 }
               }
             }
-
-            // ── Identificar usuário no OneSignal ──────────────────────────
-            if (currentUser?.id && isMounted) {
-              const userId = String(currentUser.id)
-
-              // Evitar duplicar o login se o mesmo usuário já foi identificado
-              if (window.__OS_USER_ID__ !== userId) {
-                try {
-                  if (typeof OneSignal?.login === 'function') {
-                    await OneSignal.login(userId)
-                    window.__OS_USER_ID__ = userId
-                    console.log(`✅ [OneSignal] Usuário identificado: ${userId} (perfil: ${currentUser.perfil})`)
-                  }
-                } catch (loginErr: any) {
-                  console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)
-                }
-
-                // ── Tags de segmentação ───────────────────────────────────
-                // Permite filtrar destinatários por turma, perfil, aluno_id
-                try {
-                  const tags: Record<string, string> = {
-                    perfil: currentUser.perfil || '',
-                    cargo: currentUser.cargo || '',
-                  }
-                  if (alunoId) tags['aluno_id'] = alunoId
-                  if (turmaNome) tags['turma'] = String(turmaNome)
-                  if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
-
-                  if (typeof OneSignal?.User?.addTags === 'function') {
-                    await OneSignal.User.addTags(tags)
-                    console.log('[OneSignal] Tags de segmentação atribuídas:', tags)
-                  }
-                } catch (tagsErr: any) {
-                  console.warn('[OneSignal] Erro ao atribuir tags:', tagsErr?.message)
-                }
-              }
-            }
-
-            // ── Listener de clique nas notificações ───────────────────────
-            if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
-              OneSignal.Notifications.addEventListener('click', (event: any) => {
-                const data = event?.notification?.additionalData || {}
-                console.log('[OneSignal] Notificação clicada:', data)
-
-                if (data?.rota || data?.type) {
-                  const slug = data.aluno_id || alunoId
-                  let route = ''
-
-                  if (slug) {
-                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
-                  } else {
-                    route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
-                  }
-
-                  if (route) {
-                    console.log(`[OneSignal] Deep link → ${route}`)
-                    router.push(route)
-                  }
-                }
-              })
-            }
-
           } catch (e: any) {
-            const msg = e?.message || String(e)
-            if (msg.includes('already initialized') || msg.includes('Timeout')) {
-              console.warn('[OneSignal] Aviso esperado:', msg)
-            } else {
-              console.error('[OneSignal] Erro interno:', e)
-            }
+            console.error('[OneSignal] Erro interno no listener web:', e)
           }
         })
       } catch (err: any) {
@@ -261,7 +229,91 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       clearTimeout(timer)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [responsavelId, alunoId, turmaNome])
+  }, []) // Apenas na montagem para evitar duplos listeners
+
+  // 2. Gerenciar Usuário e Tags no OneSignal (Reage a mudanças no currentUser)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const gerenciarUsuarioPush = async () => {
+      try {
+        let isNative = false
+        try {
+          const { Capacitor } = require('@capacitor/core')
+          isNative = Capacitor.isNativePlatform()
+        } catch {}
+
+        let OS: any = null
+        if (isNative) {
+          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+          OS = OneSignalNative
+        } else {
+          OS = window.OneSignal
+          // Se o script do OneSignal não carregou ainda, enfileirar
+          if (!OS && window.OneSignalDeferred) {
+             window.OneSignalDeferred.push(() => gerenciarUsuarioPush())
+             return
+          }
+        }
+
+        if (!OS) return
+
+        if (currentUser?.id) {
+          const userId = String(currentUser.id)
+          
+          if (window.__OS_USER_ID__ !== userId) {
+            try {
+              if (typeof OS.login === 'function') {
+                await OS.login(userId)
+                window.__OS_USER_ID__ = userId
+                console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
+              }
+            } catch (loginErr: any) {
+              console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)
+            }
+          }
+          
+          // ── Tags de segmentação (Aplicado no Web e Nativo) ──────────────────
+          try {
+            const tags: Record<string, string> = {
+              perfil: currentUser.perfil || '',
+              cargo: currentUser.cargo || '',
+            }
+            if (alunoId) tags['aluno_id'] = alunoId
+            if (turmaNome) tags['turma'] = String(turmaNome)
+            if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
+
+            if (OS.User && typeof OS.User.addTags === 'function') {
+              await OS.User.addTags(tags)
+              console.log('[OneSignal] Tags de segmentação atribuídas:', tags)
+            }
+          } catch (tagsErr: any) {
+            console.warn('[OneSignal] Erro ao atribuir tags:', tagsErr?.message)
+          }
+
+        } else {
+          // ── LOGOUT (Garante que usuário não receba PUSHs do usuário anterior)
+          if (window.__OS_USER_ID__) {
+             try {
+               if (typeof OS.logout === 'function') {
+                 await OS.logout()
+                 window.__OS_USER_ID__ = undefined
+                 console.log(`🚪 [OneSignal] Usuário deslogado do Push`)
+               }
+             } catch (logoutErr: any) {
+               console.warn('[OneSignal] Erro no logout:', logoutErr?.message)
+             }
+          }
+        }
+      } catch (err: any) {
+        console.error('[OneSignal] Erro ao gerenciar usuário/tags:', err)
+      }
+    }
+
+    gerenciarUsuarioPush()
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, responsavelId, alunoId, turmaNome])
 
   // ── Supabase Realtime (In-App Toasts) ────────────────────────────────────
   useEffect(() => {
@@ -379,6 +431,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     // Canal único por sessão (evita conflitos do React Strict Mode)
     const channelName = `agenda-rt-${identifier}-${Date.now()}`
+    let isMounted = true
     const channel = supabase
       .channel(channelName)
 
@@ -401,6 +454,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
 
             if (!isMe) {
+              window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
               addNotification({
                 id: merged.id,
                 type: 'comunicado',
@@ -455,6 +509,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
 
           if (eventType === 'INSERT') {
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: row.id,
               type: 'evento',
@@ -487,6 +542,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
 
           if (eventType === 'INSERT') {
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: row.id,
               type: 'ocorrencia',
@@ -519,6 +575,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
 
           if (eventType === 'INSERT') {
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: row.id,
               type: 'nota',
@@ -549,6 +606,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
 
           if (eventType === 'INSERT') {
+            // Frequencia shouldn't have badge but we trigger update just in case for other modules sync
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: row.id,
               type: 'frequencia',
@@ -576,6 +635,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
 
           if (eventType === 'INSERT') {
+            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: merged.id,
               type: 'momento',
@@ -594,6 +654,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       })
 
       .subscribe(status => {
+        if (!isMounted) return;
         if (status === 'SUBSCRIBED') {
           console.log(`✅ [Realtime] Conectado ao canal: ${channelName}`)
         } else if (status === 'CHANNEL_ERROR') {
@@ -602,6 +663,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       })
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(channel)
       console.log(`🔌 [Realtime] Canal desconectado: ${channelName}`)
     }
