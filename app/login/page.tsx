@@ -462,18 +462,13 @@ export default function LoginPage() {
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:420, position:'relative', zIndex:1, margin: '0 auto' }}>
       
       {/* HEADER MOBILE (logo, title, subtitle) */}
-      <div className="mobile-only" style={{ display:'none', flexDirection:'column', alignItems:'center', marginTop: 10, marginBottom: 24, zIndex: 10 }}>
+      <div className="mobile-only" style={{ display:'none', flexDirection:'column', alignItems:'center', marginTop: 10, marginBottom: 16, zIndex: 10 }}>
         {/* Glow behind logo */}
-        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:20 }}>
+        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:16 }}>
           <span style={{ fontSize:38, color:'#fff' }}>⚡</span>
         </div>
-        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:6 }}>IMPACTO <span style={{ color:'#8b5cf6' }}>EDU</span></div>
-        <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:28 }}>Enterprise Learning Suite</div>
-        
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 16px', borderRadius:100, border:'1px solid rgba(59,130,246,0.25)', marginBottom:24 }}>
-          <span style={{ fontSize:13 }}>🔒</span>
-          <span style={{ fontSize:11, fontWeight:800, color:'#60a5fa', letterSpacing:'0.06em' }}>ACESSO SEGURO • 256-bit SSL</span>
-        </div>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:4 }}>IMPACTO <span style={{ color:'#8b5cf6' }}>EDU</span></div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:8 }}>Enterprise Learning Suite</div>
       </div>
 
       <div className="login-header-group" style={{ marginBottom:32, textAlign: 'center' }}>
@@ -900,6 +895,14 @@ export default function LoginPage() {
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
       {LeftPanel}
       <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 40px', background:'linear-gradient(160deg,#08101e 0%,#090d1f 50%,#0a0e1c 100%)', position:'relative', overflow:'hidden', overflowY:'auto' }}>
+        
+        {/* Animated Light Points */}
+        <div className="mobile-only" style={{ position:'absolute', top:'5%', left:'5%', width:4, height:4, borderRadius:'50%', background:'#60a5fa', boxShadow:'0 0 12px #60a5fa', animation:'blink 3s infinite ease-in-out, floatOrb1 8s infinite', pointerEvents:'none' }} />
+        <div className="mobile-only" style={{ position:'absolute', top:'15%', right:'5%', width:3, height:3, borderRadius:'50%', background:'#a78bfa', boxShadow:'0 0 10px #a78bfa', animation:'blink 4s infinite ease-in-out 1s, floatOrb2 12s infinite', pointerEvents:'none' }} />
+        <div className="mobile-only" style={{ position:'absolute', top:'45%', left:'10%', width:5, height:5, borderRadius:'50%', background:'#34d399', boxShadow:'0 0 12px #34d399', animation:'blink 5s infinite ease-in-out 2s, floatOrb3 10s infinite', pointerEvents:'none' }} />
+        <div className="mobile-only" style={{ position:'absolute', bottom:'15%', right:'10%', width:6, height:6, borderRadius:'50%', background:'#3b82f6', boxShadow:'0 0 16px #3b82f6', animation:'blink 3.5s infinite ease-in-out 0.5s, floatOrb1 9s infinite', pointerEvents:'none' }} />
+        <div className="mobile-only" style={{ position:'absolute', bottom:'30%', left:'5%', width:4, height:4, borderRadius:'50%', background:'#818cf8', boxShadow:'0 0 14px #818cf8', animation:'blink 4.5s infinite ease-in-out 1.5s, floatOrb2 11s infinite', pointerEvents:'none' }} />
+
         <div style={{ position:'absolute', top:'20%', right:'10%', width:300, height:300, borderRadius:'50%', background:'radial-gradient(circle,rgba(139,92,246,0.06) 0%,transparent 70%)', pointerEvents:'none' }} />
         <div style={{ position:'absolute', bottom:'15%', left:'5%', width:200, height:200, borderRadius:'50%', background:'radial-gradient(circle,rgba(59,130,246,0.05) 0%,transparent 70%)', pointerEvents:'none' }} />
         {step === 'login'                && LoginContent}
@@ -929,7 +932,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <div style={{ position:'absolute', bottom:24, right:32, display:'flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:100, background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)' }}>
+        <div className="hide-on-mobile" style={{ position:'absolute', bottom:24, right:32, display:'flex', alignItems:'center', gap:8, padding:'6px 14px', borderRadius:100, background:'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.15)' }}>
           <div style={{ width:5, height:5, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981' }} />
           <span style={{ fontSize:10, color:'rgba(16,185,129,0.7)', fontWeight:700, letterSpacing:'0.06em' }}>SISTEMA SEGURO</span>
         </div>
@@ -945,6 +948,7 @@ export default function LoginPage() {
         @keyframes fadeSlideIn { from{opacity:0;transform:translateX(-16px)} to{opacity:1;transform:translateX(0)} }
         @keyframes shimmerBtn { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
         @keyframes progressFill { from{width:0%} to{width:100%} }
+        @keyframes gradientBG { 0% { background-position: 0% 50% } 50% { background-position: 100% 50% } 100% { background-position: 0% 50% } }
         input::placeholder { color:rgba(255,255,255,0.2) !important; }
         input:-webkit-autofill { -webkit-box-shadow:0 0 0 30px #0d1a3a inset !important; -webkit-text-fill-color:#fff !important; }
         
@@ -953,7 +957,9 @@ export default function LoginPage() {
           .login-wrapper {
             flex-direction: column !important;
             overflow-y: auto !important;
-            background: #0b0d19 !important;
+            background: linear-gradient(-45deg, #050a18, #0a0f2e, #111424, #08101e) !important;
+            background-size: 400% 400% !important;
+            animation: gradientBG 15s ease infinite !important;
           }
           .login-left-panel {
             display: none !important;
