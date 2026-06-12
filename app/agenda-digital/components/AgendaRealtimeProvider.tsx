@@ -273,6 +273,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 await OS.login(userId)
                 window.__OS_USER_ID__ = userId
                 console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
+                
+                // Add aliases for responsavel_id and aluno_id to allow backend to target them
+                if (OS.User && typeof OS.User.addAlias === 'function') {
+                  if (currentUser.responsavel_id) {
+                    OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id)).catch(() => {})
+                  }
+                  if (currentUser.aluno_id) {
+                    OS.User.addAlias('aluno_id', String(currentUser.aluno_id)).catch(() => {})
+                  }
+                }
               }
             } catch (loginErr: any) {
               console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)

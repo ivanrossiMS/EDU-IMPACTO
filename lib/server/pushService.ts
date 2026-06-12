@@ -160,8 +160,12 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   // ── Construção do Payload ─────────────────────────────────────────────────
   const payload: Record<string, any> = {
     app_id: ONESIGNAL_APP_ID,
-    include_external_user_ids: params.targetUserIds,
-    channel_for_external_user_ids: 'push',
+    include_aliases: {
+      external_id: params.targetUserIds,
+      responsavel_id: params.targetUserIds,
+      aluno_id: params.targetUserIds
+    },
+    target_channel: 'push',
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
     // Data de deep link — abre a página correta ao clicar na notificação
