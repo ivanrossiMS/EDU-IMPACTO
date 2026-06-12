@@ -459,67 +459,91 @@ export default function LoginPage() {
   // STEP: Login
   // ────────────────────────────────────────────────────────────────
   const LoginContent = (
-    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:420, position:'relative', zIndex:1 }}>
-      <div className="login-header-group" style={{ marginBottom:36 }}>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', marginBottom:20 }}>
+    <div className="login-form-wrapper" style={{ width:'100%', maxWidth:420, position:'relative', zIndex:1, margin: '0 auto' }}>
+      
+      {/* HEADER MOBILE (logo, title, subtitle) */}
+      <div className="mobile-only" style={{ display:'none', flexDirection:'column', alignItems:'center', marginTop: 10, marginBottom: 24, zIndex: 10 }}>
+        {/* Glow behind logo */}
+        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:20 }}>
+          <span style={{ fontSize:38, color:'#fff' }}>⚡</span>
+        </div>
+        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:6 }}>IMPACTO <span style={{ color:'#8b5cf6' }}>EDU</span></div>
+        <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:28 }}>Enterprise Learning Suite</div>
+        
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 16px', borderRadius:100, border:'1px solid rgba(59,130,246,0.25)', marginBottom:24 }}>
+          <span style={{ fontSize:13 }}>🔒</span>
+          <span style={{ fontSize:11, fontWeight:800, color:'#60a5fa', letterSpacing:'0.06em' }}>ACESSO SEGURO • 256-bit SSL</span>
+        </div>
+      </div>
+
+      <div className="login-header-group" style={{ marginBottom:32, textAlign: 'center' }}>
+        <div className="hide-on-mobile" style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', marginBottom:20 }}>
           <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981', animation:'blink 2s ease-in-out infinite' }} />
           <span style={{ fontSize:11, fontWeight:700, color:'#60a5fa', letterSpacing:'0.06em' }}>ACESSO SEGURO — 256-bit SSL</span>
         </div>
-        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Bem-vindo de volta</h2>
-        <p className="login-p" style={{ fontSize:14, color:'rgba(255,255,255,0.35)' }}>Entre com suas credenciais para acessar a plataforma.</p>
+        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:12 }}>Bem-vindo de volta!</h2>
+        <p className="login-p" style={{ fontSize:15, color:'rgba(255,255,255,0.4)', lineHeight:1.5, margin: '0 auto', maxWidth: 300 }}>Entre com suas credenciais para acessar sua plataforma.</p>
       </div>
 
       <div className="login-card" style={cardStyle}>
-        <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:20 }}>
+        <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:22 }}>
           <div>
             <Label text="E-mail, Matrícula (Aluno) ou CPF" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
-              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
-              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="E-mail, matrícula ou CPF" autoComplete="username"
+              <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>👤</span>
+              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="Digite seu e-mail, matrícula ou CPF" autoComplete="username"
                 suppressHydrationWarning
-                style={{ ...baseInputStyle, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.1)' }} onFocus={focusOn} onBlur={focusOff} />
+                style={{ ...baseInputStyle, paddingLeft: 46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
             </div>
           </div>
           <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
               <Label text="Senha" />
-              <button type="button" onClick={(e) => { e.preventDefault(); window.location.href = '/esqueci-senha'; }} style={{ fontSize:11, color:'#60a5fa', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50 }}>Esqueci minha senha</button>
+              <button type="button" onClick={(e) => { e.preventDefault(); window.location.href = '/esqueci-senha'; }} style={{ fontSize:12, color:'#a78bfa', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0 }}>Esqueci minha senha</button>
             </div>
             <div style={{ position:'relative' }} suppressHydrationWarning>
-              <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>🔒</span>
-              <input type={showPw?'text':'password'} value={password} onChange={e=>{setPassword(e.target.value);setLoginError('')}} placeholder="••••••••••" autoComplete="current-password"
+              <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>🔒</span>
+              <input type={showPw?'text':'password'} value={password} onChange={e=>{setPassword(e.target.value);setLoginError('')}} placeholder="Digite sua senha" autoComplete="current-password"
                 suppressHydrationWarning
-                style={{ ...baseInputStyle, paddingRight:44, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.1)' }} onFocus={focusOn} onBlur={focusOff} />
-              <button type="button" onClick={()=>setShowPw(p=>!p)} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#fff' }}>{showPw?'🙈':'👁'}</button>
+                style={{ ...baseInputStyle, paddingLeft: 46, paddingRight:46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
+              <button type="button" onClick={()=>setShowPw(p=>!p)} style={{ position:'absolute', right:16, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16, color:'rgba(255,255,255,0.5)' }}>{showPw?'🙈':'👁'}</button>
             </div>
           </div>
           <ErrorBox msg={loginError} />
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <input type="checkbox" id="remember" defaultChecked style={{ width:16, height:16, accentColor:'#3b82f6', cursor:'pointer' }} />
-            <label htmlFor="remember" style={{ fontSize:13, color:'rgba(255,255,255,0.4)', cursor:'pointer' }}>Manter conectado por 30 dias</label>
+          
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <input type="checkbox" id="remember" defaultChecked style={{ width:20, height:20, accentColor:'#2563eb', cursor:'pointer', borderRadius: 4 }} />
+            <label htmlFor="remember" style={{ fontSize:14, color:'rgba(255,255,255,0.5)', cursor:'pointer' }}>Manter conectado por 30 dias</label>
           </div>
-          <button type="submit" disabled={loginLoading} style={btnBase(loginLoading)}
-            onMouseEnter={e=>{if(!loginLoading){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 16px 40px rgba(59,130,246,0.5)'}}}
-            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 8px 26px rgba(59,130,246,0.4)'}}>
+
+          <button type="submit" disabled={loginLoading} style={{...btnBase(loginLoading), padding: '16px', background: loginLoading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(90deg, #2563eb 0%, #a855f7 100%)', borderRadius: 16, boxShadow: loginLoading ? 'none' : '0 8px 32px rgba(139,92,246,0.4)'}}
+            onMouseEnter={e=>{if(!loginLoading){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 12px 40px rgba(139,92,246,0.6)'}}}
+            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 8px 32px rgba(139,92,246,0.4)'}}>
             {!loginLoading && <ShimmerOverlay />}
             <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-              {loginLoading ? <><Spinner /><span>Autenticando...</span></> : <><span>Entrar na Plataforma</span><span style={{ fontSize:18 }}>→</span></>}
+              {loginLoading ? <><Spinner /><span>Autenticando...</span></> : <><span style={{ fontSize: 16 }}>Entrar na Plataforma</span><span style={{ fontSize:18 }}>→</span></>}
             </div>
           </button>
         </form>
 
         {/* Separador + Primeiro Acesso */}
-        <div style={{ marginTop:22 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
-            <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.06)' }} />
-            <span style={{ fontSize:11, color:'rgba(255,255,255,0.2)', fontWeight:600 }}>OU</span>
-            <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.06)' }} />
+        <div style={{ marginTop:28 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+            <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.08)' }} />
+            <span style={{ fontSize:12, color:'rgba(255,255,255,0.3)', fontWeight:700 }}>OU</span>
+            <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.08)' }} />
           </div>
           <button type="button" onClick={()=>setStep('first_access_verify')}
-            style={{ width:'100%', padding:'14px', borderRadius:14, background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.7)', fontSize:14, fontWeight:700, cursor:'pointer', transition:'all 0.25s', fontFamily:"'Outfit',sans-serif" }}
-            onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.1)';e.currentTarget.style.borderColor='rgba(139,92,246,0.4)';e.currentTarget.style.color='#c4b5fd';e.currentTarget.style.transform='translateY(-1px)'}}
-            onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.02)';e.currentTarget.style.borderColor='rgba(255,255,255,0.1)';e.currentTarget.style.color='rgba(255,255,255,0.7)';e.currentTarget.style.transform=''}}>
-            <span style={{ marginRight:8 }}>🔑</span>Primeiro Acesso (Alunos/Pais)
+            style={{ width:'100%', padding:'16px', borderRadius:16, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', fontSize:14, fontWeight:700, cursor:'pointer', transition:'all 0.25s', fontFamily:"'Outfit',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.06)'}}
+            onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'}}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 14 }}>🔑</span>
+              </div>
+              <span>Primeiro Acesso (Alunos/Pais)</span>
+            </div>
+            <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 20, paddingRight: 4 }}>›</span>
           </button>
 
           {isSystemEmpty && (
@@ -532,8 +556,24 @@ export default function LoginPage() {
           )}
         </div>
       </div>
-      <div style={{ marginTop:28, textAlign:'center' }}>
-        <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>IMPACTO EDU v3.2.0 • © 2026 Todos os direitos reservados</p>
+      
+      {/* Bottom Disclaimer Mobile */}
+      <div className="mobile-only" style={{ display: 'none', flexDirection: 'column', alignItems: 'center', marginTop: 32, paddingBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24, maxWidth: 300 }}>
+          <span style={{ fontSize: 20, color: 'rgba(255,255,255,0.2)', filter:'grayscale(1)' }}>🛡️</span>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', lineHeight: 1.5, margin: 0 }}>
+            Seus dados estão protegidos com<br/>criptografia de ponta.
+          </p>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 20 }}>IMPACTO EDU v3.2.0 • © 2025 Todos os direitos reservados.</p>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:100, border:'1px solid rgba(16,185,129,0.15)', background: 'rgba(16,185,129,0.05)' }}>
+          <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 8px #10b981' }} />
+          <span style={{ fontSize:11, color:'#34d399', fontWeight:800, letterSpacing:'0.08em' }}>SISTEMA SEGURO</span>
+        </div>
+      </div>
+
+      <div className="hide-on-mobile" style={{ marginTop:28, textAlign:'center' }}>
+        <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>IMPACTO EDU v3.2.0 • © 2025 Todos os direitos reservados</p>
       </div>
     </div>
   )
