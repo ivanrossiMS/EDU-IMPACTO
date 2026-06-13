@@ -11,14 +11,31 @@ export async function GET(request: Request) {
   try {
     const supabase = await createProtectedClient()
     
-    // Filter for today's calls only
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const url = new URL(request.url)
+    const fromDate = url.searchParams.get('from')
+    const toDate = url.searchParams.get('to')
+    const studentId = url.searchParams.get('studentId')
     
-    const { data, error } = await supabase
-      .from('saida_calls')
-      .select('*')
-      .gte('created_at', today.toISOString())
+    let query = supabase.from('saida_calls').select('*')
+    
+    if (studentId) {
+      query = query.eq('dados->>studentId', studentId)
+    }
+    
+    if (fromDate) {
+      query = query.gte('created_at', fromDate + 'T00:00:00')
+    } else {
+      // Filter for today's calls only if no from date provided
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      query = query.gte('created_at', today.toISOString())
+    }
+    
+    if (toDate) {
+      query = query.lte('created_at', toDate + 'T23:59:59')
+    }
+    
+    const { data, error } = await query
       
     if (error) throw new Error(error.message)
     

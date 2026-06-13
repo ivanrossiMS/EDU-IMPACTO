@@ -5,6 +5,7 @@ import { DataProvider } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApiQuery } from '@/hooks/useApi'
+import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 import {
   Download, FileText, Filter, Calendar, Clock, GraduationCap,
@@ -66,7 +67,7 @@ interface AlunoRow {
 // TAB 1: HISTÓRICO DE CHAMADAS
 // ─────────────────────────────────────────────────────────────────────────────
 function TabHistoricoChamadas() {
-  const { activeCalls, logs } = useSaida()
+  const { logs } = useSaida()
   const isMobile = useIsMobile()
   const [turmas] = useSupabaseArray<any>('turmas');
   
@@ -84,6 +85,9 @@ function TabHistoricoChamadas() {
     searchGuardian: '',
     statusFilter: ''
   })
+  
+  const [historicoCalls, setHistoricoCalls] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
   const getTurmaNome = (id: string) => {
     return (turmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
@@ -91,15 +95,38 @@ function TabHistoricoChamadas() {
 
   const filtered = useMemo(() => {
     if (!hasSearched) return []
-    return (activeCalls || []).filter(c => {
-      if (appliedFilters.dateFrom && new Date(c.calledAt) < new Date(appliedFilters.dateFrom)) return false
-      if (appliedFilters.dateTo   && new Date(c.calledAt) > new Date(appliedFilters.dateTo + 'T23:59:59')) return false
+    return (historicoCalls || []).filter(c => {
       if (appliedFilters.searchStudent && !c.studentName.toLowerCase().includes(appliedFilters.searchStudent.toLowerCase())) return false
       if (appliedFilters.searchGuardian && !c.guardianName.toLowerCase().includes(appliedFilters.searchGuardian.toLowerCase())) return false
       if (appliedFilters.statusFilter && c.status !== appliedFilters.statusFilter) return false
       return true
     }).sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime())
-  }, [activeCalls, appliedFilters, hasSearched])
+  }, [historicoCalls, appliedFilters, hasSearched])
+
+  const handleBuscar = async () => {
+    setIsLoading(true)
+    setHasSearched(true)
+    setAppliedFilters({ dateFrom, dateTo, searchStudent, searchGuardian, statusFilter })
+    
+    try {
+      const urlParams = new URLSearchParams()
+      if (dateFrom) urlParams.append('from', dateFrom)
+      if (dateTo) urlParams.append('to', dateTo)
+      
+      const req = await fetch(`/api/saida/calls?${urlParams.toString()}`)
+      if (!req.ok) throw new Error('Falha ao buscar chamadas')
+      
+      const data = await req.json()
+      
+      // A API já retorna os dados mapeados, basta settar
+      setHistoricoCalls(data || [])
+    } catch(err) {
+      console.error(err)
+      alert('Erro ao buscar histórico de chamadas')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const exportExcel = () => {
     const rows = filtered.map(c => ({
@@ -187,17 +214,14 @@ function TabHistoricoChamadas() {
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          <button onClick={() => {
-            setAppliedFilters({ dateFrom, dateTo, searchStudent, searchGuardian, statusFilter })
-            setHasSearched(true)
-          }}
+          <button onClick={handleBuscar} disabled={isLoading}
             style={{ 
               padding: '10px 24px', borderRadius: 10, border: 'none', 
-              background: '#06b6d4', color: '#fff', cursor: 'pointer', 
+              background: isLoading ? 'hsl(var(--bg-overlay))' : '#06b6d4', color: isLoading ? 'hsl(var(--text-muted))' : '#fff', cursor: isLoading ? 'not-allowed' : 'pointer', 
               fontWeight: 700, fontSize: 12, display: 'flex', 
               alignItems: 'center', justifyContent: 'center', gap: 6 
             }}>
-            <Filter size={13}/> Buscar
+            <Filter size={13}/> {isLoading ? 'Buscando...' : 'Buscar'}
           </button>
         </div>
       </div>

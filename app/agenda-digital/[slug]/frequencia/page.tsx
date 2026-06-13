@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
-import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2 } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2, GraduationCap } from 'lucide-react'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
@@ -10,6 +10,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { ptBR } from 'date-fns/locale'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { supabase } from '@/lib/supabase'
 
 export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: string }>}) {
   const { adConfig } = useAgendaDigital()
@@ -48,6 +49,23 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
       queryClient.invalidateQueries({ queryKey: ['frequencias-aluno'] })
     }
   });
+  // Escuta em tempo real o Supabase para a tabela saida_calls (independente do dispositivo)
+  React.useEffect(() => {
+    const channel = supabase.channel('saida_calls_agenda_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'saida_calls' },
+        (payload: any) => {
+          // Invalida a query do React Query para forçar recarregamento na página do aluno
+          queryClient.invalidateQueries({ queryKey: ['saida-calls-aluno'] })
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [queryClient])
 
   // State for interactive calendar
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -72,6 +90,14 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     ['portaria-eventos-aluno', resolvedParams.slug],
     '/api/portaria/eventos',
     { aluno_id: resolvedParams.slug },
+    { enabled: !!resolvedParams.slug }
+  )
+
+  // Histórico de saídas confirmadas (painel chamadas)
+  const { data: saidaCalls = [] } = useApiQuery<any[]>(
+    ['saida-calls-aluno', resolvedParams.slug],
+    '/api/saida/calls',
+    { studentId: resolvedParams.slug, from: '2020-01-01', to: '2030-12-31' },
     { enabled: !!resolvedParams.slug }
   )
 
@@ -185,6 +211,21 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
     return historicoReal.filter(h => h.data === selectedDateStr)
   }, [selectedDate, historicoReal])
 
+  const selectedSaidaCalls = useMemo(() => {
+    if (!selectedDate) return []
+    return saidaCalls.filter(c => {
+      if (c.status !== 'confirmed') return false
+      // Usa confirmedAt se existir, se não usa calledAt
+      const dateStr = c.confirmedAt || c.calledAt
+      if (!dateStr) return false
+      try {
+        return isSameDay(parseISO(dateStr), selectedDate)
+      } catch (e) {
+        return false
+      }
+    })
+  }, [selectedDate, saidaCalls])
+
   if (isLoadingFrequencias) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16 }}>
@@ -235,6 +276,36 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
         </div>
       </motion.div>
 
+      {/* Aviso de Registro de Frequência */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        style={{
+          background: 'linear-gradient(to right, #eff6ff, #f8fafc)',
+          borderLeft: '4px solid #3b82f6',
+          borderRadius: '0 16px 16px 0',
+          padding: '18px 24px',
+          marginBottom: 32,
+          display: 'flex',
+          gap: 16,
+          alignItems: 'flex-start',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+        }}
+      >
+        <div style={{ background: '#3b82f6', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}>
+          <AlertCircle size={18} color="#fff" strokeWidth={2.5} />
+        </div>
+        <div>
+          <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#1e3a8a', marginBottom: 6 }}>
+            Como a frequência é registrada?
+          </h4>
+          <p style={{ margin: 0, fontSize: 14, color: '#475569', lineHeight: 1.5, fontWeight: 500 }}>
+            Neste aplicativo, a <strong>entrada</strong> do aluno é computada automaticamente através da catraca de acesso. 
+            A <strong>saída</strong> é registrada no momento em que você chama o aluno pelo painel (com TAG ou botão de chamar) e a liberação é confirmada na portaria.
+          </p>
+        </div>
+      </motion.div>
 
       {/* Calendário Dinâmico Interativo */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ background: '#fff', borderRadius: 24, border: '1px solid #f1f5f9', boxShadow: '0 15px 35px rgba(0,0,0,0.02)', overflow: 'hidden', padding: '24px 28px', marginBottom: 32 }}>
@@ -361,16 +432,17 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {selectedRecords.length === 0 ? (
+                {selectedRecords.length === 0 && selectedSaidaCalls.length === 0 ? (
                   <div style={{ padding: '40px 24px', textAlign: 'center' }}>
                     <Activity size={40} color="#e2e8f0" style={{ margin: '0 auto 12px' }} />
                     <div style={{ fontSize: 16, fontWeight: 700, color: '#64748b' }}>Nenhum lançamento neste dia</div>
                     <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4 }}>
-                      {isFuture(selectedDate) ? 'Data futura ou feriado.' : 'Não há registros de presença ou falta cadastrados.'}
+                      {isFuture(selectedDate) ? 'Data futura ou feriado.' : 'Não há registros de presença, falta ou saída cadastrados.'}
                     </div>
                   </div>
                 ) : (
-                  selectedRecords.map((h, i) => {
+                  <>
+                    {selectedRecords.map((h, i) => {
                     const isPresenca = h.status === 'P'
                     const isFaltaJustificada = h.status === 'J'
                     
@@ -436,7 +508,67 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
                         </div>
                       </div>
                     )
-                  })
+                  })}
+
+                  {/* Saída Confirmada Cards */}
+                  {selectedSaidaCalls.map((call, i) => {
+                    const confirmedTime = call.confirmedAt 
+                      ? new Date(call.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+                      : ''
+
+                    return (
+                      <div 
+                        key={`saida-${i}`} 
+                        className="ad-freq-hist-item" 
+                        style={{ 
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                          padding: '24px 28px', borderTop: '1px solid #f1f5f9'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                           <div style={{ 
+                             background: 'linear-gradient(135deg, #a855f7 0%, #d946ef 100%)', 
+                             color: '#fff', 
+                             padding: 16, borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                             boxShadow: '0 8px 16px rgba(217, 70, 239, 0.25)'
+                           }}>
+                             <GraduationCap size={32} />
+                           </div>
+                           <div>
+                             <div style={{ fontWeight: 900, fontSize: 18, color: '#1e293b' }}>
+                               Saída Confirmada
+                             </div>
+                             <div style={{ fontSize: 14, color: '#64748b', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 8, fontWeight: 500 }}>                               
+                               <span style={{ 
+                                 display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                 fontSize: 12, fontWeight: 800, color: '#a855f7', 
+                                 background: '#faf5ff', padding: '6px 12px', borderRadius: 10, border: '1px solid #f3e8ff'
+                               }}>
+                                 <Clock size={16} /> {confirmedTime}
+                               </span>
+                               {call.guardianName && (
+                                 <span style={{ 
+                                   display: 'inline-flex', alignItems: 'center', gap: 6, 
+                                   fontSize: 12, fontWeight: 800, color: '#64748b', 
+                                   background: '#f1f5f9', padding: '6px 12px', borderRadius: 10 
+                                 }}>
+                                   Por: {call.guardianName}
+                                 </span>
+                               )}
+                             </div>
+                           </div>
+                        </div>
+                        <div className="ad-freq-hist-badge" style={{
+                          padding: '8px 16px', borderRadius: 14, fontSize: 14, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1,
+                          background: '#fdf4ff',
+                          color: '#c026d3'
+                        }}>
+                          Liberado
+                        </div>
+                      </div>
+                    )
+                  })}
+                  </>
                 )}
               </div>
             </div>

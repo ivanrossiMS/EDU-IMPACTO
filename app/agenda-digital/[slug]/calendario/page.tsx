@@ -234,13 +234,15 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
   }, [eventosFiltrados, aluno?.id]);
 
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 40 }}>
+    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 100 }}>
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 768px) {
            .ad-calendar-mobile-container .page-header { align-items: center !important; text-align: center !important; flex-direction: column !important; gap: 12px !important; }
            .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
            .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
            .ad-calendar-bottom-panels { grid-template-columns: 1fr !important; }
+           .ad-calendar-right-col { height: auto !important; overflow-y: visible !important; }
+           .ad-calendar-inner-scroll { max-height: none !important; overflow-y: visible !important; }
         }
       `}} />
 
@@ -296,7 +298,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
         </div>
         
         {/* Right Column: Events and Birthday sub-panels */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
+        <div className="ad-calendar-right-col" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
           
           {/* 📍 Events of the selected day Card */}
           <motion.div 
@@ -407,7 +409,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
                 <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Aniversários do Mês</span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+              <div className="ad-calendar-inner-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
                 {loadingNivers ? (
                   <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
                 ) : aniversariantes.length === 0 ? (
@@ -467,7 +469,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
                 <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Próximos Compromissos</span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+              <div className="ad-calendar-inner-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
                 {proximosEventos.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Sem eventos futuros</div>
                 ) : (
