@@ -312,20 +312,28 @@ export function ComunicadoViewModal({
 
   const handleDownload = (parsed: any) => {
     if (parsed.url) {
-      if (parsed.url.toLowerCase().endsWith('.pdf') || parsed.mime === 'application/pdf') {
+      const isCapacitor = typeof window !== 'undefined' && (window as any).Capacitor;
+      
+      if (!isCapacitor && (parsed.url.toLowerCase().endsWith('.pdf') || parsed.mime === 'application/pdf')) {
          if (setMaximizedPdfStr) {
            setMaximizedPdfStr(parsed.url);
            return;
          }
       }
-      // Se não for PDF ou não tiver handler, abre em nova aba/janela
-      const a = document.createElement('a');
-      a.href = parsed.url;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      
+      if (isCapacitor) {
+        // No Capacitor, iframe de PDF falha no iOS. target="_blank" em tags <a> também falha.
+        // O ideal é usar window.open com _system.
+        window.open(parsed.url, '_system') || window.open(parsed.url, '_blank');
+      } else {
+        const a = document.createElement('a');
+        a.href = parsed.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
     } else {
       alert(`Falha ao abrir ${parsed.name}`)
     }
@@ -611,10 +619,10 @@ export function ComunicadoViewModal({
                   const parsed = parseAnexo(anexo)
                   if (!parsed) return null
                   
-                  const isForm = parsed.name.startsWith('Formulário:')
-                  const isRel = parsed.name.startsWith('Relatório:')
-                  const isReportTask = parsed.name.startsWith('Tarefa de Relatório:')
-                  const isReportPayload = parsed.url.startsWith('payload:') || parsed.mime === 'report-payload' || parsed.name.includes('12at') || parsed.name.startsWith('Relatório Personalizado:')
+                  const isForm = parsed.name.startsWith('Formulário: ') && parsed.url.startsWith('form:')
+                  const isRel = parsed.name.startsWith('Relatório: ') && parsed.url.startsWith('form:')
+                  const isReportTask = parsed.name.startsWith('Tarefa de Relatório:') && parsed.url.startsWith('report-task:')
+                  const isReportPayload = parsed.url.startsWith('payload:') || parsed.mime === 'report-payload'
                   const isImg = parsed.url.startsWith('data:image/') || parsed.mime.startsWith('image/') || parsed.name.toLowerCase().endsWith('.png') || parsed.name.toLowerCase().endsWith('.jpg') || parsed.name.toLowerCase().endsWith('.jpeg') || parsed.name.toLowerCase().endsWith('.webp') || parsed.name.toLowerCase().endsWith('.gif')
                   const isVid = parsed.mime.startsWith('video/') || parsed.url.includes('.mov') || parsed.url.includes('.mp4') || parsed.name.toLowerCase().endsWith('.mov') || parsed.name.toLowerCase().endsWith('.mp4')
                   
