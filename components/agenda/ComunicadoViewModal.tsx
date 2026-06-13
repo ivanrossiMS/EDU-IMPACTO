@@ -255,7 +255,7 @@ export function ComunicadoViewModal({
             usageType: 'common'
           })
           if (uploadRes.ok && uploadRes.url) {
-            setPendingAnexos(prev => [...prev, uploadRes.url])
+            setPendingAnexos(prev => [...prev, uploadRes.url as string])
           } else {
             console.error('Audio upload failed:', uploadRes.error)
           }
@@ -332,9 +332,8 @@ export function ComunicadoViewModal({
           file: file,
           usageType: 'common'
         })
-        
         if (uploadRes.ok && uploadRes.url) {
-          urls.push(uploadRes.url)
+          urls.push(uploadRes.url as string)
         } else {
           console.error('Failed to upload file:', file.name, uploadRes.error)
         }
