@@ -104,6 +104,7 @@ export function ComunicadoViewModal({
   const [loadingMsg, setLoadingMsg] = useState(true)
   const [newMessage, setNewMessage] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [isInputFocused, setIsInputFocused] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
@@ -455,6 +456,11 @@ export function ComunicadoViewModal({
 
         <motion.div 
           className="cvm-modal-container"
+          style={{ 
+            boxSizing: 'border-box',
+            paddingBottom: (isInputFocused && typeof window !== 'undefined' && window.innerWidth < 768) ? '45vh' : 0, 
+            transition: 'padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
+          }}
           initial={{scale: 0.95, y: 20}} 
           animate={{scale: 1, y: 0}} 
           exit={{scale: 0.95, y: 20}} 
@@ -814,10 +820,12 @@ export function ComunicadoViewModal({
                   value={newMessage}
                   onChange={e => setNewMessage(e.target.value)}
                   onFocus={(e) => {
+                    setIsInputFocused(true);
                     setTimeout(() => {
-                      e.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                     }, 300);
                   }}
+                  onBlur={() => setIsInputFocused(false)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault()

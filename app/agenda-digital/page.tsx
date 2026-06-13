@@ -76,9 +76,30 @@ function AgendaDigitalIndexContent() {
         fetchAlunoId()
         return
       }
+      // Check if user is Responsável and has only one child
+      const fetchResponsavelChildren = async () => {
+        try {
+          const respId = currentUser?.id
+          if (!respId) {
+            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+            return
+          }
+          const { data: relacoes } = await supabase
+            .from('aluno_responsavel')
+            .select('aluno_id')
+            .eq('responsavel_id', respId)
+            
+          if (relacoes && relacoes.length === 1 && relacoes[0].aluno_id) {
+            router.replace(`/agenda-digital/${relacoes[0].aluno_id}/${redirect}${paramStr}`)
+          } else {
+            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+          }
+        } catch (e) {
+          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+        }
+      }
       
-      // Default fallback for other roles
-      router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+      fetchResponsavelChildren()
     }
   }, [currentUserPerfil, currentUser, router, searchParams])
 
