@@ -168,8 +168,9 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     target_channel: 'push',
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
-    // Data de deep link — abre a página correta ao clicar na notificação
-    ...(params.url && { url: params.url }),
+    // Use web_url ao invés de url. Assim, o app nativo não abre o navegador, 
+    // e o roteamento interno (deep link) é feito pelo listener no AgendaRealtimeProvider.
+    ...(params.url && { web_url: params.url }),
     // Dados extras para o service worker processar (ex: tipo, aluno_id, rota)
     ...(params.data && { data: params.data }),
     // Agendamento
