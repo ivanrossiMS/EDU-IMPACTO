@@ -134,11 +134,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   if (slug) {
                     route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
                   } else {
-                    route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                    route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
                   }
                   
                   if (data?.item_id) {
-                    route += `?id=${data.item_id}`
+                    route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
                   }
 
                   if (route) {
@@ -199,11 +199,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                       if (slug) {
                         route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
                       } else {
-                        route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                        route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
                       }
                       
                       if (data?.item_id) {
-                        route += `?id=${data.item_id}`
+                        route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
                       }
 
                       if (route) {
