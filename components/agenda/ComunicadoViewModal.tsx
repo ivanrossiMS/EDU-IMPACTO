@@ -106,6 +106,8 @@ export function ComunicadoViewModal({
   const [isSending, setIsSending] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
 
   // Audio Recording State
