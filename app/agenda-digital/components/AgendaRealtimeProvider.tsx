@@ -136,6 +136,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   } else {
                     route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
                   }
+                  
+                  if (data?.item_id) {
+                    route += `?id=${data.item_id}`
+                  }
 
                   if (route) {
                     console.log(`[OneSignal] Deep link nativo → ${route}`)
@@ -196,6 +200,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                         route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
                       } else {
                         route = `/agenda-digital/${data.rota || typeToRoute(data.type)}`
+                      }
+                      
+                      if (data?.item_id) {
+                        route += `?id=${data.item_id}`
                       }
 
                       if (route) {

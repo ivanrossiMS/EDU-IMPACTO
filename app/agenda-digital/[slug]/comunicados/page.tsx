@@ -1,5 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -109,6 +110,21 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   
   const { data: comunicados = [], isLoading: loading, refetch } = useQueryComunicados(false, endpoint)
   
+  const searchParams = useSearchParams()
+  const queryId = searchParams.get('id')
+  
+  const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
+  
+  // Auto-open comunicado if queryId is present
+  useEffect(() => {
+    if (queryId && comunicados.length > 0 && !selectedComunicado) {
+      const target = comunicados.find((c: any) => c.id === queryId)
+      if (target) {
+        setSelectedComunicado(target)
+      }
+    }
+  }, [queryId, comunicados, selectedComunicado])
+  
   useEffect(() => {
     const handleUpdate = () => {
       refetch()
@@ -124,7 +140,6 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
     }
   }, [refetch])
 
-  const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
