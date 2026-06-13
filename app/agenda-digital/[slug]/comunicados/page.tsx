@@ -115,15 +115,23 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   
-  // Auto-open comunicado if queryId is present
+  // Auto-open comunicado if queryId is present (only once)
+  const hasAutoOpened = useRef(false)
   useEffect(() => {
-    if (queryId && comunicados.length > 0 && !selectedComunicado) {
+    if (queryId && comunicados.length > 0 && !hasAutoOpened.current) {
       const target = comunicados.find((c: any) => c.id === queryId)
       if (target) {
         setSelectedComunicado(target)
+        hasAutoOpened.current = true
+        
+        // Remove query param from URL so it doesn't trigger again on refresh
+        try {
+          const newUrl = window.location.pathname
+          window.history.replaceState({}, '', newUrl)
+        } catch(e) {}
       }
     }
-  }, [queryId, comunicados, selectedComunicado])
+  }, [queryId, comunicados])
   
   useEffect(() => {
     const handleUpdate = () => {
