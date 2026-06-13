@@ -341,6 +341,7 @@ export default function ColaboradorComunicadosPage() {
   const [openedReportPayloadStr, setOpenedReportPayloadStr] = useState<string | null>(null)
   const [maximizedImageStr, setMaximizedImageStr] = useState<string | null>(null)
   const [maximizedVideoStr, setMaximizedVideoStr] = useState<string | null>(null)
+  const [maximizedPdfStr, setMaximizedPdfStr] = useState<string | null>(null)
   const [formResp, setFormResp] = useState<Record<string, any>>({})
   const openedFormObj: FormTemplate | undefined = forms.find(x => x.name === openedFormStr?.replace('Formulário: ', ''))
 
@@ -1085,6 +1086,7 @@ export default function ColaboradorComunicadosPage() {
             setOpenedFormStr={setOpenedFormStr}
             setMaximizedImageStr={setMaximizedImageStr}
             setMaximizedVideoStr={setMaximizedVideoStr}
+            setMaximizedPdfStr={setMaximizedPdfStr}
             setOpenedReportTask={setOpenedReportTaskStr}
             setOpenedReportPayload={setOpenedReportPayloadStr}
             alunos={alunos}
@@ -1292,6 +1294,25 @@ export default function ColaboradorComunicadosPage() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {/* Modal de PDF Maximizada */}
+        {maximizedPdfStr && (
+          <Portal>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'none', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setMaximizedPdfStr(null)}>
+            <button className="btn btn-secondary" style={{ position: 'absolute', top: 24, right: 24, width: 48, height: 48, padding: 0, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: '2px solid rgba(255,255,255,0.8)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(15,23,42,0.85)', zIndex: 100001 }} onClick={(e) => { e.stopPropagation(); setMaximizedPdfStr(null); }}>
+              <X size={24} />
+            </button>
+            <motion.div 
+              initial={{scale:0.8, opacity:0}} animate={{scale:1, opacity:1}} exit={{scale:0.8, opacity:0}} transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              style={{ width: '95vw', height: '95vh', borderRadius: 16, boxShadow: '0 32px 128px rgba(15,23,42,0.85)', background: '#fff', overflow: 'hidden' }} 
+              onClick={e => e.stopPropagation()} 
+            >
+              <iframe src={maximizedPdfStr} style={{ width: '100%', height: '100%', border: 'none' }} title="Visualizador de PDF" />
+            </motion.div>
+          </motion.div>
+          </Portal>
+        )}
+      </AnimatePresence>
 
       {/* Modal Composer */}
       <NovoComunicadoModal

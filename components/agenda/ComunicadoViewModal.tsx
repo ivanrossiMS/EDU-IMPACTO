@@ -70,6 +70,7 @@ interface ComunicadoViewModalProps {
   setOpenedFormStr?: (anexo: string) => void
   setMaximizedImageStr?: (url: string) => void
   setMaximizedVideoStr?: (url: string) => void
+  setMaximizedPdfStr?: (url: string) => void
   setOpenedReportTask?: (anexo: string) => void
   setOpenedReportPayload?: (anexo: string) => void
   alunos?: any[]
@@ -90,6 +91,7 @@ export function ComunicadoViewModal({
   setOpenedFormStr,
   setMaximizedImageStr,
   setMaximizedVideoStr,
+  setMaximizedPdfStr,
   setOpenedReportTask,
   setOpenedReportPayload,
   alunos = [],
@@ -310,7 +312,20 @@ export function ComunicadoViewModal({
 
   const handleDownload = (parsed: any) => {
     if (parsed.url) {
-      window.open(parsed.url, '_blank')
+      if (parsed.url.toLowerCase().endsWith('.pdf') || parsed.mime === 'application/pdf') {
+         if (setMaximizedPdfStr) {
+           setMaximizedPdfStr(parsed.url);
+           return;
+         }
+      }
+      // Se não for PDF ou não tiver handler, abre em nova aba/janela
+      const a = document.createElement('a');
+      a.href = parsed.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } else {
       alert(`Falha ao abrir ${parsed.name}`)
     }

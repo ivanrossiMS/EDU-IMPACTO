@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import Portal from '@/components/Portal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Heart, Sparkles, Star } from 'lucide-react';
 import { ReportPayload, MOCK_TEMPLATES } from './types';
@@ -254,5 +254,5 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStu
   );
 
   if (!mounted) return null;
-  return createPortal(content, document.body);
+  return <Portal>{content}</Portal>;
 }

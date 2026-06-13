@@ -4,7 +4,7 @@ import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -164,16 +164,31 @@ export async function POST(request: Request) {
       // Disparar Pushes para cada comunicado
       for (const row of rows) {
         if (row.destino === 'interno') continue;
-        const targetIds = await getResponsavelIdsForTargets(row.dados)
-        if (targetIds.length > 0) {
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+        
+        for (const student of students) {
+          if (student.responsaveis_ids.length > 0) {
+            await sendAgendaPushNotification({
+              type: 'comunicados',
+              itemId: String(row.id),
+              title: `📢 Comunicado: ${row.titulo}`,
+              message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
+              targetUserIds: student.responsaveis_ids,
+              targetUrl: '/agenda-digital/comunicados',
+              metadata: { aluno_id: student.aluno_id }
+            }).catch(err => console.error("Push Error:", err))
+          }
+        }
+
+        if (directColaboradores.length > 0) {
           await sendAgendaPushNotification({
             type: 'comunicados',
             itemId: String(row.id),
             title: `📢 Comunicado: ${row.titulo}`,
             message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
-            targetUserIds: targetIds,
+            targetUserIds: directColaboradores,
             targetUrl: '/agenda-digital/comunicados'
-          }).catch(err => console.error("Push Error:", err))
+          }).catch(err => console.error("Push Error Colab:", err))
         }
       }
       
@@ -189,16 +204,31 @@ export async function POST(request: Request) {
     // Disparar Push (em background)
     // Disparar Push
     if (data.destino !== 'interno') {
-      const targetIds = await getResponsavelIdsForTargets(data.dados);
-      if (targetIds.length > 0) {
+      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+      
+      for (const student of students) {
+        if (student.responsaveis_ids.length > 0) {
+          await sendAgendaPushNotification({
+            type: 'comunicados',
+            itemId: String(data.id),
+            title: `📢 Comunicado: ${data.titulo}`,
+            message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
+            targetUserIds: student.responsaveis_ids,
+            targetUrl: '/agenda-digital/comunicados',
+            metadata: { aluno_id: student.aluno_id }
+          }).catch(err => console.error("Push Error:", err))
+        }
+      }
+
+      if (directColaboradores.length > 0) {
         await sendAgendaPushNotification({
           type: 'comunicados',
           itemId: String(data.id),
           title: `📢 Comunicado: ${data.titulo}`,
           message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
-          targetUserIds: targetIds,
+          targetUserIds: directColaboradores,
           targetUrl: '/agenda-digital/comunicados'
-        }).catch(err => console.error("Push Error:", err))
+        }).catch(err => console.error("Push Error Colab:", err))
       }
     }
 

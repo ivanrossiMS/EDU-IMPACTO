@@ -166,3 +166,120 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
   if (!colaboradoresIds || colaboradoresIds.length === 0) return []
   return colaboradoresIds.map(String).filter(Boolean)
 }
+
+/**
+ * Resolve alvos para Comunicados (Per-Student).
+ * Retorna uma lista de alunos com seus respectivos responsáveis e nomes, 
+ * para permitir o disparo de notificações push separadas (não agrupadas) por aluno.
+ */
+export async function getStudentTargetsForComunicados(dados: TargetParams | null | undefined): Promise<{
+  students: { aluno_id: string; aluno_nome: string; responsaveis_ids: string[] }[];
+  directColaboradores: string[];
+}> {
+  if (!dados) return { students: [], directColaboradores: [] }
+
+  try {
+    const supabase = supabaseServer
+
+    const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
+    const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
+    const destino = String(dados.destino || '').toLowerCase().trim()
+
+    const isTodos =
+      destino === 'todos' ||
+      destino === 'toda a escola' ||
+      destino === 'all' ||
+      turmas.some(t => {
+        const tl = t.toLowerCase().trim()
+        return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
+      })
+
+    let alunosToProcess: { id: string, nome: string }[] = []
+
+    if (isTodos) {
+      // Busca TODOS os alunos
+      const { data, error } = await supabase.from('alunos').select('id, nome')
+      if (!error && data) {
+        alunosToProcess = data.map(d => ({ id: String(d.id), nome: d.nome || '' }))
+      }
+    } else {
+      let targetAlunosSet = new Map<string, string>() // id -> nome
+
+      // Adicionar alunos explicitamente listados
+      const cleanAlunosIds = alunosIds.map(id => id.replace(/^(a_|_ALU)/, '')).filter(Boolean)
+      if (cleanAlunosIds.length > 0) {
+        const { data, error } = await supabase.from('alunos').select('id, nome').in('id', cleanAlunosIds)
+        if (!error && data) {
+          data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+        }
+      }
+
+      // Adicionar turmas
+      if (turmas.length > 0) {
+        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo')
+        if (!turmasError) {
+          const matchedTurmaIds = (allTurmas || [])
+            .filter(t => {
+              const tId = String(t.id).toLowerCase()
+              const tNome = String(t.nome || '').toLowerCase()
+              const tCod = String(t.codigo || '').toLowerCase()
+              return turmas.some(turma => {
+                const tl = turma.toLowerCase().trim()
+                return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
+              })
+            })
+            .map(t => String(t.id))
+
+          const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+
+          if (allSearchTerms.length > 0) {
+            const { data: alunosTurma, error: alunosError } = await supabase.from('alunos').select('id, nome').in('turma', allSearchTerms)
+            if (!alunosError && alunosTurma) {
+              alunosTurma.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+            }
+          }
+        }
+      }
+
+      alunosToProcess = Array.from(targetAlunosSet.entries()).map(([id, nome]) => ({ id, nome }))
+    }
+
+    // Buscar responsáveis para TODOS os alunos agrupados
+    let studentsResult: { aluno_id: string; aluno_nome: string; responsaveis_ids: string[] }[] = []
+
+    if (alunosToProcess.length > 0) {
+      const allAlunoIds = alunosToProcess.map(a => a.id)
+      const { data: vinculados, error: vincError } = await supabase
+        .from('aluno_responsavel')
+        .select('aluno_id, responsavel_id')
+        .in('aluno_id', allAlunoIds)
+
+      if (!vincError && vinculados) {
+        // Agrupar responsáveis por aluno
+        const mapResponsaveis = new Map<string, Set<string>>()
+        vinculados.forEach(v => {
+          if (v.aluno_id && v.responsavel_id) {
+            const aid = String(v.aluno_id)
+            if (!mapResponsaveis.has(aid)) mapResponsaveis.set(aid, new Set())
+            mapResponsaveis.get(aid)!.add(String(v.responsavel_id))
+          }
+        })
+
+        studentsResult = alunosToProcess.map(a => ({
+          aluno_id: a.id,
+          aluno_nome: a.nome,
+          responsaveis_ids: Array.from(mapResponsaveis.get(a.id) || [])
+        })).filter(s => s.responsaveis_ids.length > 0) // Only return students with attached responsaveis
+      }
+    }
+
+    return {
+      students: studentsResult,
+      directColaboradores: colaboradoresIds
+    }
+  } catch (err: any) {
+    console.error('[NotifHelper] Erro em getStudentTargetsForComunicados:', err.message)
+    return { students: [], directColaboradores: [] }
+  }
+}
