@@ -76,26 +76,25 @@ function AgendaDigitalIndexContent() {
         fetchAlunoId()
         return
       }
-      // Check if user is Responsável and has only one child
+      // Check if user is Responsável and has only one child using the same logic as selecionar-aluno
       const fetchResponsavelChildren = async () => {
         try {
-          const respId = currentUser?.id
-          if (!respId) {
-            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
-            return
+          const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+          const emailBusca = (currentUser?.email || '').toLowerCase().trim();
+          const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
+
+          const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
+          const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data) && data.length === 1 && data[0].id) {
+              router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
+              return;
+            }
           }
-          const { data: relacoes } = await supabase
-            .from('aluno_responsavel')
-            .select('aluno_id')
-            .eq('responsavel_id', respId)
-            
-          if (relacoes && relacoes.length === 1 && relacoes[0].aluno_id) {
-            router.replace(`/agenda-digital/${relacoes[0].aluno_id}/${redirect}${paramStr}`)
-          } else {
-            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
-          }
+          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         } catch (e) {
-          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         }
       }
       
