@@ -105,7 +105,7 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStu
   const content = (
     <AnimatePresence>
       {isOpen && payload && template && (
-        <div className="fixed inset-0 flex items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm" style={{ zIndex: 999999 }}>
+        <div className="fixed inset-0 flex items-center justify-center sm:p-4 bg-black/60" style={{ zIndex: 2147483647, transform: 'translateZ(9999px)' }}>
           <motion.div
             initial={{ y: "100%", opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
