@@ -106,16 +106,27 @@ export function ComunicadoViewModal({
   const [isSending, setIsSending] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
 
-  // Audio Recording State
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordingTime, setRecordingTime] = useState(0)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioChunksRef = useRef<Blob[]>([])
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [viewportHeight, setViewportHeight] = useState('100%')
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onResize = () => {
+      if (window.visualViewport) {
+        setViewportHeight(`${window.visualViewport.height}px`)
+      }
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onResize)
+      onResize() // initial check
+    } else {
+      setViewportHeight(`${window.innerHeight}px`)
+    }
+    return () => window.visualViewport?.removeEventListener('resize', onResize)
+  }, [])
+
 
   const adminThreads = useMemo(() => {
     if (!isAdminMode) return []
@@ -232,62 +243,6 @@ export function ComunicadoViewModal({
     }
   }, [comunicado.id, currentUserSlug, isAdminMode, canReply])
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data)
-        }
-      }
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-        const audioFile = new File([audioBlob], `audio_${Date.now()}.webm`, { type: 'audio/webm' })
-        
-        setIsUploading(true)
-        try {
-          const uploadRes = await uploadFileToSupabase({
-            bucket: 'comunicados-midia',
-            file: audioFile,
-            usageType: 'common'
-          })
-          if (uploadRes.ok && uploadRes.url) {
-            setPendingAnexos(prev => [...prev, uploadRes.url as string])
-          } else {
-            console.error('Audio upload failed:', uploadRes.error)
-          }
-        } catch(e) { 
-          console.error('Audio upload error', e) 
-        } finally { 
-          setIsUploading(false) 
-        }
-
-        stream.getTracks().forEach(track => track.stop())
-      }
-
-      mediaRecorder.start()
-      setIsRecording(true)
-      setRecordingTime(0)
-      recordingTimerRef.current = setInterval(() => setRecordingTime(p => p + 1), 1000)
-    } catch (e) {
-      alert('Permissão de microfone negada ou não suportada.')
-      console.error(e)
-    }
-  }
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop()
-      setIsRecording(false)
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
-    }
-  }
-
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return
     setIsSending(true)
@@ -371,19 +326,20 @@ export function ComunicadoViewModal({
         animate={{opacity: 1}} 
         exit={{opacity: 0}} 
         style={{ 
-          position: 'fixed', inset: 0, 
-          height: '100dvh',
+          position: 'fixed', 
+          top: 0, left: 0, right: 0, 
+          height: viewportHeight,
           background: 'rgba(15, 23, 42, 0.4)', 
           backdropFilter: 'blur(8px)', zIndex: 99999, 
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center'
         }} 
       >
         <style dangerouslySetInnerHTML={{__html: `
           .cvm-modal-container {
             width: 100%;
-            height: 100dvh;
+            height: 100%;
             max-width: 1100px;
-            max-height: 100dvh;
+            max-height: 100%;
             background: #ffffff;
             display: flex;
             flex-direction: column;
@@ -394,6 +350,7 @@ export function ComunicadoViewModal({
             .cvm-modal-container {
               border-radius: 24px;
               max-height: 92vh;
+              margin-top: 4vh;
             }
           }
           .cvm-header {
@@ -850,60 +807,41 @@ export function ComunicadoViewModal({
                 <Paperclip size={20} />
               </label>
 
-              {isRecording ? (
-                <div className="cvm-input-area" style={{ justifyContent: 'space-between', color: '#ef4444', fontWeight: 600 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', animation: 'pulseGlowRead 1.5s infinite' }} />
-                    Gravando Áudio...
-                  </div>
-                  <span>{Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}</span>
-                </div>
-              ) : (
-                <div className="cvm-input-area">
-                  <input 
-                    type="text" 
-                    placeholder="Escreva um comentário" 
-                    value={newMessage}
-                    onChange={e => setNewMessage(e.target.value)}
-                    onFocus={(e) => {
-                      setTimeout(() => {
-                        e.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                      }, 300);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        handleSend()
-                      }
-                    }}
-                  />
-                </div>
-              )}
+              <div className="cvm-input-area">
+                <input 
+                  type="text" 
+                  placeholder="Escreva um comentário" 
+                  value={newMessage}
+                  onChange={e => setNewMessage(e.target.value)}
+                  onFocus={(e) => {
+                    setTimeout(() => {
+                      e.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    }, 300);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleSend()
+                    }
+                  }}
+                />
+              </div>
 
-              {isRecording ? (
-                <button onClick={stopRecording} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: '50%', background: '#fee2e2', color: '#ef4444', border: 'none', cursor: 'pointer' }}>
-                  <div style={{ width: 14, height: 14, background: '#ef4444', borderRadius: 4 }} />
-                </button>
-              ) : (
-                <button onClick={startRecording} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: '50%', background: '#f8fafc', color: '#64748b', border: 'none', cursor: 'pointer' }}>
-                  <Mic size={20} />
-                </button>
-              )}
-              
               <button 
                 onClick={handleSend}
                 disabled={isSending || isUploading || (!newMessage.trim() && pendingAnexos.length === 0)}
                 style={{ 
                   display: 'flex', alignItems: 'center', justifyContent: 'center', 
                   width: 44, height: 44, borderRadius: '50%', 
-                  background: (!newMessage.trim() && pendingAnexos.length === 0) ? '#e2e8f0' : 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)', 
+                  background: (!newMessage.trim() && pendingAnexos.length === 0) ? '#e2e8f0' : 'linear-gradient(135deg, #4f46e5 0%, #312e81 100%)', 
                   color: (!newMessage.trim() && pendingAnexos.length === 0) ? '#94a3b8' : '#ffffff', 
                   border: 'none', cursor: (!newMessage.trim() && pendingAnexos.length === 0) ? 'default' : 'pointer',
-                  boxShadow: (!newMessage.trim() && pendingAnexos.length === 0) ? 'none' : '0 4px 12px rgba(79,70,229,0.3)',
-                  transition: 'all 0.2s'
+                  boxShadow: (!newMessage.trim() && pendingAnexos.length === 0) ? 'none' : '0 4px 14px rgba(79,70,229,0.4)',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transform: (!newMessage.trim() && pendingAnexos.length === 0) ? 'scale(1)' : 'scale(1.05)'
                 }}
               >
-                <Send size={18} style={{ marginLeft: 2 }} />
+                <Send size={18} style={{ marginLeft: 2, transform: isSending ? 'translateX(2px)' : 'none', transition: 'transform 0.2s' }} />
               </button>
             </div>
           )}

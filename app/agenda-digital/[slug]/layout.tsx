@@ -221,7 +221,9 @@ export default function AgendaDigitalFamilyLayout({
   const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
   if (isGenericModule) {
     if (typeof window !== 'undefined') {
-      router.replace(`/agenda-digital?redirect=${resolvedParams.slug}`)
+      const sp = new URLSearchParams(window.location.search)
+      sp.set('redirect', resolvedParams.slug)
+      router.replace(`/agenda-digital?${sp.toString()}`)
     }
     return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">Carregando...</div>
   }

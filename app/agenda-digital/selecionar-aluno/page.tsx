@@ -49,6 +49,14 @@ function SelecionarAlunoContent() {
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
 
+  const getForwardParams = () => {
+    if (typeof window === 'undefined') return ''
+    const p = new URLSearchParams(window.location.search)
+    p.delete('redirect')
+    const str = p.toString()
+    return str ? `?${str}` : ''
+  }
+
   // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
   const [meusAlunos, setMeusAlunos] = useState<any[]>([])
   // Track whether we've completed at least one successful fetch
@@ -721,7 +729,7 @@ function SelecionarAlunoContent() {
               meusAlunos.map((student) => {
                 const pendingAlerts = student.pendenciasAtrasadas || 0;
                 return (
-                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
+                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
                     <div className="card-avatar-container">
                       {student.foto ? (
                         <img src={student.foto} alt={student.nome} className="card-avatar-img" />
@@ -794,7 +802,7 @@ function SelecionarAlunoContent() {
 
             <div className="cards-column">
               <Link 
-                href={`/agenda-digital/colaborador/${redirectTarget}`} 
+                href={`/agenda-digital/colaborador/${redirectTarget}${getForwardParams()}`} 
                 onClick={() => setLoadingCardId('colaborador')}
                 className="portal-modern-card collaborator-theme"
               >

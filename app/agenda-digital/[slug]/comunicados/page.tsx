@@ -1,6 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -112,6 +112,7 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
   
   const searchParams = useSearchParams()
   const queryId = searchParams.get('id')
+  const router = useRouter()
   
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   
@@ -126,12 +127,14 @@ export default function ADComunicadosPage({ params }: { params: Promise<{ slug: 
         
         // Remove query param from URL so it doesn't trigger again on refresh
         try {
-          const newUrl = window.location.pathname
-          window.history.replaceState({}, '', newUrl)
+          const urlParams = new URLSearchParams(window.location.search);
+          urlParams.delete('id');
+          const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+          router.replace(newUrl, { scroll: false })
         } catch(e) {}
       }
     }
-  }, [queryId, comunicados])
+  }, [queryId, comunicados, router])
   
   useEffect(() => {
     const handleUpdate = () => {

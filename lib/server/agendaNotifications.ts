@@ -100,8 +100,11 @@ export async function sendAgendaPushNotification({
     console.log(`${logPrefix} Disparando para ${cleanTargetIds.length} usuário(s)...`)
 
     // Construir URL completa (deep link)
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'
-    const fullUrl = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu-app.vercel.app'
+    let fullUrl = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
+    if (itemId && !fullUrl.includes('id=')) {
+      fullUrl += (fullUrl.includes('?') ? '&' : '?') + `id=${itemId}`
+    }
 
     const pushResponse = await sendPushNotification({
       title,

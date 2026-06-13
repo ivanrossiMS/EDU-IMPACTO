@@ -28,7 +28,7 @@ function AgendaDigitalIndexContent() {
 
     const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
     const redirect = searchParams.get('redirect') || 'comunicados'
-    const redirectParamString = searchParams.get('redirect') ? `?redirect=${searchParams.get('redirect')}` : ''
+    const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
     
     if (isAdmin) {
       if (currentUserPerfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master') {
@@ -42,7 +42,7 @@ function AgendaDigitalIndexContent() {
         
         // Fast path: if we already have the ID, redirect immediately!
         if (directAlunoId) {
-          router.replace(`/agenda-digital/${directAlunoId}/${redirect}`)
+          router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`)
           return
         }
 
@@ -51,7 +51,7 @@ function AgendaDigitalIndexContent() {
           try {
             const nomeLower = (currentUser.nome || '').trim()
             if (!nomeLower) {
-              router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
+              router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
               return
             }
             
@@ -63,13 +63,13 @@ function AgendaDigitalIndexContent() {
               .single()
               
             if (data && data.id) {
-              router.replace(`/agenda-digital/${data.id}/${redirect}`)
+              router.replace(`/agenda-digital/${data.id}/${redirect}${paramStr}`)
             } else {
-              router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
+              router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
             }
           } catch (e) {
             console.error('Error fetching aluno ID', e)
-            router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
+            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
           }
         }
         
@@ -78,7 +78,7 @@ function AgendaDigitalIndexContent() {
       }
       
       // Default fallback for other roles
-      router.replace(`/agenda-digital/selecionar-aluno${redirectParamString}`)
+      router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
     }
   }, [currentUserPerfil, currentUser, router, searchParams])
 
