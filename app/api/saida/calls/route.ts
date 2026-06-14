@@ -62,13 +62,10 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        // Se o array estiver vazio, deletamos TODAS as chamadas para zerar o sistema
-        const { error } = await supabase
-          .from('saida_calls')
-          .delete()
-          .not('id', 'is', null) // Filtro genérico para deletar tudo
-          
-        if (error) throw new Error(error.message)
+        // Apenas retornamos OK sem deletar nada no banco.
+        // O frontend usa um array vazio (via setActiveCalls([])) para limpar a tela
+        // no fim do expediente (23:59), mas as chamadas DEVEM permanecer no banco
+        // para aparecerem no Histórico / Relatórios.
         return NextResponse.json({ ok: true, count: 0 })
       }
       

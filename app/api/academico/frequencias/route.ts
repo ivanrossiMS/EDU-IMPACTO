@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
-import { createAdminClient } from '@/lib/server/supabaseServerFactory'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
 
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = createAdminClient();
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
   const alunoId = searchParams.get('aluno_id')
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = createAdminClient();
+  const supabase = await createProtectedClient();
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
@@ -86,7 +86,7 @@ export async function DELETE(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = createAdminClient();
+  const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   const all = searchParams.get('all')

@@ -113,7 +113,8 @@ export async function GET(request: Request) {
         if (safeNomes) orConditions.push(`aluno.in.(${safeNomes})`)
       }
 
-      if (orConditions.length > 0) {
+      // Se tiver mais que 50 vínculos, pula a query pesada de títulos para evitar erro de URL limit no PostgREST
+      if (orConditions.length > 0 && ativosIds.length <= 50) {
         const { data: titulos } = await supabase
           .from('titulos')
           .select('id,status,aluno,alunoId')

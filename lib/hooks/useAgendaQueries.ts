@@ -6,12 +6,12 @@ import { ADComunicado, ADMomento } from '@/lib/agendaDigitalContext'
 // --- COMUNICADOS ---
 export function useQueryComunicados(
   isFamily: boolean,
-  fetchUrl: string = '/api/comunicados'
+  fetchUrl: string | null = '/api/comunicados'
 ) {
   const query = useQuery<ADComunicado[]>({
     queryKey: ['agenda', 'comunicados', fetchUrl],
     queryFn: async () => {
-      if (isFamily) return [] // Família busca na página local, ou se usar fetchUrl global:
+      if (isFamily || !fetchUrl) return [] 
       const res = await fetch(fetchUrl)
       if (!res.ok) throw new Error('Falha ao buscar comunicados')
       const data = await res.json()
@@ -19,10 +19,9 @@ export function useQueryComunicados(
     },
     staleTime: 1000 * 60 * 5, // 5 min de cache fresco
     gcTime: 1000 * 60 * 10, // 10 min na memória
-    refetchOnWindowFocus: true, // Recarrega ao voltar pro app
-    refetchInterval: 15000, // Atualiza automaticamente a cada 15 segundos
-    refetchOnMount: true,
-    enabled: !isFamily
+    refetchOnWindowFocus: false, 
+    refetchOnMount: false,
+    enabled: !isFamily && !!fetchUrl
   })
 
   return query
@@ -31,12 +30,12 @@ export function useQueryComunicados(
 // --- MOMENTOS ---
 export function useQueryMomentos(
   isFamily: boolean,
-  fetchUrl: string = '/api/agenda/momentos'
+  fetchUrl: string | null = '/api/agenda/momentos'
 ) {
   const query = useQuery<ADMomento[]>({
     queryKey: ['agenda', 'momentos', fetchUrl],
     queryFn: async () => {
-      if (isFamily) return [] 
+      if (isFamily || !fetchUrl) return [] 
       const res = await fetch(fetchUrl)
       if (!res.ok) throw new Error('Falha ao buscar momentos')
       const data = await res.json()
@@ -46,7 +45,7 @@ export function useQueryMomentos(
     gcTime: 1000 * 60 * 10,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    enabled: !isFamily
+    enabled: !isFamily && !!fetchUrl
   })
 
   return query

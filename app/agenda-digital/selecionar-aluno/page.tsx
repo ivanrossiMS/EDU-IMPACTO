@@ -1,5 +1,6 @@
 'use client'
 import { useData } from '@/lib/dataContext'
+import { memo, useCallback } from 'react'
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
@@ -42,95 +43,7 @@ function formatShortName(name: string): string {
   return `${firstName} ${lastName}`;
 }
 
-function SelecionarAlunoContent() {
-  const { turmas = [] } = useData();
-  const { currentUser, hydrated } = useApp()
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirectTarget = searchParams.get('redirect') || 'comunicados'
-
-  const getForwardParams = () => {
-    if (typeof window === 'undefined') return ''
-    const p = new URLSearchParams(window.location.search)
-    p.delete('redirect')
-    const str = p.toString()
-    return str ? `?${str}` : ''
-  }
-
-  // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
-  const [meusAlunos, setMeusAlunos] = useState<any[]>([])
-  // Track whether we've completed at least one successful fetch
-  const [hasFetched, setHasFetched] = useState(false)
-  const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
-
-  const [loadingCardId, setLoadingCardId] = useState<string | null>(null)
-
-  // 1. Obter metadados do responsável autenticado
-  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-  const emailBusca = (currentUser?.email || '').toLowerCase().trim();
-  const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
-
-  useEffect(() => {
-    if (!hydrated || !currentUser) return;
-
-    const cacheKey = `edu-meus-alunos-${respId || emailBusca}`;
-
-    // Step 1: Serve from localStorage cache INSTANTLY (zero latency)
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { data, ts } = JSON.parse(cached);
-        if (Array.isArray(data) && data.length > 0) {
-          setMeusAlunos(data);
-          setHasFetched(true); // Show data immediately, no spinner
-        }
-      }
-    } catch (_) {}
-
-    // Step 2: Always fire a fresh network request in background
-    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}&_t=${Date.now()}`;
-
-    fetch(url, { credentials: 'include', cache: 'no-store' })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (!Array.isArray(data)) return;
-        setMeusAlunos(data);
-        setHasFetched(true);
-        // Update localStorage cache with fresh data
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
-        } catch (_) {}
-      })
-      .catch(() => {
-        setHasFetched(true); // Even on error, stop the spinner
-      });
-  }, [hydrated, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Redirecionamento de alunos normais
-  useEffect(() => {
-    if (currentUser && currentUser.perfil === 'Aluno') {
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('edu-current-user')
-        if (stored) {
-          const u = JSON.parse(stored)
-          if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-            setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
-            return
-          }
-        }
-      }
-      if (currentUser.id) {
-        setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
-      }
-    }
-  }, [isStillLoading, currentUser, redirectTarget])
-
-  const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
-
-  return (
-    <div className="premium-selector-container">
-      {/* Dynamic styles block for modern theme design */}
-      <style dangerouslySetInnerHTML={{__html: `
+const SELECTOR_STYLES = `
         .premium-selector-container {
           max-width: 800px;
           width: 100%;
@@ -668,7 +581,147 @@ function SelecionarAlunoContent() {
             height: 14px !important;
           }
         }
-      `}} />
+`;
+
+const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardParams, setLoadingCardId }: any) => {
+  const pendingAlerts = student.pendenciasAtrasadas || 0;
+  
+  let rawName = student.turmaNome || student.turma || 'S/T'
+  const nomeTurma = rawName.split('-')[0].trim()
+  const anoLetivo = student.anoLetivo || new Date().getFullYear()
+
+  return (
+    <Link href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
+      <div className="card-avatar-container">
+        {student.foto ? (
+          <img src={student.foto} alt={student.nome} className="card-avatar-img" />
+        ) : (
+          getInitials(student.nome)
+        )}
+      </div>
+
+      <div className="card-info">
+        <h3 className="card-title">{formatShortName(student.nome)}</h3>
+        <div className="card-subtitle">
+          <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
+          <span className="card-dot-separator" />
+          <span>{anoLetivo}</span>
+        </div>
+      </div>
+
+      <div className="card-actions-wrapper">
+        <div className="unread-indicator-badge">
+          <Bell size={18} />
+          <span className="badge-count-bubble">2</span>
+        </div>
+
+        {pendingAlerts > 0 && (
+          <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
+            <AlertTriangle size={18} />
+          </div>
+        )}
+
+        <div className="chevron-circle-btn">
+          {loadingCardId === student.id ? (
+            <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
+          ) : (
+            <ChevronRight size={18} strokeWidth={2.5} />
+          )}
+        </div>
+      </div>
+    </Link>
+  )
+})
+
+function SelecionarAlunoContent() {
+  const { turmas = [] } = useData();
+  const { currentUser, hydrated } = useApp()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTarget = searchParams.get('redirect') || 'comunicados'
+
+  const getForwardParams = useCallback(() => {
+    if (typeof window === 'undefined') return ''
+    const p = new URLSearchParams(window.location.search)
+    p.delete('redirect')
+    const str = p.toString()
+    return str ? `?${str}` : ''
+  }, [])
+
+  // ─── Fast-path data fetching with localStorage cache to eliminate empty-state flash ───
+  const [meusAlunos, setMeusAlunos] = useState<any[]>([])
+  // Track whether we've completed at least one successful fetch
+  const [hasFetched, setHasFetched] = useState(false)
+  const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
+
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null)
+
+  // 1. Obter metadados do responsável autenticado
+  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+  const emailBusca = (currentUser?.email || '').toLowerCase().trim();
+  const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
+
+  useEffect(() => {
+    if (!hydrated || !currentUser) return;
+
+    const cacheKey = `edu-meus-alunos-${respId || emailBusca}`;
+
+    // Step 1: Serve from localStorage cache INSTANTLY (zero latency)
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached);
+        if (Array.isArray(data) && data.length > 0) {
+          setMeusAlunos(data);
+          setHasFetched(true); // Show data immediately, no spinner
+        }
+      }
+    } catch (_) {}
+
+    // Step 2: Always fire a fresh network request in background
+    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}&_t=${Date.now()}`;
+
+    fetch(url, { credentials: 'include', cache: 'no-store' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (!Array.isArray(data)) return;
+        setMeusAlunos(data);
+        setHasFetched(true);
+        // Update localStorage cache with fresh data
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+        } catch (_) {}
+      })
+      .catch(() => {
+        setHasFetched(true); // Even on error, stop the spinner
+      });
+  }, [hydrated, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redirecionamento de alunos normais
+  useEffect(() => {
+    if (currentUser && currentUser.perfil === 'Aluno') {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('edu-current-user')
+        if (stored) {
+          const u = JSON.parse(stored)
+          if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
+            setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
+            return
+          }
+        }
+      }
+      if (currentUser.id) {
+        setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
+      }
+    }
+  }, [isStillLoading, currentUser, redirectTarget])
+
+  const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
+
+  return (
+    <div className="premium-selector-container">
+      {/* Dynamic styles block for modern theme design */}
+      <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
 
       {/* Header section */}
       <header className="premium-welcome-card animate-reveal">
@@ -726,63 +779,16 @@ function SelecionarAlunoContent() {
                 </p>
               </div>
             ) : (
-              meusAlunos.map((student) => {
-                const pendingAlerts = student.pendenciasAtrasadas || 0;
-                return (
-                  <Link key={student.id} href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
-                    <div className="card-avatar-container">
-                      {student.foto ? (
-                        <img src={student.foto} alt={student.nome} className="card-avatar-img" />
-                      ) : (
-                        getInitials(student.nome)
-                      )}
-                    </div>
-
-                    <div className="card-info">
-                      <h3 className="card-title">{formatShortName(student.nome)}</h3>
-                      <div className="card-subtitle">
-                        {(() => {
-                          // Extract class name
-                          let rawName = student.turmaNome || student.turma || 'S/T'
-                          const nomeTurma = rawName.split('-')[0].trim()
-                          const anoLetivo = student.anoLetivo || new Date().getFullYear()
-
-                          return (
-                            <>
-                              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
-                              <span className="card-dot-separator" />
-                              <span>{anoLetivo}</span>
-                            </>
-                          )
-                        })()}
-                      </div>
-                    </div>
-
-                    <div className="card-actions-wrapper">
-                      {/* Notifications/Inbox quick alert */}
-                      <div className="unread-indicator-badge">
-                        <Bell size={18} />
-                        <span className="badge-count-bubble">2</span>
-                      </div>
-
-                      {/* Warnings alert (if any) */}
-                      {pendingAlerts > 0 && (
-                        <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
-                          <AlertTriangle size={18} />
-                        </div>
-                      )}
-
-                      <div className="chevron-circle-btn">
-                        {loadingCardId === student.id ? (
-                          <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
-                        ) : (
-                          <ChevronRight size={18} strokeWidth={2.5} />
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                )
-              })
+              meusAlunos.map((student) => (
+                <StudentCard 
+                  key={student.id} 
+                  student={student} 
+                  loadingCardId={loadingCardId} 
+                  redirectTarget={redirectTarget} 
+                  getForwardParams={getForwardParams} 
+                  setLoadingCardId={setLoadingCardId} 
+                />
+              ))
             )}
           </div>
         </section>

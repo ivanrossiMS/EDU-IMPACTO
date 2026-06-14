@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   const authClient = await createProtectedClient();
-  const supabase = supabaseServer;
+  const supabase = authClient;
   const { searchParams } = new URL(request.url);
   const limitParam = searchParams.get('limit');
   const offsetParam = searchParams.get('offset');
@@ -41,7 +41,14 @@ export async function GET(request: Request) {
   const sinceParam = searchParams.get('since');
   
   let resolvedTurma = turmaId;
-  if (turmaId) {
+  if (!turmaId && alunoId) {
+     const { data: aData } = await supabase.from('alunos').select('turma').eq('id', alunoId).single();
+     if (aData && aData.turma) {
+        const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${aData.turma}",codigo.eq."${aData.turma}",nome.eq."${aData.turma}"`).maybeSingle();
+        if (tData && tData.nome) resolvedTurma = tData.nome;
+        else resolvedTurma = aData.turma;
+     }
+  } else if (turmaId) {
     const { data: tData } = await supabase.from('turmas').select('nome').eq('id', turmaId).single();
     if (tData && tData.nome) {
       resolvedTurma = tData.nome;
@@ -90,6 +97,8 @@ export async function GET(request: Request) {
      const limit = parseInt(limitParam);
      const offset = offsetParam ? parseInt(offsetParam) : 0;
      query = query.range(offset, offset + limit - 1);
+  } else {
+     query = query.limit(30);
   }
 
   const { data, error } = await query;
@@ -142,7 +151,7 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   const authClient = await createProtectedClient();
-  const supabase = supabaseServer;
+  const supabase = authClient;
   console.log("==> POST /api/comunicados CALLED!");
   try {
     const body = await request.json()
@@ -244,7 +253,7 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   const authClient = await createProtectedClient();
-  const supabase = supabaseServer;
+  const supabase = authClient;
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })

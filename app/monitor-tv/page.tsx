@@ -937,7 +937,7 @@ function MonitorContent() {
           object-fit: contain;
           z-index: 1;
           transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
-          filter: brightness(1.25) contrast(1.25) saturate(1.35);
+          filter: brightness(1.15) contrast(1.15) saturate(1.20);
         }
 
         .tv-card-photo-bg-initials {

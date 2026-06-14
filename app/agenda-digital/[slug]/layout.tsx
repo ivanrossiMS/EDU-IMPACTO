@@ -34,7 +34,7 @@ function abbreviateName(name: string): string {
   return `${first} ${middle} ${last}`;
 }
 
-function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: any }) {
+function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, currentUser: any, vinculo?: any }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => c.studentId === aluno.id && c.status !== 'cancelled')
@@ -47,12 +47,105 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
     }
   }, [call?.status])
 
+  const { isProibido, isDiaRestrito, diasPermitidos } = React.useMemo(() => {
+    let proibido = false;
+    let diaRestrito = false;
+    let dias: string[] = [];
+
+    const rawSaude = aluno?.dados?.saude || {};
+    const autorizados = rawSaude.autorizados || [];
+    const responsaveis = aluno?.responsaveis || aluno?.dados?.responsaveis || [];
+    
+    const currentNameKey = (currentUser?.nome || '').toLowerCase().trim();
+    const currentId = vinculo?.id || currentUser?.responsavel_id || (currentUser?.dados?.responsavel_id) || currentUser?.id;
+    const currentEmail = (currentUser?.email || '').toLowerCase().trim();
+
+    const findMatch = (list: any[]) => {
+      return list.find((r: any) => {
+        if (currentId && r.id && String(r.id) === String(currentId)) return true;
+        if (currentEmail && r.email && String(r.email).toLowerCase().trim() === currentEmail) return true;
+        if (currentNameKey && r.nome && String(r.nome).toLowerCase().trim() === currentNameKey) return true;
+        
+        // Loose name match as last resort
+        if (currentNameKey && r.nome) {
+          const rName = String(r.nome).toLowerCase().trim();
+          if (rName.includes(currentNameKey) || currentNameKey.includes(rName)) return true;
+        }
+        return false;
+      });
+    };
+
+    let isFound = false;
+
+    const autMatch = findMatch(autorizados);
+    if (autMatch) {
+      isFound = true;
+      proibido = autMatch.proibido === true;
+      dias = autMatch.diasSemana || [];
+    } else {
+      const respMatch = findMatch(responsaveis);
+      if (respMatch) {
+        isFound = true;
+        proibido = respMatch.proibido === true;
+        dias = respMatch.diasAcesso || respMatch.dias_acesso || respMatch.diasSemana || [];
+      } else if (responsaveis.length === 1) {
+        // Fallback to the only guardian if no exact match
+        isFound = true;
+        proibido = responsaveis[0].proibido === true;
+        dias = responsaveis[0].diasAcesso || responsaveis[0].dias_acesso || responsaveis[0].diasSemana || [];
+      }
+    }
+
+    if (isFound) {
+      if (proibido) {
+        // Explicitly forbidden
+        diaRestrito = false;
+      } else if (dias.length === 0) {
+        // No days allowed
+        diaRestrito = true;
+      } else {
+        const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+        const todayIdx = new Date().getDay();
+        const todayK = remap[todayIdx];
+        if (!dias.includes(todayK)) {
+          diaRestrito = true;
+        }
+      }
+    } else {
+      // If we COULD NOT match them to ANY responsible in the list...
+      // This is a safety fallback. Since manual names/IDs might break the match, 
+      // we will check if ANY guardian is allowed today. If at least one is, we'll allow it.
+      // Otherwise, we block it.
+      if (responsaveis.length > 0) {
+        let anyAllowedToday = false;
+        const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
+        const todayK = remap[new Date().getDay()];
+
+        for (const r of responsaveis) {
+          if (r.proibido) continue;
+          const rDias = r.diasAcesso || r.dias_acesso || r.diasSemana || [];
+          if (rDias.includes(todayK)) {
+            anyAllowedToday = true;
+            break;
+          }
+        }
+
+        if (!anyAllowedToday) {
+           diaRestrito = true;
+           dias = responsaveis[0].diasAcesso || responsaveis[0].dias_acesso || responsaveis[0].diasSemana || [];
+        }
+      }
+    }
+
+    return { isProibido: proibido, isDiaRestrito: diaRestrito, diasPermitidos: dias };
+  }, [aluno?.dados, currentUser]);
+
   const isActive = call && (call.status === 'waiting' || call.status === 'called')
   const isBlocked = call?.status === 'blocked'
   const isConfirmed = call?.status === 'confirmed' || localConfirmed
 
   const handleCall = () => {
-    if (isActive || isConfirmed) return
+    if (isActive || isConfirmed || isProibido || isDiaRestrito) return
     const gName = currentUser.nome || 'Responsável'
     const gId = currentUser.id || 'usr-fam'
     callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
@@ -77,6 +170,46 @@ function StudentCallButton({ aluno, currentUser }: { aluno: any, currentUser: an
   }
 
   if (!call && !localConfirmed) {
+    if (isProibido) {
+      return (
+        <div style={{
+          ...baseBtnStyle,
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '2px solid rgba(239, 68, 68, 0.3)',
+          color: '#ef4444',
+          cursor: 'not-allowed'
+        }} title="Você está proibido de retirar este aluno.">
+          <AlertTriangle size={18} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14 }}>Retirada Proibida</span>
+              <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+                Liberado: {diasPermitidos.length > 0 ? diasPermitidos.join(', ') : 'Nenhum dia'}
+              </span>
+          </div>
+        </div>
+      )
+    }
+
+    if (isDiaRestrito) {
+      return (
+        <div style={{
+          ...baseBtnStyle,
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '2px solid rgba(245, 158, 11, 0.3)',
+          color: '#d97706',
+          cursor: 'not-allowed'
+        }} title={`Dias permitidos: ${diasPermitidos.join(', ')}`}>
+          <Calendar size={18} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Fora do Dia Permitido</span>
+              <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+                Liberado: {diasPermitidos.join(', ')}
+              </span>
+          </div>
+        </div>
+      )
+    }
+
     return (
       <button 
         className="ad-premium-cta-btn"
@@ -333,101 +466,6 @@ export default function AgendaDigitalFamilyLayout({
     return true
   })
 
-  if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '80vh',
-        width: '100%',
-        gap: '24px',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-      }}>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin-simple {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          .loader-ring {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 3px solid rgba(99, 102, 241, 0.1);
-            border-top-color: #6366f1;
-            animation: spin-simple 1s linear infinite;
-          }
-        `}} />
-        
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="loader-ring" />
-        </div>
-        
-        <p style={{
-          fontSize: '15px',
-          fontWeight: 600,
-          color: '#64748b',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          margin: 0
-        }}>
-          Carregando Agenda...
-        </p>
-      </div>
-    )
-  }
-
-  if (!aluno) {
-    return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '80vh',
-        width: '100%',
-        gap: '24px',
-        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-      }}>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin-gradient {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          .loader-ring {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            padding: 4px;
-            background: linear-gradient(135deg, #00D2FF, #7928CA, #FF0080);
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            animation: spin-gradient 1.2s linear infinite;
-          }
-        `}} />
-        
-        <div style={{ position: 'relative', width: 80, height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="loader-ring" style={{ position: 'absolute' }} />
-        </div>
-        
-        <p style={{
-          fontSize: '15px',
-          fontWeight: 600,
-          background: 'linear-gradient(135deg, #ffffff, rgba(255,255,255,0.7))',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          letterSpacing: '0.05em',
-          textTransform: 'uppercase',
-          margin: 0
-        }}>
-          Carregando Agenda...
-        </p>
-      </div>
-    )
-  }
-
   return (
     <>
     <AnimatePresence>
@@ -445,10 +483,10 @@ export default function AgendaDigitalFamilyLayout({
           <div style={{ display: 'grid', gap: 12 }}>
             {meusAlunos.map((a: any) => (
               <div key={a.id} className="ad-switcher-item" onClick={() => {
-                const newPath = pathname.replace(aluno.id, a.id)
+                const newPath = pathname.replace(aluno?.id || '', a.id)
                 router.push(newPath)
                 setSwitcherOpen(false)
-              }} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, border: `1px solid ${a.id === aluno.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, background: a.id === aluno.id ? 'rgba(99,102,241,0.05)' : 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}>
+              }} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, border: `1px solid ${a.id === aluno?.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, background: a.id === aluno?.id ? 'rgba(99,102,241,0.05)' : 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}>
                  <div className="avatar" style={{ width: 48, height: 48, fontSize: 18, background: 'var(--gradient-purple)', color: 'white' }}>
                     {getInitials(a.nome)}
                   </div>
@@ -1550,9 +1588,9 @@ export default function AgendaDigitalFamilyLayout({
             }}>
               {aluno?.foto ? (
                  // eslint-disable-next-line @next/next/no-img-element
-                 <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                 <img src={aluno.foto} alt={aluno?.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                 getInitials(aluno.nome)
+                 getInitials(aluno?.nome || '')
               )}
               {/* Soft gradient glass reflection gloss */}
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0,
@@ -1562,7 +1600,7 @@ export default function AgendaDigitalFamilyLayout({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%' }}>
                 <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbreviateName(aluno.nome)}</span>
+                  <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbreviateName(aluno?.nome || 'Carregando...')}</span>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                 </h2>
                 {currentUser?.cargo === 'Aluno' && (
@@ -1642,7 +1680,7 @@ export default function AgendaDigitalFamilyLayout({
                       </div>
                       <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100px' }}>
-                          {abbreviateName(currentUser?.nome || (aluno as any).responsavel || 'Responsável')}
+                          {abbreviateName(currentUser?.nome || (aluno as any)?.responsavel || 'Responsável')}
                         </span>
                         <span className="ad-badge-parentesco" style={{ fontSize: 8, background: '#3b82f6', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>{userAccessRole.parentesco}</span>
                         {userAccessRole.isFin && (
@@ -1665,7 +1703,7 @@ export default function AgendaDigitalFamilyLayout({
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', width: '100%' }}>
                 {adConfig?.permissoes?.chamadaAlunoPortaria !== false ? (
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <StudentCallButton aluno={aluno} currentUser={currentUser} />
+                    <StudentCallButton aluno={aluno} currentUser={currentUser} vinculo={profileData?.vinculo} />
                   </div>
                 ) : (
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, background: 'rgba(0,0,0,0.02)', borderRadius: 16, border: '1px dashed rgba(0,0,0,0.05)' }}>

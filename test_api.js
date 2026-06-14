@@ -1,13 +1,27 @@
-const { createClient } = require('@supabase/supabase-js')
-require('dotenv').config({ path: '.env.local' })
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+require('dotenv').config({ path: '.env.local' });
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function run() {
-  const { data: alunos, error: err1 } = await supabase.from('alunos').select('id, data_nascimento').not('data_nascimento', 'is', null).limit(10)
-  const { data: profs, error: err2 } = await supabase.from('funcionarios').select('id, data_nascimento').not('data_nascimento', 'is', null).limit(10)
+  // Let's mimic what route.ts does exactly
+  let query = supabase.from('comunicados').select('*');
+  const turmaId = '4º ANO A';
+  const alunoId = '4697';
   
-  console.log("Alunos:", alunos)
-  console.log("Profs:", profs)
+  if (turmaId || alunoId) {
+    const conditions = [`destino.eq.todos`];
+    if (turmaId) {
+      conditions.push(`dados->turmas.cs.["${turmaId}"]`);
+    }
+    if (alunoId) {
+      conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
+    }
+    query = query.or(conditions.join(','));
+  }
+  
+  const { data, error } = await query;
+  console.log("Found:", data?.length);
 }
-run()
+run();

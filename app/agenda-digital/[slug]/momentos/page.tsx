@@ -44,8 +44,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return String(nomeTurma).split('-')[0].trim()
   })()
   
-  const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, '/api/agenda/momentos')
-
+  const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
+  const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, endpoint)
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})

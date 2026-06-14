@@ -104,7 +104,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
 
   const year = viewDate.getFullYear()

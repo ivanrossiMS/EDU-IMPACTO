@@ -13,12 +13,16 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createProtectedClient()
+    const { searchParams } = new URL(request.url)
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? parseInt(limitParam, 10) : 30
+
     const accessStartDate = await getLoggedUserAccessStartDate()
     let query = supabase.from('momentos').select('*')
     if (accessStartDate) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
-    const { data, error } = await query.order('created_at', { ascending: false })
+    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit)
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {

@@ -35,7 +35,41 @@ function setSenha(uid: string, senha: string) {
 function verificarSenha(uid: string, senha: string): boolean { return getSenhas()[uid] === senha }
 function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
-// Removed fetchAllUsersFromDB to prevent data enumeration vulnerabilities
+import { memo } from 'react'
+
+const BackgroundEffects = memo(() => {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+  useEffect(() => {
+    let ticking = false
+    const h = (e: MouseEvent) => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight })
+          ticking = false
+        })
+        ticking = true
+      }
+    }
+    window.addEventListener('mousemove', h)
+    return () => window.removeEventListener('mousemove', h)
+  }, [])
+
+  const orbitX = (mousePos.x - 0.5) * 30
+  const orbitY = (mousePos.y - 0.5) * 30
+
+  return (
+    <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
+      <div style={{ position:'absolute', top:'-10%', left:'20%', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)', transform:`translate(${orbitX*.4}px,${orbitY*.4}px)`, transition:'transform 0.8s ease-out' }} />
+      <div style={{ position:'absolute', bottom:'0%', right:'-10%', width:440, height:440, borderRadius:'50%', background:'radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)', transform:`translate(${orbitX*-.3}px,${orbitY*-.3}px)`, transition:'transform 0.8s ease-out' }} />
+      <div style={{ position:'absolute', inset:0, opacity:0.04, backgroundImage:'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize:'48px 48px' }} />
+      {[{ t:'15%',r:'18%',s:6,c:'#60a5fa',a:'floatOrb1 6s'},{t:'35%',r:'8%',s:4,c:'#a78bfa',a:'floatOrb2 8s'},{b:'25%',r:'22%',s:5,c:'#34d399',a:'floatOrb3 7s'},{t:'60%',l:'12%',s:3,c:'#f59e0b',a:'floatOrb1 9s reverse'},{t:'80%',r:'35%',s:4,c:'#ec4899',a:'floatOrb2 5s'}].map((o:{t?:string;r?:string;b?:string;l?:string;s:number;c:string;a:string},i)=>(
+        <div key={i} style={{ position:'absolute', top:o.t, right:o.r, bottom:o.b, left:o.l, width:o.s, height:o.s, borderRadius:'50%', background:o.c, boxShadow:`0 0 ${o.s*2}px ${o.c}`, animation:`${o.a} ease-in-out infinite` }} />
+      ))}
+      <div style={{ position:'absolute', bottom:'-80px', right:'-80px', width:420, height:420, borderRadius:'50%', border:'1px solid rgba(59,130,246,0.08)', transform:`translate(${orbitX*.15}px,${orbitY*.15}px)`, transition:'transform 1.2s ease-out' }} />
+    </div>
+  )
+})
 
 export default function LoginPage() {
   const router = useRouter()
@@ -73,7 +107,6 @@ export default function LoginPage() {
   // ── animations
   const [typedText, setTypedText]       = useState('')
   const [testimonialIdx, setTestimonialIdx] = useState(0)
-  const [mousePos, setMousePos]         = useState({ x: 0, y: 0 })
   const headline = 'Gestão escolar do futuro, hoje.'
 
   useEffect(() => {
@@ -94,8 +127,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true)
-    const h = (e: MouseEvent) => setMousePos({ x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight })
-    window.addEventListener('mousemove', h); 
     // Otimização: verifica se o sistema está vazio apenas 1 vez por navegador
     const systemChecked = localStorage.getItem('edu-master-checked')
     if (!systemChecked) {
@@ -114,8 +145,6 @@ export default function LoginPage() {
           setIsSystemEmpty(false)
         })
     }
-
-    return () => window.removeEventListener('mousemove', h)
   }, [])
 
   useEffect(() => {
@@ -145,8 +174,6 @@ export default function LoginPage() {
   }, [])
 
 
-  const orbitX = (mousePos.x - 0.5) * 30
-  const orbitY = (mousePos.y - 0.5) * 30
 
   // ── password strength
   const passStrength = (p: string) => {
@@ -382,15 +409,7 @@ export default function LoginPage() {
   const LeftPanel = (
     <div className="login-left-panel" style={{ flex:'0 0 52%', position:'relative', overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between', padding:'48px 56px', background:'linear-gradient(145deg, #050a18 0%, #0a0f2e 30%, #0d1a3a 60%, #060d24 100%)' }}>
       {/* Glows */}
-      <div style={{ position:'absolute', inset:0, pointerEvents:'none' }}>
-        <div style={{ position:'absolute', top:'-10%', left:'20%', width:500, height:500, borderRadius:'50%', background:'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)', transform:`translate(${orbitX*.4}px,${orbitY*.4}px)`, transition:'transform 0.8s ease-out' }} />
-        <div style={{ position:'absolute', bottom:'0%', right:'-10%', width:440, height:440, borderRadius:'50%', background:'radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)', transform:`translate(${orbitX*-.3}px,${orbitY*-.3}px)`, transition:'transform 0.8s ease-out' }} />
-        <div style={{ position:'absolute', inset:0, opacity:0.04, backgroundImage:'linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)', backgroundSize:'48px 48px' }} />
-        {[{ t:'15%',r:'18%',s:6,c:'#60a5fa',a:'floatOrb1 6s'},{t:'35%',r:'8%',s:4,c:'#a78bfa',a:'floatOrb2 8s'},{b:'25%',r:'22%',s:5,c:'#34d399',a:'floatOrb3 7s'},{t:'60%',l:'12%',s:3,c:'#f59e0b',a:'floatOrb1 9s reverse'},{t:'80%',r:'35%',s:4,c:'#ec4899',a:'floatOrb2 5s'}].map((o:{t?:string;r?:string;b?:string;l?:string;s:number;c:string;a:string},i)=>(
-          <div key={i} style={{ position:'absolute', top:o.t, right:o.r, bottom:o.b, left:o.l, width:o.s, height:o.s, borderRadius:'50%', background:o.c, boxShadow:`0 0 ${o.s*2}px ${o.c}`, animation:`${o.a} ease-in-out infinite` }} />
-        ))}
-        <div style={{ position:'absolute', bottom:'-80px', right:'-80px', width:420, height:420, borderRadius:'50%', border:'1px solid rgba(59,130,246,0.08)', transform:`translate(${orbitX*.15}px,${orbitY*.15}px)`, transition:'transform 1.2s ease-out' }} />
-      </div>
+      <BackgroundEffects />
 
       {/* Logo */}
       <div style={{ position:'relative', zIndex:2 }}>

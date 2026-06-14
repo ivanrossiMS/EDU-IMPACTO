@@ -465,8 +465,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         const row = eventType === 'DELETE' ? old : newRow
         const merged = { ...row, ...(row.dados || {}) }
 
-        if (eventType === 'DELETE' || isTargetingAluno(merged)) {
+        if (eventType === 'DELETE' || isTargetingAluno(merged) || !isFamily) {
           window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
 
           if (
             eventType === 'INSERT' &&
@@ -529,8 +530,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         const { eventType, old, new: newRow } = payload
         const row = eventType === 'DELETE' ? old : newRow
 
-        if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas })) {
+        if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas }) || !isFamily) {
           window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
 
           if (eventType === 'INSERT') {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
@@ -560,10 +562,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           eventType === 'DELETE' ||
           String(row.aluno_id) === String(alunoId) ||
           String(row.dados?.aluno_id) === String(alunoId) ||
-          String(row.dados?.alunoId) === String(alunoId)
+          String(row.dados?.alunoId) === String(alunoId) ||
+          !isFamily
 
         if (isForAluno) {
           window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'ocorrencias'] })
 
           if (eventType === 'INSERT') {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
@@ -594,9 +598,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (
           eventType === 'DELETE' ||
           String(row.aluno_id) === alunoStr ||
-          String(row.aluno_id) === alunoSemZero
+          String(row.aluno_id) === alunoSemZero ||
+          !isFamily
         ) {
           window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'boletins'] })
 
           if (eventType === 'INSERT') {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
@@ -625,9 +631,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (
           eventType === 'DELETE' ||
           String(row.aluno_id) === String(alunoId) ||
-          String(row.dados?.aluno_id) === String(alunoId)
+          String(row.dados?.aluno_id) === String(alunoId) ||
+          !isFamily
         ) {
           window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
 
           if (eventType === 'INSERT') {
             // Frequencia shouldn't have badge but we trigger update just in case for other modules sync
