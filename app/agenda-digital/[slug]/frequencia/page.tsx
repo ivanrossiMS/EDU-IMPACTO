@@ -12,7 +12,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { supabase } from '@/lib/supabase'
 
-export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: string }>}) {
+import { useParams } from 'next/navigation'
+
+export default function ADFrequenciaPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
   
   if (adConfig?.permissoes?.visualizarFrequencia === false) {
@@ -28,7 +30,7 @@ export default function ADFrequenciaPage({ params }: { params: Promise<{ slug: s
   }
 
   const { aluno } = useSelectedStudent()
-  const resolvedParams = use(params as Promise<{ slug: string }>)
+  const resolvedParams = useParams() as { slug: string }
   const queryClient = useQueryClient()
 
   useAgendaRealtime({

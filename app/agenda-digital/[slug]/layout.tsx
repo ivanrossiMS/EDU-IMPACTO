@@ -330,12 +330,12 @@ function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, curren
   )
 }
 
-export default function AgendaDigitalFamilyLayout({ 
+export default function ADInnerLayout({ 
   children,
   params 
 }: { 
   children: React.ReactNode, 
-  params: Promise<{ slug: string }>
+  params: any
 }) {
   const queryClient = useQueryClient();
   const [profileData, setProfileData] = useState<any>(null)

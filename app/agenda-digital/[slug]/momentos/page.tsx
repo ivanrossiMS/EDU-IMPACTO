@@ -23,7 +23,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
   const [dbTurmas = []] = useSupabaseArray<any>('turmas', [])
   const { turmas: contextTurmas = [] } = useData()
-  const resolvedParams = use(params as Promise<{ slug: string }>)
+  const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
   const aluno = contextAluno || (alunos || []).find(a => a.id === resolvedParams.slug)

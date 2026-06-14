@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
-export default function ADOcorrenciasPage({ params }: { params: Promise<{ slug: string }>}) {
+export default function ADOcorrenciasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
   const { currentUser } = useApp()
   const [signingIds, setSigningIds] = useState<Record<string, boolean>>({})

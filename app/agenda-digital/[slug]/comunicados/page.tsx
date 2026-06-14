@@ -1,6 +1,6 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -88,11 +88,11 @@ const getAnexoType = (anexoStr: string) => {
 
 import { useApp } from '@/lib/context'
 
-export default function ADComunicadosPage({ params }: { params: Promise<{ slug: string }>}) {
+export default function ADComunicadosPage({ params }: { params: any }) {
   const queryClient = useQueryClient()
   const { adAlert } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
-  const resolvedParams = use(params as Promise<{ slug: string }>)
+  const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()

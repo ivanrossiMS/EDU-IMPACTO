@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, use } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect } from 'react'
+import { useRouter, useSearchParams, useParams } from 'next/navigation'
 
-export default function GenericSlugPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function GenericSlugPage({ params }: { params: any }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const resolvedParams = use(params)
+  const resolvedParams = useParams() as { slug: string }
 
   useEffect(() => {
     // Prevent 404 on deep links like /agenda-digital/comunicados

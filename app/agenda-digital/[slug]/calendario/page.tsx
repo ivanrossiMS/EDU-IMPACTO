@@ -30,9 +30,11 @@ function todayStr() {
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
 }
 
+import { useParams } from 'next/navigation'
+
 // Caches removidos: utilizando API otimizada de aniversariantes
 
-export default function ADCalendarioPage({ params }: { params: Promise<{ slug: string }>}) {
+export default function ADCalendarioPage({ params }: { params: any }) {
   const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
 
@@ -63,7 +65,7 @@ export default function ADCalendarioPage({ params }: { params: Promise<{ slug: s
       }
     }
   });
-  const resolvedParams = use(params as Promise<{ slug: string }>)
+  const resolvedParams = useParams() as { slug: string }
   const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()
   const rawTurma = aluno?.turma || 'Sem Turma'
