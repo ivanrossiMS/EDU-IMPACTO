@@ -81,13 +81,18 @@ export async function GET(request: Request) {
              resp_pedagogico: meuVinculo.resp_pedagogico
            }
          }
-         responsaveisDb = links.map((l: any) => ({
-            id: l.responsaveis?.id || (Array.isArray(l.responsaveis) ? l.responsaveis[0]?.id : undefined),
-            nome: l.responsaveis?.nome || (Array.isArray(l.responsaveis) ? l.responsaveis[0]?.nome : undefined),
-            parentesco: l.parentesco,
-            resp_financeiro: l.resp_financeiro,
-            resp_pedagogico: l.resp_pedagogico
-         }));
+         responsaveisDb = links.map((l: any) => {
+            const resp = Array.isArray(l.responsaveis) ? l.responsaveis[0] : l.responsaveis;
+            return {
+              id: resp?.id,
+              nome: resp?.nome,
+              parentesco: l.parentesco,
+              resp_financeiro: l.resp_financeiro,
+              resp_pedagogico: l.resp_pedagogico,
+              dias_acesso: resp?.dados?.diasPermitidos || resp?.dados?.dias_acesso || resp?.dados?.diasAcesso || resp?.dados?.diasSemana || [],
+              proibido: resp?.dados?.proibido === true
+            };
+         });
        }
 
        // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
