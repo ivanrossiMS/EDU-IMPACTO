@@ -292,17 +292,13 @@ export function ADSidebar() {
                       <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none', zIndex: 1 }} />
                       {badge && (
                         <div style={{ 
-                          position: 'absolute', top: 0, right: 0, 
+                          position: 'absolute', top: 2, right: 2, 
                           background: '#ef4444', 
-                          color: 'white', fontSize: 10, fontWeight: 800, 
-                          width: 14, height: 14, borderRadius: '50%', 
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: '2px solid rgba(255,255,255,0.2)',
-                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)',
+                          width: 8, height: 8, borderRadius: '50%', 
+                          border: '1.5px solid rgba(15, 17, 41, 0.8)',
+                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)',
                           zIndex: 2
-                        }}>
-                          {badge}
-                        </div>
+                        }} />
                       )}
                     </motion.div>
                     <span style={{ fontSize: 9, fontWeight: isActive ? 800 : 500, color: 'white', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
@@ -432,19 +428,19 @@ export function ADSidebar() {
                         position: 'relative'
                       }}>
                         <item.icon size={18} strokeWidth={2} />
-                        {/* Dot badge when collapsed */}
-                        {getBadgeValue(item.id) && isCollapsed && (
+                        {/* Red dot badge for new content */}
+                        {getBadgeValue(item.id) && (
                           <motion.div 
                             style={{
                             position: 'absolute',
-                            top: -4,
-                            right: -4,
-                            width: 10,
-                            height: 10,
+                            top: -2,
+                            right: -2,
+                            width: 8,
+                            height: 8,
                             borderRadius: '50%',
-                            background: 'linear-gradient(135deg, #FF0080, #7928ca)',
+                            background: '#ef4444',
                             border: '1.5px solid #0f1129',
-                            boxShadow: '0 0 6px rgba(255,0,128,0.7)'
+                            boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)'
                           }} />
                         )}
                       </div>
@@ -458,23 +454,6 @@ export function ADSidebar() {
                         }}>
                           {item.label}
                         </span>
-                      )}
-
-                      {getBadgeValue(item.id) && !isCollapsed && (
-                        <motion.div 
-                          initial={{ scale: 1 }}
-                          style={{ 
-                          marginLeft: 'auto', 
-                          background: 'linear-gradient(135deg, #7928ca, #FF0080)', 
-                          color: 'white', 
-                          padding: '2px 10px', 
-                          borderRadius: 12, 
-                          fontSize: 12, 
-                          fontWeight: 800,
-                          boxShadow: '0 0 12px rgba(255, 0, 128, 0.5)'
-                        }}>
-                          {getBadgeValue(item.id)}
-                        </motion.div>
                       )}
 
                       {isActive && !isCollapsed && (
@@ -554,18 +533,18 @@ export function ADSidebar() {
                             position: 'relative'
                           }}>
                             <item.icon size={18} strokeWidth={2} />
-                            {item.badge && isCollapsed && (
+                            {item.badge && (
                               <motion.div 
                                 style={{
                                 position: 'absolute',
-                                top: -4,
-                                right: -4,
-                                width: 10,
-                                height: 10,
+                                top: -2,
+                                right: -2,
+                                width: 8,
+                                height: 8,
                                 borderRadius: '50%',
-                                background: 'linear-gradient(135deg, #FF0080, #7928ca)',
+                                background: '#ef4444',
                                 border: '1.5px solid #0f1129',
-                                boxShadow: '0 0 6px rgba(255,0,128,0.7)'
+                                boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)'
                               }} />
                             )}
                           </div>
@@ -579,22 +558,6 @@ export function ADSidebar() {
                             }}>
                               {item.label}
                             </span>
-                          )}
-
-                          {item.badge && !isCollapsed && (
-                            <div 
-                              style={{ 
-                              marginLeft: 'auto', 
-                              background: 'linear-gradient(135deg, #7928ca, #00D2FF)', 
-                              color: 'white', 
-                              padding: '2px 10px', 
-                              borderRadius: 12, 
-                              fontSize: 12, 
-                              fontWeight: 800,
-                              boxShadow: '0 0 12px rgba(0, 210, 255, 0.5)'
-                            }}>
-                              {item.badge}
-                            </div>
                           )}
 
                           {isActive && !isCollapsed && (
