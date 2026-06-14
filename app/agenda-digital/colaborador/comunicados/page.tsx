@@ -723,15 +723,18 @@ export default function ColaboradorComunicadosPage() {
 
           const filteredComunicados = (comunicados || []).filter((c: any) => {
             if (c.id?.startsWith('AD-COM-REL-STU')) return false;
+            const isAuthor = String(c.autorId) === String(currentUser?.id) || c.autor === currentUser?.nome;
+            const isTodos = c.destino === 'todos';
             
-            if (!isMaster) {
-              const isAuthor = String(c.autorId) === String(currentUser?.id) || c.autor === currentUser?.nome;
-              
-              if (!isAuthor) {
-                return false;
-              }
+            const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
+            const targetGrupos = c.grupos || (c.dados?.grupos) || [];
+            
+            const inFuncs = targetFuncs.some((id: any) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`);
+            const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
+            
+            if (!isAuthor && !isTodos && !inFuncs && !inGrupos) {
+              return false;
             }
-
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();
             const titulo = c.titulo?.toLowerCase() || '';
