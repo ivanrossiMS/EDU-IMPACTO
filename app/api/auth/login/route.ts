@@ -147,8 +147,14 @@ export async function POST(request: NextRequest) {
         cookies: {
           getAll() { return cookieStore.getAll() },
           setAll(cookiesToSet) {
+            const newNames = cookiesToSet.map(c => c.name)
+            cookieStore.getAll().forEach(c => {
+               if (c.name.startsWith('sb-') && !newNames.includes(c.name)) {
+                  try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
+               }
+            })
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set({ name, value, ...options })
+              try { cookieStore.set({ name, value, ...options, maxAge: options.maxAge || 31536000 }) } catch(e) {}
             })
           },
         },

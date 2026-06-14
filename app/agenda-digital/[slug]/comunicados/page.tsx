@@ -98,11 +98,11 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
-  const turmaObj = turmas.find((t: any) => 
+  const turmaObj = turmas.find((t: any) => t && (
     String(t.id) === String(rawTurma) || 
     String(t.codigo) === String(rawTurma) ||
     (t.nome && typeof rawTurma === 'string' && t.nome.toLowerCase().includes(rawTurma.toLowerCase()))
-  )
+  ))
   const turmaNome = turmaObj?.nome || rawTurma
 
   const [limit, setLimit] = useState(6)

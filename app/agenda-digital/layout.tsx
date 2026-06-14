@@ -192,7 +192,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           
           @media (max-width: 768px) {
             .ad-main-scroll {
-              padding-top: env(safe-area-inset-top, 0px) !important;
+              /* Remover padding-top no wrapper principal para o banner encostar no topo */
             }
             .ad-banner-global {
               position: relative !important;
@@ -207,7 +207,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               width: 100% !important;
               height: auto !important;
               max-height: 400px !important;
-              object-fit: contain !important;
+              object-fit: cover !important;
               margin: 0 !important;
             }
             .ad-fin-sticky-footer {
@@ -216,6 +216,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             }
             .ad-content-inner {
               padding: 16px !important;
+              padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
               padding-bottom: 100px !important;
             }
             .ad-content-inner.ad-has-banner {
