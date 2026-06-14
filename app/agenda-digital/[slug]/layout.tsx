@@ -37,7 +37,7 @@ function abbreviateName(name: string): string {
 function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, currentUser: any, vinculo?: any }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
-  const call = activeCalls.find(c => c.studentId === aluno.id && c.status !== 'cancelled')
+  const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled')
 
   useEffect(() => {
     if (call?.status === 'confirmed') {
@@ -422,7 +422,7 @@ export default function ADInnerLayout({
       return aluno.turma_nome.split('-')[0].trim()
     }
     // 2. Fallback para o turmas em cache
-    const turmaObj = (turmas || []).find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    const turmaObj = (turmas || []).find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
     const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'S/T'
     return nomeTurma.split('-')[0].trim()
   })()
@@ -431,7 +431,7 @@ export default function ADInnerLayout({
     if (!aluno) return 'Vespertino'
     if (aluno.turno_nome) return aluno.turno_nome
     if (aluno.turno && aluno.turno.trim() !== '') return aluno.turno
-    const turmaObj = (turmas || []).find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    const turmaObj = (turmas || []).find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
     return turmaObj?.turno || 'Vespertino'
   })()
 
@@ -493,7 +493,7 @@ export default function ADInnerLayout({
                   <div>
                     <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
                     {(() => {
-                      const turmaObj = turmas.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma))
+                      const turmaObj = turmas.find(t => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
                       const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
                       return (
                         <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {nomeTurma}</div>

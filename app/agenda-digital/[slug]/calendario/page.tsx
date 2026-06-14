@@ -75,7 +75,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
       return String(aluno.turma_nome).split('-')[0].trim()
     }
-    const turmaObj = turmas.find(t => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma))
+    const turmaObj = turmas.find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
     const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
     return String(nomeTurma).split('-')[0].trim()
   })()
@@ -182,7 +182,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           
           if (p.tipo === 'Aluno') {
             const pTurmaRaw = p.turma || ''
-            const pTurmaObj = turmas.find((t: any) => String(t.id) === String(pTurmaRaw) || String(t.codigo) === String(pTurmaRaw) || String(t.nome) === String(pTurmaRaw))
+            const pTurmaObj = turmas.find((t: any) => t && (String(t.id) === String(pTurmaRaw) || String(t.codigo) === String(pTurmaRaw) || String(t.nome) === String(pTurmaRaw)))
             const pNomeTurma = pTurmaObj?.nome || p.turma_nome || pTurmaRaw
             const pNomeTurmaLimpo = String(pNomeTurma).split('-')[0].trim()
             return pNomeTurmaLimpo.toLowerCase() === turmaDoAluno.toLowerCase()

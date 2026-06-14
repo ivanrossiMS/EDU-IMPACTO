@@ -27,7 +27,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
-  const aluno = contextAluno || (alunos || []).find(a => a.id === resolvedParams.slug)
+  const aluno = contextAluno || (alunos || []).find(a => a && a.id === resolvedParams.slug)
   
   const turmas = contextTurmas.length > 0 ? contextTurmas : dbTurmas
   

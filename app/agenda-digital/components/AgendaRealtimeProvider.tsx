@@ -84,7 +84,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   const rawTurma = alunoObj?.turma
   const resolvedTurmaObj = turmasArray.find(
-    t => String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma)
+    t => t && (String(t.id) === String(rawTurma) || String(t.codigo) === String(rawTurma))
   )
   const turmaNome = resolvedTurmaObj?.nome || rawTurma
 
@@ -284,11 +284,17 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 
                 // Add aliases for responsavel_id and aluno_id to allow backend to target them
                 if (OS.User && typeof OS.User.addAlias === 'function') {
-                  if (currentUser.responsavel_id) {
-                    OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id)).catch(() => {})
-                  }
-                  if (currentUser.aluno_id) {
-                    OS.User.addAlias('aluno_id', String(currentUser.aluno_id)).catch(() => {})
+                  try {
+                    if (currentUser.responsavel_id) {
+                      const p = OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                    if (currentUser.aluno_id) {
+                      const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                  } catch (e) {
+                    // ignore
                   }
                 }
               }
