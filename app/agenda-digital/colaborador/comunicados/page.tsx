@@ -726,17 +726,8 @@ export default function ColaboradorComunicadosPage() {
             
             if (!isMaster) {
               const isAuthor = String(c.autorId) === String(currentUser?.id) || c.autor === currentUser?.nome;
-              const isTodos = c.destino === 'todos';
               
-              const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
-              const targetGrupos = c.grupos || (c.dados?.grupos) || [];
-              const targetTurmas = c.turmas || (c.dados?.turmas) || [];
-              
-              const inFuncs = targetFuncs.some((id: any) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`);
-              const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
-              const inTurmas = targetTurmas.some((t: string) => myTurmaNames.includes(t));
-              
-              if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
+              if (!isAuthor) {
                 return false;
               }
             }
