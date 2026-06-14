@@ -66,43 +66,51 @@ export async function GET(request: Request) {
          resp_pedagogico: false
        }
        meusAlunos = [aluno]
-    } else if (responsavel_id) {
+    } else {
+       // Sempre buscar os responsáveis do aluno para ter os dados de restrição atualizados, independente de quem acessa
        const { data: links, error: linkError } = await supabase
          .from('aluno_responsavel')
-         .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dados)')
+         .select('parentesco, resp_financeiro, resp_pedagogico, responsaveis!fk_ar_responsavel(id, nome, email, rfid, dias_acesso, proibido, dados)')
          .eq('aluno_id', slug)
          
        if (!linkError && links && links.length > 0) {
-         const meuVinculo = links.find((l: any) => l.responsaveis?.id === responsavel_id || (Array.isArray(l.responsaveis) && l.responsaveis[0]?.id === responsavel_id));
-         if (meuVinculo) {
-           vinculo = {
-             parentesco: meuVinculo.parentesco,
-             resp_financeiro: meuVinculo.resp_financeiro,
-             resp_pedagogico: meuVinculo.resp_pedagogico
+         if (responsavel_id) {
+           const meuVinculo = links.find((l: any) => l.responsaveis?.id === responsavel_id || (Array.isArray(l.responsaveis) && l.responsaveis[0]?.id === responsavel_id));
+           if (meuVinculo) {
+             vinculo = {
+               parentesco: meuVinculo.parentesco,
+               resp_financeiro: meuVinculo.resp_financeiro,
+               resp_pedagogico: meuVinculo.resp_pedagogico
+             }
            }
          }
+         
          responsaveisDb = links.map((l: any) => {
             const resp = Array.isArray(l.responsaveis) ? l.responsaveis[0] : l.responsaveis;
             return {
               id: resp?.id,
               nome: resp?.nome,
+              email: resp?.email,
               parentesco: l.parentesco,
               resp_financeiro: l.resp_financeiro,
               resp_pedagogico: l.resp_pedagogico,
-              dias_acesso: resp?.dados?.diasPermitidos || resp?.dados?.dias_acesso || resp?.dados?.diasAcesso || resp?.dados?.diasSemana || [],
-              proibido: resp?.dados?.proibido === true
+              dias_acesso: resp?.dias_acesso || resp?.dados?.diasPermitidos || resp?.dados?.dias_acesso || resp?.dados?.diasAcesso || resp?.dados?.diasSemana || [],
+              proibido: resp?.proibido === true || resp?.dados?.proibido === true,
+              dados: resp?.dados || {}
             };
          });
        }
 
-       // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
-       const { data: meusLinks } = await supabase
-         .from('aluno_responsavel')
-         .select('alunos(id, nome, turma)')
-         .eq('responsavel_id', responsavel_id)
-       
-       if (meusLinks && meusLinks.length > 0) {
-         meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
+       if (responsavel_id) {
+         // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
+         const { data: meusLinks } = await supabase
+           .from('aluno_responsavel')
+           .select('alunos(id, nome, turma)')
+           .eq('responsavel_id', responsavel_id)
+         
+         if (meusLinks && meusLinks.length > 0) {
+           meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
+         }
        }
     }
 
