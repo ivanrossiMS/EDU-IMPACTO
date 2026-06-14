@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     }
 
     // 2. Unread Comunicados (Mural)
-    let comQuery = supabase.from('comunicados').select('id, dados, autorId, status');
+    let comQuery = supabase.from('comunicados').select('id, dados');
     
     if (isFamily && queryAlunoId) {
       const conditions = [`destino.eq.todos`];
@@ -80,14 +80,15 @@ export async function GET(request: Request) {
       const mergedStatus = c.status || c.dados?.status || 'enviado';
       if (mergedStatus === 'rascunho' || mergedStatus === 'agendado') return false;
       // Não conta se fui eu mesmo que mandei
-      if (String(c.autorId) === String(user.id)) return false;
+      const autorId = c.autorId || c.dados?.autorId;
+      if (String(autorId) === String(user.id)) return false;
       
       const leituras = (c as any).leituras || c.dados?.leituras || {};
       return !leituras[readerId as string];
     }).length || 0;
 
     // 3. Unread Momentos
-    let momQuery = supabase.from('momentos').select('id, dados, autorId, created_at').eq('dados->>status', 'approved');
+    let momQuery = supabase.from('momentos').select('id, dados, created_at').eq('dados->>status', 'approved');
     if (isFamily && queryAlunoId) {
       const momentosConditions = [`dados->targetClasses.cs.["TODOS"]`, `dados->targetClasses.cs.["Toda a Escola"]`, `dados->targetClasses.cs.["Toda a escola"]`];
       if (resolvedTurma) {
@@ -107,7 +108,8 @@ export async function GET(request: Request) {
     if (momError) throw new Error(`Momentos error: ${momError.message}`);
        
     const unreadMomentos = momentos?.filter(m => {
-      if (String(m.autorId) === String(user.id)) return false;
+      const autorId = m.autorId || m.dados?.autorId;
+      if (String(autorId) === String(user.id)) return false;
       const leituras = (m as any).leituras || m.dados?.leituras || {};
       return !leituras[readerId as string];
     }).length || 0;
