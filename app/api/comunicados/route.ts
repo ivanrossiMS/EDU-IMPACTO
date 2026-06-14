@@ -69,9 +69,9 @@ export async function GET(request: Request) {
   
   if (turmaId || alunoId) {
     const conditions = [`destino.eq.todos`];
-    if (turmaId) {
+    if (resolvedTurma) {
       conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
-      if (resolvedTurma !== turmaId) {
+      if (turmaId && resolvedTurma !== turmaId) {
         conditions.push(`dados->turmas.cs.["${turmaId}"]`);
       }
     }
