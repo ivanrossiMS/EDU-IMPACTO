@@ -51,23 +51,7 @@ export const OCUPACAO_SEGMENTOS = [
 
 export const UNIDADES: any[] = []
 
-export const CENSO_DATA = {
-  ano_ref: 2026,
-  prazo: '2026-04-14',
-  status: 'em_andamento',
-  progresso: 0,
-  total_alunos: 0,
-  preenchidos: 0,
-  pendentes: 0,
-  inconsistencias: 0,
-  validacoes: [
-    { campo: 'CPF Aluno', status: 'ok', total: 0, invalidos: 0 },
-    { campo: 'Endereço', status: 'ok', total: 0, invalidos: 0 },
-    { campo: 'Deficiências', status: 'ok', total: 0, invalidos: 0 },
-    { campo: 'Raça/Cor', status: 'ok', total: 0, invalidos: 0 },
-    { campo: 'Transporte', status: 'ok', total: 0, invalidos: 0 },
-  ]
-}
+
 
 export const PLANOS_AULA: any[] = []
 export const AVALIACOES: any[] = []
