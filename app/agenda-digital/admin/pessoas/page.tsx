@@ -3,7 +3,7 @@ import { useSupabaseArray, invalidateCache } from '@/lib/useSupabaseCollection';
 
 import { useState, useEffect, useCallback } from 'react'
 import { useData } from '@/lib/dataContext'
-import { Search, Filter, Mail, MessageSquare, User, Smartphone, AlertTriangle, Settings, Key, Lock, X, CheckCircle, Loader, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Filter, Mail, MessageSquare, User, Smartphone, AlertTriangle, Settings, Key, Lock, X, CheckCircle, Loader, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -437,8 +437,7 @@ function EditProfileModal({ profile, onClose, onSave }: { profile: any, onClose:
               
               {loadingResps && (!draft.responsaveis || draft.responsaveis.length === 0) ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'hsl(var(--text-muted))', border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12 }}>
-                  <Loader size={20} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
-                  <div>Carregando responsaveis...</div>
+                  <Loader2 size={48} className="animate-spin" color="#00D2FF" style={{ filter: 'drop-shadow(0 0 10px rgba(0,210,255,0.5))', margin: '0 auto' }} />
                 </div>
               ) : draft.responsaveis && draft.responsaveis.length > 0 ? (
                 draft.responsaveis.map((resp: any, i: number) => {

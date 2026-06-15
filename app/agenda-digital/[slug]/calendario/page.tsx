@@ -235,6 +235,16 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     }
   }, [eventosFiltrados, aluno?.id]);
 
+  if (loading || loadingNivers) {
+    return (
+      <div className="ad-admin-page-container" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <Loader2 size={40} color="#00D2FF" className="animate-spin" style={{ filter: 'drop-shadow(0 0 10px rgba(0,210,255,0.5))' }} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 100 }}>
       <style dangerouslySetInnerHTML={{__html: `

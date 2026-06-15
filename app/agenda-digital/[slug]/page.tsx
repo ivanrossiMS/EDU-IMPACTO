@@ -1,6 +1,7 @@
 'use client'
 import { useEffect } from 'react'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
+import { LoadingGlass } from '@/components/LoadingGlass'
 
 export default function GenericSlugPage({ params }: { params: any }) {
   const router = useRouter()
@@ -19,7 +20,7 @@ export default function GenericSlugPage({ params }: { params: any }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-      <div className="animate-pulse">Carregando redirecionamento...</div>
+      <LoadingGlass />
     </div>
   )
 }

@@ -12,19 +12,20 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 const accessStartDateCache = new Map<string, { date: Date | null; expiry: number }>()
 const CACHE_DURATION_MS = 10 * 60 * 1000 // 10 minutes cache TTL
 
-export async function getLoggedUserAccessStartDate(): Promise<Date | null> {
+export async function getLoggedUserAccessStartDate(strictMomentos = false): Promise<Date | null> {
   try {
     const authClient = await createProtectedClient()
     const { data: { user } } = await authClient.auth.getUser()
     if (!user) return null
 
-    const cached = accessStartDateCache.get(user.id)
+    const cacheKey = `${user.id}_${strictMomentos}`
+    const cached = accessStartDateCache.get(cacheKey)
     if (cached && Date.now() < cached.expiry) {
       return cached.date
     }
 
-    const resultDate = await fetchLoggedUserAccessStartDate(user)
-    accessStartDateCache.set(user.id, { date: resultDate, expiry: Date.now() + CACHE_DURATION_MS })
+    const resultDate = await fetchLoggedUserAccessStartDate(user, strictMomentos)
+    accessStartDateCache.set(cacheKey, { date: resultDate, expiry: Date.now() + CACHE_DURATION_MS })
     return resultDate
   } catch (err) {
     console.error("Error in getLoggedUserAccessStartDate wrapper:", err)
@@ -32,7 +33,7 @@ export async function getLoggedUserAccessStartDate(): Promise<Date | null> {
   }
 }
 
-async function fetchLoggedUserAccessStartDate(user: any): Promise<Date | null> {
+async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean): Promise<Date | null> {
   try {
     const email = user.email || ''
     const userId = user.id
@@ -57,8 +58,10 @@ async function fetchLoggedUserAccessStartDate(user: any): Promise<Date | null> {
       return null
     }
 
-    // 2. ALUNO: Respeitar data da matrícula
+    // 2. ALUNO: Visualização total do seu próprio histórico, exceto para momentos restritos
     if (cargo === 'Aluno' || perfil === 'Aluno') {
+      if (!strictMomentos) return null
+      
       const alunoId = user.user_metadata?.aluno_id || dbUser?.dados?.aluno_id
       if (alunoId) {
         const { data: student } = await adminClient
@@ -74,8 +77,10 @@ async function fetchLoggedUserAccessStartDate(user: any): Promise<Date | null> {
       return new Date(dbUser?.created_at || user.created_at)
     }
 
-    // 3. FAMÍLIA: Respeitar data do vínculo familiar
+    // 3. FAMÍLIA: Visualização total do histórico do aluno, exceto para momentos restritos
     if (perfil === 'Família' || cargo === 'Responsável' || perfil === 'Responsável') {
+      if (!strictMomentos) return null
+      
       const responsavelId = user.user_metadata?.responsavel_id || dbUser?.dados?.responsavel_id
       if (responsavelId) {
         const { data: links } = await adminClient
@@ -131,3 +136,4 @@ async function fetchLoggedUserAccessStartDate(user: any): Promise<Date | null> {
     return null
   }
 }
+

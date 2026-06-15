@@ -1,5 +1,5 @@
 'use client'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { LoadingGlass } from '@/components/LoadingGlass'
 import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
@@ -11,7 +11,7 @@ const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
 
 export default function AgendaDigitalIndex() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+    <Suspense fallback={<LoadingGlass />}>
       <AgendaDigitalIndexContent />
     </Suspense>
   )
@@ -113,12 +113,6 @@ function AgendaDigitalIndexContent() {
       background: 'hsl(var(--bg-main))',
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
       
       <div style={{
         display: 'flex',
@@ -133,34 +127,7 @@ function AgendaDigitalIndexContent() {
         width: '90%',
         textAlign: 'center'
       }}>
-        <div style={{
-          position: 'relative',
-          width: '64px',
-          height: '64px',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '50%',
-          background: 'rgba(99, 102, 241, 0.08)',
-          border: '1px solid rgba(99, 102, 241, 0.15)'
-        }}>
-          <div style={{
-            position: 'absolute',
-            inset: '0',
-            border: '3px solid transparent',
-            borderTopColor: '#6366f1',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <BookOpen style={{ width: '28px', height: '28px', color: '#6366f1' }} />
-        </div>
-        <h2 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: 600, color: '#333' }}>
-          Agenda Digital
-        </h2>
-        <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
-          Carregando...
-        </p>
+        <LoadingGlass />
       </div>
     </div>
   )

@@ -2,8 +2,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
-import { FloatingNotificationBadge } from '../components/notifications/FloatingNotificationBadge';
-import { PullToRefresh } from '@/components/PullToRefresh';
+
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useData } from '@/lib/dataContext'
@@ -20,6 +19,7 @@ import {
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
   Megaphone, Loader2, CheckCircle2, Building, ShieldCheck
 } from 'lucide-react'
+import { LoadingGlass } from '@/components/LoadingGlass'
 
 function abbreviateName(name: string): string {
   if (!name) return '';
@@ -344,7 +344,7 @@ export default function ADInnerLayout({
 
   const { turmas = [] } = useData();
   const { adConfig, setAdLoading } = useAgendaDigital();
-  const { currentUser, hydrated, setCurrentUser } = useApp()
+  const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
   const pathname = usePathname()
   const router = useRouter()
   const paramsHook = useParams<{ slug: string }>()
@@ -358,7 +358,7 @@ export default function ADInnerLayout({
       sp.set('redirect', resolvedParams.slug)
       router.replace(`/agenda-digital?${sp.toString()}`)
     }
-    return <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">Carregando...</div>
+    return <LoadingGlass />
   }
 
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
@@ -1564,7 +1564,7 @@ export default function ADInnerLayout({
         }
       `}} />
       {/* Dynamic Header floating profile card */}
-      <PullToRefresh onRefresh={async () => { await queryClient.refetchQueries({ queryKey: ['agenda'] }) }}>
+
       <div className="ad-premium-card-wrapper">
         <div className="ad-premium-card">
           {/* AREA 1: PERFIL ALUNO (À esquerda) */}
@@ -1605,11 +1605,11 @@ export default function ADInnerLayout({
                 </h2>
                 {currentUser?.cargo === 'Aluno' && (
                   <button 
-                    onClick={async () => {
+                    onClick={() => {
+                        setLoadingPath('logout')
+                        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
                         localStorage.removeItem('edu-current-user');
                         localStorage.removeItem('edu-current-perfil');
-                        setCurrentUser(null);
-                        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
                         window.location.href = '/login';
                       }}
                       title="Sair da Conta"
@@ -1712,8 +1712,8 @@ export default function ADInnerLayout({
                 )}
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                  <button 
-                    onClick={() => router.push('/agenda-digital/selecionar-aluno')}
+                  <Link 
+                    href="/agenda-digital/selecionar-aluno"
                     title="Trocar de Aluno"
                     className="ad-family-mini-btn ad-switch-student-btn"
                     style={{
@@ -1733,7 +1733,8 @@ export default function ADInnerLayout({
                       fontSize: 10,
                       fontWeight: 800,
                       fontFamily: 'Outfit, sans-serif',
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      textDecoration: 'none'
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.background = 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
@@ -1750,14 +1751,14 @@ export default function ADInnerLayout({
                   >
                     <Users size={11} strokeWidth={2.5} />
                     <span>Trocar aluno</span>
-                  </button>
+                  </Link>
 
                   <button 
-                    onClick={async () => {
+                    onClick={() => {
+                      setLoadingPath('logout')
+                      fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
                       localStorage.removeItem('edu-current-user');
                       localStorage.removeItem('edu-current-perfil');
-                      setCurrentUser(null);
-                      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
                       window.location.href = '/login';
                     }}
                     title="Sair da Conta"
@@ -1803,7 +1804,7 @@ export default function ADInnerLayout({
           )}
         </div>
       </div>
-      </PullToRefresh>
+
 
 
       {/* Main Grid containing Page Content */}
@@ -1813,7 +1814,6 @@ export default function ADInnerLayout({
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
           <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole }}>
               {children}
-              <FloatingNotificationBadge />
           </SelectedStudentProvider>
         </div>
       </div>

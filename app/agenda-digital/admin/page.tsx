@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
+import { LoadingGlass } from '@/components/LoadingGlass'
 import Link from 'next/link'
 import {
   Send, Eye, MessageCircle, AlertCircle, Users, UserCheck,
@@ -139,8 +140,8 @@ export default function ADAdminDashboard() {
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
 
   if (!mounted) return (
-    <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-      Carregando painel...
+    <div className="flex items-center justify-center h-full text-slate-500 font-medium">
+      <LoadingGlass />
     </div>
   )
 

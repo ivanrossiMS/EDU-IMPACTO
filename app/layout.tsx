@@ -3,6 +3,7 @@ import './globals.css'
 import { AppProvider } from '@/lib/context'
 import { ReactQueryProvider } from '@/components/ReactQueryProvider'
 import { GlobalAccessGuard } from '@/components/layout/GlobalAccessGuard'
+import { Suspense } from 'react'
 
 
 export const metadata: Metadata = {
@@ -19,10 +20,12 @@ export const viewport = {
   themeColor: '#0d1117'
 }
 
+import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         {/* Preconnect para carregamento não-bloqueante das fontes */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,7 +36,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
-
+        <Suspense fallback={null}>
+          <GlobalNavigationLoader />
+        </Suspense>
         <ReactQueryProvider>
           <AppProvider>
             <GlobalAccessGuard>

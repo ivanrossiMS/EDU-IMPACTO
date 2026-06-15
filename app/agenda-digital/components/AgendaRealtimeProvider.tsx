@@ -24,7 +24,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
-import { PullToRefresh } from '@/components/PullToRefresh'
+
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -671,6 +671,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         if (eventType === 'DELETE' || isTargetingAluno(merged)) {
           window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
 
           if (eventType === 'INSERT') {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
@@ -696,7 +697,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         if (status === 'SUBSCRIBED') {
           console.log(`✅ [Realtime] Conectado ao canal: ${channelName}`)
         } else if (status === 'CHANNEL_ERROR') {
-          console.error(`❌ [Realtime] Erro no canal: ${channelName}`)
+          console.error(`❌ [Realtime] Erro no canal: ${channelName}. Desconectando para evitar loop. Verifique se o Realtime está ativado no banco para todas as tabelas.`)
+          // Desconecta o canal para evitar o loop infinito de reconexão do supabase-js
+          supabase.removeChannel(channel)
         }
       })
 
@@ -706,7 +709,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       console.log(`🔌 [Realtime] Canal desconectado: ${channelName}`)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alunoId, currentUser?.id, currentUser?.perfil, turmaNome, rawTurma])
+  }, [alunoId, currentUser?.id, currentUser?.perfil, turmaNome, typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma)])
 
   return (
     <>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
-import { use } from 'react'
+import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
   Edit3, HeartPulse, ShieldCheck, Contact, FileText, Camera, 
@@ -48,8 +48,8 @@ export default function ADPerfilPage() {
   )
 
   if (isLoading || !aluno) return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: 100, color: 'hsl(var(--text-muted))' }}>
-      Carregando perfil do aluno...
+    <div className="flex items-center justify-center h-full text-slate-500 font-medium p-8">
+      <LoadingGlass />
     </div>
   )
 

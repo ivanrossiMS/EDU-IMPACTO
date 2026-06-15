@@ -18,8 +18,7 @@ export async function GET(request: Request) {
     }
     const { data, error } = await query
     if (error) throw new Error(error.message)
-    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
-    return NextResponse.json(result, {
+    return NextResponse.json(data || [], {
       headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
   } catch (err: any) {
@@ -47,16 +46,23 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.from('rotina_items').upsert(row).select().single()
     if (error) throw new Error(error.message)
 
-    return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
+    return NextResponse.json(data, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }
 
 function buildRowAuth(body: any) {
-  const { id, ...rest } = body
   return {
-    id: id || crypto.randomUUID(),
-    dados: rest,
+    id: body.id || crypto.randomUUID(),
+    turma: body.turma || '',
+    dia_semana: body.dia_semana || 1,
+    hora_inicio: body.hora_inicio || '',
+    hora_fim: body.hora_fim || '',
+    disciplina: body.disciplina || '',
+    professor: body.professor || '',
+    sala: body.sala || '',
+    tipo: body.tipo || 'aula',
+    cor: body.cor || '#3b82f6',
   }
 }

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   try {
     const supabase = await createProtectedClient()
     const accessStartDate = await getLoggedUserAccessStartDate()
-    let query = supabase.from('relatorios_templates').select('*')
+    let query = supabase.from('relatorios_templates').select('id, dados, created_at')
     if (accessStartDate) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }

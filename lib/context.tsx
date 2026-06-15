@@ -66,6 +66,9 @@ interface AppState {
   setCurrentUser: (user: CurrentUser | null) => void
   // Whether localStorage has been read (prevents false 'Diretor Geral' default)
   hydrated: boolean
+  // Global loading path state
+  loadingPath: string | null
+  setLoadingPath: (path: string | null) => void
 }
 
 const AppContext = createContext<AppState>({
@@ -86,6 +89,8 @@ const AppContext = createContext<AppState>({
   currentUser: null,
   setCurrentUser: () => {},
   hydrated: false,
+  loadingPath: null,
+  setLoadingPath: () => {},
 })
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -99,6 +104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentUserPerfil, setCurrentUserPerfilState] = useState('')
   const [currentUser, setCurrentUserState] = useState<CurrentUser | null>(null)
   const [hydrated, setHydrated] = useState(false)
+  const [loadingPath, setLoadingPathState] = useState<string | null>(null)
 
   // Hydrate from localStorage after mount
   useEffect(() => {
@@ -213,6 +219,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       currentUserPerfil, setCurrentUserPerfil,
       currentUser, setCurrentUser,
       hydrated,
+      loadingPath,
+      setLoadingPath: setLoadingPathState,
     }}>
       {children}
     </AppContext.Provider>

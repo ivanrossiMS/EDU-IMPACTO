@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { useData } from '@/lib/dataContext'
 import { useState, useEffect, useMemo } from 'react'
+import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   BookOpen, Users, Search, Plus, 
   ArrowLeft, X, Trash2, Check,
@@ -70,7 +71,7 @@ const SUGESTOES_EQUIPES = [
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function ADAdminTurmas() {
   const { turmas = [], cfgCalendarioLetivo = [] } = useData();
-  const [alunos] = useSupabaseArray<any>('alunos?limit=9999');
+  const [alunos] = useSupabaseArray<any>('alunos?lightweight=true');
   const [grupos, setGrupos] = useSupabaseArray<GrupoDigital>('agenda/grupos');
   const [equipes, setEquipes] = useSupabaseArray<EquipeGrupo>('agenda/equipes');
   const [funcionarios] = useSupabaseArray<any>('configuracoes/usuarios');
@@ -181,11 +182,8 @@ export default function ADAdminTurmas() {
   const searchResultsColabs = buscaColab.length > 0 ? (funcionarios || []).filter((f: any) => f.nome.toLowerCase().includes(buscaColab.toLowerCase())).slice(0, 10) : []
 
   if (!isLoaded) return (
-    <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-      <div style={{ width: 48, height: 48, borderRadius: 24, background: 'hsl(var(--bg-surface))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-        <Layers size={24} style={{ opacity: 0.3 }} />
-      </div>
-      Carregando turmas e equipes...
+    <div className="flex items-center justify-center h-full text-slate-500 font-medium">
+      <LoadingGlass />
     </div>
   )
 

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createProtectedClient()
-    const { data, error } = await supabase.from('enquetes').select('*')
+    const { data, error } = await supabase.from('enquetes').select('id, dados, created_at')
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {

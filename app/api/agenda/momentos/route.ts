@@ -15,18 +15,20 @@ export async function GET(request: Request) {
     const supabase = await createProtectedClient()
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
+    const offsetParam = searchParams.get('offset')
     const limit = limitParam ? parseInt(limitParam, 10) : 30
+    const offset = offsetParam ? parseInt(offsetParam, 10) : 0
 
-    const accessStartDate = await getLoggedUserAccessStartDate()
+    const accessStartDate = await getLoggedUserAccessStartDate(true)
     let query = supabase.from('momentos').select('*')
     if (accessStartDate) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
-    const { data, error } = await query.order('created_at', { ascending: false }).limit(limit)
+    const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' }
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

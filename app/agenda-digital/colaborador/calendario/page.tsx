@@ -414,6 +414,9 @@ export default function ADCalendarioPage() {
            .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
            .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
            .ad-calendar-bottom-panels { grid-template-columns: 1fr !important; }
+           .ad-calendar-right-column { height: auto !important; overflow-y: visible !important; }
+           .ad-calendar-day-card { flex-shrink: 0 !important; }
+           .ad-calendar-bottom-panels > div { flex-shrink: 0 !important; }
         }
       `}} />
 
@@ -486,12 +489,13 @@ export default function ADCalendarioPage() {
         </div>
         
         {/* Right Column: Events and Birthday sub-panels */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
+        <div className="ad-calendar-right-column" style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
           
           {/* 📍 Events of the selected day Card */}
           <motion.div 
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="card" 
+            className="card ad-calendar-day-card" 
+
             style={{ 
               padding: '24px', borderRadius: 28, border: '1px solid rgba(255,255,255,0.8)',
               background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)',

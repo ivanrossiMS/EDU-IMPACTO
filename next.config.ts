@@ -1,4 +1,4 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from 'next'; 
 
 const securityHeaders = [
   // Prevent clickjacking
@@ -75,19 +75,25 @@ const nextConfig: NextConfig = {
 
   // ── Security Headers ────────────────────────────────────────────
   async headers() {
-    return [
+    const headersConfig = [
       {
         source: '/(.*)',
         headers: securityHeaders,
       },
-      // Cache static assets aggressively
-      {
+    ];
+    
+    // Cache static assets aggressively ONLY in production.
+    // In development, this breaks Next.js Fast Refresh and causes massive lag.
+    if (process.env.NODE_ENV === 'production') {
+      headersConfig.push({
         source: '/_next/static/(.*)',
         headers: [
           { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
-      },
-    ];
+      });
+    }
+
+    return headersConfig;
   },
 
   // ── Redirects ───────────────────────────────────────────────────

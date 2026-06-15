@@ -138,10 +138,9 @@ export function useSupabaseCollection<T>(
     const doFetch = options?.fetcher
       ? () => options.fetcher!()
       : () => {
-          const sep = endpoint.includes('?') ? '&' : '?';
-          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
-            cache: 'no-store',
+          return fetch(`/api/${endpoint}`, { 
+            headers: { 'Cache-Control': 'default' }, 
+            cache: 'default',
             credentials: 'include',
             redirect: 'error'
           })

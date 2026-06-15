@@ -39,8 +39,6 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { useAgendaBadges } from '../hooks/useAgendaBadges'
-
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
@@ -57,9 +55,8 @@ const menuItems = [
 export function ADSidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { currentUser, setCurrentUser, theme, setTheme } = useApp()
+  const { currentUser, setCurrentUser, theme, setTheme, loadingPath, setLoadingPath } = useApp()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { comunicados = [], chatsList = [], momentosFeed = [], messages = {} } = useAgendaDigital()
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -71,8 +68,6 @@ export function ADSidebar() {
   const alunoId = isSlugPath ? segments[2] : ''
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
-
-  const unreadStats = useAgendaBadges(alunoId)
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,14 +119,7 @@ export function ADSidebar() {
     }
   }
 
-  const getBadgeValue = (id: string) => {
-    if (id === 'comunicados') return unreadStats.unreadMural || undefined
-    if (id === 'momentos') return unreadStats.unreadMomentos || undefined
-    if (id === 'calendario') return unreadStats.unreadCalendario || undefined
-    if (id === 'ocorrencias') return unreadStats.unreadOcorrencias || undefined
-    if (id === 'notas') return unreadStats.unreadNotas || undefined
-    return undefined
-  }
+
 
   let mobileTabs: any[] = []
     
@@ -151,13 +139,13 @@ export function ADSidebar() {
       ]
     } else if (alunoId) {
       mobileTabs = [
-        { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados`, badgeVal: unreadStats.unreadMural || undefined },
+        { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
 
-        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos`, badgeVal: unreadStats.unreadMomentos || undefined },
-        { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario`, badgeVal: unreadStats.unreadCalendario || undefined },
-        { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia`, badgeVal: unreadStats.unreadFrequencia || undefined },
-        { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias`, badgeVal: unreadStats.unreadOcorrencias || undefined },
-        { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas`, badgeVal: unreadStats.unreadNotas || undefined },
+        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
+        { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
+        { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
+        { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
+        { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
@@ -183,7 +171,7 @@ export function ADSidebar() {
     return () => {
       if (el) el.removeEventListener('scroll', handleScroll)
     }
-  }, [mobileTabs])
+  }, [alunoId])
 
     return (
       <>
@@ -193,10 +181,13 @@ export function ADSidebar() {
           bottom: 0,
           left: 0,
           right: 0,
-          background: 'linear-gradient(90deg, #9f00ff 0%, #0066ff 50%, #00bfff 100%)',
+          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9) 0%, rgba(30, 58, 138, 0.9) 100%)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: '24px 24px 0 0',
           zIndex: 9999,
-          boxShadow: '0 -4px 30px rgba(0, 102, 255, 0.3)',
+          boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.5)',
           display: 'block',
           overflow: 'hidden',
           paddingBottom: 'env(safe-area-inset-bottom)'
@@ -228,7 +219,7 @@ export function ADSidebar() {
                   position: 'absolute',
                   top: 0, bottom: 0, right: 0,
                   width: '50px',
-                  background: 'linear-gradient(to right, transparent, rgba(0, 191, 255, 0.9))',
+                  background: 'linear-gradient(to right, transparent, rgba(15, 23, 42, 0.9))',
                   pointerEvents: 'none',
                   zIndex: 10,
                   display: 'flex',
@@ -260,7 +251,6 @@ export function ADSidebar() {
             <LayoutGroup id="ad-mobile-tabs">
             {mobileTabs.map((item, idx) => {
               const isActive = pathname === item.href || (item.href !== '/agenda-digital' && pathname.startsWith(item.href))
-              const badge = item.badgeVal !== undefined ? item.badgeVal : getBadgeValue(item.id)
               
               return (
                 <div key={item.id} style={{ display: 'flex', alignItems: 'center', minWidth: '76px', scrollSnapAlign: 'start', zIndex: 1, position: 'relative' }}>
@@ -284,22 +274,13 @@ export function ADSidebar() {
                             position: 'absolute',
                             width: 50, height: 50,
                             borderRadius: '50%',
-                            background: 'radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 40%, transparent 70%)',
+                            background: 'radial-gradient(circle, rgba(121,40,202,0.6) 0%, rgba(121,40,202,0.15) 40%, transparent 70%)',
                             zIndex: 0
                           }}
                         />
                       )}
                       <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} style={{ filter: isActive ? 'drop-shadow(0 0 6px rgba(255,255,255,0.5))' : 'none', zIndex: 1 }} />
-                      {badge && (
-                        <div style={{ 
-                          position: 'absolute', top: 2, right: 2, 
-                          background: '#ef4444', 
-                          width: 8, height: 8, borderRadius: '50%', 
-                          border: '1.5px solid rgba(15, 17, 41, 0.8)',
-                          boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)',
-                          zIndex: 2
-                        }} />
-                      )}
+
                     </motion.div>
                     <span style={{ fontSize: 9, fontWeight: isActive ? 800 : 500, color: 'white', textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>
                       {item.label}
@@ -314,8 +295,8 @@ export function ADSidebar() {
                           width: 14,
                           height: 3,
                           borderRadius: 2,
-                          background: 'white',
-                          boxShadow: '0 0 6px rgba(255,255,255,0.8)'
+                          background: '#7928ca',
+                          boxShadow: '0 0 10px rgba(121,40,202,0.8)'
                         }}
                       />
                     )}
@@ -428,21 +409,6 @@ export function ADSidebar() {
                         position: 'relative'
                       }}>
                         <item.icon size={18} strokeWidth={2} />
-                        {/* Red dot badge for new content */}
-                        {getBadgeValue(item.id) && (
-                          <motion.div 
-                            style={{
-                            position: 'absolute',
-                            top: -2,
-                            right: -2,
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            background: '#ef4444',
-                            border: '1.5px solid #0f1129',
-                            boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)'
-                          }} />
-                        )}
                       </div>
                       
                       {!isCollapsed && (
@@ -457,7 +423,7 @@ export function ADSidebar() {
                       )}
 
                       {isActive && !isCollapsed && (
-                        <div style={{ marginLeft: getBadgeValue(item.id) ? 8 : 'auto', opacity: 0.4 }}>
+                        <div style={{ marginLeft: 'auto', opacity: 0.4 }}>
                            <ChevronRight size={18} />
                         </div>
                       )}
@@ -489,15 +455,14 @@ export function ADSidebar() {
                     { 
                       label: 'Comunicados', 
                       href: `/agenda-digital/${alunoId}/comunicados`, 
-                      icon: Bell,
-                      badge: unreadStats.unreadMural || undefined
+                      icon: Bell
                     },
 
-                    { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon, badge: unreadStats.unreadMomentos || undefined },
-                    { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar, badge: unreadStats.unreadCalendario || undefined },
+                    { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
+                    { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
-                    { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle, badge: unreadStats.unreadOcorrencias || undefined },
-                    { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap, badge: unreadStats.unreadNotas || undefined },
+                    { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
+                    { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
@@ -533,20 +498,6 @@ export function ADSidebar() {
                             position: 'relative'
                           }}>
                             <item.icon size={18} strokeWidth={2} />
-                            {item.badge && (
-                              <motion.div 
-                                style={{
-                                position: 'absolute',
-                                top: -2,
-                                right: -2,
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                background: '#ef4444',
-                                border: '1.5px solid #0f1129',
-                                boxShadow: '0 0 8px rgba(239, 68, 68, 0.8)'
-                              }} />
-                            )}
                           </div>
                           
                           {!isCollapsed && (
@@ -561,7 +512,7 @@ export function ADSidebar() {
                           )}
 
                           {isActive && !isCollapsed && (
-                            <div style={{ marginLeft: item.badge ? 8 : 'auto', opacity: 0.4 }}>
+                            <div style={{ marginLeft: 'auto', opacity: 0.4 }}>
                                <ChevronRight size={18} />
                             </div>
                           )}
@@ -629,9 +580,10 @@ export function ADSidebar() {
                   )}
                   <button 
                     onClick={async () => { 
+                      setLoadingPath('logout')
+                      fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                       localStorage.removeItem('edu-current-user');
                       localStorage.removeItem('edu-current-perfil');
-                      await fetch('/api/auth/logout', { method: 'POST' }); 
                       window.location.href = '/login'; 
                     }}
                     style={{
@@ -657,7 +609,7 @@ export function ADSidebar() {
                   />
                   {isUploadingPhoto && (
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Loader2 className="animate-spin" size={16} color="#fff" />
+                      
                     </div>
                   )}
                   <label style={{ position: 'absolute', inset: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.85)', opacity: 0, transition: 'opacity 0.2s', borderRadius: '50%' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
@@ -674,10 +626,11 @@ export function ADSidebar() {
                   </button>
                 )}
                 <button 
-                  onClick={async () => { 
+                  onClick={() => { 
+                    setLoadingPath('logout')
                     localStorage.removeItem('edu-current-user');
                     localStorage.removeItem('edu-current-perfil');
-                    await fetch('/api/auth/logout', { method: 'POST' }); 
+                    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                     window.location.href = '/login'; 
                   }}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}

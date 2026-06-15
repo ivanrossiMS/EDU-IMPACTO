@@ -5,6 +5,8 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
+import { LoadingGlass } from '@/components/LoadingGlass'
 import { UserAvatar } from '@/components/UserAvatar'
 import React, { useState, useEffect } from 'react'
 import { 
@@ -17,7 +19,7 @@ export default function AgendaDigitalColaboradorLayout({
 }: { 
   children: React.ReactNode 
 }) {
-  const { currentUser, hydrated, setCurrentUser } = useApp()
+  const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
   const { adConfig, setAdLoading } = useAgendaDigital();
   const pathname = usePathname()
   const router = useRouter()
@@ -57,7 +59,7 @@ export default function AgendaDigitalColaboradorLayout({
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         minHeight: '80vh', width: '100%', gap: '24px', fontFamily: 'system-ui, sans-serif'
       }}>
-         <p>Carregando Agenda...</p>
+         <LoadingGlass />
       </div>
     )
   }
@@ -435,6 +437,7 @@ export default function AgendaDigitalColaboradorLayout({
               </button>
               <button 
                 onClick={() => { 
+                  setLoadingPath('logout')
                   localStorage.removeItem('edu-current-user');
                   localStorage.removeItem('edu-current-perfil');
                   setCurrentUser(null); 

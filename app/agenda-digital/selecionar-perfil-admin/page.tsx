@@ -4,7 +4,8 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard } from 'lucide-react'
+import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell } from 'lucide-react'
+import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -624,7 +625,7 @@ function SelecionarPerfilAdminContent() {
 
 export default function SelecionarPerfilAdmin() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+    <Suspense fallback={<LoadingGlass />}>
       <SelecionarPerfilAdminContent />
     </Suspense>
   )

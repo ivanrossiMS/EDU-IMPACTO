@@ -13,14 +13,14 @@ export async function GET(request: Request) {
     
     const { data, error } = await supabase
       .from('agenda_equipes')
-      .select('*')
+      .select('id, dados')
       
     if (error) throw new Error(error.message)
     
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' }
+      headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

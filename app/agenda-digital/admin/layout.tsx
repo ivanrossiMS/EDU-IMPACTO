@@ -25,14 +25,13 @@ export default function AgendaDigitalAdminLayout({
     }
   }, [hydrated, currentUser, router])
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-      setCurrentUser(null)
-      router.push('/login')
-    } catch (e) {
-      router.push('/login')
-    }
+  const { setLoadingPath } = useApp()
+  const handleLogout = () => {
+    setLoadingPath('logout')
+    localStorage.removeItem('edu-current-user')
+    localStorage.removeItem('edu-current-perfil')
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    window.location.href = '/login'
   }
 
   const nomeUsuario = currentUser?.nome || 'Administrador'

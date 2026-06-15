@@ -14,6 +14,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { ADSidebar } from './components/Sidebar'
 import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
+import { Loader2 } from 'lucide-react'
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
@@ -56,7 +57,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   const { bannerUrl, adLoading } = useAgendaDigital()
-  const { currentUser, hydrated } = useApp()
+  const { currentUser, hydrated, loadingPath, setLoadingPath } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
@@ -74,6 +75,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     setMounted(true)
   }, [])
+
+  React.useEffect(() => {
+    setLoadingPath(null)
+  }, [pathname, setLoadingPath])
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
@@ -251,6 +256,29 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         
         <FloatingWhatsApp />
         <AgendaRealtimeProvider />
+        
+        {loadingPath && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+          }}>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 16
+            }}>
+              <Loader2 size={48} color="#00D2FF" className="animate-spin" style={{ filter: 'drop-shadow(0 0 10px rgba(0,210,255,0.5))' }} />
+            </div>
+          </div>
+        )}
     </div>
   )
 }

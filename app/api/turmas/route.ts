@@ -78,6 +78,8 @@ export async function GET(request: Request) {
       total: count || 0,
       page,
       limit
+    }, {
+      headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' }
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

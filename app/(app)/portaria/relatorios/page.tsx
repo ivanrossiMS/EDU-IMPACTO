@@ -11,7 +11,9 @@ import {
 
 const ACCENT = '#06b6d4'
 
-export default function PortariaRelatoriosPage() {
+import { Suspense } from 'react'
+
+function PortariaRelatoriosPageContent() {
   const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10))
   const [dataFim, setDataFim] = useState(new Date().toISOString().slice(0, 10))
   const [turmaId, setTurmaId] = useState('')
@@ -991,5 +993,13 @@ export default function PortariaRelatoriosPage() {
       </div>
 
     </div>
+  )
+}
+
+export default function PortariaRelatoriosPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center' }}>Carregando relatórios...</div>}>
+      <PortariaRelatoriosPageContent />
+    </Suspense>
   )
 }

@@ -267,11 +267,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           .ad-momentos-desc {
             display: none !important;
           }
+          .ad-hide-mobile { display: none !important; }
         }
       `}} />
 
       {/* Decorative Blur Blobs */}
-      <div style={{
+      <div className="ad-hide-mobile" style={{
         position: 'absolute',
         top: '15%',
         left: '5%',
@@ -283,7 +284,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         pointerEvents: 'none',
         zIndex: 0
       }} />
-      <div style={{
+      <div className="ad-hide-mobile" style={{
         position: 'absolute',
         bottom: '25%',
         right: '5%',
@@ -297,7 +298,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       }} />
 
       {/* Floating Modern Icons Background Layer */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+      <div className="ad-hide-mobile" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
         <div className="floating-icon" style={{ top: '8%', left: '8%', color: 'rgba(99, 102, 241, 0.35)', animation: 'floatRandom 14s ease-in-out infinite' }}><Heart size={28} fill="rgba(99, 102, 241, 0.15)" /></div>
         <div className="floating-icon" style={{ top: '15%', left: '85%', color: 'rgba(236, 72, 153, 0.4)', animation: 'floatRandom 16s ease-in-out infinite 1s' }}><Sparkles size={24} /></div>
         <div className="floating-icon" style={{ top: '40%', left: '5%', color: 'rgba(245, 158, 11, 0.35)', animation: 'floatRandom 12s ease-in-out infinite 2s' }}><Smile size={30} /></div>

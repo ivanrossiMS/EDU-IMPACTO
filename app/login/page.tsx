@@ -107,7 +107,7 @@ export default function LoginPage() {
   // ── animations
   const [typedText, setTypedText]       = useState('')
   const [testimonialIdx, setTestimonialIdx] = useState(0)
-  const headline = 'Gestão escolar do futuro, hoje.'
+  const headline = 'Bem-vindo de volta!'
 
   useEffect(() => {
     let i = 0; setTypedText('')
@@ -386,95 +386,24 @@ export default function LoginPage() {
   }
 
   // ── shared styles
-  const cardStyle: React.CSSProperties = { padding:'36px', borderRadius:22, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', boxShadow:'0 32px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)' }
-  const baseInputStyle: React.CSSProperties = { width:'100%', padding:'13px 14px 13px 42px', borderRadius:12, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.1)', color:'#fff', fontSize:14, outline:'none', transition:'all 0.2s', fontFamily:"'Inter',sans-serif" }
+  const cardStyle: React.CSSProperties = { padding:'36px', borderRadius:28, background:'linear-gradient(145deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border:'1px solid rgba(96, 165, 250, 0.2)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', boxShadow:'0 32px 80px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.1)' }
+  const baseInputStyle: React.CSSProperties = { width:'100%', padding:'15px 16px 15px 44px', borderRadius:16, background:'rgba(59, 130, 246, 0.08)', border:'1px solid rgba(96, 165, 250, 0.2)', color:'#fff', fontSize:14, outline:'none', transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily:"'Inter',sans-serif", boxShadow:'inset 0 2px 6px rgba(0,0,0,0.1)' }
   const btnBase = (disabled: boolean): React.CSSProperties => ({
-    position:'relative', padding:'15px', borderRadius:14, width:'100%',
+    position:'relative', padding:'16px', borderRadius:16, width:'100%',
     background: disabled ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
-    border:'none', color:'#fff', fontSize:15, fontWeight:700,
+    border:'none', color:'#fff', fontSize:15, fontWeight:800,
     cursor: disabled ? 'not-allowed' : 'pointer', overflow:'hidden', letterSpacing:'0.02em',
-    fontFamily:"'Outfit',sans-serif", transition:'all 0.25s',
-    boxShadow: disabled ? 'none' : '0 8px 26px rgba(59,130,246,0.4)',
+    fontFamily:"'Outfit',sans-serif", transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: disabled ? 'none' : '0 8px 30px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
   })
-  const focusOn  = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(59,130,246,0.6)'; e.target.style.boxShadow='0 0 0 3px rgba(59,130,246,0.12)'; e.target.style.background='rgba(59,130,246,0.04)' }
-  const focusOff = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(255,255,255,0.1)'; e.target.style.boxShadow='none'; e.target.style.background='rgba(255,255,255,0.04)' }
+  const focusOn  = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(96, 165, 250, 0.8)'; e.target.style.boxShadow='0 0 0 4px rgba(96, 165, 250, 0.25), inset 0 2px 6px rgba(0,0,0,0.1)'; e.target.style.background='rgba(59, 130, 246, 0.15)' }
+  const focusOff = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(96, 165, 250, 0.2)'; e.target.style.boxShadow='inset 0 2px 6px rgba(0,0,0,0.1)'; e.target.style.background='rgba(59, 130, 246, 0.08)' }
   const Spinner = () => <div style={{ width:18, height:18, borderRadius:'50%', border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'#fff', animation:'spin 0.8s linear infinite', display:'inline-block' }} />
   const ErrorBox = ({ msg }: { msg: string }) => msg ? <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)', fontSize:13, color:'#f87171', display:'flex', alignItems:'center', gap:8 }}>⚠ {msg}</div> : null
   const ShimmerOverlay = () => <div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%)', backgroundSize:'200% 100%', animation:'shimmerBtn 2.5s ease-in-out infinite' }} />
   const Label = ({ text }: { text: string }) => <label style={{ display:'block', fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.45)', letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:8 }}>{text}</label>
 
-  // ────────────────────────────────────────────────────────────────
-  // LEFT PANEL
-  // ────────────────────────────────────────────────────────────────
-  const LeftPanel = (
-    <div className="login-left-panel" style={{ flex:'0 0 52%', position:'relative', overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between', padding:'48px 56px', background:'linear-gradient(145deg, #050a18 0%, #0a0f2e 30%, #0d1a3a 60%, #060d24 100%)' }}>
-      {/* Glows */}
-      <BackgroundEffects />
 
-      {/* Logo */}
-      <div style={{ position:'relative', zIndex:2 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ width:46, height:46, borderRadius:14, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 8px 24px rgba(59,130,246,0.4)', overflow: 'hidden' }}>
-            <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          </div>
-          <div>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:20, fontWeight:900, color:'#fff', letterSpacing:'-0.02em' }}>IMPACTO <span style={{ background:'linear-gradient(90deg,#60a5fa,#a78bfa)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>EDU</span></div>
-            <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', fontWeight:600, letterSpacing:'0.12em', textTransform:'uppercase' }}>Enterprise Learning Suite</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Headline + features */}
-      <div className="login-headline-wrapper" style={{ position:'relative', zIndex:2, flex:1, display:'flex', flexDirection:'column', justifyContent:'center', paddingTop:40, paddingBottom:40 }}>
-        <div className="login-tag" style={{ fontSize:11, fontWeight:700, letterSpacing:'0.14em', color:'#60a5fa', textTransform:'uppercase', marginBottom:20, display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ width:20, height:1.5, background:'#60a5fa', borderRadius:2 }} /> Plataforma #1 em Gestão Escolar
-        </div>
-        <h1 className="login-title" style={{ fontFamily:"'Outfit',sans-serif", fontSize:46, fontWeight:900, lineHeight:1.08, color:'#fff', letterSpacing:'-0.03em', marginBottom:24, minHeight:108 }}>
-          {typedText}<span style={{ display:'inline-block', width:3, height:'0.85em', background:'#60a5fa', marginLeft:3, verticalAlign:'middle', animation:'blink 1s step-end infinite', borderRadius:1 }} />
-        </h1>
-        <p className="login-subtitle" style={{ fontSize:16, color:'rgba(255,255,255,0.45)', lineHeight:1.7, marginBottom:40, maxWidth:380 }}>Unificamos acadêmico, financeiro, RH, CRM e IA em uma única plataforma enterprise-grade.</p>
-        <div className="hide-on-mobile" style={{ display:'flex', flexDirection:'column', gap:14 }}>
-          {FEATURES.map((f, i) => (
-            <div key={f.label} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 18px', borderRadius:14, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', backdropFilter:'blur(8px)', animation:`fadeSlideIn 0.5s ease-out ${i*.1}s both`, transition:'all 0.2s', cursor:'default' }}
-              onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)';e.currentTarget.style.borderColor='rgba(59,130,246,0.2)'}}
-              onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)';e.currentTarget.style.borderColor='rgba(255,255,255,0.06)'}}>
-              <div style={{ width:36, height:36, borderRadius:10, background:'rgba(59,130,246,0.12)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>{f.icon}</div>
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,0.85)' }}>{f.label}</div>
-                <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)', marginTop:1 }}>{f.desc}</div>
-              </div>
-              <div style={{ marginLeft:'auto', width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981' }} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Testimonial + stats */}
-      <div className="hide-on-mobile" style={{ position:'relative', zIndex:2 }}>
-        <div style={{ padding:'20px 22px', borderRadius:16, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', backdropFilter:'blur(8px)', minHeight:96 }}>
-          <div style={{ fontSize:13, color:'rgba(255,255,255,0.6)', lineHeight:1.6, marginBottom:12, fontStyle:'italic' }}>{TESTIMONIALS[testimonialIdx].text}</div>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div style={{ width:28, height:28, borderRadius:'50%', background:'linear-gradient(135deg,#3b82f6,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:800, color:'#fff' }}>{TESTIMONIALS[testimonialIdx].author[0]}</div>
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.7)' }}>{TESTIMONIALS[testimonialIdx].author}</div>
-              <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)' }}>{TESTIMONIALS[testimonialIdx].school}</div>
-            </div>
-            <div style={{ marginLeft:'auto', display:'flex', gap:5 }}>
-              {TESTIMONIALS.map((_,i)=><div key={i} style={{ width:i===testimonialIdx?16:5, height:5, borderRadius:3, background:i===testimonialIdx?'#60a5fa':'rgba(255,255,255,0.15)', transition:'all 0.4s' }} />)}
-            </div>
-          </div>
-        </div>
-        <div style={{ display:'flex', marginTop:20, borderRadius:12, overflow:'hidden', border:'1px solid rgba(255,255,255,0.06)' }}>
-          {[{v:'2.400+',l:'Instituições'},{v:'98%',l:'Satisfação'},{v:'R$2bi+',l:'Gerenciados'}].map((s,i)=>(
-            <div key={s.l} style={{ flex:1, textAlign:'center', padding:'14px 8px', background:'rgba(255,255,255,0.02)', borderRight:i<2?'1px solid rgba(255,255,255,0.06)':'none' }}>
-              <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:18, fontWeight:900, color:'#fff' }}>{s.v}</div>
-              <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:2, fontWeight:600 }}>{s.l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
 
   // ────────────────────────────────────────────────────────────────
   // STEP: Login
@@ -482,22 +411,13 @@ export default function LoginPage() {
   const LoginContent = (
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:420, position:'relative', zIndex:1, margin: '0 auto' }}>
       
-      {/* HEADER MOBILE (logo, title, subtitle) */}
-      <div className="mobile-only" style={{ display:'none', flexDirection:'column', alignItems:'center', marginTop: 10, marginBottom: 16, zIndex: 10 }}>
-        {/* Glow behind logo */}
-        <div style={{ position:'relative', display:'flex', alignItems:'center', justifyContent:'center', width:76, height:76, borderRadius:22, background:'linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%)', boxShadow:'0 0 32px rgba(139,92,246,0.4)', marginBottom:16, overflow: 'hidden' }}>
-          <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-        <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:4 }}>IMPACTO <span style={{ color:'#8b5cf6' }}>EDU</span></div>
-        <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.16em', textTransform:'uppercase', marginBottom:8 }}>Enterprise Learning Suite</div>
-      </div>
+
 
       <div className="login-header-group" style={{ marginBottom:32, textAlign: 'center' }}>
-        <div className="hide-on-mobile" style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(59,130,246,0.08)', border:'1px solid rgba(59,130,246,0.2)', marginBottom:20 }}>
-          <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 6px #10b981', animation:'blink 2s ease-in-out infinite' }} />
-          <span style={{ fontSize:11, fontWeight:700, color:'#60a5fa', letterSpacing:'0.06em' }}>ACESSO SEGURO — 256-bit SSL</span>
-        </div>
-        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:12 }}>Bem-vindo de volta!</h2>
+
+        <h2 className="login-h2" style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:12, minHeight: 38 }}>
+          {typedText}<span style={{ display:'inline-block', width:3, height:'0.85em', background:'#60a5fa', marginLeft:3, verticalAlign:'middle', animation:'blink 1s step-end infinite', borderRadius:1 }} />
+        </h2>
         <p className="login-p" style={{ fontSize:15, color:'rgba(255,255,255,0.4)', lineHeight:1.5, margin: '0 auto', maxWidth: 300 }}>Entre com suas credenciais para acessar sua plataforma.</p>
       </div>
 
@@ -914,9 +834,23 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
-      {LeftPanel}
-      <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'48px 40px', background:'linear-gradient(160deg,#08101e 0%,#090d1f 50%,#0a0e1c 100%)', position:'relative', overflow:'hidden', overflowY:'auto' }}>
+      
+      {/* Top Bar with Glassmorphism */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', zIndex: 50 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ width:40, height:40, borderRadius:12, background:'linear-gradient(135deg, #3b82f6, #8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 4px 16px rgba(59,130,246,0.3)', overflow: 'hidden' }}>
+            <img src="/logo-impacto.png" alt="Logo Impacto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:18, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', lineHeight: 1 }}>IMPACTO <span style={{ background:'linear-gradient(90deg,#60a5fa,#a78bfa)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>EDU</span></div>
+            <div style={{ fontSize:9, color:'rgba(255,255,255,0.4)', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', marginTop: 2 }}>Enterprise Learning Suite</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="login-right-panel" style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 20px 48px', background:'linear-gradient(-45deg, #020617, #0f172a, #172554, #082f49)', backgroundSize: '400% 400%', animation: 'gradientBG 15s ease infinite', position:'relative', overflow:'hidden', overflowY:'auto' }}>
         
+
         {/* Animated Light Points */}
         <div className="mobile-only" style={{ position:'absolute', top:'5%', left:'5%', width:4, height:4, borderRadius:'50%', background:'#60a5fa', boxShadow:'0 0 12px #60a5fa', animation:'blink 3s infinite ease-in-out, floatOrb1 8s infinite', pointerEvents:'none' }} />
         <div className="mobile-only" style={{ position:'absolute', top:'15%', right:'5%', width:3, height:3, borderRadius:'50%', background:'#a78bfa', boxShadow:'0 0 10px #a78bfa', animation:'blink 4s infinite ease-in-out 1s, floatOrb2 12s infinite', pointerEvents:'none' }} />
@@ -978,13 +912,15 @@ export default function LoginPage() {
           .login-wrapper {
             flex-direction: column !important;
             overflow-y: auto !important;
-            background: #0A0F24 !important;
+            background: linear-gradient(-45deg, #020617, #0f172a, #172554, #082f49) !important;
+            background-size: 400% 400% !important;
+            animation: gradientBG 15s ease infinite !important;
           }
           .login-left-panel {
             display: none !important;
           }
           .login-right-panel {
-            padding: 16px 20px 48px 20px !important;
+            padding: 100px 20px 48px 20px !important;
             justify-content: flex-start !important;
             background: transparent !important;
             align-items: stretch !important;
@@ -997,11 +933,7 @@ export default function LoginPage() {
           }
           .login-card {
             padding: 24px 20px !important;
-            border-radius: 20px !important;
-            background: #111424 !important;
-            border: 1px solid rgba(255,255,255,0.04) !important;
-            box-shadow: none !important;
-            backdrop-filter: none !important;
+            border-radius: 24px !important;
           }
           .login-header-group {
             margin-bottom: 24px !important;

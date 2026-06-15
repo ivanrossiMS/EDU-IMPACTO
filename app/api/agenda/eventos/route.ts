@@ -18,11 +18,27 @@ export async function GET(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey)
     
     const accessStartDate = await getLoggedUserAccessStartDate()
-    let query = supabase.from('eventos_agenda').select('*')
+    const url = new URL(request.url)
+    const limitParam = url.searchParams.get('limit')
+    const offsetParam = url.searchParams.get('offset')
+    
+    let query = supabase.from('eventos_agenda').select('id, titulo, data, tipo, hora_inicio, hora_fim, criado_por, dados, created_at')
+    
     if (accessStartDate) {
       const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)
       query = query.gte('data', accessStartDateStr)
     }
+
+    if (limitParam) {
+      const limit = parseInt(limitParam)
+      const offset = offsetParam ? parseInt(offsetParam) : 0
+      query = query.range(offset, offset + limit - 1)
+    } else {
+      query = query.limit(30)
+    }
+
+    query = query.order('data', { ascending: false })
+
     const { data, error } = await query
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ 
@@ -33,7 +49,7 @@ export async function GET(request: Request) {
       ...(row.dados || {}) 
     }))
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' }
+      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })

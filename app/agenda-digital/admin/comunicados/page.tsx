@@ -36,7 +36,7 @@ export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos?lightweight=true');
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   
@@ -384,8 +384,7 @@ export default function ADAdminComunicados() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filtered.length === 0 && isDataLoading && (
             <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-              <Loader2 size={32} className="animate-spin" style={{ color: '#6366f1' }} />
-              <p style={{ color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 500 }}>Carregando comunicados...</p>
+              <Loader2 size={48} className="animate-spin" color="#00D2FF" style={{ filter: 'drop-shadow(0 0 10px rgba(0,210,255,0.5))' }} />
             </div>
           )}
           {filtered.length === 0 && !isDataLoading && (

@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2 } from 'lucide-react'
+import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -523,6 +524,9 @@ const SELECTOR_STYLES = `
 
         /* Mobile Adjustments */
         @media (max-width: 768px) {
+          .premium-selector-container::before {
+            display: none !important;
+          }
           .premium-selector-container {
             padding: 24px 12px 64px 12px;
             gap: 28px;
@@ -679,9 +683,9 @@ function SelecionarAlunoContent() {
     } catch (_) {}
 
     // Step 2: Always fire a fresh network request in background
-    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}&_t=${Date.now()}`;
+    const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
 
-    fetch(url, { credentials: 'include', cache: 'no-store' })
+    fetch(url, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         if (!Array.isArray(data)) return;
@@ -722,6 +726,14 @@ function SelecionarAlunoContent() {
     <div className="premium-selector-container">
       {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
+
+      {/* Full-screen Loading Overlay */}
+      {loadingCardId && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(255, 255, 255, 0.3)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, animation: 'revealUp 0.3s ease-out' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '4px solid rgba(99,102,241,0.2)', borderTopColor: '#6366f1', animation: 'orbRotate 1s linear infinite' }} />
+          <p style={{ color: '#0f172a', fontSize: 18, fontWeight: 800 }}>Entrando...</p>
+        </div>
+      )}
 
       {/* Header section */}
       <header className="premium-welcome-card animate-reveal">
@@ -849,7 +861,7 @@ function SelecionarAlunoContent() {
 
 export default function SelecionarAluno() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+    <Suspense fallback={<LoadingGlass />}>
       <SelecionarAlunoContent />
     </Suspense>
   )

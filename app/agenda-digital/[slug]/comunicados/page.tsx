@@ -21,7 +21,7 @@ import { ComunicadoChat } from '@/components/ComunicadoChat'
 import { ComunicadoViewModal } from '@/components/agenda/ComunicadoViewModal'
 import { ComunicadoSkeleton } from '../../components/ComunicadoSkeleton'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
-import { PullToRefresh } from '@/components/PullToRefresh'
+
 
 // Helper to abbreviate names for mobile (e.g., "Maria Auxiliadora de Araújo Honório" -> "Maria A. de A. Honório")
 function abbreviateName(name: string): string {
@@ -390,11 +390,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           
           .ad-feed-card { padding: 16px 16px !important; gap: 12px !important; }
           .ad-com-card-title { font-size: 15px !important; }
+          .ad-hide-mobile { display: none !important; }
         }
       `}} />
 
       {/* Floating Animated Nebula Glows */}
-      <div style={{
+      <div className="ad-hide-mobile" style={{
         position: 'absolute',
         top: '5%',
         left: '10%',
@@ -406,7 +407,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         pointerEvents: 'none',
         zIndex: 0
       }} />
-      <div style={{
+      <div className="ad-hide-mobile" style={{
         position: 'absolute',
         bottom: '10%',
         right: '5%',
@@ -422,7 +423,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <PullToRefresh onRefresh={async () => { await refetch() }}>
+
         <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="ad-com-header-icon-box" style={{
@@ -488,7 +489,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             </button>
           </div>
         </div>
-        </PullToRefresh>
+
 
 
 

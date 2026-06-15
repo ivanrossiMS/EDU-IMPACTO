@@ -14,7 +14,13 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    const isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
+    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
+    if (!isFamily) {
+      const { data: dbUser } = await supabase.from('system_users').select('perfil, cargo').eq('id', user.id).maybeSingle();
+      if (dbUser) {
+        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
+      }
+    }
     const readerId = isFamily ? alunoId : user.id
 
     if (!tipo || !ids || !readerId || !Array.isArray(ids) || ids.length === 0) {
@@ -41,6 +47,9 @@ export async function POST(request: Request) {
     let selectRes: any = await supabase.from(table).select('id, dados, leituras').in('id', ids)
     if (selectRes.error && (selectRes.error.code === '42703' || selectRes.error.message?.includes('does not exist'))) {
       selectRes = await supabase.from(table).select('id, dados').in('id', ids)
+      if (selectRes.error && (selectRes.error.code === '42703' || selectRes.error.message?.includes('does not exist'))) {
+        selectRes = await supabase.from(table).select('id').in('id', ids)
+      }
     }
 
     if (selectRes.error) {
@@ -49,37 +58,39 @@ export async function POST(request: Request) {
     const rows = selectRes.data || []
 
     const now = new Date().toISOString()
-    const updates = rows.map((row: any) => {
-      // For "comunicados", they extract "leituras" to root level on normal APIs, but in the DB it's often in "dados".
-      // We will update both just to be safe.
-      const dados = typeof row.dados === 'object' && row.dados !== null ? { ...row.dados } : {}
+    const updates = []
+    
+    for (const row of rows) {
+      const updateObj: any = { id: row.id }
+      let needsUpdate = false
       
-      const leiturasInDados = typeof dados.leituras === 'object' && dados.leituras !== null ? { ...dados.leituras } : {}
-      leiturasInDados[readerId as string] = now
-      dados.leituras = leiturasInDados
-
-      // If the root level "leituras" exists in the table structure (some tables like comunicados might have it or use "dados")
-      let rootLeituras = null
+      if (row.dados !== undefined) {
+        const dados = typeof row.dados === 'object' && row.dados !== null ? { ...row.dados } : {}
+        const leiturasInDados = typeof dados.leituras === 'object' && dados.leituras !== null ? { ...dados.leituras } : {}
+        leiturasInDados[readerId as string] = now
+        dados.leituras = leiturasInDados
+        updateObj.dados = dados
+        needsUpdate = true
+      }
+      
       if (row.leituras !== undefined) {
-         rootLeituras = typeof row.leituras === 'object' && row.leituras !== null ? { ...row.leituras } : {}
+         const rootLeituras = typeof row.leituras === 'object' && row.leituras !== null ? { ...row.leituras } : {}
          rootLeituras[readerId as string] = now
-      }
-
-      const updateObj: any = {
-        id: row.id,
-        dados
+         updateObj.leituras = rootLeituras
+         needsUpdate = true
       }
       
-      if (rootLeituras !== null) {
-         updateObj.leituras = rootLeituras
-      }
+      if (needsUpdate) updates.push(updateObj)
+    }
 
-      return updateObj
-    })
-
-    const { error: upsertError } = await supabase.from(table).upsert(updates)
-    if (upsertError) {
-      throw new Error(`Upsert error: ${upsertError.message}`)
+    if (updates.length > 0) {
+      await Promise.all(updates.map(async (updateData) => {
+        const { id, ...rest } = updateData
+        const { error: updateError } = await supabase.from(table).update(rest).eq('id', id)
+        if (updateError) {
+          throw new Error(`Update error for id ${id}: ${updateError.message}`)
+        }
+      }))
     }
 
     // --- NOVA LÓGICA DE NOTIFICATIONS CENTER ---
