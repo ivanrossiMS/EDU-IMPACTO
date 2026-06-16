@@ -26,44 +26,115 @@ export async function GET(req: Request) {
     if (errorResponse) return errorResponse
 
     const supabase = await createProtectedClient()
-    const { data: { user: supabaseUser } } = await supabase.auth.getUser()
+    
+    let supabaseUser = null;
+    try {
+      const { data } = await supabase.auth.getUser()
+      supabaseUser = data.user;
+    } catch (err: any) {
+      if (err?.message?.includes('stole it') || err?.message?.includes('Lock')) {
+        try {
+          const retryRes = await supabase.auth.getUser()
+          supabaseUser = retryRes.data.user;
+        } catch (e) {}
+      }
+    }
+    
     if (!supabaseUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: sysUsers, error: sysErr } = await supabase.from('system_users').select('*')
-    if (sysErr) return NextResponse.json({ error: sysErr.message }, { status: 500 })
-    
-    const mappedSys = sysUsers?.map(u => ({ ...u, ultimoAcesso: u.ultimoacesso || u.ultimoAcesso })) || []
+    async function fetchAll(table: string, cols: string) {
+      let all: any[] = []
+      let from = 0
+      let to = 999
+      let hasMore = true
+      while(hasMore) {
+        const { data } = await supabase.from(table).select(cols).range(from, to)
+        if (!data || data.length === 0) {
+          hasMore = false
+        } else {
+          all = [...all, ...data]
+          if (data.length < 1000) hasMore = false
+          else {
+            from += 1000
+            to += 1000
+          }
+        }
+      }
+      return all
+    }
+
+    const sysUsers = await fetchAll('system_users', '*')
+
+    // Fetch active Auth users to check their actual existence and map orphaned records
+    const supabaseAdmin = getAdminClient()
+    // Aumentamos o limite para 10000 para capturar o último acesso de todos os colaboradores, alunos e responsáveis
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10000 }).catch(() => ({ data: { users: [] } }))
+    const authUsersList = authData?.users || []
+
+    const mappedSys = sysUsers.map(u => {
+      const email = (u.email || '').trim().toLowerCase()
+      const authUser = authUsersList.find((au: any) => au.email?.toLowerCase() === email)
+
+      const sysProfile = authUser?.user_metadata?.profile_code
+      let perfilStr = 'Colaborador'
+      if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
+      else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
+      else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
+      else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
+      else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
+      else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
+
+      if (u.perfil && typeof u.perfil === 'string') {
+        perfilStr = u.perfil
+      }
+
+      return {
+        id: u.id,
+        nome: u.nome,
+        email: email,
+        cargo: u.cargo || 'Não definido',
+        perfil: perfilStr,
+        status: authUser ? 'ativo' : 'inativo',
+        ultimoAcesso: authUser?.last_sign_in_at 
+          ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+          : 'Nunca acessou'
+      }
+    })
 
     // Buscar alunos de forma LEVE para prover acesso virtual a alunos
-    const { data: alunosData } = await supabase.from('alunos').select('id, nome, email, dados')
+    const alunosData = await fetchAll('alunos', 'id, nome, email, dados, matricula')
 
     const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
        const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
        if (alunoEmail) {
+          const virtualEmail = `aluno.${aluno.matricula || aluno.dados?.codigo || aluno.id}@impactoedu.local`.toLowerCase()
+          
+          const authUser = authUsersList.find((au: any) => {
+             const auEmail = au.email?.toLowerCase()
+             return auEmail === alunoEmail || auEmail === virtualEmail
+          })
+          
           acc.push({
              id: `virtual-${aluno.id}`,
              nome: aluno.nome,
              email: alunoEmail,
              cargo: 'Alunos',
              perfil: 'Família',
-             status: 'ativo',
-             ultimoAcesso: 'Nunca'
+             status: authUser ? 'ativo' : 'inativo',
+             ultimoAcesso: authUser?.last_sign_in_at 
+               ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+               : 'Nunca acessou'
           })
        }
        return acc
     }, [])
 
     // Fetch active Auth users to check their actual existence and map orphaned records
-    const supabaseAdmin = getAdminClient()
-    // Em vez de puxar 1000 usuários na memória, assumimos ativo se ele estiver no system_users
-    // (a verificação do último acesso pode ser relaxada aqui para listagens grandes, ou buscada individualmente)
-    // Se precisarmos muito do auth, buscamos as páginas que interessam
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 }).catch(() => ({ data: { users: [] } }))
-    const authUsersList = authData?.users || []
+    // (Already fetched above for mappedSys)
 
-    // Buscar responsáveis e seus vínculos no banco
-    const { data: respData } = await supabase.from('responsaveis').select('id, nome, email')
-    const { data: linksData } = await supabase.from('aluno_responsavel').select('responsavel_id, resp_financeiro, resp_pedagogico')
+
+    const respData = await fetchAll('responsaveis', 'id, nome, email')
+    const linksData = await fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
 
     const mappedResps: any[] = []
 
@@ -73,7 +144,7 @@ export async function GET(req: Request) {
         const email = (resp.email || '').trim().toLowerCase()
         if (!email) return
 
-        const links = (linksData || []).filter((l: any) => l.responsavel_id === resp.id)
+        const links = (linksData || []).filter((l: any) => String(l.responsavel_id) === String(resp.id))
         const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
         
         // APENAS responsáveis com vínculos financeiros ou pedagógicos ativos são listados
@@ -91,7 +162,7 @@ export async function GET(req: Request) {
           status: authUser ? 'ativo' : 'inativo',
           ultimoAcesso: authUser?.last_sign_in_at 
             ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
-            : 'Nunca'
+            : 'Nunca acessou'
         })
       })
     }

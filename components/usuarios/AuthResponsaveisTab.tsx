@@ -171,10 +171,16 @@ export function AuthResponsaveisTab() {
     return newAuth
   }
 
+  const { data: usersData } = useApiQuery<any[]>(['usuarios'], '/api/configuracoes/usuarios')
+
   // Merge with auth data and filter
   const displayed = guardians.map(g => {
     const authRecord = authUsers.find(u => u.user_type === 'guardian' && (u.reference_key === g.key || (g.cpf && u.reference_key === g.cpf) || (g.email && u.reference_key === g.email)))
     
+    // Tenta encontrar o usuário real no banco (mapeado pelo e-mail)
+    const searchEmail = (g.email || (authRecord?.email) || '').trim().toLowerCase()
+    const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+
     const defaultAuth = {
       id: `virtual-${g.key}`,
       user_type: 'guardian',
@@ -184,10 +190,16 @@ export function AuthResponsaveisTab() {
       celular: g.celular || '',
       status: 'ATIVO',
       profile_code: 'FAMILIA',
-      last_login: null
+      last_login: realUser ? realUser.ultimoAcesso : null
     }
 
-    return { ...g, auth: authRecord || defaultAuth }
+    const auth = authRecord || defaultAuth
+    // Sobrescreve o last_login mockado com o real do Supabase
+    if (realUser && realUser.ultimoAcesso) {
+      auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
+    }
+
+    return { ...g, auth }
   }).filter(item => {
     const q = search.toLowerCase()
     return item.nome.toLowerCase().includes(q) || (item.cpf && item.cpf.includes(q)) || (item.auth?.login?.toLowerCase().includes(q))

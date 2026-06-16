@@ -143,10 +143,17 @@ export function AuthAlunosTab() {
     return list
   }
 
-  // Derived list: academic students merged with auth state
-  const displayed = (alunos || []).map(aluno => {
-    const authRecord = authUsers.find(u => u.academic_id === aluno.id && u.user_type === 'student')
+  // Derived list: academic students
+  const { data: usersData } = useApiQuery<any[]>(['usuarios'], '/api/configuracoes/usuarios')
+
+  // Merge with auth data and filter
+  const displayed = alunos.map(aluno => {
+    const authRecord = authUsers.find(u => u.user_type === 'student' && (u.reference_key === aluno.id || u.academic_id === aluno.id || (aluno.dados?.matricula && u.login === aluno.dados.matricula)))
     
+    // Tenta encontrar o usuário real no banco (mapeado pelo e-mail)
+    const searchEmail = (aluno.email || (authRecord?.email) || '').trim().toLowerCase()
+    const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
+
     // Virtual record automatically linking the user to FAMILIA and ATIVO
     const defaultAuth = {
       id: `virtual-${aluno.id}`,
@@ -157,10 +164,16 @@ export function AuthAlunosTab() {
       celular: (aluno as any).celular || (aluno as any).telefone || '',
       status: 'ATIVO',
       profile_code: 'FAMILIA',
-      last_login: null
+      last_login: realUser ? realUser.ultimoAcesso : null
     }
 
-    return { ...aluno, auth: authRecord || defaultAuth }
+    const auth = authRecord || defaultAuth
+    // Sobrescreve o last_login mockado com o real do Supabase
+    if (realUser && realUser.ultimoAcesso) {
+      auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
+    }
+
+    return { ...aluno, auth }
   }).filter(item => {
     const q = search.toLowerCase()
     return item.nome.toLowerCase().includes(q) || (getTurmaNome((item as any).turma) && getTurmaNome((item as any).turma).toLowerCase().includes(q)) || (item.auth?.login?.toLowerCase().includes(q))

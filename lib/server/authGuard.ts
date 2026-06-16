@@ -15,7 +15,30 @@ import { createProtectedClient } from './supabaseServerFactory'
  */
 export async function requireAuth() {
   const supabase = await createProtectedClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  
+  let user = null;
+  let error = null;
+
+  try {
+    const res = await supabase.auth.getUser()
+    user = res.data.user;
+    error = res.error;
+  } catch (err: any) {
+    // If multiple API routes hit the server concurrently and token needs refresh,
+    // Supabase SSR uses Web Locks. If the lock is "stolen" by another request, it throws.
+    if (err?.message?.includes('stole it') || err?.message?.includes('Lock')) {
+      // Just retry once, the other request should have refreshed the token by now
+      try {
+        const retryRes = await supabase.auth.getUser()
+        user = retryRes.data.user;
+        error = retryRes.error;
+      } catch (retryErr: any) {
+        error = retryErr;
+      }
+    } else {
+      error = err;
+    }
+  }
 
   if (error || !user) {
     return {

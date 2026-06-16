@@ -37,7 +37,7 @@ function abbreviateName(name: string): string {
 function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, currentUser: any, vinculo?: any }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
-  const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled')
+  const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled' && c.status !== 'blocked')
 
   useEffect(() => {
     if (call?.status === 'confirmed') {

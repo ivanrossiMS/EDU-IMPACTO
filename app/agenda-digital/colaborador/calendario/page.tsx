@@ -248,11 +248,16 @@ export default function ADCalendarioPage() {
     return (eventosAgenda || []).filter(e => {
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
+      const isParaMim = (e as any).visibilidadeUsuario && currentUser?.nome && String((e as any).visibilidadeUsuario).toLowerCase().trim() === String(currentUser.nome).toLowerCase().trim()
+      if (isParaMim) return true
+      
       let targets: any = e.turmas || []
       if (typeof targets === 'string') {
         try { targets = JSON.parse(targets) } catch(err) { targets = [targets] }
       }
       if (!Array.isArray(targets)) targets = []
+      
+      if (targets.length === 0 && !isParaMim) return false // No targets specified
       
       if (targets.some((t: string) => t.toLowerCase() === 'todos' || t.toLowerCase() === 'toda a escola' || t.toLowerCase() === 'todas')) {
         return true

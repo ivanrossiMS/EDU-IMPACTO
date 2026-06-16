@@ -8,7 +8,7 @@ import { useData, Tarefa } from '@/lib/dataContext'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
-  CheckCircle, CalendarDays, Cake
+  CheckCircle, CalendarDays, Cake, ShieldCheck
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -85,6 +85,43 @@ export default function DashboardPage() {
     novasMatriculas = 0,
   } = kpis
 
+  // ── Usuários Cadastrados / Acessos
+  const { data: usuariosData, isLoading: loadUsuarios } = useApiQuery<any[]>(
+    ['dash-usuarios'],
+    `/api/configuracoes/usuarios`,
+    {},
+    { staleTime: 300_000 }
+  )
+  
+  const usuariosAtivos = useMemo(() => {
+    if (!usuariosData) return []
+    return usuariosData.filter(u => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
+  }, [usuariosData])
+
+  const statsUsuarios = useMemo(() => {
+    if (!usuariosData) return { colab: 0, colabTotal: 0, alunos: 0, alunosTotal: 0, resps: 0, respsTotal: 0, total: 0, totalGeral: 0 }
+    let colab = 0, colabTotal = 0
+    let alunos = 0, alunosTotal = 0
+    let resps = 0, respsTotal = 0
+
+    usuariosData.forEach(u => {
+      const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
+      if (u.cargo === 'Alunos') {
+        alunosTotal++
+        if (isAtivo) alunos++
+      }
+      else if (u.cargo === 'Responsáveis') {
+        respsTotal++
+        if (isAtivo) resps++
+      }
+      else {
+        colabTotal++
+        if (isAtivo) colab++
+      }
+    })
+    return { colab, colabTotal, alunos, alunosTotal, resps, respsTotal, total: usuariosAtivos.length, totalGeral: usuariosData.length }
+  }, [usuariosData, usuariosAtivos])
+
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)
   const tarefasPendentes = tarefas.filter(t => t.status !== 'concluida')
@@ -153,6 +190,10 @@ export default function DashboardPage() {
           turma: turmaNome,
           eventoDescricao: desc,
           valor: Number(p.valor) || 0,
+          dataLancamento: p.dataLancamento,
+          created_at: p.created_at,
+          createdAt: p.createdAt,
+          vencimento: p.vencimento
         })
       }
     }
@@ -173,6 +214,10 @@ export default function DashboardPage() {
           turma: turmaNome,
           eventoDescricao: resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao }),
           valor: t.valor,
+          dataLancamento: t.dataLancamento,
+          created_at: t.created_at,
+          createdAt: t.createdAt,
+          vencimento: t.vencimento
         }
       })
 
@@ -197,7 +242,16 @@ export default function DashboardPage() {
       }
 
       if (!map.has(key)) {
-        map.set(key, { id: p.id, aluno: p.aluno, turma: finalTurma || 'S/T', material: p.eventoDescricao, valor: 0, feito: pMeta?.feito ?? false, entregue: pMeta?.entregue ?? false })
+        map.set(key, { 
+          id: p.id, 
+          aluno: p.aluno, 
+          turma: finalTurma || 'S/T', 
+          material: p.eventoDescricao, 
+          valor: 0, 
+          feito: pMeta?.feito ?? false, 
+          entregue: pMeta?.entregue ?? false,
+          timestamp: new Date(p.dataLancamento || p.created_at || p.createdAt || p.vencimento || 0).getTime() 
+        })
       } else {
         const existing = map.get(key)
         if (pMeta?.feito) existing.feito = true
@@ -217,13 +271,15 @@ export default function DashboardPage() {
       else pendenteCount++
     })
 
+    const sortedOrders = [...uniqueOrders].sort((a, b) => b.timestamp - a.timestamp)
+
     return {
       totalOrders: uniqueOrders.length,
       totalValue,
       entregueCount,
       preparadoCount,
       pendenteCount,
-      recentOrders: uniqueOrders.slice(0, 4)
+      recentOrders: sortedOrders.slice(0, 4)
     }
   }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
@@ -278,6 +334,62 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
+      <div style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '24px', padding: '32px 40px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px rgba(99, 102, 241, 0.2)', flexWrap: 'wrap', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{ width: 64, height: 64, background: 'rgba(255,255,255,0.2)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
+            <Users size={32} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Engajamento do Sistema</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div style={{ fontSize: '36px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>{statsUsuarios.total}</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
+            </div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginTop: 8, fontWeight: 500 }}>Já realizaram o primeiro acesso à plataforma</div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.totalGeral > 0 ? (statsUsuarios.total / statsUsuarios.totalGeral) * 100 : 0}%`, height: '100%', background: '#34d399', borderRadius: 2 }} />
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {/* Card Colaboradores */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} /> Colaboradores</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.colab}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+          {/* Card Alunos */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} /> Alunos</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.alunos}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+          {/* Card Responsáveis */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Responsáveis</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.resps}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ═══ Main Area Grid (4 Columns) ═══════════════════════════════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, alignItems: 'start' }}>
 
@@ -330,7 +442,18 @@ export default function DashboardPage() {
               ordersSummary.recentOrders.slice(0, 3).map((o) => (
                 <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#f8fafc', borderRadius: '16px' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
+                      {!o.feito && !o.entregue && (
+                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>NOVO</span>
+                      )}
+                      {o.feito && !o.entregue && (
+                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', background: '#fffbeb', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', whiteSpace: 'nowrap' }}>PEDIDO FEITO</span>
+                      )}
+                      {o.entregue && (
+                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', background: '#ecfdf5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>ENTREGUE</span>
+                      )}
+                    </div>
                     <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
                   </div>
                 </div>

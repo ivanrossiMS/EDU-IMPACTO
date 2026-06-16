@@ -2035,14 +2035,14 @@ export default function AlunosPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   
                   {/* Search Existing */}
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1, position: 'relative' }}>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[200px] max-w-[400px] relative">
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Buscar Responsável Existente</label>
                       <div style={{ position: 'relative' }}>
                         <SearchIcon size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input 
                           className="form-input" 
-                          style={{ paddingLeft: 36 }} 
+                          style={{ paddingLeft: 36, height: 44 }} 
                           placeholder="Nome ou CPF do responsável…" 
                           value={buscaResponsavel}
                           onChange={e => setBuscaResponsavel(e.target.value)}
@@ -2094,18 +2094,18 @@ export default function AlunosPage() {
                     </div>
                     <button 
                       onClick={handleBuscarResponsavel} 
-                      className="neo-btn neo-btn-secondary" 
-                      style={{ height: 40 }}
+                      className="neo-btn neo-btn-secondary shrink-0" 
+                      style={{ height: 44, padding: '0 24px', minWidth: '100px', fontSize: 14 }}
                       disabled={loadingBuscaResp}
                     >
                       {loadingBuscaResp ? 'Buscando...' : 'Buscar'}
                     </button>
-                    <div style={{ fontSize: 13, color: '#64748b', alignSelf: 'center', padding: '0 10px' }}>ou</div>
+                    <div style={{ fontSize: 13, color: '#64748b', alignSelf: 'center', padding: '0 4px', paddingBottom: 12 }}>ou</div>
                     <button onClick={() => {
                       const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
                       setFormData({ ...formData, responsaveis: [...formData.responsaveis, { id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false, isNewAdded: true } as any] });
                       setMostrarFormResponsavel(true);
-                    }} className="neo-btn neo-btn-primary" style={{ height: 40 }}>
+                    }} className="neo-btn neo-btn-primary shrink-0" style={{ height: 44, padding: '0 24px', fontSize: 14 }}>
                       <Plus size={16} /> Novo Responsável
                     </button>
                   </div>
@@ -2937,55 +2937,48 @@ export default function AlunosPage() {
         </div>
       )}
 
-      {/* FILTROS AVANÇADOS MODAL */}
+      {/* FILTROS AVANÇADOS MODAL (EXACT SPEC REWRITE) */}
       {isFiltrosAvancadosModalOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>
-          <div 
-            className="w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl rounded-[24px] relative bg-[#f8fafc]"
-            style={{ maxWidth: '520px', animation: 'zoomFadeIn 0.2s ease-out' }}
-          >
-            {/* Modal Header */}
-            <div className="px-6 py-5 border-b border-slate-200/60 bg-white z-10 flex items-center justify-between">
+        <div className="fixed inset-0 z-[10000]" style={{ background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)' }}>
+          <div className="modal-filtros-avancados">
+            {/* Header */}
+            <div className="modalHeader-fa">
               <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <Lightbulb size={22} strokeWidth={2} className="text-indigo-600" />
+                <div className="w-10 h-10 rounded-[12px] bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <Filter size={18} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-800">Filtros Avançados</h3>
-                  <p className="text-xs font-medium text-slate-500 mt-0.5">Refine sua busca de alunos</p>
+                  <h3 className="text-[18px] font-bold text-slate-900 leading-tight">Filtros Avançados</h3>
+                  <p className="text-[13px] text-slate-500 mt-0.5">Refine sua busca de alunos</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 transition-colors"
-              >
-                <X size={16} strokeWidth={2.5} />
+              <button onClick={() => setIsFiltrosAvancadosModalOpen(false)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                <X size={18} strokeWidth={2.5} />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-5 overflow-y-auto flex flex-col gap-4">
-              
-              {/* Período de Cadastro */}
-              <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-                <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
-                  <Calendar size={16} className="text-slate-400" /> Período de Cadastro
+            {/* Body */}
+            <div className="modalBody-fa">
+              {/* Período de Cadastro (Ocupa 1 coluna) */}
+              <div className="filterCard-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
+                  <Calendar size={16} className="text-blue-500" /> Período de Cadastro
                 </h4>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-4">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">A Partir De</label>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">A Partir De</label>
                     <input 
                       type="date" 
-                      className="w-full h-10 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
+                      className="w-full min-h-[44px] px-3 rounded-[12px] bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-800 text-[14px] font-medium outline-none transition-all"
                       value={filtrosAvancados.dataCadastroInicio}
                       onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroInicio: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Até</label>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Até</label>
                     <input 
                       type="date" 
-                      className="w-full h-10 px-3 rounded-xl bg-white border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-700 text-sm outline-none transition-all shadow-sm"
+                      className="w-full min-h-[44px] px-3 rounded-[12px] bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-800 text-[14px] font-medium outline-none transition-all"
                       value={filtrosAvancados.dataCadastroFim}
                       onChange={e => setFiltrosAvancados(prev => ({ ...prev, dataCadastroFim: e.target.value }))}
                     />
@@ -2993,42 +2986,26 @@ export default function AlunosPage() {
                 </div>
               </div>
 
-              {/* Turno */}
-              <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-                <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+              {/* Turno de Estudo (Ocupa 1 coluna) */}
+              <div className="filterCard-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
                   <GraduationCap size={16} className="text-indigo-500" /> Turno de Estudo
                 </h4>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="optionGroup-fa">
                   {[
-                    { val: 'todos', label: 'Todos os turnos', icon: CircleDot, colSpan: 'col-span-2' },
-                    { val: 'matutino', label: 'Matutino', icon: Sun },
-                    { val: 'vespertino', label: 'Vespertino', icon: CloudSun },
-                    { val: 'integral', label: 'Integral', icon: Clock },
-                    { val: 'noturno', label: 'Noturno', icon: Moon },
+                    { val: 'todos', label: 'Todos os turnos' },
+                    { val: 'matutino', label: 'Matutino' },
+                    { val: 'vespertino', label: 'Vespertino' },
+                    { val: 'integral', label: 'Integral' },
+                    { val: 'noturno', label: 'Noturno' },
                   ].map(item => {
                     const isActive = filtrosAvancados.turno === item.val;
-                    const Icon = item.icon;
-                    
-                    if (isActive) {
-                      return (
-                        <button
-                          key={item.val}
-                          onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
-                          className={`flex items-center gap-2 px-3 h-10 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold text-[13px] transition-all ${item.colSpan || ''}`}
-                        >
-                          <Icon size={16} className="text-indigo-600" />
-                          {item.label}
-                        </button>
-                      );
-                    }
-                    
                     return (
                       <button
                         key={item.val}
                         onClick={() => setFiltrosAvancados(prev => ({ ...prev, turno: item.val }))}
-                        className={`flex items-center gap-2 px-3 h-10 rounded-xl border border-slate-200 bg-white text-slate-600 font-medium text-[13px] hover:border-slate-300 hover:bg-slate-50 transition-all ${item.colSpan || ''}`}
+                        className={`optionButton-fa ${isActive ? 'active' : ''}`}
                       >
-                        <Icon size={16} className="text-slate-400" />
                         {item.label}
                       </button>
                     );
@@ -3036,23 +3013,23 @@ export default function AlunosPage() {
                 </div>
               </div>
 
-              {/* Saída Sozinho */}
-              <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-                <h4 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
+              {/* Saída na Portaria (Ocupa largura total - Full Width) */}
+              <div className="filterCard-fa filterCardFull-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
                   <DoorOpen size={16} className="text-emerald-500" /> Saída na Portaria
                 </h4>
-                <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px]">
+                <div className="optionGroup-fa">
                   {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'true', label: 'Autorizado' },
-                    { val: 'false', label: 'Não Aut.' },
+                    { val: 'todos', label: 'Qualquer' },
+                    { val: 'true', label: 'Autorizado (Sozinho)' },
+                    { val: 'false', label: 'Apenas com Responsável' },
                   ].map(item => {
                     const isActive = filtrosAvancados.autorizadoSairSozinho === item.val;
                     return (
                       <button
                         key={item.val}
                         onClick={() => setFiltrosAvancados(prev => ({ ...prev, autorizadoSairSozinho: item.val }))}
-                        className={`flex-1 h-8 rounded-[8px] font-medium text-xs transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+                        className={`optionButton-fa ${isActive ? 'active' : ''}`}
                       >
                         {item.label}
                       </button>
@@ -3060,94 +3037,30 @@ export default function AlunosPage() {
                   })}
                 </div>
               </div>
-
-              {/* Financeiro */}
-              <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-                <h4 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
-                  <CreditCard size={16} className="text-rose-500" /> Situação Financeira
-                </h4>
-                <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px]">
-                  {[
-                    { val: 'todos', label: 'Todos' },
-                    { val: 'false', label: 'Em Dia' },
-                    { val: 'true', label: 'Inadimplente' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.inadimplente === item.val;
-                    return (
-                      <button
-                        key={item.val}
-                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, inadimplente: item.val }))}
-                        className={`flex-1 h-8 rounded-[8px] font-medium text-xs transition-all ${isActive ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Risco de Evasão */}
-              <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.03)]">
-                <h4 className="text-sm font-bold text-slate-700 mb-2.5 flex items-center gap-2">
-                  <AlertTriangle size={16} className="text-orange-500" /> Risco de Evasão
-                </h4>
-                <div className="flex p-1 bg-slate-50/80 border border-slate-200/80 rounded-[12px] gap-1">
-                  {[
-                    { val: 'todos', label: 'Todos', bg: 'bg-[#1e293b]', text: 'text-white' },
-                    { val: 'baixo', label: 'Baixo', bg: 'bg-emerald-50 border border-emerald-100', text: 'text-emerald-600' },
-                    { val: 'medio', label: 'Médio', bg: 'bg-amber-50 border border-amber-100', text: 'text-amber-600' },
-                    { val: 'alto', label: 'Alto', bg: 'bg-rose-50 border border-rose-100', text: 'text-rose-600' },
-                  ].map(item => {
-                    const isActive = filtrosAvancados.riscoEvasao === item.val;
-                    if (isActive) {
-                       return (
-                         <button
-                           key={item.val}
-                           onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
-                           className={`flex-1 h-8 rounded-[8px] font-semibold text-xs transition-all shadow-sm ${item.bg} ${item.text}`}
-                         >
-                           {item.label}
-                         </button>
-                       )
-                    }
-                    return (
-                       <button
-                         key={item.val}
-                         onClick={() => setFiltrosAvancados(prev => ({ ...prev, riscoEvasao: item.val }))}
-                         className={`flex-1 h-8 rounded-[8px] font-medium text-xs transition-all bg-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100`}
-                       >
-                         {item.label}
-                       </button>
-                    )
-                  })}
-                </div>
-              </div>
-
             </div>
 
-            {/* Modal Footer */}
-            <div className="px-5 py-4 border-t border-slate-200/60 bg-white flex items-center justify-between">
+            {/* Footer */}
+            <div className="modalFooter-fa">
               <button 
                 onClick={() => setFiltrosAvancados({
                   dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos'
                 })}
-                className="flex items-center gap-1.5 text-[13px] font-semibold text-indigo-600 hover:text-indigo-700 transition-colors"
+                className="flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[12px] text-[14px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors"
               >
-                <Trash2 size={16} />
-                Limpar
+                Limpar Filtros
               </button>
-              <div className="flex items-center gap-2.5">
+              <div className="flex gap-3 footer-actions-fa">
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)} 
-                  className="px-4 h-9 rounded-[10px] border border-slate-200 font-semibold text-[13px] text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="min-h-[44px] px-6 rounded-[12px] font-bold text-[14px] text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-all"
                 >
                   Cancelar
                 </button>
                 <button 
                   onClick={() => setIsFiltrosAvancadosModalOpen(false)}
-                  className="px-4 h-9 rounded-[10px] font-semibold text-[13px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-[0_2px_8px_-2px_rgba(79,70,229,0.5)] transition-all flex items-center gap-2"
+                  className="min-h-[44px] px-8 rounded-[12px] font-bold text-[14px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all flex items-center justify-center gap-2"
                 >
-                  <Check size={16} strokeWidth={2.5} />
+                  <Check size={18} strokeWidth={2.5} />
                   Aplicar Filtros
                 </button>
               </div>
@@ -3155,9 +3068,136 @@ export default function AlunosPage() {
           </div>
           
           <style dangerouslySetInnerHTML={{__html: `
-            @keyframes zoomFadeIn {
-              0% { opacity: 0; transform: scale(0.97) translateY(5px); }
-              100% { opacity: 1; transform: scale(1) translateY(0); }
+            .modal-filtros-avancados {
+              position: fixed;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              width: min(860px, calc(100vw - 40px));
+              max-height: 88vh;
+              height: auto;
+              overflow: hidden;
+              border-radius: 22px;
+              background: #f8fafc;
+              display: flex;
+              flex-direction: column;
+              box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+              border: 1px solid rgba(226, 232, 240, 0.8);
+            }
+
+            .modalHeader-fa {
+              padding: 20px 24px 14px;
+              background: #ffffff;
+              border-bottom: 1px solid #e5e7eb;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              flex-shrink: 0;
+            }
+
+            .modalBody-fa {
+              padding: 20px 24px;
+              overflow-y: auto;
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 18px;
+            }
+
+            .filterCard-fa {
+              padding: 18px;
+              border-radius: 18px;
+              height: auto;
+              min-height: auto;
+              background: #ffffff;
+              border: 1px solid rgba(226, 232, 240, 0.8);
+              box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            }
+
+            .filterCardFull-fa {
+              grid-column: 1 / -1;
+            }
+
+            .optionGroup-fa {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 10px;
+            }
+
+            .optionButton-fa {
+              min-height: 40px;
+              padding: 0 16px;
+              white-space: nowrap;
+              width: auto;
+              flex: 0 0 auto;
+              border-radius: 10px;
+              font-weight: 600;
+              font-size: 13.5px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border: 1px solid #e2e8f0;
+              background: #f8fafc;
+              color: #475569;
+              cursor: pointer;
+              transition: all 0.2s;
+            }
+            .optionButton-fa:hover {
+              background: #f1f5f9;
+              border-color: #cbd5e1;
+            }
+            .optionButton-fa.active {
+              background: #ffffff;
+              color: #0f172a;
+              border-color: #cbd5e1;
+              box-shadow: 0 2px 8px -2px rgba(0,0,0,0.1);
+            }
+
+            .modalFooter-fa {
+              padding: 16px 24px;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-top: 1px solid #e5e7eb;
+              background: #ffffff;
+              flex-shrink: 0;
+            }
+            .footer-actions-fa {
+              display: flex;
+              gap: 12px;
+            }
+
+            @media (max-width: 768px) {
+              .modal-filtros-avancados {
+                width: calc(100vw - 24px);
+                max-height: 90vh;
+              }
+
+              .modalBody-fa {
+                grid-template-columns: 1fr;
+                padding: 16px;
+              }
+
+              .filterCardFull-fa {
+                grid-column: auto;
+              }
+
+              .modalFooter-fa {
+                flex-direction: column-reverse;
+                gap: 12px;
+                align-items: stretch;
+              }
+
+              .modalFooter-fa > button, .footer-actions-fa {
+                width: 100%;
+              }
+              
+              .footer-actions-fa {
+                flex-direction: column-reverse;
+              }
+
+              .footer-actions-fa button {
+                width: 100%;
+              }
             }
           `}} />
         </div>

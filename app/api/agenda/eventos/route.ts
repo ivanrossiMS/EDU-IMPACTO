@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const limitParam = url.searchParams.get('limit')
     const offsetParam = url.searchParams.get('offset')
     
-    let query = supabase.from('eventos_agenda').select('id, titulo, data, tipo, hora_inicio, hora_fim, criado_por, dados, created_at')
+    let query = supabase.from('eventos_agenda').select('*')
     
     if (accessStartDate) {
       const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)

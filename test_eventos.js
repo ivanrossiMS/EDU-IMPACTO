@@ -5,12 +5,7 @@ dotenv.config({ path: '.env.local' });
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function run() {
-  const { data, error } = await supabase.from('alunos').select('nome, parcelas').limit(10);
-  for (const a of data || []) {
-    if (a.parcelas && a.parcelas.length > 0) {
-      console.log(JSON.stringify(a.parcelas[0], null, 2));
-      break;
-    }
-  }
+  const { data, error } = await supabase.from('eventos_agenda').select('*').limit(5);
+  console.log(JSON.stringify(data, null, 2));
 }
 run();

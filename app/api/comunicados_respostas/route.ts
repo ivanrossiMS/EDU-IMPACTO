@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +69,78 @@ export async function POST(request: Request) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    // ── Notificações Push e In-App bidirecionais ──
+    try {
+      const msgTexto = body.conteudo.length > 50 ? body.conteudo.substring(0, 50) + '...' : body.conteudo;
+      const remetenteNome = body.remetente_nome || (body.is_admin ? 'A Escola' : 'Usuário');
+
+      if (!body.is_admin) {
+        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado)
+        const { data: comData } = await supabase
+          .from('comunicados')
+          .select('titulo, dados')
+          .eq('id', body.comunicado_id)
+          .single();
+        
+        if (comData && comData.dados && comData.dados.autorId) {
+          const targetUserId = comData.dados.autorId;
+          
+          await supabase.from('notificacoes').insert({
+            user_id: targetUserId,
+            titulo: `Nova resposta: ${comData.titulo}`,
+            mensagem: `${remetenteNome} comentou: "${msgTexto}"`,
+            link: `/agenda-digital/comunicados`,
+            lida: false,
+            tipo: 'comunicado',
+            created_at: new Date().toISOString()
+          }).catch(err => console.error("Notificacao DB erro:", err));
+
+          await sendAgendaPushNotification({
+            type: 'comunicados',
+            itemId: String(data.id), // ID único do comentário evita deduplicação indevida
+            title: `💬 Resposta de ${remetenteNome}`,
+            message: `No comunicado "${comData.titulo}": ${msgTexto}`,
+            targetUserIds: [targetUserId],
+            targetUrl: `/agenda-digital/comunicados`
+          }).catch(err => console.error("Push erro:", err));
+        }
+      } else {
+        // Escola respondeu -> Notifica o Pai/Aluno dono da thread (remetente_id da thread)
+        const targetUserId = body.remetente_id; 
+        if (targetUserId) {
+          const { data: comData } = await supabase
+            .from('comunicados')
+            .select('titulo')
+            .eq('id', body.comunicado_id)
+            .single();
+            
+          const tituloCom = comData ? comData.titulo : 'Comunicado';
+
+          await supabase.from('notificacoes').insert({
+            user_id: targetUserId,
+            titulo: `Nova resposta da Escola`,
+            mensagem: `Resposta no comunicado "${tituloCom}": "${msgTexto}"`,
+            link: `/agenda-digital/comunicados`,
+            lida: false,
+            tipo: 'comunicado',
+            created_at: new Date().toISOString()
+          }).catch(err => console.error("Notificacao DB erro:", err));
+
+          await sendAgendaPushNotification({
+            type: 'comunicados',
+            itemId: String(data.id),
+            title: `🏫 Nova mensagem da Escola`,
+            message: `Sobre "${tituloCom}": ${msgTexto}`,
+            targetUserIds: [targetUserId],
+            targetUrl: `/agenda-digital/comunicados`
+          }).catch(err => console.error("Push erro:", err));
+        }
+      }
+    } catch (notifError) {
+      console.error("Erro geral nas notificações de resposta:", notifError);
+      // Nao damos throw para nao quebrar a insercao original da mensagem
     }
 
     return NextResponse.json(data, { status: 201 });

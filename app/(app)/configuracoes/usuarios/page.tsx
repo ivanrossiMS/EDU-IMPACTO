@@ -329,9 +329,18 @@ export default function UsuariosPage() {
 
       <div className="tab-list" style={{ marginBottom: 20, width: 'fit-content' }}>
         <button className={`tab-trigger ${tab === 'tipos-conta' ? 'active' : ''}`} onClick={() => setTab('tipos-conta')}><Layers size={12} />Tipos de Conta</button>
-        <button className={`tab-trigger ${tab === 'usuarios' ? 'active' : ''}`} onClick={() => setTab('usuarios')}><Shield size={12} />Colaboradores</button>
-        <button className={`tab-trigger ${tab === 'alunos' ? 'active' : ''}`} onClick={() => setTab('alunos')}><GraduationCap size={12} />Alunos</button>
-        <button className={`tab-trigger ${tab === 'responsaveis' ? 'active' : ''}`} onClick={() => setTab('responsaveis')}><Users size={12} />Responsáveis</button>
+        <button className={`tab-trigger ${tab === 'usuarios' ? 'active' : ''}`} onClick={() => setTab('usuarios')}>
+          <Shield size={12} />Colaboradores
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.perfil !== 'Família' && u.cargo !== 'Alunos' && u.cargo !== 'Responsáveis').length}</span>}
+        </button>
+        <button className={`tab-trigger ${tab === 'alunos' ? 'active' : ''}`} onClick={() => setTab('alunos')}>
+          <GraduationCap size={12} />Alunos
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.cargo === 'Alunos').length}</span>}
+        </button>
+        <button className={`tab-trigger ${tab === 'responsaveis' ? 'active' : ''}`} onClick={() => setTab('responsaveis')}>
+          <Users size={12} />Responsáveis
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.cargo === 'Responsáveis').length}</span>}
+        </button>
         <button className={`tab-trigger ${tab === 'perfis' ? 'active' : ''}`} onClick={() => setTab('perfis')}><Lock size={12} />Perfis & Permissões</button>
         <button className={`tab-trigger ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>📋 Logs de Acesso</button>
       </div>
