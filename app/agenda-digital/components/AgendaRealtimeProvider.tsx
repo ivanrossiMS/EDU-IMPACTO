@@ -517,37 +517,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               link: `/agenda-digital/${alunoId}/comunicados`,
             })
 
-            toast.custom(t => (
-              <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
-                <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
-                  <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
-                  <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full" />
-                </div>
-                <div className="flex-1 min-w-0 pr-1 sm:pr-2">
-                  <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
-                    Novo comunicado disponível!
-                  </h4>
-                  <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
-                    Acesse agora para não perder nenhuma novidade.
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    toast.dismiss(t)
-                    router.push(`/agenda-digital/${alunoId}/comunicados`)
-                  }}
-                  className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
-                >
-                  Ver agora
-                </button>
-                <button
-                  onClick={() => toast.dismiss(t)}
-                  className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
-                >
-                  <X size={20} strokeWidth={2} />
-                </button>
-              </div>
-            ), { duration: 10000, position: 'top-center' })
+            // toast in-app removido para evitar duplicidade com as notificações push
           }
         }
       }
@@ -572,11 +542,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             read: false,
             link: `/agenda-digital/${alunoId}/calendario`,
           })
-          toast('Novo Evento no Calendário', {
-            description: row.titulo,
-            icon: <Calendar size={20} className="text-emerald-500" />,
-            action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/calendario`) },
-          })
+          // toast in-app removido
         }
       }
     });
@@ -607,11 +573,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             read: false,
             link: `/agenda-digital/${alunoId}/ocorrencias`,
           })
-          toast('Nova Ocorrência', {
-            description: `Foi registrada uma nova ocorrência.`,
-            icon: <ShieldAlert size={20} className="text-red-500" />,
-            action: { label: 'Abrir', onClick: () => router.push(`/agenda-digital/${alunoId}/ocorrencias`) },
-          })
+          // toast in-app removido
         }
       }
     });
@@ -642,11 +604,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             read: false,
             link: `/agenda-digital/${alunoId}/notas`,
           })
-          toast('Novas Notas Lançadas', {
-            description: 'O boletim de notas foi atualizado.',
-            icon: <FileText size={20} className="text-indigo-500" />,
-            action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) },
-          })
+          // toast in-app removido
         }
       }
     });
@@ -675,11 +633,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             read: false,
             link: `/agenda-digital/${alunoId}/frequencia`,
           })
-          toast('Nova Falta Registrada', {
-            description: 'Uma nova falta foi lançada no sistema.',
-            icon: <Calendar size={20} className="text-orange-500" />,
-            action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) },
-          })
+          // toast in-app removido
         }
       }
     });
@@ -704,11 +658,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             read: false,
             link: `/agenda-digital/${alunoId}/momentos`,
           })
-          toast('Novas Fotos/Vídeos', {
-            description: merged.titulo || 'Um novo momento foi compartilhado',
-            icon: <ImageIcon size={20} className="text-pink-500" />,
-            action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) },
-          })
+          // toast in-app removido
         }
       }
     });
