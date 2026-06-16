@@ -467,254 +467,257 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       return false
     }
 
-    // Canal único por sessão (evita conflitos do React Strict Mode)
-    const channelName = `agenda-rt-${identifier}-${Date.now()}`
-    let isMounted = true
-    const channel = supabase
-      .channel(channelName)
+    
+    let isMounted = true;
+    const channels: any[] = [];
 
-      // ── COMUNICADOS ──────────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comunicados' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
-        const merged = { ...row, ...(row.dados || {}) }
-
-        if (eventType === 'DELETE' || isTargetingAluno(merged) || !isFamily) {
-          window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
-
-          if (
-            eventType === 'INSERT' &&
-            (merged.status === 'enviado' || merged.dados?.status === 'enviado')
-          ) {
-            const isMe =
-              (merged.autorId && String(merged.autorId) === String(currentUser?.id)) ||
-              (merged.autor && currentUser?.nome &&
-                String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
-
-            if (!isMe) {
-              window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-              addNotification({
-                id: merged.id,
-                type: 'comunicado',
-                title: merged.titulo,
-                createdAt: merged.created_at || new Date().toISOString(),
-                read: false,
-                link: `/agenda-digital/${alunoId}/comunicados`,
-              })
-
-              toast.custom(t => (
-                <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
-                  <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
-                    <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
-                    <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full" />
-                  </div>
-                  <div className="flex-1 min-w-0 pr-1 sm:pr-2">
-                    <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
-                      Novo comunicado disponível!
-                    </h4>
-                    <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
-                      Acesse agora para não perder nenhuma novidade.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      toast.dismiss(t)
-                      router.push(`/agenda-digital/${alunoId}/comunicados`)
-                    }}
-                    className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
-                  >
-                    Ver agora
-                  </button>
-                  <button
-                    onClick={() => toast.dismiss(t)}
-                    className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
-                  >
-                    <X size={20} strokeWidth={2} />
-                  </button>
-                </div>
-              ), { duration: 10000, position: 'top-center' })
-            }
+    const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
+      const cName = `agenda-rt-${table}-${identifier}-${Date.now()}`
+      const c = supabase.channel(cName)
+      c.on('postgres_changes', filter, handler)
+        .subscribe((status: string) => {
+          if (!isMounted) return;
+          if (status === 'SUBSCRIBED') {
+            console.log(`✅ [Realtime] Conectado ao canal ${table}`)
+          } else if (status === 'CHANNEL_ERROR') {
+            console.warn(`⚠️ [Realtime] Erro no canal ${table}. Verifique se Realtime está ativado no banco.`)
+            supabase.removeChannel(c)
           }
-        }
-      })
+        })
+      channels.push(c)
+    }
 
-      // ── CALENDÁRIO ───────────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos_agenda' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
+    // ── COMUNICADOS ──────────────────────────────────────────────────────
+    createBinding('comunicados', { event: '*', schema: 'public', table: 'comunicados' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const merged = { ...row, ...(row.dados || {}) }
 
-        if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas }) || !isFamily) {
-          window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
-
-          if (eventType === 'INSERT') {
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            addNotification({
-              id: row.id,
-              type: 'evento',
-              title: row.titulo || 'Novo Evento',
-              createdAt: row.created_at || new Date().toISOString(),
-              read: false,
-              link: `/agenda-digital/${alunoId}/calendario`,
-            })
-            toast('Novo Evento no Calendário', {
-              description: row.titulo,
-              icon: <Calendar size={20} className="text-emerald-500" />,
-              action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/calendario`) },
-            })
-          }
-        }
-      })
-
-      // ── OCORRÊNCIAS ──────────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ocorrencias' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
-
-        const isForAluno =
-          eventType === 'DELETE' ||
-          String(row.aluno_id) === String(alunoId) ||
-          String(row.dados?.aluno_id) === String(alunoId) ||
-          String(row.dados?.alunoId) === String(alunoId) ||
-          !isFamily
-
-        if (isForAluno) {
-          window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'ocorrencias'] })
-
-          if (eventType === 'INSERT') {
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            addNotification({
-              id: row.id,
-              type: 'ocorrencia',
-              title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
-              createdAt: row.created_at || new Date().toISOString(),
-              read: false,
-              link: `/agenda-digital/${alunoId}/ocorrencias`,
-            })
-            toast('Nova Ocorrência', {
-              description: `Foi registrada uma nova ocorrência.`,
-              icon: <ShieldAlert size={20} className="text-red-500" />,
-              action: { label: 'Abrir', onClick: () => router.push(`/agenda-digital/${alunoId}/ocorrencias`) },
-            })
-          }
-        }
-      })
-
-      // ── BOLETINS (NOTAS) ─────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'boletins' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
-        const alunoStr = String(alunoId)
-        const alunoSemZero = alunoStr.replace(/^0+/, '')
+      if (eventType === 'DELETE' || isTargetingAluno(merged) || !isFamily) {
+        window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
 
         if (
-          eventType === 'DELETE' ||
-          String(row.aluno_id) === alunoStr ||
-          String(row.aluno_id) === alunoSemZero ||
-          !isFamily
+          eventType === 'INSERT' &&
+          (merged.status === 'enviado' || merged.dados?.status === 'enviado')
         ) {
-          window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'boletins'] })
+          const isMe =
+            (merged.autorId && String(merged.autorId) === String(currentUser?.id)) ||
+            (merged.autor && currentUser?.nome &&
+              String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
 
-          if (eventType === 'INSERT') {
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            addNotification({
-              id: row.id,
-              type: 'nota',
-              title: 'Boletim de notas atualizado',
-              createdAt: row.created_at || new Date().toISOString(),
-              read: false,
-              link: `/agenda-digital/${alunoId}/notas`,
-            })
-            toast('Novas Notas Lançadas', {
-              description: 'O boletim de notas foi atualizado.',
-              icon: <FileText size={20} className="text-indigo-500" />,
-              action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) },
-            })
-          }
-        }
-      })
-
-      // ── FREQUÊNCIAS ──────────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
-
-        if (
-          eventType === 'DELETE' ||
-          String(row.aluno_id) === String(alunoId) ||
-          String(row.dados?.aluno_id) === String(alunoId) ||
-          !isFamily
-        ) {
-          window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
-
-          if (eventType === 'INSERT') {
-            // Frequencia shouldn't have badge but we trigger update just in case for other modules sync
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            addNotification({
-              id: row.id,
-              type: 'frequencia',
-              title: 'Nova falta registrada',
-              createdAt: row.created_at || new Date().toISOString(),
-              read: false,
-              link: `/agenda-digital/${alunoId}/frequencia`,
-            })
-            toast('Nova Falta Registrada', {
-              description: 'Uma nova falta foi lançada no sistema.',
-              icon: <Calendar size={20} className="text-orange-500" />,
-              action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) },
-            })
-          }
-        }
-      })
-
-      // ── MOMENTOS ─────────────────────────────────────────────────────────
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'momentos' }, payload => {
-        const { eventType, old, new: newRow } = payload
-        const row = eventType === 'DELETE' ? old : newRow
-        const merged = { ...row, ...(row.dados || {}) }
-
-        if (eventType === 'DELETE' || isTargetingAluno(merged)) {
-          window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
-          queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
-
-          if (eventType === 'INSERT') {
+          if (!isMe) {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
             addNotification({
               id: merged.id,
-              type: 'momento',
-              title: merged.titulo || 'Novo Momento',
+              type: 'comunicado',
+              title: merged.titulo,
               createdAt: merged.created_at || new Date().toISOString(),
               read: false,
-              link: `/agenda-digital/${alunoId}/momentos`,
+              link: `/agenda-digital/${alunoId}/comunicados`,
             })
-            toast('Novas Fotos/Vídeos', {
-              description: merged.titulo || 'Um novo momento foi compartilhado',
-              icon: <ImageIcon size={20} className="text-pink-500" />,
-              action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) },
-            })
+
+            toast.custom(t => (
+              <div className="flex items-center bg-white p-4 sm:p-5 rounded-[24px] shadow-[0_12px_40px_-10px_rgba(0,0,0,0.12)] border border-gray-100 gap-3 sm:gap-4 pointer-events-auto w-max max-w-[95vw] mx-auto">
+                <div className="relative flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#F5F2FF] flex items-center justify-center">
+                  <Megaphone size={24} strokeWidth={1.5} className="text-[#694CF2]" />
+                  <span className="absolute top-[2px] right-[2px] w-[12px] h-[12px] sm:w-[14px] sm:h-[14px] bg-[#FE5062] border-[2px] sm:border-[2.5px] border-white rounded-full" />
+                </div>
+                <div className="flex-1 min-w-0 pr-1 sm:pr-2">
+                  <h4 className="text-[#1F1F1F] font-extrabold text-[15px] sm:text-[16px] leading-tight tracking-tight mb-0.5 sm:mb-1">
+                    Novo comunicado disponível!
+                  </h4>
+                  <p className="text-[#848484] text-[12px] sm:text-[13.5px] leading-snug truncate sm:whitespace-normal">
+                    Acesse agora para não perder nenhuma novidade.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    toast.dismiss(t)
+                    router.push(`/agenda-digital/${alunoId}/comunicados`)
+                  }}
+                  className="flex-shrink-0 bg-[#694CF2] hover:bg-[#5C3CE0] text-white text-[13px] sm:text-[14.5px] font-bold px-4 sm:px-6 py-2 sm:py-[10px] rounded-[12px] sm:rounded-[14px] transition-transform active:scale-95 shadow-[0_4px_12px_rgba(105,76,242,0.3)]"
+                >
+                  Ver agora
+                </button>
+                <button
+                  onClick={() => toast.dismiss(t)}
+                  className="flex-shrink-0 text-gray-400 hover:text-gray-800 transition-colors p-1"
+                >
+                  <X size={20} strokeWidth={2} />
+                </button>
+              </div>
+            ), { duration: 10000, position: 'top-center' })
           }
         }
-      })
+      }
+    });
 
-      .subscribe(status => {
-        if (!isMounted) return;
-        if (status === 'SUBSCRIBED') {
-          console.log(`✅ [Realtime] Conectado ao canal: ${channelName}`)
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error(`❌ [Realtime] Erro no canal: ${channelName}. Desconectando para evitar loop. Verifique se o Realtime está ativado no banco para todas as tabelas.`)
-          // Desconecta o canal para evitar o loop infinito de reconexão do supabase-js
-          supabase.removeChannel(channel)
+    // ── CALENDÁRIO ───────────────────────────────────────────────────────
+    createBinding('eventos_agenda', { event: '*', schema: 'public', table: 'eventos_agenda' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+
+      if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas }) || !isFamily) {
+        window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          addNotification({
+            id: row.id,
+            type: 'evento',
+            title: row.titulo || 'Novo Evento',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/calendario`,
+          })
+          toast('Novo Evento no Calendário', {
+            description: row.titulo,
+            icon: <Calendar size={20} className="text-emerald-500" />,
+            action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/calendario`) },
+          })
         }
-      })
+      }
+    });
+
+    // ── OCORRÊNCIAS ──────────────────────────────────────────────────────
+    createBinding('ocorrencias', { event: '*', schema: 'public', table: 'ocorrencias' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+
+      const isForAluno =
+        eventType === 'DELETE' ||
+        String(row.aluno_id) === String(alunoId) ||
+        String(row.dados?.aluno_id) === String(alunoId) ||
+        String(row.dados?.alunoId) === String(alunoId) ||
+        !isFamily
+
+      if (isForAluno) {
+        window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'ocorrencias'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          addNotification({
+            id: row.id,
+            type: 'ocorrencia',
+            title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/ocorrencias`,
+          })
+          toast('Nova Ocorrência', {
+            description: `Foi registrada uma nova ocorrência.`,
+            icon: <ShieldAlert size={20} className="text-red-500" />,
+            action: { label: 'Abrir', onClick: () => router.push(`/agenda-digital/${alunoId}/ocorrencias`) },
+          })
+        }
+      }
+    });
+
+    // ── BOLETINS (NOTAS) ─────────────────────────────────────────────────
+    createBinding('boletins', { event: '*', schema: 'public', table: 'boletins' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const alunoStr = String(alunoId)
+      const alunoSemZero = alunoStr.replace(/^0+/, '')
+
+      if (
+        eventType === 'DELETE' ||
+        String(row.aluno_id) === alunoStr ||
+        String(row.aluno_id) === alunoSemZero ||
+        !isFamily
+      ) {
+        window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'boletins'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          addNotification({
+            id: row.id,
+            type: 'nota',
+            title: 'Boletim de notas atualizado',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/notas`,
+          })
+          toast('Novas Notas Lançadas', {
+            description: 'O boletim de notas foi atualizado.',
+            icon: <FileText size={20} className="text-indigo-500" />,
+            action: { label: 'Consultar', onClick: () => router.push(`/agenda-digital/${alunoId}/notas`) },
+          })
+        }
+      }
+    });
+
+    // ── FREQUÊNCIAS ──────────────────────────────────────────────────────
+    createBinding('frequencias', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+
+      if (
+        eventType === 'DELETE' ||
+        String(row.aluno_id) === String(alunoId) ||
+        String(row.dados?.aluno_id) === String(alunoId) ||
+        !isFamily
+      ) {
+        window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          addNotification({
+            id: row.id,
+            type: 'frequencia',
+            title: 'Nova falta registrada',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/frequencia`,
+          })
+          toast('Nova Falta Registrada', {
+            description: 'Uma nova falta foi lançada no sistema.',
+            icon: <Calendar size={20} className="text-orange-500" />,
+            action: { label: 'Verificar', onClick: () => router.push(`/agenda-digital/${alunoId}/frequencia`) },
+          })
+        }
+      }
+    });
+
+    // ── MOMENTOS ─────────────────────────────────────────────────────────
+    createBinding('momentos', { event: '*', schema: 'public', table: 'momentos' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const merged = { ...row, ...(row.dados || {}) }
+
+      if (eventType === 'DELETE' || isTargetingAluno(merged)) {
+        window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          addNotification({
+            id: merged.id,
+            type: 'momento',
+            title: merged.titulo || 'Novo Momento',
+            createdAt: merged.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${alunoId}/momentos`,
+          })
+          toast('Novas Fotos/Vídeos', {
+            description: merged.titulo || 'Um novo momento foi compartilhado',
+            icon: <ImageIcon size={20} className="text-pink-500" />,
+            action: { label: 'Ver', onClick: () => router.push(`/agenda-digital/${alunoId}/momentos`) },
+          })
+        }
+      }
+    });
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel)
-      console.log(`🔌 [Realtime] Canal desconectado: ${channelName}`)
+      channels.forEach(c => supabase.removeChannel(c))
+      console.log(`🔌 [Realtime] Canais desconectados.`)
+
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alunoId, currentUser?.id, currentUser?.perfil, turmaNome, typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma)])
