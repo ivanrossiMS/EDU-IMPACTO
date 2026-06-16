@@ -29,7 +29,10 @@
         </provider>
 
         <!-- OneSignal Push Notification Icon -->
-        <meta-data android:name="com.onesignal.NotificationIcon.DEFAULT" android:resource="@drawable/ic_stat_onesignal_default" />
+        <meta-data
+            android:name="com.onesignal.NotificationIcon.DEFAULT"
+            android:resource="@drawable/ic_stat_onesignal_default"
+        />
     </application>
 
     <!-- Permissions -->
