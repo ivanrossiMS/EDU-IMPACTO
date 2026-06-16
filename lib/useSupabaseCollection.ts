@@ -181,7 +181,11 @@ export function useSupabaseCollection<T>(
         if (data === undefined || data === null) {
           normalized = initialValueRef.current
         } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-          normalized = initialValueRef.current
+          if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
+            normalized = (data as any).data
+          } else {
+            normalized = initialValueRef.current
+          }
         } else if (
           typeof data === 'object' && !Array.isArray(data) &&
           initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
@@ -217,7 +221,11 @@ export function useSupabaseCollection<T>(
             if (data === undefined || data === null) {
               normalized = initialValueRef.current
             } else if (Array.isArray(initialValueRef.current) && !Array.isArray(data)) {
-              normalized = initialValueRef.current
+              if (data && typeof data === 'object' && Array.isArray((data as any).data)) {
+                normalized = (data as any).data
+              } else {
+                normalized = initialValueRef.current
+              }
             } else if (
               typeof data === 'object' && !Array.isArray(data) &&
               initialValueRef.current && typeof initialValueRef.current === 'object' && !Array.isArray(initialValueRef.current)
