@@ -158,6 +158,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         window.OneSignalDeferred = window.OneSignalDeferred || []
         window.OneSignalDeferred.push(async function (OneSignal: any) {
           try {
+            if (!OneSignal) {
+              console.warn('[OneSignal] Instância não encontrada.');
+              return;
+            }
             if (!window.__OS_INIT__) {
               if (window.location.hostname === 'localhost') {
                 console.log('Push notifications Web desativadas no localhost (evita erro do OneSignal).')
@@ -265,7 +269,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           OS = window.OneSignal
           // Se o script do OneSignal não carregou ainda, enfileirar
           if (!OS && window.OneSignalDeferred) {
-             window.OneSignalDeferred.push(() => gerenciarUsuarioPush())
+             window.OneSignalDeferred.push(function(OneSignalInstance: any) {
+               if (OneSignalInstance) {
+                 gerenciarUsuarioPush();
+               }
+             })
              return
           }
         }

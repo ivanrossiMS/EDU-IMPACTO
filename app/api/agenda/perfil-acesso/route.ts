@@ -5,6 +5,9 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+const memCache = new Map<string, { value: any, timestamp: number }>();
+const CACHE_TTL = 300_000; // 5 minutos
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -18,6 +21,14 @@ export async function GET(request: Request) {
 
     if (!slug) {
       return NextResponse.json({ error: 'Slug do aluno é obrigatório' }, { status: 400 })
+    }
+
+    const cacheKey = `${user.id}-${slug}-${responsavel_id}-${isAlunoProfile}`;
+    const cached = memCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+       return NextResponse.json(cached.value, {
+         headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' }
+       })
     }
 
     // 1. Buscar os dados essenciais do aluno
@@ -114,12 +125,16 @@ export async function GET(request: Request) {
        }
     }
 
-    return NextResponse.json({
+    const result = {
       aluno: { ...aluno, responsaveis: responsaveisDb },
       vinculo: vinculo,
       meusAlunos: meusAlunos
-    }, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' }
+    };
+
+    memCache.set(cacheKey, { value: result, timestamp: Date.now() });
+
+    return NextResponse.json(result, {
+      headers: { 'Cache-Control': 'private, max-age=60, stale-while-revalidate=300' }
     })
 
   } catch (e: any) {

@@ -26,7 +26,21 @@ export async function GET(request: Request) {
     }
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
-    const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
+    const result = (data || []).map(row => {
+      const merged = { ...row, ...(row.dados || {}) }
+      if (merged.midias && Array.isArray(merged.midias)) {
+        merged.midias = merged.midias.map((m: any) => {
+          if (m.url && m.url.startsWith('data:image/') && m.url.length > 500) {
+             m.url = m.thumbnail_url || null; // fallback para thumb se base64 for pesado
+          }
+          if (m.thumbnail_url && m.thumbnail_url.startsWith('data:image/') && m.thumbnail_url.length > 500) {
+             m.thumbnail_url = null;
+          }
+          return m;
+        });
+      }
+      return merged;
+    })
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
     })

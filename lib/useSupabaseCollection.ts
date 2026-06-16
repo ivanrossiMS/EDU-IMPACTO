@@ -82,6 +82,7 @@ export function useSupabaseCollection<T>(
     fetcher?: () => Promise<T>
     persister?: (value: T) => Promise<void>
     refreshIntervalMs?: number
+    enabled?: boolean
   }
 ): [T, (value: T | ((prev: T) => T)) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T>> }] {
   const lsKey = `edu-ls-${endpoint}`
@@ -115,6 +116,11 @@ export function useSupabaseCollection<T>(
 
   // ── Fetch with SWR ─────────────────────────────────────────────────────────
   useEffect(() => {
+    if (options?.enabled === false) {
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     const existing = getCacheEntry<T>(endpoint)
 
@@ -344,19 +350,28 @@ export function useSupabaseCollection<T>(
 export function useSupabaseArray<T>(
   endpoint: string,
   initialValue: T[] = [],
-  options?: { refreshIntervalMs?: number }
+  options?: { refreshIntervalMs?: number, noCache?: boolean, enabled?: boolean }
 ): [T[], (value: T[] | ((prev: T[]) => T[])) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T[]>> }] {
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {
     ...options,
     fetcher: () => {
-      const sep = endpoint.includes('?') ? '&' : '?';
-          return fetch(`/api/${endpoint}${sep}_t=${Date.now()}`, { 
-            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }, 
-            cache: 'no-store',
-            credentials: 'include',
-            redirect: 'error'
-          })
+      const noCache = options?.noCache ?? false;
+      const url = noCache ? `/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}_t=${Date.now()}` : `/api/${endpoint}`;
+      
+      const fetchOpts: RequestInit = {
+        credentials: 'include',
+        redirect: 'error',
+      };
+      if (noCache) {
+        fetchOpts.headers = { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
+        fetchOpts.cache = 'no-store';
+      } else {
+        // Usa as configs default do browser e cabeçalhos enviados pelo servidor Next.js
+        fetchOpts.cache = 'default';
+      }
+
+      return fetch(url, fetchOpts)
             .then(async r => {
               const contentType = r.headers.get('content-type')
               if (r.ok && contentType && contentType.includes('text/html')) {

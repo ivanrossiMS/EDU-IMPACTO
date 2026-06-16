@@ -157,13 +157,13 @@ export function useSaida() {
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
-export function SaidaProvider({ children }: { children: React.ReactNode }) {
-  const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [])
-  const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [])
-  const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [])
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [])
+export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
+  const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [], { enabled })
+  const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [], { enabled })
+  const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [], { enabled })
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled })
   const [logs, setLogs] = useState<SaidaLog[]>([])
-  const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG)
+  const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
   const { emit, on } = useBroadcastRealtime()
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')

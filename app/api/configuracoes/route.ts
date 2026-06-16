@@ -5,6 +5,9 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
+const memCache = new Map<string, { value: any, timestamp: number }>();
+const CACHE_TTL = 300_000; // 5 minutos
+
 // GET /api/configuracoes?chave=cfgDisciplinas  → single key
 // GET /api/configuracoes                        → all keys
 // GET /api/configuracoes?chaves=k1,k2,k3       → bulk fetch (NEW — eliminates 16 separate requests)
@@ -26,6 +29,14 @@ export async function GET(request: Request) {
     const keys = chaves.split(',').map(k => k.trim()).filter(Boolean)
     if (keys.length === 0) return NextResponse.json({})
 
+    const cacheKey = keys.sort().join(',');
+    const cached = memCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+       return NextResponse.json(cached.value, {
+         headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
+       })
+    }
+
     const { data, error } = await supabase
       .from('configuracoes')
       .select('chave, valor')
@@ -38,7 +49,14 @@ export async function GET(request: Request) {
     for (const row of data || []) {
       result[row.chave] = row.valor
     }
-    return NextResponse.json(result)
+
+    memCache.set(cacheKey, { value: result, timestamp: Date.now() });
+
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600'
+      }
+    })
   }
 
   // ── Single key ─────────────────────────────────────────────────

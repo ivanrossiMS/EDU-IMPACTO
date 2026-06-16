@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
     const lightweight = url.searchParams.get('lightweight') === 'true'
     const queryFields = lightweight
-      ? 'id, nome, matricula, status, data_nascimento, foto, turma, inadimplente, historicoTurmas:dados->historicoTurmas'
+      ? 'id, nome, turma, status'
       : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
 
     let query = supabase
@@ -122,11 +122,10 @@ export async function GET(request: Request) {
 
     if (lightweight) {
       const formatted = (students || []).map((student: any) => {
-        const { historicoTurmas, ...rest } = student
         return {
-          ...rest,
+          ...student,
           dados: {
-            historicoTurmas: historicoTurmas || []
+            historicoTurmas: []
           }
         }
       })

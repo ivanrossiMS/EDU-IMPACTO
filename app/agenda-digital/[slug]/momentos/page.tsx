@@ -21,32 +21,23 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const queryClient = useQueryClient()
   // removido const { fetchMomentos } = useAgendaDigital()
   const { aluno: contextAluno } = useSelectedStudent()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
-  const [dbTurmas = []] = useSupabaseArray<any>('turmas', [])
-  const { turmas: contextTurmas = [] } = useData()
   const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
-  const aluno = contextAluno || (alunos || []).find(a => a && a.id === resolvedParams.slug)
-  
-  const turmas = contextTurmas.length > 0 ? contextTurmas : dbTurmas
+  const aluno = contextAluno
   
   const nomeTurmaDoAluno = (() => {
     if (!aluno) return 'Sem Turma'
     if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
       return String(aluno.turma_nome).split('-')[0].trim()
     }
-    const turmaObj = turmas.find(t => 
-      String(t.id) === String(aluno.turma) || 
-      String(t.codigo) === String(aluno.turma) || 
-      String(t.nome) === String(aluno.turma)
-    )
-    const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
-    return String(nomeTurma).split('-')[0].trim()
+    return String(aluno.turma || 'Sem Turma').split('-')[0].trim()
   })()
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
   const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, endpoint)
+  const dataCtx = useData();
+  const turmas = dataCtx?.turmas || [];
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2 } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2 } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -81,7 +81,7 @@ interface ComunicadoViewModalProps {
 }
 
 export function ComunicadoViewModal({
-  comunicado,
+  comunicado: initialComunicado,
   onClose,
   onCiencia,
   currentUserSlug,
@@ -100,6 +100,23 @@ export function ComunicadoViewModal({
   onEdit,
   onDelete
 }: ComunicadoViewModalProps) {
+  const [comunicado, setComunicado] = useState<any>(initialComunicado)
+  const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
+
+  useEffect(() => {
+    if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
+      setIsLoadingFull(true)
+      fetch(`/api/comunicados?id=${comunicado.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            setComunicado(data[0])
+          }
+        })
+        .finally(() => setIsLoadingFull(false))
+    }
+  }, [comunicado.id])
+
   const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -608,12 +625,20 @@ export function ComunicadoViewModal({
               </div>
 
               {/* Text Content */}
-              <div style={{ fontSize: 16, lineHeight: 1.7, color: '#334155', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} 
-                   dangerouslySetInnerHTML={{ __html: comunicado.conteudo.replace(/\n/g, '<br/>') }} />
+              {isLoadingFull ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                  <Loader2 size={32} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 16, lineHeight: 1.7, color: '#334155', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }} 
+                       dangerouslySetInnerHTML={{ __html: (comunicado.conteudo || comunicado.texto || '').replace(/\n/g, '<br/>') }} />
+                </>
+              )}
             </div>
 
             {/* Attachments - Visual Order */}
-            {comunicado.anexos && comunicado.anexos.length > 0 && (
+            {comunicado.anexos && comunicado.anexos.length > 0 && !isLoadingFull && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 800, margin: '0 auto' }}>
                 {comunicado.anexos.map((anexo: string, idx: number) => {
                   const parsed = parseAnexo(anexo)

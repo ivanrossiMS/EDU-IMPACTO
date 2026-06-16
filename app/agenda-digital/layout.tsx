@@ -27,7 +27,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
   if (isFamily) {
     return (
       <FormulariosProvider>
-        <SaidaProvider>
+        <SaidaProvider enabled={!isFamily}>
           <AgendaDigitalProvider isFamily={isFamily}>
             <AgendaDigitalLayoutInner>
               {children}
@@ -42,7 +42,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
     <DataProvider>
       <FormulariosProvider>
         <RelatoriosProvider>
-          <SaidaProvider>
+          <SaidaProvider enabled={!isFamily}>
             <AgendaDigitalProvider isFamily={isFamily}>
               <AgendaDigitalLayoutInner>
                 {children}

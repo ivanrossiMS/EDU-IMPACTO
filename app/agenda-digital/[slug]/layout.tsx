@@ -404,7 +404,7 @@ export default function ADInnerLayout({
         }
      }
      loadProfile()
-  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, pathname, router])
+  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado])
 
   useEffect(() => {
     if (setAdLoading) setAdLoading(isLoading);

@@ -209,7 +209,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const [adLoading, setAdLoading] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
-  const isDataLoading = !isLoaded || comunicadosLoading || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
+  const isDataLoading = comunicadosLoading || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
   const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
   const [adConfig, setAdConfig] = useState<ADConfig>({
     permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },

@@ -139,9 +139,25 @@ export async function GET(request: Request) {
   }
 
   const normalized = (data || []).map(normalizeRow);
-  const filtered = isFamilyOrStudent
+  let filtered = isFamilyOrStudent
     ? normalized.filter((c: any) => c.destino !== 'interno')
     : normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
+
+  // Optimization: Remove heavy payload from lists (Phase 3)
+  if (!idParam) {
+    filtered = filtered.map((c: any) => {
+      delete c.conteudo;
+      delete c.texto;
+      delete c.anexos;
+      if (c.dados) {
+        delete c.dados.conteudo;
+        delete c.dados.texto;
+        delete c.dados.anexos;
+        delete c.dados.respostas;
+      }
+      return c;
+    });
+  }
 
   return NextResponse.json(filtered)
 }
