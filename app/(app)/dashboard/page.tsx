@@ -519,7 +519,7 @@ export default function DashboardPage() {
               {aniversariantes.length === 0 ? (
                 <div style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
               ) : (
-                aniversariantes.slice(0, 3).map(aniv => (
+                aniversariantes.slice(0, 3).map((aniv: any) => (
                   <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: '16px', border: '1px solid #fce7f3' }}>
                     <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
                       {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
