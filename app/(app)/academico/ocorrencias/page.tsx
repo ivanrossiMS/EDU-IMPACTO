@@ -473,7 +473,8 @@ export default function OcorrenciasPage() {
   
   const { data: rawTurmas, isLoading: isLoadingTurmas } = useApiQuery<any[]>(['turmas'], `/api/turmas`);
   const { data: rawAlunos, isLoading: isLoadingAlunos } = useApiQuery<any[]>(['alunos'], `/api/alunos`);
-  const [rawCfgTipos, , { loading: isLoadingTipos }] = useSupabaseArray<any>('edu-cfg-tipos-ocorrencia');
+  // Removido endpoint 404 edu-cfg-tipos-ocorrencia
+  const rawCfgTipos: any[] = []; const isLoadingTipos = false;
 
   const ocorrencias = rawOcorrencias || [];
   const turmas = (rawTurmas as any)?.data || [];

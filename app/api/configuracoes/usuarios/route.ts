@@ -70,10 +70,16 @@ export async function GET(req: Request) {
     // Aumentamos o limite para 10000 para capturar o último acesso de todos os colaboradores, alunos e responsáveis
     const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10000 }).catch(() => ({ data: { users: [] } }))
     const authUsersList = authData?.users || []
+    
+    // Create Hash Map for O(1) lookups
+    const authMap = new Map<string, any>()
+    for (const au of authUsersList) {
+      if (au.email) authMap.set(au.email.toLowerCase(), au)
+    }
 
     const mappedSys = sysUsers.map(u => {
       const email = (u.email || '').trim().toLowerCase()
-      const authUser = authUsersList.find((au: any) => au.email?.toLowerCase() === email)
+      const authUser = authMap.get(email)
 
       const sysProfile = authUser?.user_metadata?.profile_code
       let perfilStr = 'Colaborador'
@@ -109,10 +115,7 @@ export async function GET(req: Request) {
        if (alunoEmail) {
           const virtualEmail = `aluno.${aluno.matricula || aluno.dados?.codigo || aluno.id}@impactoedu.local`.toLowerCase()
           
-          const authUser = authUsersList.find((au: any) => {
-             const auEmail = au.email?.toLowerCase()
-             return auEmail === alunoEmail || auEmail === virtualEmail
-          })
+          const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
           
           acc.push({
              id: `virtual-${aluno.id}`,
@@ -151,7 +154,7 @@ export async function GET(req: Request) {
         if (!hasActiveLink) return
 
         // Localiza se o responsável possui uma conta Auth correspondente
-        const authUser = authUsersList.find((au: any) => au.email?.toLowerCase() === email)
+        const authUser = authMap.get(email)
 
         mappedResps.push({
           id: `resp-${resp.id}`,

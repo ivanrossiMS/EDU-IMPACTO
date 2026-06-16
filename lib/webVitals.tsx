@@ -79,21 +79,21 @@ function flushMetrics() {
 
   // Persist to system_logs API (fire-and-forget, non-blocking)
   if (typeof fetch !== 'undefined') {
-    fetch('/api/system-logs', {
+    fetch('/api/system-logs/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: JSON.stringify([{
         modulo: 'Performance',
         acao: 'WEB_VITALS',
         descricao: `Web Vitals batch (${batch.length} metrics)`,
-        dados: batch.map(m => ({
+        detalhes: batch.map(m => ({
           name: m.name,
           value: m.value,
           rating: m.rating,
           route: m.route,
           timestamp: m.timestamp,
         })),
-      }),
+      }]),
     }).catch(() => {})
   }
 }

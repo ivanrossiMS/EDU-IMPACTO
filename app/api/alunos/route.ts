@@ -16,10 +16,15 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const pageParam = url.searchParams.get('page')
     const limitParam = url.searchParams.get('limit')
-    const all = url.searchParams.get('all') === 'true' || (!pageParam && !limitParam)
+    // Removemos fallback oculto; agora sempre paginado a menos que force explicitamente, mas limitado.
+    const all = url.searchParams.get('all') === 'true'
 
     const page = parseInt(pageParam || '1')
-    const limit = parseInt(limitParam || '10')
+    const lightweight = url.searchParams.get('lightweight') === 'true'
+    const requestedLimit = parseInt(limitParam || (all ? '500' : '25'))
+    // LIMITAMOS MAX 100 itens por vez na rota pesada para impedir travamentos.
+    // (Para buscar todos os alunos para dropdowns, o app deve usar /api/alunos/lightweight)
+    const limit = lightweight ? Math.min(requestedLimit, 2000) : Math.min(requestedLimit, 100)
     const search = url.searchParams.get('search') || ''
     const status = url.searchParams.get('status') || 'todos'
     const turma = url.searchParams.get('turma') || ''
@@ -37,7 +42,6 @@ export async function GET(request: Request) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    const lightweight = url.searchParams.get('lightweight') === 'true'
     const queryFields = lightweight
       ? 'id, nome, turma, status'
       : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
@@ -105,9 +109,8 @@ export async function GET(request: Request) {
     }
 
     let queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' })
-    if (!all) {
-      queryExec = queryExec.range(from, to)
-    }
+    // Sempre aplicar range limit
+    queryExec = queryExec.range(from, from + limit - 1)
 
     const { data: students, error: studentsError, count } = await queryExec
 

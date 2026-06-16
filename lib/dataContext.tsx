@@ -8,6 +8,39 @@ import { useConfigDb, invalidateConfigCache } from './useConfigDb'
 // ─── Data version — bump to force-clear all stored data ───────────
 const DATA_VERSION = '17'
 
+// ─── System Logs Batching Queue ───────────────────────────────────
+let systemLogQueue: any[] = [];
+let isFlushingLogs = false;
+
+const flushSystemLogs = async () => {
+  if (systemLogQueue.length === 0 || isFlushingLogs) return;
+  isFlushingLogs = true;
+  const logsToSend = [...systemLogQueue];
+  systemLogQueue = [];
+  try {
+    await fetch('/api/system-logs/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logsToSend),
+    });
+  } catch (err) {
+    console.error('Failed to flush logs', err);
+    // Put them back on failure
+    systemLogQueue = [...logsToSend, ...systemLogQueue];
+  } finally {
+    isFlushingLogs = false;
+  }
+};
+
+if (typeof window !== 'undefined') {
+  setInterval(flushSystemLogs, 10000); // flush every 10 seconds
+  window.addEventListener('beforeunload', () => {
+    if (systemLogQueue.length > 0) {
+      navigator.sendBeacon('/api/system-logs/batch', JSON.stringify(systemLogQueue));
+    }
+  });
+}
+
 // ─── Types ────────────────────────────────────────────────────────
 export interface Aluno {
   id: string; nome: string; matricula: string; codigo?: string; turma: string; serie: string
@@ -1372,12 +1405,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ip: '127.0.0.1',
       ...sanitizedPayload
     }
-    // Persist log to Supabase asynchronously (fire and forget)
-    fetch('/api/system-logs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([newLog]),
-    }).catch(() => { /* silently ignore log write errors */ })
+    // Persist log to Supabase asynchronously via batch queue
+    systemLogQueue.push(newLog);
   }, [])
 
   const createTrackedSetter = useCallback(<T extends Record<string, any>>(
@@ -1446,12 +1475,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             if (newLogs.length > 0) {
               const ts = Date.now()
               const withIds = newLogs.map((l, i) => ({ ...l, id: `LOG-${ts}-${i}` }))
-              // Persist log to Supabase asynchronously (fire and forget)
-              fetch('/api/system-logs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(withIds),
-              }).catch(() => { /* silently ignore log write errors */ })
+              // Persist log to Supabase asynchronously via batch queue
+              systemLogQueue.push(...withIds);
             }
           })
         }

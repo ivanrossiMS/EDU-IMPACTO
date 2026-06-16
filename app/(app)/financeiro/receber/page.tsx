@@ -67,9 +67,8 @@ export default function ContasReceberPage() {
   const { cfgEventos, cfgMetodosPagamento, setMovimentacoesManuais, logSystemAction } = useData();
   const { currentUser } = useApp();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
-  const [caixasAbertosLegacy] = useSupabaseArray<any>('financeiro/caixas');
-  const { data: respCaixas } = useApiQuery<{data: any[]}>(['caixas-abertos'], '/api/financeiro/caixas', { status: 'aberto', limit: 200 })
-  const caixasAbertos = respCaixas?.data || caixasAbertosLegacy || []
+  // Removido endpoint 404 /api/financeiro/caixas provisoriamente
+  const caixasAbertos: any[] = []
   
   const [ctxTitulos, setTitulos] = useSupabaseArray<any>('titulos');
   

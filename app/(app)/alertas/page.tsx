@@ -37,7 +37,8 @@ export default function AlertasPage() {
   const { ocorrencias = [] } = useData();
   const [alunos, setAlunos, { loading: loadAlunos }] = useSupabaseArray<any>('alunos');
   const [titulos, setTitulos, { loading: loadTitulos }] = useSupabaseArray<any>('titulos');
-  const [contasPagar, setContasPagar, { loading: loadContas }] = useSupabaseArray<any>('contas-pagar');
+  // Removido 404 provisoriamente
+  const contasPagar: any[] = []; const loadContas = false;
   const [funcionarios, setFuncionarios, { loading: loadFuncs }] = useSupabaseArray<any>('rh/funcionarios');
   const [lidosArray = [], setLidosArray, { loading: loadLidos }] = useSupabaseArray<string>('alertas/lidos');
   const isLoading = loadAlunos || loadTitulos || loadContas || loadFuncs || loadLidos;

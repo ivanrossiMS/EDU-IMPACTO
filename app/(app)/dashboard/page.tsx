@@ -59,7 +59,8 @@ export default function DashboardPage() {
   const { tarefas = [], eventosAgenda = [], turmas = [] } = useData()
 
   // ── Data for Stats
-  const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos?limit=1000')
+  const { data: aniversariantesList } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
+  const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos?lightweight=true&limit=2000')
   const [titulos, , { loading: loadTitulos }] = useSupabaseArray<any>('titulos')
   const [pedidos, , { loading: loadPedidosMeta }] = useSupabaseArray<any>('administrativo/pedidos-livros')
   const [pedidosManuais, , { loading: loadPedidosManuais }] = useSupabaseArray<any>('administrativo/pedidos-livros-manuais')
@@ -135,33 +136,21 @@ export default function DashboardPage() {
   ]
 
   const aniversariantes = useMemo(() => {
-    if (!alunos || alunos.length === 0) return []
-    const currentYear = hoje.getFullYear()
-    return (alunos || [])
-      .map((aluno: any) => {
-        if (!aluno.data_nascimento) return null
-        const parts = aluno.data_nascimento.split('-')
-        if (parts.length < 3) return null
-        const bMonth = parseInt(parts[1]) - 1
-        const bDay = parseInt(parts[2])
-        const birthdayThisYear = new Date(currentYear, bMonth, bDay)
-        
-        if (bMonth === hoje.getMonth()) {
-          const t = turmas.find((t:any) => t.id === aluno.turma || t.codigo === aluno.turma)
-          return {
-            id: aluno.id,
-            nome: aluno.nome,
-            dia: bDay,
-            turma: t?.nome || aluno.turma || 'S/T',
-            foto: aluno.foto,
-            timestamp: birthdayThisYear.getTime()
-          }
-        }
-        return null
-      })
-      .filter((a): a is any => a !== null)
-      .sort((a, b) => a.timestamp - b.timestamp)
-  }, [alunos, turmas, hoje])
+    // Garante extração do array (a API retorna { data: [], meta: {} })
+    const list = Array.isArray(aniversariantesList) 
+      ? aniversariantesList 
+      : (aniversariantesList as any)?.data || []
+      
+    if (!list || list.length === 0) return []
+    return list.map((a: any) => ({
+      id: a.id,
+      nome: a.nome,
+      dia: parseInt(a.dataNascimento.split('-')[2] || '0'),
+      turma: a.turma || 'S/T',
+      foto: null,
+      timestamp: new Date().getTime()
+    }))
+  }, [aniversariantesList])
 
   const ordersSummary = useMemo(() => {
     const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
@@ -283,9 +272,7 @@ export default function DashboardPage() {
     }
   }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
-  const isGlobalLoading = loadKpis || loadAlunos || loadTitulos || loadPedidosMeta || loadPedidosManuais
-
-  if (isGlobalLoading) return <DashboardSkeleton />
+  if (loadKpis) return <DashboardSkeleton />
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
