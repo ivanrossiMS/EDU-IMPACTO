@@ -95,6 +95,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
+  const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
@@ -543,8 +544,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const isRead = !!(c.leituras || {})[resolvedParams.slug];
-            const isCiencia = !!(c.ciencias || {})[resolvedParams.slug];
+            const currentReaderId = (isFamily ? resolvedParams.slug : currentUser?.id) || '';
+            const isRead = !!(c.leituras || {})[currentReaderId];
+            const isCiencia = !!(c.ciencias || {})[currentReaderId];
 
             return (
               <motion.div 
@@ -625,9 +627,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     gap: 16
                   }}
                   onClick={() => {
-                    const isRead = !!(c.leituras || {})[resolvedParams.slug];
+                    const isRead = !!(c.leituras || {})[currentReaderId];
                     const nowIso = new Date().toISOString();
-                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [resolvedParams.slug]: nowIso } };
+                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [currentReaderId]: nowIso } };
                     
                     setSelectedComunicado(updatedComunicado)
                     

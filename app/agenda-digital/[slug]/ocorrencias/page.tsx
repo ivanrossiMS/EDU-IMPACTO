@@ -126,10 +126,15 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
 
   useEffect(() => {
     if (!aluno?.id || ocorrenciasFiltradas.length === 0) return;
+    
+    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+    const currentReaderId = isFamily ? aluno.id : currentUser?.id;
+    if (!currentReaderId) return;
+
     const unreadIds = ocorrenciasFiltradas
       .filter(o => {
         const leituras = (o as any).dados?.leituras || (o as any).leituras || {};
-        return !leituras[aluno.id];
+        return !leituras[currentReaderId];
       })
       .map(o => o.id);
 

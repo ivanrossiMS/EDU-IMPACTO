@@ -153,11 +153,15 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;
     
+    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+    const currentReaderId = isFamily ? aluno.id : currentUser?.id;
+    if (!currentReaderId) return;
+
     // Check which ones are unread
     const unreadIds = meusMomentos
       .filter(m => {
         const leituras = (m as any).leituras || {};
-        return !leituras[aluno.id];
+        return !leituras[currentReaderId];
       })
       .map(m => m.id);
 

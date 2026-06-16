@@ -3,6 +3,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useEffect } from 'react'
+import { useApp } from '@/lib/context'
 import { GraduationCap, Download, ChevronRight, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
@@ -26,6 +27,7 @@ export default function ADNotasPage({ params }: { params: any }) {
   }
 
   const { aluno } = useSelectedStudent()
+  const { currentUser } = useApp()
   const { turmas = [] } = useData()
 
   // Fetch real data
@@ -127,12 +129,16 @@ export default function ADNotasPage({ params }: { params: any }) {
   useEffect(() => {
     if (!aluno?.id || boletins.length === 0) return;
     
+    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+    const currentReaderId = isFamily ? aluno.id : currentUser?.id;
+    if (!currentReaderId) return;
+
     // Check which ones are unread
     const unreadIds = boletins
       .filter((b: any) => {
         const dados = typeof b.dados === 'string' ? JSON.parse(b.dados) : b.dados || {};
         const leituras = b.leituras || dados.leituras || {};
-        return !leituras[aluno.id];
+        return !leituras[currentReaderId];
       })
       .map((b: any) => b.id);
 

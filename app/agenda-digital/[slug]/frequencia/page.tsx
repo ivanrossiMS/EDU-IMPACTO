@@ -3,6 +3,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
 import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2, GraduationCap } from 'lucide-react'
+import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
@@ -30,6 +31,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   }
 
   const { aluno } = useSelectedStudent()
+  const { currentUser } = useApp()
   const resolvedParams = useParams() as { slug: string }
   const queryClient = useQueryClient()
 
@@ -107,10 +109,14 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   React.useEffect(() => {
     if (!frequenciasDb || frequenciasDb.length === 0 || !resolvedParams.slug) return;
     
+    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+    const currentReaderId = isFamily ? resolvedParams.slug : currentUser?.id;
+    if (!currentReaderId) return;
+
     const unreadIds = frequenciasDb
       .filter((item: any) => {
         const leituras = item.leituras || item.dados?.leituras || {};
-        return !leituras[resolvedParams.slug];
+        return !leituras[currentReaderId];
       })
       .map((item: any) => item.id);
       
