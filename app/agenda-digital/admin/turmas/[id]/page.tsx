@@ -17,7 +17,7 @@ export default function ADAdminTurmaDetail() {
   const { id } = useParams()
   const router = useRouter()
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos?lightweight=true');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos/lightweight');
   const { adAlert, adConfirm } = useAgendaDigital()
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   

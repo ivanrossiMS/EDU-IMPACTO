@@ -27,13 +27,7 @@ export async function GET(req: Request) {
       status: aluno.status || 'ativo'
     }))
 
-    return NextResponse.json({
-      data: formatted,
-      meta: {
-        total: formatted.length,
-        isLightweight: true
-      }
-    })
+    return NextResponse.json(formatted)
   } catch (err: any) {
     console.error('[API alunos/lightweight] Error:', err)
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

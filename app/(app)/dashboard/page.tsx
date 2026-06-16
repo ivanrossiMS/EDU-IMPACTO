@@ -60,7 +60,7 @@ export default function DashboardPage() {
 
   // ── Data for Stats
   const { data: aniversariantesList } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
-  const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos?lightweight=true&limit=2000')
+  const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [titulos, , { loading: loadTitulos }] = useSupabaseArray<any>('titulos')
   const [pedidos, , { loading: loadPedidosMeta }] = useSupabaseArray<any>('administrativo/pedidos-livros')
   const [pedidosManuais, , { loading: loadPedidosManuais }] = useSupabaseArray<any>('administrativo/pedidos-livros-manuais')

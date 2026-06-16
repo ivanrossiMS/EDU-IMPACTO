@@ -36,7 +36,7 @@ export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos?lightweight=true');
+  const [alunos, setAlunos] = useSupabaseArray<any>('alunos/lightweight');
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   

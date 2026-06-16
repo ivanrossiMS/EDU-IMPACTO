@@ -20,7 +20,7 @@ import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage() {
   const { momentosFeed, isDataLoading } = useAgendaDigital()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos?lightweight=true', []);
+  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos/lightweight', []);
   
   
   const { currentUser } = useApp()
