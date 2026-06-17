@@ -141,14 +141,30 @@ export function AuthAlunosTab() {
       })
     } else if (aluno._responsaveis && Array.isArray(aluno._responsaveis)) {
       list.push(...aluno._responsaveis)
-    } else if (aluno.responsavel) {
-      list.push({
-        nome: aluno.responsavel,
-        cpf: aluno.cpf_responsavel || aluno.cpfResponsavel || '',
-        email: aluno.email_responsavel || aluno.emailResponsavel || '',
-        celular: aluno.celular_responsavel || aluno.telResponsavel || '',
-        tipo: 'Responsável principal'
-      })
+    } else {
+      if (aluno.responsavel) {
+        list.push({
+          nome: aluno.responsavel,
+          cpf: aluno.cpf_responsavel || aluno.cpfResponsavel || '',
+          email: aluno.email_responsavel || aluno.emailResponsavel || '',
+          celular: aluno.celular_responsavel || aluno.telResponsavel || '',
+          tipo: 'Responsável principal'
+        })
+      }
+      if (aluno.responsavel_financeiro && aluno.responsavel_financeiro !== aluno.responsavel) {
+        list.push({
+          nome: aluno.responsavel_financeiro,
+          cpf: '', email: '', celular: '',
+          tipo: 'Financeiro'
+        })
+      }
+      if (aluno.responsavel_pedagogico && aluno.responsavel_pedagogico !== aluno.responsavel && aluno.responsavel_pedagogico !== aluno.responsavel_financeiro) {
+        list.push({
+          nome: aluno.responsavel_pedagogico,
+          cpf: '', email: '', celular: '',
+          tipo: 'Pedagógico'
+        })
+      }
     }
     return list
   }

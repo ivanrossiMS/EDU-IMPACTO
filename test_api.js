@@ -1,27 +1,33 @@
-require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({path: '.env.local'});
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-async function run() {
-  // Let's mimic what route.ts does exactly
-  let query = supabase.from('comunicados').select('*');
-  const turmaId = '4º ANO A';
-  const alunoId = '4697';
-  
-  if (turmaId || alunoId) {
-    const conditions = [`destino.eq.todos`];
-    if (turmaId) {
-      conditions.push(`dados->turmas.cs.["${turmaId}"]`);
-    }
-    if (alunoId) {
-      conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
-      conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
-      conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
-    }
-    query = query.or(conditions.join(','));
-  }
-  
-  const { data, error } = await query;
-  console.log("Found:", data?.length);
-}
-run();
+supabase.from('alunos').select('id, nome, turma, status, dados').limit(5).then(res => {
+  const students = res.data;
+  const formatted = students.map(student => {
+    const d = student.dados || {};
+    return {
+      ...student,
+      responsaveis: d.responsaveis,
+      _responsaveis: d._responsaveis,
+      responsavel: d.responsavel,
+      cpf_responsavel: d.cpf_responsavel || d.cpfResponsavel,
+      email_responsavel: d.email_responsavel || d.emailResponsavel,
+      celular_responsavel: d.celular_responsavel || d.telResponsavel,
+      dados: {
+        historicoTurmas: [],
+        responsaveis: d.responsaveis,
+        _responsaveis: d._responsaveis,
+        responsavel: d.responsavel,
+        cpf_responsavel: d.cpf_responsavel,
+        email_responsavel: d.email_responsavel,
+        celular_responsavel: d.celular_responsavel,
+        cpfResponsavel: d.cpfResponsavel,
+        emailResponsavel: d.emailResponsavel,
+        telResponsavel: d.telResponsavel,
+        codigo: d.codigo,
+        email: d.email
+      }
+    };
+  });
+  console.log(JSON.stringify(formatted, null, 2));
+});
