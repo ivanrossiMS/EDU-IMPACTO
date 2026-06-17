@@ -61,14 +61,8 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Como ainda não temos uma string específica para Gestão de Pessoas, liberamos para RH, Diretor Geral, etc.
-    const allowedProfiles = ['Diretor Geral', 'Recursos Humanos', 'Administrador Master', 'Coordenador', 'SST']
-    if (allowedProfiles.includes(currentUser.perfil) || allowedProfiles.includes(currentUser.cargo)) {
-      setAccessState('allowed')
-    } else {
-      // Professores podem ver os próprios dados, mas não o dashboard de RH? Vamos liberar por enquanto e restringir nas APIs.
-      setAccessState('allowed') 
-    }
+    const hasAccess = !userPerfilObj.bloqueadoGestaoPessoas
+    setAccessState(hasAccess ? 'allowed' : 'denied')
 
   }, [hydrated, currentUser, pathname, perfisLoading, perfis])
 

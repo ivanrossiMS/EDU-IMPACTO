@@ -1,17 +1,18 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Shield, FileText, HeartPulse, HardHat, AlertTriangle, CheckCircle2, Clock, Trash2, Edit2 } from 'lucide-react'
+import { Shield, FileText, HeartPulse, HardHat, AlertTriangle, CheckCircle2, Clock, Trash2, Edit2, Search } from 'lucide-react'
 import { SidePanel } from '@/components/ui/SidePanel'
 
 type Documento = { id: string, tipo: string, titulo: string, revisao: string, medico: string, vigencia: string, status: string }
-type Aso = { id: string, colaborador: string, tipo_exame: string, vencimento: string, status: string }
+type Aso = { id: string, colaborador: string, tipo_exame: string, data_exame: string, vencimento: string, status: string }
 
 export default function GestaoSST() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pgr' | 'pcmso' | 'aso'>('dashboard')
   
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [asos, setAsos] = useState<Aso[]>([])
+  const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const [isDocPanelOpen, setIsDocPanelOpen] = useState(false)
@@ -20,7 +21,7 @@ export default function GestaoSST() {
 
   const [isAsoPanelOpen, setIsAsoPanelOpen] = useState(false)
   const [editAsoId, setEditAsoId] = useState<string | null>(null)
-  const [asoForm, setAsoForm] = useState({ colaborador: '', tipo_exame: 'Periódico', vencimento: '', status: 'REGULAR' })
+  const [asoForm, setAsoForm] = useState({ colaborador: '', tipo_exame: 'Periódico', data_exame: '', vencimento: '', status: 'REGULAR' })
 
   useEffect(() => {
     fetchData()
@@ -34,7 +35,32 @@ export default function GestaoSST() {
         fetch('/api/gestao-pessoas/sst/asos')
       ])
       if (resDoc.ok) { const d = await resDoc.json(); setDocumentos(Array.isArray(d) ? d : []) }
-      if (resAso.ok) { const a = await resAso.json(); setAsos(Array.isArray(a) ? a : []) }
+      if (resAso.ok) { 
+        const a = await resAso.json(); 
+        const today = new Date();
+        today.setUTCHours(0,0,0,0);
+        const processedAsos = (Array.isArray(a) ? a : []).map((aso: any) => {
+          let calcStatus = aso.status;
+          if (aso.vencimento) {
+            const vDate = new Date(aso.vencimento + 'T00:00:00Z');
+            const diffTime = vDate.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) calcStatus = 'VENCIDO';
+            else if (diffDays <= 30) calcStatus = 'VENCE EM BREVE';
+            else calcStatus = 'REGULAR';
+          }
+          return { ...aso, status: calcStatus };
+        });
+        setAsos(processedAsos);
+      }
+      
+      const resFunc = await fetch('/api/rh/funcionarios')
+      if (resFunc.ok) {
+        const f = await resFunc.json()
+        setFuncionarios(Array.isArray(f) ? f : (f.data || []))
+      } else {
+        console.error('Failed to fetch funcionarios:', resFunc.status)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -74,10 +100,16 @@ export default function GestaoSST() {
   const handleOpenAsoPanel = (aso?: Aso) => {
     if (aso) {
       setEditAsoId(aso.id)
-      setAsoForm({ colaborador: aso.colaborador || '', tipo_exame: aso.tipo_exame || 'Periódico', vencimento: aso.vencimento ? new Date(aso.vencimento).toISOString().split('T')[0] : '', status: aso.status || 'REGULAR' })
+      setAsoForm({ 
+        colaborador: aso.colaborador || '', 
+        tipo_exame: aso.tipo_exame || 'Periódico', 
+        data_exame: aso.data_exame ? new Date(aso.data_exame).toISOString().split('T')[0] : '',
+        vencimento: aso.vencimento ? new Date(aso.vencimento).toISOString().split('T')[0] : '', 
+        status: aso.status || 'REGULAR' 
+      })
     } else {
       setEditAsoId(null)
-      setAsoForm({ colaborador: '', tipo_exame: 'Periódico', vencimento: '', status: 'REGULAR' })
+      setAsoForm({ colaborador: '', tipo_exame: 'Periódico', data_exame: '', vencimento: '', status: 'REGULAR' })
     }
     setIsAsoPanelOpen(true)
   }
@@ -224,6 +256,7 @@ export default function GestaoSST() {
               <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                 <th style={{ padding: '16px', textAlign: 'left', fontSize: 13, color: '#64748b', fontWeight: 700 }}>COLABORADOR</th>
                 <th style={{ padding: '16px', textAlign: 'left', fontSize: 13, color: '#64748b', fontWeight: 700 }}>TIPO EXAME</th>
+                <th style={{ padding: '16px', textAlign: 'left', fontSize: 13, color: '#64748b', fontWeight: 700 }}>DATA EXAME</th>
                 <th style={{ padding: '16px', textAlign: 'left', fontSize: 13, color: '#64748b', fontWeight: 700 }}>VENCIMENTO</th>
                 <th style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: '#64748b', fontWeight: 700 }}>STATUS</th>
                 <th style={{ padding: '16px', textAlign: 'right', fontSize: 13, color: '#64748b', fontWeight: 700 }}>AÇÕES</th>
@@ -231,15 +264,21 @@ export default function GestaoSST() {
             </thead>
             <tbody>
               {asos.length === 0 ? (
-                <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Nenhum ASO registrado.</td></tr>
+                <tr><td colSpan={6} style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>Nenhum ASO registrado.</td></tr>
               ) : (
                 asos.map(aso => (
                   <tr key={aso.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={{ padding: '16px', fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{aso.colaborador}</td>
                     <td style={{ padding: '16px', fontSize: 14, color: '#475569' }}>{aso.tipo_exame}</td>
-                    <td style={{ padding: '16px', fontSize: 14, color: '#475569' }}>{new Date(aso.vencimento).toLocaleDateString('pt-BR')}</td>
+                    <td style={{ padding: '16px', fontSize: 14, color: '#475569' }}>{aso.data_exame ? new Date(aso.data_exame).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-'}</td>
+                    <td style={{ padding: '16px', fontSize: 14, color: '#475569' }}>{aso.vencimento ? new Date(aso.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-'}</td>
                     <td style={{ padding: '16px', textAlign: 'center' }}>
-                      <span style={{ padding: '4px 10px', background: aso.status === 'VENCIDO' ? '#fee2e2' : '#d1fae5', color: aso.status === 'VENCIDO' ? '#b91c1c' : '#059669', borderRadius: 100, fontSize: 12, fontWeight: 700 }}>
+                      <span style={{ 
+                        padding: '4px 10px', 
+                        background: aso.status === 'VENCIDO' ? '#fee2e2' : aso.status === 'VENCE EM BREVE' ? '#fef3c7' : '#d1fae5', 
+                        color: aso.status === 'VENCIDO' ? '#b91c1c' : aso.status === 'VENCE EM BREVE' ? '#d97706' : '#059669', 
+                        borderRadius: 100, fontSize: 12, fontWeight: 700 
+                      }}>
                         {aso.status}
                       </span>
                     </td>
@@ -297,7 +336,17 @@ export default function GestaoSST() {
         <form onSubmit={handleSaveAso} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Colaborador</label>
-            <input required value={asoForm.colaborador} onChange={e => setAsoForm({ ...asoForm, colaborador: e.target.value })} placeholder="Nome do funcionário" style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none' }} />
+            <select 
+              required
+              value={asoForm.colaborador} 
+              onChange={e => setAsoForm({ ...asoForm, colaborador: e.target.value })} 
+              style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none', background: '#fff' }}
+            >
+              <option value="" disabled>Selecione um colaborador...</option>
+              {funcionarios.map(f => (
+                <option key={f.id} value={f.nome}>{f.nome}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Tipo de Exame</label>
@@ -309,9 +358,24 @@ export default function GestaoSST() {
               <option value="Mudança de Função">Mudança de Função</option>
             </select>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Data de Vencimento</label>
-            <input required type="date" value={asoForm.vencimento} onChange={e => setAsoForm({ ...asoForm, vencimento: e.target.value })} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Data do Exame</label>
+              <input required type="date" value={asoForm.data_exame} onChange={e => {
+                const newDate = e.target.value;
+                let newVencimento = asoForm.vencimento;
+                if (newDate) {
+                  const d = new Date(newDate + 'T00:00:00Z');
+                  d.setUTCFullYear(d.getUTCFullYear() + 2);
+                  newVencimento = d.toISOString().split('T')[0];
+                }
+                setAsoForm({ ...asoForm, data_exame: newDate, vencimento: newVencimento });
+              }} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Data de Vencimento</label>
+              <input required type="date" value={asoForm.vencimento} onChange={e => setAsoForm({ ...asoForm, vencimento: e.target.value })} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none' }} />
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>Status</label>

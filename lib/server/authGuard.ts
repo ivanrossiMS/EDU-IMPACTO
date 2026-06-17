@@ -20,10 +20,7 @@ export async function requireAuth() {
   let error = null;
 
   try {
-    const authLogId = `Auth Valid (${Date.now()})`
-    console.time(authLogId)
     const res = await supabase.auth.getUser()
-    console.timeEnd(authLogId)
     user = res.data.user;
     error = res.error;
   } catch (err: any) {
@@ -32,10 +29,7 @@ export async function requireAuth() {
     if (err?.message?.includes('stole it') || err?.message?.includes('Lock')) {
       // Just retry once, the other request should have refreshed the token by now
       try {
-        const retryLogId = `Auth Retry (${Date.now()})`
-        console.time(retryLogId)
         const retryRes = await supabase.auth.getUser()
-        console.timeEnd(retryLogId)
         user = retryRes.data.user;
         error = retryRes.error;
       } catch (retryErr: any) {

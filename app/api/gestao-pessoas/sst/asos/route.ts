@@ -23,20 +23,22 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
-    const id = crypto.randomUUID()
+    const { colaborador, tipo_exame, data_exame, vencimento, status } = body
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('gp_sst_asos')
-      .insert({ ...body, id })
+      .insert([{ colaborador, tipo_exame, data_exame, vencimento, status }])
+      .select()
+      .single()
 
     if (error) throw error
-    return NextResponse.json({ success: true, id })
+    return NextResponse.json({ success: true, data })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

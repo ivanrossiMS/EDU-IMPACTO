@@ -157,14 +157,6 @@ function TabHistoricoChamadas() {
 
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-muted))' }}>
-          Filtros de Busca
-        </span>
-        <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
-          {filtered.length} registro{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
-        </span>
-      </div>
 
       {/* Filters */}
       <div style={{
@@ -227,16 +219,23 @@ function TabHistoricoChamadas() {
       </div>
 
       {/* Export buttons */}
-      {hasSearched && filtered.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexDirection: isMobile ? 'column' : 'row', justifyContent: isMobile ? 'stretch' : 'flex-end' }}>
-          <button onClick={exportCSV}
-            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(6,182,212,0.3)', background: 'rgba(6,182,212,0.08)', color: '#06b6d4', cursor: 'pointer', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <FileText size={13}/> Exportar CSV
-          </button>
-          <button onClick={exportExcel}
-            style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)', color: '#10b981', cursor: 'pointer', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Download size={13}/> Exportar Excel
-          </button>
+      {hasSearched && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center' }}>
+          <div style={{ fontSize: 13, color: 'hsl(var(--text-primary))', fontWeight: 800 }}>
+            {filtered.length} registro{filtered.length !== 1 ? 's' : ''} encontrado{filtered.length !== 1 ? 's' : ''}
+          </div>
+          {filtered.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, flexDirection: isMobile ? 'column' : 'row' }}>
+              <button onClick={exportCSV}
+                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(6,182,212,0.3)', background: 'rgba(6,182,212,0.08)', color: '#06b6d4', cursor: 'pointer', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <FileText size={13}/> Exportar CSV
+              </button>
+              <button onClick={exportExcel}
+                style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.3)', background: 'rgba(16,185,129,0.08)', color: '#10b981', cursor: 'pointer', fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Download size={13}/> Exportar Excel
+              </button>
+            </div>
+          )}
         </div>
       )}
 

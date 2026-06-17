@@ -81,6 +81,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'RH',
     collapsible: true,
     items: [
+      { label: 'GESTÃO DE PESSOAS', href: '/gestao-pessoas', icon: <Users size={16} /> },
       { label: 'FUNCIONÁRIOS', href: '/rh/funcionarios', icon: <Users2 size={16} /> },
       { label: 'FOLHA DE PGTO', href: '/rh/folha', icon: <DollarSign size={16} /> },
       { label: 'ADIANTAMENTOS', href: '/rh/adiantamentos', icon: <Banknote size={16} /> },

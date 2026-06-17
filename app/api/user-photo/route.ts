@@ -8,13 +8,7 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    // First, verify the user is logged in using the protected client (local JWT check for performance)
-    const protectedClient = await createProtectedClient()
-    const { data: sessionData, error: sessionError } = await protectedClient.auth.getSession()
-    
-    if (sessionError || !sessionData?.session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // requireAuth já validou o usuário
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -53,11 +47,7 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const protectedClient = await createProtectedClient()
-    const { data: sessionData } = await protectedClient.auth.getSession()
-    if (!sessionData?.session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // requireAuth já validou o usuário
 
     const { userId, fotoUrl } = await request.json()
     if (!userId || !fotoUrl) {

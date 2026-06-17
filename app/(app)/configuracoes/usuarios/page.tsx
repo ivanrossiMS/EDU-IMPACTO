@@ -212,7 +212,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
 
   /* ── User actions ── */
@@ -277,8 +277,8 @@ export default function UsuariosPage() {
   }
 
   /* ── Perfil actions ── */
-  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false }); setPerfilModal('add') }
-  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: [...p.permissoes], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
+  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false }); setPerfilModal('add') }
+  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: p.permissoes || [], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false, bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false, bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
   const savePerfil = () => {
     if (!perfilForm.nome.trim()) return
     if (perfilModal === 'add') {
@@ -639,22 +639,61 @@ export default function UsuariosPage() {
             </div>
             <div><label className="form-label">Descrição</label><input className="form-input" value={perfilForm.descricao} onChange={e => setPerfilForm(p => ({ ...p, descricao: e.target.value }))} placeholder="Resumo das permissões..." /></div>
             
-            {/* Toggle de Acesso ao Gestão Escolar */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.3)' }}>
-                  🏢
+            {/* Toggles de Acesso aos Módulos Principais */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Gestão Escolar (ERP) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.3)' }}>
+                    🏢
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Gestão Escolar (ERP)</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Se desativado, o colaborador não poderá acessar o sistema principal.</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Gestão Escolar (ERP)</div>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Se desativado, o colaborador não poderá acessar o sistema principal.</div>
-                </div>
+                <ModernSwitch
+                  checked={!perfilForm.bloqueadoGestaoEscolar}
+                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoEscolar: !p.bloqueadoGestaoEscolar }))}
+                  color="#10b981"
+                />
               </div>
-              <ModernSwitch
-                checked={!perfilForm.bloqueadoGestaoEscolar}
-                onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoEscolar: !p.bloqueadoGestaoEscolar }))}
-                color="#10b981"
-              />
+
+              {/* Agenda Digital */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7, #9333ea)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(168,85,247,0.3)' }}>
+                    📱
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Agenda Digital</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de comunicação e agenda.</div>
+                  </div>
+                </div>
+                <ModernSwitch
+                  checked={!perfilForm.bloqueadoAgendaDigital}
+                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoAgendaDigital: !p.bloqueadoAgendaDigital }))}
+                  color="#10b981"
+                />
+              </div>
+
+              {/* Gestão de Pessoas */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(16,185,129,0.3)' }}>
+                    👥
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso à Gestão de Pessoas</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso ao módulo de SST, treinamentos e colaboradores.</div>
+                  </div>
+                </div>
+                <ModernSwitch
+                  checked={!perfilForm.bloqueadoGestaoPessoas}
+                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
+                  color="#10b981"
+                />
+              </div>
             </div>
 
             <div>
@@ -760,8 +799,8 @@ export default function UsuariosPage() {
                           borderTop: `1px solid ${perfilForm.cor}15`,
                           padding: '16px 18px',
                           background: 'hsl(var(--bg-base))',
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                          display: 'flex',
+                          flexWrap: 'wrap',
                           gap: 12
                         }}>
                           {m.pages.map((p: any) => {
@@ -771,6 +810,8 @@ export default function UsuariosPage() {
                                 key={p.key}
                                 onClick={() => isDiretorGeral && togglePermissao(p.key)}
                                 style={{
+                                  flex: '1 1 180px',
+                                  minWidth: 180,
                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                                   padding: '10px 14px', borderRadius: 10,
                                   cursor: isDiretorGeral ? 'pointer' : 'not-allowed',

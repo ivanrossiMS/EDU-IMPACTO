@@ -113,8 +113,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     if (!userPerfilObj) return
 
     // Agora temos dados reais: verificar permissão
-    const userPerms: string[] = userPerfilObj.permissoes || []
-    const hasAccess = userPerms.includes('/agenda-digital') || userPerms.includes('agenda-digital')
+    const hasAccess = !userPerfilObj.bloqueadoAgendaDigital
     setAccessState(hasAccess ? 'allowed' : 'denied')
 
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])

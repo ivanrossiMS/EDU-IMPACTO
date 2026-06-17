@@ -10,18 +10,14 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const protectedClient = await createProtectedClient()
-    const { data: sessionData } = await protectedClient.auth.getSession()
-    if (!sessionData?.session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // requireAuth já validou o usuário
 
     const { userId, bio, telefone, unidade } = await request.json()
     if (!userId) {
       return NextResponse.json({ error: 'Falta userId' }, { status: 400 })
     }
 
-    const loggedUser = sessionData.session.user
+    const loggedUser = user
     if (loggedUser.id !== userId) {
       return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 })
     }

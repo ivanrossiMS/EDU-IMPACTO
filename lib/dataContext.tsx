@@ -209,6 +209,8 @@ export interface Perfil {
   id: string; nome: string; cor: string
   permissoes: string[]; descricao: string
   bloqueadoGestaoEscolar?: boolean
+  bloqueadoAgendaDigital?: boolean
+  bloqueadoGestaoPessoas?: boolean
 }
 
 // ─── AGENDA ESCOLAR ───────────────────────────────────────────────
