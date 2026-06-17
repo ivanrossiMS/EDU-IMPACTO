@@ -1,9 +1,10 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { Search, UserPlus, Filter, Clock, Calendar, CheckCircle2, AlertTriangle } from 'lucide-react'
+import React, { useEffect, useState, useRef } from 'react'
+import { Search, UserPlus, Filter, Clock, Calendar, CheckCircle2, AlertTriangle, Printer, BadgeIcon, Download, Info } from 'lucide-react'
+import { SidePanel } from '@/components/ui/SidePanel'
 
-type Funcionario = { id: string; nome: string; cpf: string; email: string; telefone: string; status: string; cargo: string; data_nascimento?: string }
+type Funcionario = { id: string; nome: string; cpf: string; email: string; telefone: string; status: string; cargo: string; data_nascimento?: string; foto?: string }
 type Ausencia = { id: string; funcionario_id: string; tipo: string; data_inicio: string; data_fim: string; status: string; motivo?: string }
 
 export default function GestaoPessoasColaboradores() {
@@ -11,6 +12,9 @@ export default function GestaoPessoasColaboradores() {
   const [ausencias, setAusencias] = useState<Ausencia[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+  const [selectedFunc, setSelectedFunc] = useState<Funcionario | null>(null)
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [isCrachaView, setIsCrachaView] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -40,16 +44,33 @@ export default function GestaoPessoasColaboradores() {
     
     if (emAusencia) {
       return (
-        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:100, background:'#fef3c7', color:'#d97706', fontSize:12, fontWeight:600 }}>
-          <Clock size={12}/> {emAusencia.tipo} até {new Date(emAusencia.data_fim).toLocaleDateString('pt-BR')}
+        <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'6px 12px', borderRadius:100, background:'#fef3c7', color:'#d97706', fontSize:12, fontWeight:700 }}>
+          <Clock size={14}/> {emAusencia.tipo} (até {new Date(emAusencia.data_fim).toLocaleDateString('pt-BR')})
         </span>
       )
     }
     return (
-      <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:100, background:'#d1fae5', color:'#059669', fontSize:12, fontWeight:600 }}>
-        <CheckCircle2 size={12}/> Ativo e Trabalhando
+      <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'6px 12px', borderRadius:100, background:'#d1fae5', color:'#059669', fontSize:12, fontWeight:700 }}>
+        <CheckCircle2 size={14}/> Ativo
       </span>
     )
+  }
+
+  const handleOpenDossie = (f: Funcionario) => {
+    setSelectedFunc(f)
+    setIsCrachaView(false)
+    setIsPanelOpen(true)
+  }
+
+  const handleOpenCracha = (f: Funcionario) => {
+    setSelectedFunc(f)
+    setIsCrachaView(true)
+    setIsPanelOpen(true)
+  }
+
+  const handlePrintCracha = () => {
+    // Abordagem simples para imprimir a div de crachá
+    window.print()
   }
 
   return (
@@ -62,19 +83,8 @@ export default function GestaoPessoasColaboradores() {
             Colaboradores
           </h1>
           <p style={{ fontSize: 15, color: '#64748b' }}>
-            Base de dados unificada de funcionários, histórico de ausências e afastamentos.
+            Base de dados unificada de funcionários, emissão de crachás e histórico de ausências.
           </p>
-        </div>
-        
-        <div style={{ display: 'flex', gap: 12 }}>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 12, background: '#ffffff', border: '1px solid #cbd5e1', color: '#0f172a', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-            <Filter size={18} color="#64748b" />
-            Filtrar
-          </button>
-          <button style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 12, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            <UserPlus size={18} />
-            Novo Colaborador
-          </button>
         </div>
       </div>
 
@@ -103,51 +113,210 @@ export default function GestaoPessoasColaboradores() {
         ) : filtered.length === 0 ? (
           <div style={{ padding: 60, textAlign: 'center', color: '#64748b', fontSize: 15 }}>Nenhum colaborador encontrado.</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Colaborador</th>
-                <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cargo / Setor</th>
-                <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status de Trabalho</th>
-                <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((f, i) => (
-                <tr key={f.id} style={{ borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #f1f5f9', transition: 'all 0.2s', background: '#fff' }}
-                    onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                  <td style={{ padding: '20px 24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff' }}>
-                        {f.nome?.charAt(0)}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{f.nome}</div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>CPF: {f.cpf || 'Não informado'} • E-mail: {f.email || 'Não informado'}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '20px 24px' }}>
-                    <div style={{ fontSize: 14, color: '#334155', fontWeight: 600, marginBottom: 4 }}>{f.cargo || 'Não especificado'}</div>
-                  </td>
-                  <td style={{ padding: '20px 24px' }}>
-                    {getStatusAusencia(f.id)}
-                  </td>
-                  <td style={{ padding: '20px 24px', textAlign: 'right' }}>
-                    <button style={{ padding: '8px 16px', borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.borderColor = '#cbd5e1' }}
-                      onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#e2e8f0' }}>
-                      Ver Dossiê
-                    </button>
-                  </td>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 800 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                  <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Colaborador</th>
+                  <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cargo / Setor</th>
+                  <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status de Trabalho</th>
+                  <th style={{ padding: '20px 24px', fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((f, i) => (
+                  <tr key={f.id} style={{ borderBottom: i === filtered.length - 1 ? 'none' : '1px solid #f1f5f9', transition: 'all 0.2s', background: '#fff' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                    <td style={{ padding: '20px 24px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        {f.foto ? (
+                          <img src={f.foto} alt={f.nome} style={{ width: 48, height: 48, borderRadius: 12, objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                            {f.nome?.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{f.nome}</div>
+                          <div style={{ fontSize: 12, color: '#64748b' }}>CPF: {f.cpf || 'Não informado'}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '20px 24px' }}>
+                      <div style={{ fontSize: 14, color: '#334155', fontWeight: 600 }}>{f.cargo || 'Não especificado'}</div>
+                    </td>
+                    <td style={{ padding: '20px 24px' }}>
+                      {getStatusAusencia(f.id)}
+                    </td>
+                    <td style={{ padding: '20px 24px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <button 
+                          onClick={() => handleOpenCracha(f)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#dcfce7'; e.currentTarget.style.borderColor = '#86efac' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#f0fdf4'; e.currentTarget.style.borderColor = '#bbf7d0' }}
+                        >
+                          <BadgeIcon size={16} /> Crachá
+                        </button>
+                        <button 
+                          onClick={() => handleOpenDossie(f)}
+                          style={{ padding: '8px 16px', borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#0f172a', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.borderColor = '#cbd5e1' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#e2e8f0' }}
+                        >
+                          Ver Dossiê
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
+      {/* Side Panel para Dossiê ou Crachá */}
+      <SidePanel
+        isOpen={isPanelOpen}
+        onClose={() => setIsPanelOpen(false)}
+        title={isCrachaView ? 'Emissão de Crachá' : 'Dossiê do Colaborador'}
+        subtitle={selectedFunc?.nome}
+        width={isCrachaView ? 400 : 600}
+      >
+        {selectedFunc && (
+          isCrachaView ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }}>
+              <div style={{ width: '100%', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                {/* Visual do Crachá (ID Badge) */}
+                <div id="cracha-print-area" style={{ 
+                  width: 250, height: 400, background: '#fff', borderRadius: 16, overflow: 'hidden',
+                  boxShadow: '0 10px 25px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', position: 'relative'
+                }}>
+                  {/* Top Color Band */}
+                  <div style={{ height: 80, background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', position: 'relative' }}>
+                    <div style={{ position: 'absolute', bottom: -30, left: '50%', transform: 'translateX(-50%)' }}>
+                      {selectedFunc.foto ? (
+                        <img src={selectedFunc.foto} alt="Foto" style={{ width: 80, height: 80, borderRadius: '50%', border: '4px solid #fff', objectFit: 'cover' }} />
+                      ) : (
+                        <div style={{ width: 80, height: 80, borderRadius: '50%', border: '4px solid #fff', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 32, fontWeight: 900 }}>
+                          {selectedFunc.nome.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Info Area */}
+                  <div style={{ flex: 1, padding: '40px 20px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: '0 0 4px', lineHeight: 1.2 }}>
+                      {selectedFunc.nome}
+                    </h3>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#3b82f6', margin: '0 0 16px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {selectedFunc.cargo || 'COLABORADOR'}
+                    </p>
+                    
+                    <div style={{ marginTop: 'auto', background: '#f1f5f9', padding: '12px', borderRadius: 12 }}>
+                      <p style={{ fontSize: 10, color: '#64748b', margin: '0 0 4px', textTransform: 'uppercase', fontWeight: 700 }}>ID DO SISTEMA</p>
+                      <p style={{ fontSize: 11, color: '#0f172a', margin: 0, fontFamily: 'monospace', fontWeight: 600 }}>{selectedFunc.id.split('-')[0] || selectedFunc.id}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handlePrintCracha}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', borderRadius: 12, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+              >
+                <Printer size={18} /> Imprimir Crachá
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, background: '#eff6ff', padding: 16, borderRadius: 12 }}>
+                <Info size={20} color="#3b82f6" style={{ flexShrink: 0 }} />
+                <p style={{ fontSize: 13, color: '#1e3a8a', margin: 0, lineHeight: 1.5 }}>
+                  Para impressão em cartões PVC, utilize as dimensões padrão CR80 (54mm x 86mm). O layout se ajustará na impressão.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+              {/* Profile Card */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                {selectedFunc.foto ? (
+                  <img src={selectedFunc.foto} alt="Foto" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: 80, height: 80, borderRadius: 20, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 800, color: '#fff' }}>
+                    {selectedFunc.nome.charAt(0)}
+                  </div>
+                )}
+                <div>
+                  <h3 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>{selectedFunc.nome}</h3>
+                  <div style={{ display: 'inline-flex', padding: '4px 12px', background: '#f1f5f9', color: '#475569', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                    {selectedFunc.cargo || 'Cargo não definido'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Data Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>E-mail</div>
+                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{selectedFunc.email || '-'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Telefone</div>
+                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{selectedFunc.telefone || '-'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>CPF</div>
+                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{selectedFunc.cpf || '-'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>Data Nasc.</div>
+                  <div style={{ fontSize: 15, color: '#0f172a', fontWeight: 500 }}>{selectedFunc.data_nascimento ? new Date(selectedFunc.data_nascimento).toLocaleDateString('pt-BR') : '-'}</div>
+                </div>
+              </div>
+
+              {/* Ausências */}
+              <div>
+                <h4 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Calendar size={18} /> Histórico de Ausências
+                </h4>
+                {getAusenciasFuncionario(selectedFunc.id).length === 0 ? (
+                  <div style={{ padding: 24, background: '#f8fafc', borderRadius: 16, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
+                    Nenhuma ausência ou férias registrada.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {getAusenciasFuncionario(selectedFunc.id).map(aus => (
+                      <div key={aus.id} style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 14, color: '#0f172a' }}>{aus.tipo}</strong>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: aus.status === 'aprovado' ? '#059669' : '#d97706', textTransform: 'uppercase' }}>{aus.status}</span>
+                        </div>
+                        <div style={{ fontSize: 13, color: '#64748b' }}>
+                          De {new Date(aus.data_inicio).toLocaleDateString('pt-BR')} até {new Date(aus.data_fim).toLocaleDateString('pt-BR')}
+                        </div>
+                        {aus.motivo && <div style={{ fontSize: 13, color: '#475569', marginTop: 8, background: '#f8fafc', padding: 8, borderRadius: 8 }}>{aus.motivo}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )
+        )}
+      </SidePanel>
+
+      {/* Global Print Styles */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          body * { visibility: hidden; }
+          #cracha-print-area, #cracha-print-area * { visibility: visible; }
+          #cracha-print-area { position: absolute; left: 0; top: 0; box-shadow: none !important; border: 1px solid #000; }
+        }
+      `}} />
     </div>
   )
 }

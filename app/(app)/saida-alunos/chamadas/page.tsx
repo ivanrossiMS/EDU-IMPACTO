@@ -239,7 +239,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               textTransform: 'uppercase',
             }}>
-              <Megaphone size={13}/> {recalling ? 'Chamando...' : 'Chamar'}
+              <Megaphone size={13}/> {recalling ? 'Chamando...' : 'CHAMAR ALUNO'}
             </button>
 
             <button className="btn-modern btn-confirmar" onClick={() => onConfirm(call.id)} style={{
