@@ -18,7 +18,7 @@ export default function GestaoPessoasDashboard() {
     // Buscar KPIs
     Promise.all([
       fetch('/api/gestao-pessoas/riscos').then(res => res.ok ? res.json() : []),
-      fetch('/api/gestao-pessoas/plano-acao').then(res => res.ok ? res.json() : []),
+      fetch('/api/gestao-pessoas/acoes').then(res => res.ok ? res.json() : []),
       fetch('/api/gestao-pessoas/atendimentos').then(res => res.ok ? res.json() : []),
       fetch('/api/rh/funcionarios').then(res => res.ok ? res.json() : [])
     ]).then(([riscos, acoes, atendimentos, funcs]) => {
