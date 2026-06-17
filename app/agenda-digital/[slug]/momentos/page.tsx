@@ -60,12 +60,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
 
 
-  const handleLike = (momentId: number | string) => {
+  const handleLike = async (momentId: number | string) => {
+    const myName = currentUser?.nome || 'Você'
+    
+    // Otimistic UI
     queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
       if (!old) return old;
       return old.map((m: any) => {
         if (m.id !== momentId) return m;
-        const myName = currentUser?.nome || 'Você'
         const likesArray = m.likes || []
         const isLiked = likesArray.includes(myName)
         return {
@@ -74,12 +76,26 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         }
       });
     });
+
+    // Salvar no backend e disparar push
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ momentId, action: 'like', authorName: myName })
+      })
+    } catch (err) {
+      console.error("Error updating like:", err)
+    }
   }
 
-  const handlePublishComment = (momentId: number | string) => {
+  const handlePublishComment = async (momentId: number | string) => {
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 
+    const myName = currentUser?.nome || 'Você'
+
+    // Otimistic UI
     queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
       if (!old) return old;
       return old.map((m: any) => {
@@ -87,11 +103,22 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         const commentsArray = m.comments || []
         return {
           ...m,
-          comments: [...commentsArray, { id: Date.now().toString(), author: currentUser?.nome || 'Você', text, time: 'Agora' }]
+          comments: [...commentsArray, { id: Date.now().toString(), author: myName, text, time: 'Agora' }]
         }
       });
     });
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
+
+    // Salvar no backend e disparar push
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ momentId, action: 'comment', value: text, authorName: myName })
+      })
+    } catch (err) {
+      console.error("Error updating comment:", err)
+    }
   }
   
   const todasTurmasDoAluno = useMemo(() => {

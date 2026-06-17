@@ -72,12 +72,62 @@ export async function POST(request: Request) {
       const rows = body.map(buildRow)
       const { error } = await supabase.from('saida_calls').upsert(rows)
       if (error) throw new Error(error.message)
+      
+      // Processar Notificações de Saída
+      for (const row of rows) {
+        if (row.dados?.status === 'confirmed' && row.dados?.studentId) {
+          try {
+            const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+            const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+            const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.dados.studentId).single()
+            if (aluno) {
+              const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.dados.studentId] })
+              if (targetIds.length > 0) {
+                await sendAgendaPushNotification({
+                  type: 'frequencia',
+                  itemId: String(row.id),
+                  title: '🎓 Saída Confirmada',
+                  message: `A saída de ${aluno.nome} foi confirmada na portaria.`,
+                  targetUserIds: targetIds,
+                  targetUrl: `/agenda-digital/frequencia`
+                })
+              }
+            }
+          } catch (e) {
+            console.error('Saida Push Error:', e)
+          }
+        }
+      }
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
 
     const row = buildRow(body)
     const { data, error } = await supabase.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
+
+    if (data.dados?.status === 'confirmed' && data.dados?.studentId) {
+      try {
+        const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+        const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.dados.studentId).single()
+        if (aluno) {
+          const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.dados.studentId] })
+          if (targetIds.length > 0) {
+            sendAgendaPushNotification({
+              type: 'frequencia',
+              itemId: String(data.id),
+              title: '🎓 Saída Confirmada',
+              message: `A saída de ${aluno.nome} foi confirmada na portaria.`,
+              targetUserIds: targetIds,
+              targetUrl: `/agenda-digital/frequencia`
+            }).catch(e => console.error('Saida Push Error:', e))
+          }
+        }
+      } catch (e) {
+        console.error('Saida Push Error:', e)
+      }
+    }
 
     return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {

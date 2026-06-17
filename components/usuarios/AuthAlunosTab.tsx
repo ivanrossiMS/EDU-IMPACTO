@@ -60,7 +60,7 @@ export function AuthAlunosTab() {
   const { data: apiData, isLoading } = useApiQuery<any>(
     ['alunos_auth_tab'],
     '/api/alunos',
-    { limit: 1000 }
+    { lightweight: true, all: true, limit: 10000 }
   )
   const queryClient = useQueryClient()
 

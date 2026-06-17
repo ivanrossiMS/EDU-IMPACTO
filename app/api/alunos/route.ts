@@ -21,10 +21,10 @@ export async function GET(request: Request) {
 
     const page = parseInt(pageParam || '1')
     const lightweight = url.searchParams.get('lightweight') === 'true'
-    const requestedLimit = parseInt(limitParam || (all ? '500' : '25'))
+    const requestedLimit = parseInt(limitParam || (all ? '10000' : '25'))
     // LIMITAMOS MAX 100 itens por vez na rota pesada para impedir travamentos.
     // (Para buscar todos os alunos para dropdowns, o app deve usar /api/alunos/lightweight)
-    const limit = lightweight ? Math.min(requestedLimit, 2000) : Math.min(requestedLimit, 100)
+    const limit = lightweight ? Math.min(requestedLimit, 10000) : Math.min(requestedLimit, 100)
     const search = url.searchParams.get('search') || ''
     const status = url.searchParams.get('status') || 'todos'
     const turma = url.searchParams.get('turma') || ''
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
     const to = from + limit - 1
 
     const queryFields = lightweight
-      ? 'id, nome, turma, status'
+      ? 'id, nome, turma, status, dados'
       : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
 
     let query = supabase

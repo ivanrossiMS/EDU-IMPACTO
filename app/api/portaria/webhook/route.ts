@@ -315,16 +315,25 @@ export async function POST(req: Request) {
             console.log(`✅ [Portaria Integration] Frequência atualizada com sucesso para ${alunoNome} em ${localDate} (${localTimeStr})`)
             
             // 9. Disparo do Push Notification para a Agenda Digital
-            if (alunoResponsaveis && alunoResponsaveis.length > 0) {
-              const targetUserIds = alunoResponsaveis.map((r: any) => r.id || r.telefone || 'mock_parent_id')
-              
-              sendPushNotification({
-                title: 'Entrada Registrada',
-                body: `O aluno ${alunoNome} acessou a unidade às ${localTimeStr}.`,
-                targetUserIds,
-                url: '/agenda-digital/frequencia',
-                data: { alunoId, eventId, type: 'portaria' }
-              }).catch(err => console.error('[Push Dispatch Error]', err))
+            if (alunoId) {
+              try {
+                const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+                const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+                const targetIds = await getResponsavelIdsForTargets({ targetStudents: [alunoId] })
+                
+                if (targetIds.length > 0) {
+                  await sendAgendaPushNotification({
+                    type: 'frequencia',
+                    itemId: String(freqId),
+                    title: '✅ Presença Confirmada',
+                    message: `A presença de ${alunoNome} foi confirmada na escola (Entrada às ${localTimeStr}).`,
+                    targetUserIds: targetIds,
+                    targetUrl: '/agenda-digital/frequencia'
+                  })
+                }
+              } catch (e) {
+                console.error('[Push Dispatch Error]', e)
+              }
             }
           }
         }

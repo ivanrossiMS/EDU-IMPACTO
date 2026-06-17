@@ -147,6 +147,10 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // ── Adicionar colaboradores diretos ───────────────────────────────────
     colaboradoresIds.forEach(id => allResponsavelIds.add(id))
 
+    // Também incluímos os próprios IDs dos alunos, pois os responsáveis virtuais (sem cadastro fixo) 
+    // se inscrevem no OneSignal usando o alias 'aluno_id'.
+    finalAlunosIds.forEach(id => allResponsavelIds.add(String(id)))
+
     const result = Array.from(allResponsavelIds)
     console.log(`[NotifHelper] ${result.length} destinatário(s) resolvido(s) | turmas=${turmas.length} | alunos=${finalAlunosIds.length}`)
     return result

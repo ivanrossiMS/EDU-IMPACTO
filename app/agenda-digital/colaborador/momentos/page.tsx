@@ -205,6 +205,7 @@ export default function ADMomentosPage() {
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: currentUser?.nome || 'Administração',
+        authorId: currentUser?.id,
         targetClasses,
         targetClassesIds,
         alunosIds,
@@ -230,48 +231,53 @@ export default function ADMomentosPage() {
     }
   }
 
-  const handleLike = (momentId: number | string) => {
+  const handleLike = async (momentId: number | string) => {
+    const myName = currentUser?.nome || 'Você'
     setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
-      const myName = currentUser?.nome || 'Você'
       const likesArray = m.likes || []
       const isLiked = likesArray.includes(myName)
-      const updatedM = {
+      return {
         ...m,
         likes: isLiked ? likesArray.filter(name => name !== myName) : [...likesArray, myName]
       }
-      
-      fetch('/api/agenda/momentos', {
+    }))
+    
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedM)
-      }).catch(err => console.error("Error updating momento likes:", err))
-      
-      return updatedM
-    }))
+        body: JSON.stringify({ momentId, action: 'like', authorName: myName })
+      })
+    } catch (err) {
+      console.error("Error updating momento likes:", err)
+    }
   }
 
-  const handlePublishComment = (momentId: number | string) => {
+  const handlePublishComment = async (momentId: number | string) => {
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 
+    const myName = currentUser?.nome || 'Você'
     setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
       const commentsArray = m.comments || []
-      const updatedM = {
+      return {
         ...m,
-        comments: [...commentsArray, { id: Date.now().toString(), author: currentUser?.nome || 'Você', text, time: 'Agora' }]
+        comments: [...commentsArray, { id: Date.now().toString(), author: myName, text, time: 'Agora' }]
       }
-      
-      fetch('/api/agenda/momentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedM)
-      }).catch(err => console.error("Error updating momento comments:", err))
-      
-      return updatedM
     }))
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
+    
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ momentId, action: 'comment', value: text, authorName: myName })
+      })
+    } catch (err) {
+      console.error("Error updating momento comments:", err)
+    }
   }
   
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'

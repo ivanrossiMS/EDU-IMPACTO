@@ -279,7 +279,7 @@ export default function FrequenciaPage() {
   const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
     '/api/alunos', 
-    { limit: 2000 }
+    { lightweight: true, all: true, limit: 2000 }
   )
   const alunos = apiResponse?.data || []
 

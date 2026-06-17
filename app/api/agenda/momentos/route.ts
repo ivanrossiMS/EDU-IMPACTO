@@ -59,23 +59,30 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) {
-         // Se array vazio, talvez queira apagar tudo? 
-         // O useSupabaseArray manda o estado atual. Se mandou [], apaga o que não está no []?
-         // Na vdd upsert([]) não faz nada. 
          return NextResponse.json({ ok: true, count: 0 })
       }
       
       const rows = body.map(buildRowAuth)
       console.log(`[API Momentos] Upserting ${rows.length} items...`)
       
+      // Obter IDs existentes para não mandar push repetido
+      const incomingIds = rows.map((r: any) => r.id)
+      const { data: existingRecords } = await supabase
+        .from('momentos')
+        .select('id')
+        .in('id', incomingIds)
+        
+      const existingIds = new Set((existingRecords || []).map(r => r.id))
+      const newRows = rows.filter((r: any) => !existingIds.has(r.id))
+
       const { error } = await supabase.from('momentos').upsert(rows)
       if (error) {
         console.error('[API Momentos] Upsert Error:', error)
         throw new Error(error.message)
       }
 
-      // Disparar Push (Background)
-      rows.forEach(async (row: any) => {
+      // Disparar Push APENAS para novos
+      newRows.forEach(async (row: any) => {
         const targetIds = await getResponsavelIdsForTargets(row.dados)
         if (targetIds.length > 0) {
            sendAgendaPushNotification({
@@ -93,24 +100,31 @@ export async function POST(request: Request) {
     }
 
     const row = buildRowAuth(body)
+    
+    // Verificar se já existe antes do single upsert
+    const { data: existingSingle } = await supabase.from('momentos').select('id').eq('id', row.id).maybeSingle()
+    const isNew = !existingSingle
+
     const { data, error } = await supabase.from('momentos').upsert(row).select().single()
     if (error) {
        console.error('[API Momentos] Single Upsert Error:', error)
        throw new Error(error.message)
     }
 
-    getResponsavelIdsForTargets(data.dados).then(targetIds => {
-      if (targetIds.length > 0) {
-         sendAgendaPushNotification({
-            type: 'momentos',
-            itemId: String(data.id),
-            title: '📸 Novo Momento Publicado!',
-            message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
-            targetUserIds: targetIds,
-            targetUrl: '/agenda-digital/momentos'
-         }).catch(err => console.error('Momento Push Error:', err))
-      }
-    })
+    if (isNew) {
+      getResponsavelIdsForTargets(data.dados).then(targetIds => {
+        if (targetIds.length > 0) {
+           sendAgendaPushNotification({
+              type: 'momentos',
+              itemId: String(data.id),
+              title: '📸 Novo Momento Publicado!',
+              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
+              targetUserIds: targetIds,
+              targetUrl: '/agenda-digital/momentos'
+           }).catch(err => console.error('Momento Push Error:', err))
+        }
+      })
+    }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {

@@ -45,11 +45,18 @@ export async function POST(request: Request) {
         if (targetIds.length > 0) {
           const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
           const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+          
+          const isPresent = row.presente !== false;
+          const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada';
+          const pushMsg = isPresent 
+            ? `A presença de ${nomeAluno} foi confirmada na escola.` 
+            : `Foi registrada uma falta para ${nomeAluno}.`;
+
           await sendAgendaPushNotification({
             type: 'frequencia',
             itemId: String(row.id),
-            title: '✋ Atualização de Frequência',
-            message: `Foi feito um novo registro de frequência para ${nomeAluno}.`,
+            title: pushTitle,
+            message: pushMsg,
             targetUserIds: targetIds,
             targetUrl: `/agenda-digital/frequencia`
           }).catch(err => console.error('Frequencia Push Error:', err))
@@ -66,11 +73,18 @@ export async function POST(request: Request) {
     if (targetIds.length > 0) {
       const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
       const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+      
+      const isPresent = data.presente !== false;
+      const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada';
+      const pushMsg = isPresent 
+        ? `A presença de ${nomeAluno} foi confirmada na escola.` 
+        : `Foi registrada uma falta para ${nomeAluno}.`;
+
       sendAgendaPushNotification({
         type: 'frequencia',
         itemId: String(data.id),
-        title: '✋ Atualização de Frequência',
-        message: `Foi feito um novo registro de frequência para ${nomeAluno}.`,
+        title: pushTitle,
+        message: pushMsg,
         targetUserIds: targetIds,
         targetUrl: `/agenda-digital/frequencia`
       }).catch(err => console.error('Frequencia Push Error:', err))

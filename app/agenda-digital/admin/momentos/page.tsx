@@ -130,6 +130,7 @@ export default function ADAdminMomentos() {
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: currentUser?.nome || 'Administração',
+        authorId: currentUser?.id,
         targetClasses,
         targetClassesIds,
         alunosIds,

@@ -112,23 +112,21 @@ export async function GET(req: Request) {
 
     const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
        const alunoEmail = (aluno.email || aluno.dados?.email || '').trim().toLowerCase()
-       if (alunoEmail) {
-          const virtualEmail = `aluno.${aluno.matricula || aluno.dados?.codigo || aluno.id}@impactoedu.local`.toLowerCase()
-          
-          const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
-          
-          acc.push({
-             id: `virtual-${aluno.id}`,
-             nome: aluno.nome,
-             email: alunoEmail,
-             cargo: 'Alunos',
-             perfil: 'Família',
-             status: authUser ? 'ativo' : 'inativo',
-             ultimoAcesso: authUser?.last_sign_in_at 
-               ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
-               : 'Nunca acessou'
-          })
-       }
+       const virtualEmail = `aluno.${aluno.matricula || aluno.dados?.codigo || aluno.id}@impactoedu.local`.toLowerCase()
+       
+       const authUser = authMap.get(alunoEmail) || authMap.get(virtualEmail)
+       
+       acc.push({
+          id: `virtual-${aluno.id}`,
+          nome: aluno.nome,
+          email: alunoEmail || '',
+          cargo: 'Alunos',
+          perfil: 'Família',
+          status: authUser ? 'ativo' : 'inativo',
+          ultimoAcesso: authUser?.last_sign_in_at 
+            ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+            : 'Nunca acessou'
+       })
        return acc
     }, [])
 
@@ -145,7 +143,6 @@ export async function GET(req: Request) {
     if (respData && Array.isArray(respData)) {
       respData.forEach((resp: any) => {
         const email = (resp.email || '').trim().toLowerCase()
-        if (!email) return
 
         const links = (linksData || []).filter((l: any) => String(l.responsavel_id) === String(resp.id))
         const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
@@ -154,12 +151,12 @@ export async function GET(req: Request) {
         if (!hasActiveLink) return
 
         // Localiza se o responsável possui uma conta Auth correspondente
-        const authUser = authMap.get(email)
+        const authUser = email ? authMap.get(email) : undefined
 
         mappedResps.push({
           id: `resp-${resp.id}`,
           nome: resp.nome,
-          email: email,
+          email: email || '',
           cargo: 'Responsáveis',
           perfil: 'Família',
           status: authUser ? 'ativo' : 'inativo',
