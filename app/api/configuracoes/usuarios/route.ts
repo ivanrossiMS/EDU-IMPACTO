@@ -42,21 +42,82 @@ export async function GET(req: Request) {
     
     if (!supabaseUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    const type = url.searchParams.get('type')
+    const pageParam = url.searchParams.get('page')
+    const limitParam = url.searchParams.get('limit')
+    const search = url.searchParams.get('search') || ''
+    
+    const page = parseInt(pageParam || '1')
+    const limit = parseInt(limitParam || '20')
+    const from = (page - 1) * limit
+    const to = from + limit - 1
+
+    const supabaseAdmin = getAdminClient()
+    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10000 }).catch(() => ({ data: { users: [] } }))
+    const authUsersList = authData?.users || []
+    
+    const authMap = new Map<string, any>()
+    for (const au of authUsersList) {
+      if (au.email) authMap.set(au.email.toLowerCase(), au)
+    }
+
+    if (type === 'colaboradores') {
+      let query = supabase.from('system_users').select('*', { count: 'exact' })
+      if (search) {
+        query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%`)
+      }
+      
+      const { data: sysUsers, count } = await query.order('nome').range(from, to)
+
+      const mappedSys = (sysUsers || []).map(u => {
+        const email = (u.email || '').trim().toLowerCase()
+        const authUser = authMap.get(email)
+
+        const sysProfile = authUser?.user_metadata?.profile_code
+        let perfilStr = 'Colaborador'
+        if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
+        else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
+        else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
+        else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
+        else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
+        else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
+
+        if (u.perfil && typeof u.perfil === 'string') {
+          perfilStr = u.perfil
+        }
+
+        return {
+          id: u.id,
+          nome: u.nome,
+          email: email,
+          cargo: u.cargo || 'Não definido',
+          perfil: perfilStr,
+          status: authUser ? 'ativo' : 'inativo',
+          ultimoAcesso: authUser?.last_sign_in_at 
+            ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
+            : 'Nunca acessou'
+        }
+      })
+
+      return NextResponse.json({ data: mappedSys, total: count || 0, page, limit })
+    }
+
+    // Fallback logic for general users fetch (legacy support)
     async function fetchAll(table: string, cols: string) {
       let all: any[] = []
-      let from = 0
-      let to = 999
+      let fromLoop = 0
+      let toLoop = 999
       let hasMore = true
       while(hasMore) {
-        const { data } = await supabase.from(table).select(cols).range(from, to)
+        const { data } = await supabase.from(table).select(cols).range(fromLoop, toLoop)
         if (!data || data.length === 0) {
           hasMore = false
         } else {
           all = [...all, ...data]
           if (data.length < 1000) hasMore = false
           else {
-            from += 1000
-            to += 1000
+            fromLoop += 1000
+            toLoop += 1000
           }
         }
       }
@@ -64,19 +125,7 @@ export async function GET(req: Request) {
     }
 
     const sysUsers = await fetchAll('system_users', '*')
-
-    // Fetch active Auth users to check their actual existence and map orphaned records
-    const supabaseAdmin = getAdminClient()
-    // Aumentamos o limite para 10000 para capturar o último acesso de todos os colaboradores, alunos e responsáveis
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10000 }).catch(() => ({ data: { users: [] } }))
-    const authUsersList = authData?.users || []
     
-    // Create Hash Map for O(1) lookups
-    const authMap = new Map<string, any>()
-    for (const au of authUsersList) {
-      if (au.email) authMap.set(au.email.toLowerCase(), au)
-    }
-
     const mappedSys = sysUsers.map(u => {
       const email = (u.email || '').trim().toLowerCase()
       const authUser = authMap.get(email)
@@ -107,7 +156,6 @@ export async function GET(req: Request) {
       }
     })
 
-    // Buscar alunos de forma LEVE para prover acesso virtual a alunos
     const alunosData = await fetchAll('alunos', 'id, nome, email, dados, matricula')
 
     const mappedAlunos = (alunosData || []).reduce((acc: any[], aluno: any) => {
@@ -130,16 +178,11 @@ export async function GET(req: Request) {
        return acc
     }, [])
 
-    // Fetch active Auth users to check their actual existence and map orphaned records
-    // (Already fetched above for mappedSys)
-
-
     const respData = await fetchAll('responsaveis', 'id, nome, email')
     const linksData = await fetchAll('aluno_responsavel', 'responsavel_id, resp_financeiro, resp_pedagogico')
 
     const mappedResps: any[] = []
 
-    // 1. Processar responsáveis cadastrados no banco
     if (respData && Array.isArray(respData)) {
       respData.forEach((resp: any) => {
         const email = (resp.email || '').trim().toLowerCase()
@@ -147,10 +190,8 @@ export async function GET(req: Request) {
         const links = (linksData || []).filter((l: any) => String(l.responsavel_id) === String(resp.id))
         const hasActiveLink = links.some((l: any) => l.resp_financeiro === true || l.resp_pedagogico === true)
         
-        // APENAS responsáveis com vínculos financeiros ou pedagógicos ativos são listados
         if (!hasActiveLink) return
 
-        // Localiza se o responsável possui uma conta Auth correspondente
         const authUser = email ? authMap.get(email) : undefined
 
         mappedResps.push({

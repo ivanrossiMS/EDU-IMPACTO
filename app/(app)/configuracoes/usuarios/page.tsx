@@ -6,7 +6,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useMemo, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers } from 'lucide-react'
+import { Search, Plus, Shield, Eye, Pencil, Trash2, Lock, X, Save, ChevronDown, ChevronRight, GraduationCap, Users, RotateCcw, Layers } from 'lucide-react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { newId, useData, Perfil } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -71,9 +71,10 @@ const TableSkeleton = () => (
             </td>
           </tr>
         ))}
-      </tbody>
-    </table>
-  </div>
+                    </tbody>
+            </table>
+            
+          </div>
 );
 
 const PerfisSkeleton = () => (
@@ -154,11 +155,23 @@ export default function UsuariosPage() {
 
   const queryClient = useQueryClient()
 
-  const { data: usersData, isLoading: isUsersLoading } = useApiQuery<SysUser[]>(
-    ['usuarios'],
-    '/api/configuracoes/usuarios'
+  const [colabPage, setColabPage] = useState(1);
+  const [colabLimit, setColabLimit] = useState(20);
+  const [colabSearch, setColabSearch] = useState('');
+  const [debouncedColabSearch, setDebouncedColabSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedColabSearch(colabSearch), 400);
+    return () => clearTimeout(t);
+  }, [colabSearch]);
+
+  const { data: colabData, isLoading: isUsersLoading } = useApiQuery<any>(
+    ['usuarios', 'colaboradores', String(colabPage), String(colabLimit), debouncedColabSearch],
+    '/api/configuracoes/usuarios',
+    { type: 'colaboradores', page: colabPage, limit: colabLimit, search: debouncedColabSearch }
   )
-  const users = usersData || []
+  const users: SysUser[] = colabData?.data || []
+  const colabTotal = colabData?.total || 0;
 
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
@@ -331,15 +344,15 @@ export default function UsuariosPage() {
         <button className={`tab-trigger ${tab === 'tipos-conta' ? 'active' : ''}`} onClick={() => setTab('tipos-conta')}><Layers size={12} />Tipos de Conta</button>
         <button className={`tab-trigger ${tab === 'usuarios' ? 'active' : ''}`} onClick={() => setTab('usuarios')}>
           <Shield size={12} />Colaboradores
-          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.perfil !== 'Família' && u.cargo !== 'Alunos' && u.cargo !== 'Responsáveis').length}</span>}
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{colabTotal}</span>}
         </button>
         <button className={`tab-trigger ${tab === 'alunos' ? 'active' : ''}`} onClick={() => setTab('alunos')}>
           <GraduationCap size={12} />Alunos
-          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.cargo === 'Alunos').length}</span>}
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}></span>}
         </button>
         <button className={`tab-trigger ${tab === 'responsaveis' ? 'active' : ''}`} onClick={() => setTab('responsaveis')}>
           <Users size={12} />Responsáveis
-          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}>{users.filter(u => u.cargo === 'Responsáveis').length}</span>}
+          {users.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 10 }}></span>}
         </button>
         <button className={`tab-trigger ${tab === 'perfis' ? 'active' : ''}`} onClick={() => setTab('perfis')}><Lock size={12} />Perfis & Permissões</button>
         <button className={`tab-trigger ${tab === 'logs' ? 'active' : ''}`} onClick={() => setTab('logs')}>📋 Logs de Acesso</button>
@@ -357,14 +370,41 @@ export default function UsuariosPage() {
             <button className="btn btn-primary" onClick={openAddUser}><Plus size={13} />Inserir primeiro usuário</button>
           </div>
         ) : (
-          <div className="table-container">
+          <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                  <input
+                    type="text"
+                    placeholder="Buscar colaborador..."
+                    value={colabSearch}
+                    onChange={(e) => { setColabSearch(e.target.value); setColabPage(1); }}
+                    style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13, width: 250 }}
+                  />
+                </div>
+                <select 
+                  value={colabLimit} 
+                  onChange={(e) => { setColabLimit(Number(e.target.value)); setColabPage(1); }}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13 }}
+                >
+                  <option value={20}>20 por pág.</option>
+                  <option value={50}>50 por pág.</option>
+                  <option value={100}>100 por pág.</option>
+                </select>
+              </div>
+              <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+                Total: <strong>{colabTotal}</strong>
+              </div>
+            </div>
+            <div className="table-container">
             <table>
               <thead><tr><th>Usuário</th><th>Cargo</th><th>Perfil</th><th>Último Acesso</th><th>2FA</th><th>Status</th><th>Ações</th></tr></thead>
               <tbody>
-                {users.filter(u => u.perfil !== 'Família').length === 0 ? (
+                {users.length === 0 ? (
                   <tr><td colSpan={7} style={{ textAlign: 'center', padding: '30px' }}>Nenhum colaborador real cadastrado.</td></tr>
                 ) : (
-                  users.filter(u => u.perfil !== 'Família').map(u => {
+                  users.map(u => {
                     const p = perfilByName(u.perfil)
                   return (
                     <tr key={u.id}>
@@ -392,7 +432,32 @@ export default function UsuariosPage() {
                 })
               )}
               </tbody>
-            </table>
+                        </table>
+            
+            {colabTotal > colabLimit && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+                  Mostrando {(colabPage - 1) * colabLimit + 1} a {Math.min(colabPage * colabLimit, colabTotal)} de {colabTotal}
+                </span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button 
+                    className="btn btn-outline btn-sm" 
+                    onClick={() => setColabPage(p => Math.max(1, p - 1))}
+                    disabled={colabPage === 1}
+                  >
+                    Anterior
+                  </button>
+                  <button 
+                    className="btn btn-outline btn-sm" 
+                    onClick={() => setColabPage(p => p + 1)}
+                    disabled={colabPage * colabLimit >= colabTotal}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           </div>
         )
       )}
@@ -495,9 +560,9 @@ export default function UsuariosPage() {
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
       {/* ── LOGS ── */}
       {tab === 'logs' && (

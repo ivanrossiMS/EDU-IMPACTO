@@ -57,14 +57,24 @@ const TableSkeleton = () => (
 );
 export function AuthAlunosTab() {
   const { logSystemAction } = useData();
+  
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data: apiData, isLoading } = useApiQuery<any>(
-    ['alunos_auth_tab'],
+    ['alunos_auth_tab', String(page), String(limit), debouncedSearch],
     '/api/alunos',
-    { lightweight: true, all: true, limit: 10000 }
+    { lightweight: true, page, limit, search: debouncedSearch }
   )
   const queryClient = useQueryClient()
 
-  // Sincronização e fallback local seguro para edições imediatas na UI
   const [localAlunos, setLocalAlunos] = useState<any[]>([])
 
   useEffect(() => {
@@ -75,10 +85,10 @@ export function AuthAlunosTab() {
 
   const alunos = localAlunos
   const setAlunos = setLocalAlunos
+  const totalItems = apiData?.total || 0;
 
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const [authUsers, setAuthUsers] = useLocalStorage<any[]>('edu-auth-users', [])
-  const [search, setSearch] = useState('')
   const [editModal, setEditModal] = useState<any | null>(null)
   const [resetModal, setResetModal] = useState<any | null>(null)
   const [linksModal, setLinksModal] = useState<any | null>(null)
@@ -283,9 +293,23 @@ export function AuthAlunosTab() {
   return (
 <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ position: 'relative', width: 320 }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" placeholder="Buscar por aluno, turma ou login..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 40 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ position: 'relative', width: 320 }}>
+            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+            <input className="form-input" placeholder="Buscar por aluno, turma ou login..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ paddingLeft: 40 }} />
+          </div>
+          <select 
+            value={limit} 
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13 }}
+          >
+            <option value={20}>20 por pág.</option>
+            <option value={50}>50 por pág.</option>
+            <option value={100}>100 por pág.</option>
+          </select>
+        </div>
+        <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+          Total: <strong>{totalItems}</strong>
         </div>
       </div>
 
@@ -350,6 +374,29 @@ export function AuthAlunosTab() {
               )}
             </tbody>
           </table>
+          {totalItems > limit && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+                Mostrando {(page - 1) * limit + 1} a {Math.min(page * limit, totalItems)} de {totalItems}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Anterior
+                </button>
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={page * limit >= totalItems}
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -57,28 +57,37 @@ const TableSkeleton = () => (
 );
 export function AuthResponsaveisTab() {
   const { logSystemAction } = useData();
+  
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data: apiData, isLoading } = useApiQuery<any>(
-    ['alunos_auth_tab'],
-    '/api/alunos',
-    { lightweight: true, all: true, limit: 10000 }
+    ['responsaveis_auth_tab', String(page), String(limit), debouncedSearch],
+    '/api/responsaveis',
+    { lightweight: true, page, limit, search: debouncedSearch }
   )
   const queryClient = useQueryClient()
 
-  // Sincronização e fallback local seguro para edições imediatas na UI
-  const [localAlunos, setLocalAlunos] = useState<any[]>([])
+  const [localResps, setLocalResps] = useState<any[]>([])
 
   useEffect(() => {
     if (apiData && Array.isArray(apiData.data)) {
-      setLocalAlunos(apiData.data)
+      setLocalResps(apiData.data)
     }
   }, [apiData])
 
-  const alunos = localAlunos
-  const setAlunos = setLocalAlunos
+  const guardians = localResps
+  const totalItems = apiData?.total || 0;
 
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const [authUsers, setAuthUsers] = useLocalStorage<any[]>('edu-auth-users', [])
-  const [search, setSearch] = useState('')
   const [editModal, setEditModal] = useState<any | null>(null)
   const [resetModal, setResetModal] = useState<any | null>(null)
   const [linksModal, setLinksModal] = useState<any | null>(null)
@@ -91,66 +100,6 @@ export function AuthResponsaveisTab() {
     return (todasTurmas || []).find((t: any) => String(t.id) === String(id))?.nome || id
   }
 
-  // Extract unique guardians from students
-  const guardians = useMemo(() => {
-    const gMap = new Map<string, any>()
-    
-    alunos.forEach(aluno => {
-      // Extractor helper
-      const addGuardian = (g: any, types: string[]) => {
-        if (!g.nome) return
-        const key = g.email || g.cpf || g.nome // fallback to name
-        if (!gMap.has(key)) {
-          gMap.set(key, { ...g, key, alunos: [aluno], tipos: new Set(types.length ? types : ['Outro']) })
-        } else {
-          const ex = gMap.get(key)
-          // avoid duplicating the same student for a guardian
-          if (!ex.alunos) ex.alunos = []
-          if (!ex.alunos.find((a: any) => a.id === aluno.id)) {
-            ex.alunos.push(aluno)
-          }
-          types.forEach(t => ex.tipos.add(t))
-        }
-      }
-
-      // Check _responsaveis (new format)
-      if ((aluno as any)._responsaveis && Array.isArray((aluno as any)._responsaveis)) {
-        (aluno as any)._responsaveis.forEach((r: any) => addGuardian(r, [r.tipo || 'Outro']))
-      } 
-      // Check responsaveis (legacy format)
-      else if ((aluno as any).responsaveis && Array.isArray((aluno as any).responsaveis)) {
-        (aluno as any).responsaveis.forEach((r: any) => {
-          let tps = [];
-          if (r.isFinanceiro) tps.push('Financeiro');
-          if (r.isPedagogico) tps.push('Pedagógico');
-          if (r.isOutro) tps.push('Outro');
-          addGuardian({
-            id: r.id || r.responsavel_id,
-            nome: r.nome,
-            cpf: r.cpf,
-            email: r.email,
-            celular: r.telefone || r.celular, // mapping
-            ...r
-          }, tps.length ? tps : ['Outro'])
-        })
-      } 
-      // Fallback flat fields
-      else if (aluno.responsavel) {
-        addGuardian({
-          nome: aluno.responsavel,
-          cpf: (aluno as any).cpf_responsavel || (aluno as any).cpfResponsavel || '',
-          email: (aluno as any).email_responsavel || (aluno as any).emailResponsavel || '',
-          celular: (aluno as any).celular_responsavel || (aluno as any).telResponsavel || ''
-        }, ['Responsável principal'])
-      }
-    })
-
-    const allGuardians = Array.from(gMap.values())
-    return allGuardians.filter((g: any) => {
-      const types = Array.from(g.tipos)
-      return types.some(t => t !== 'Outro')
-    })
-  }, [alunos])
 
   const handleCreateAuth = (guardian: any) => {
     const exists = authUsers.find(u => u.user_type === 'guardian' && u.reference_key === guardian.key)
@@ -175,34 +124,42 @@ export function AuthResponsaveisTab() {
 
   // Merge with auth data and filter
   const displayed = guardians.map(g => {
-    const authRecord = authUsers.find(u => u.user_type === 'guardian' && (u.reference_key === g.key || (g.cpf && u.reference_key === g.cpf) || (g.email && u.reference_key === g.email)))
+    const refKey = g.email || g.cpf || g.nome
+    const authRecord = authUsers.find(u => u.user_type === 'guardian' && (u.reference_key === refKey || (g.cpf && u.reference_key === g.cpf) || (g.email && u.reference_key === g.email)))
     
-    // Tenta encontrar o usuário real no banco (mapeado pelo e-mail)
     const searchEmail = (g.email || (authRecord?.email) || '').trim().toLowerCase()
     const realUser = usersData?.find(u => u.email?.toLowerCase() === searchEmail && u.perfil === 'Família')
 
     const defaultAuth = {
-      id: `virtual-${g.key}`,
+      id: `virtual-${refKey}`,
       user_type: 'guardian',
-      reference_key: g.key,
-      login: g.email || g.celular || '',
+      reference_key: refKey,
+      login: g.email || g.celular || g.telefone || '',
       email: g.email || '',
-      celular: g.celular || '',
+      celular: g.celular || g.telefone || '',
       status: 'ATIVO',
       profile_code: 'FAMILIA',
       last_login: realUser ? realUser.ultimoAcesso : null
     }
 
     const auth = authRecord || defaultAuth
-    // Sobrescreve o last_login mockado com o real do Supabase
     if (realUser && realUser.ultimoAcesso) {
       auth.last_login = realUser.ultimoAcesso === 'Nunca acessou' ? null : realUser.ultimoAcesso
     }
 
+    // Map backward compatibility for UI
+    g.key = refKey
+    if(g.alunosVinculados) {
+      g.alunos = g.alunosVinculados
+      g.tipos = new Set()
+      g.alunosVinculados.forEach((l: any) => {
+        if(l.isFinanceiro) g.tipos.add('Financeiro')
+        if(l.isPedagogico) g.tipos.add('Pedagógico')
+      })
+      if(g.tipos.size === 0) g.tipos.add('Outro')
+    }
+
     return { ...g, auth }
-  }).filter(item => {
-    const q = search.toLowerCase()
-    return item.nome.toLowerCase().includes(q) || (item.cpf && item.cpf.includes(q)) || (item.auth?.login?.toLowerCase().includes(q))
   })
 
   const saveEdit = async () => {
@@ -250,39 +207,7 @@ export function AuthResponsaveisTab() {
       setAuthUsers(prev => prev.map(u => u.id === newU.id ? { ...u, email: form.email, celular: form.celular, reference_key: newRefKey, login: newLogin } : u))
     }
 
-    // Bidirectional Sync: Update ALL academic records where this guardian exists
-    setAlunos(prev => prev.map(aluno => {
-       let changed = false
-       const a = { ...aluno } as any
-       
-       const updateG = (gx: any) => {
-         if ((gx.cpf === guardian.cpf && guardian.cpf) || (gx.nome === guardian.nome)) {
-            gx.email = form.email
-            gx.celular = form.celular
-            gx.telefone = form.celular // legacy mapping
-            changed = true
-         }
-         return gx
-       }
-
-       if (a._responsaveis && Array.isArray(a._responsaveis)) {
-         a._responsaveis = a._responsaveis.map((gx: any) => ({...gx}))
-         a._responsaveis.forEach(updateG)
-       } 
-       if (a.responsaveis && Array.isArray(a.responsaveis)) {
-         a.responsaveis = a.responsaveis.map((gx: any) => ({...gx}))
-         a.responsaveis.forEach(updateG)
-       }
-       if (a.responsavel && guardian.nome === a.responsavel) {
-         a.email_responsavel = form.email
-         a.emailResponsavel = form.email
-         a.celular_responsavel = form.celular
-         a.telResponsavel = form.celular
-         changed = true
-       }
-
-       return changed ? a : aluno
-    }))
+    // Sync removed as we are using react-query invalidation now.
 
     logSystemAction('Config (Acessos)', 'Edição', `Atualização de contatos de acesso (Responsável: ${guardian.nome})`, { registroId: guardian.key, detalhesDepois: form })
     
@@ -348,9 +273,23 @@ export function AuthResponsaveisTab() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ position: 'relative', width: 320 }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-          <input className="form-input" placeholder="Buscar por responsável ou CPF..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 40 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ position: 'relative', width: 320 }}>
+            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+            <input className="form-input" placeholder="Buscar por responsável ou CPF..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ paddingLeft: 40 }} />
+          </div>
+          <select 
+            value={limit} 
+            onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13 }}
+          >
+            <option value={20}>20 por pág.</option>
+            <option value={50}>50 por pág.</option>
+            <option value={100}>100 por pág.</option>
+          </select>
+        </div>
+        <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+          Total: <strong>{totalItems}</strong>
         </div>
       </div>
 
@@ -421,6 +360,29 @@ export function AuthResponsaveisTab() {
               )}
             </tbody>
           </table>
+          {totalItems > limit && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+              <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+                Mostrando {(page - 1) * limit + 1} a {Math.min(page * limit, totalItems)} de {totalItems}
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  Anterior
+                </button>
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  onClick={() => setPage(p => p + 1)}
+                  disabled={page * limit >= totalItems}
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -125,10 +125,28 @@ export async function GET(request: Request) {
 
     if (lightweight) {
       const formatted = (students || []).map((student: any) => {
+        const d = student.dados || {}
         return {
           ...student,
+          responsaveis: d.responsaveis,
+          _responsaveis: d._responsaveis,
+          responsavel: d.responsavel,
+          cpf_responsavel: d.cpf_responsavel || d.cpfResponsavel,
+          email_responsavel: d.email_responsavel || d.emailResponsavel,
+          celular_responsavel: d.celular_responsavel || d.telResponsavel,
           dados: {
-            historicoTurmas: []
+            historicoTurmas: [],
+            responsaveis: d.responsaveis,
+            _responsaveis: d._responsaveis,
+            responsavel: d.responsavel,
+            cpf_responsavel: d.cpf_responsavel,
+            email_responsavel: d.email_responsavel,
+            celular_responsavel: d.celular_responsavel,
+            cpfResponsavel: d.cpfResponsavel,
+            emailResponsavel: d.emailResponsavel,
+            telResponsavel: d.telResponsavel,
+            codigo: d.codigo,
+            email: d.email
           }
         }
       })
