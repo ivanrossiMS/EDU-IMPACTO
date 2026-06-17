@@ -25,7 +25,11 @@ export async function GET(request: NextRequest) {
   )
 
   // Sign out — Supabase will clear session cookies via setAll above
-  await supabase.auth.signOut()
+  try {
+    await supabase.auth.signOut()
+  } catch (error) {
+    // Ignore invalid refresh token errors during logout
+  }
 
   // Belt-and-suspenders: forcibly expire every sb-* cookie from this request
   request.cookies.getAll().forEach(cookie => {
@@ -61,7 +65,11 @@ export async function POST(request: NextRequest) {
     }
   )
 
-  await supabase.auth.signOut()
+  try {
+    await supabase.auth.signOut()
+  } catch (error) {
+    // Ignore invalid refresh token errors during logout
+  }
 
   request.cookies.getAll().forEach(cookie => {
     if (cookie.name.startsWith('sb-')) {
