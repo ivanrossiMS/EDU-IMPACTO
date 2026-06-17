@@ -25,9 +25,11 @@ export async function createProtectedClient() {
                   try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
                }
             })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 31536000 })
-            )
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 31536000, expires })
+            })
           } catch {
             // Ignorado intencionalmente: Ocorre quando lido por Client/Server components sem contexto de Mutação
           }

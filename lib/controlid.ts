@@ -39,7 +39,7 @@ export class ControliDClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: this.login, password: this.password }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(3000),
       })
       if (!res.ok) throw new Error(`Login failed: ${res.status}`)
       const data = await res.json()
@@ -60,7 +60,7 @@ export class ControliDClient {
         Cookie: `session=${this.session}`,
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(3000),
     })
 
     if (!res.ok) {
@@ -74,7 +74,7 @@ export class ControliDClient {
             Cookie: `session=${this.session}`,
           },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(3000),
         })
         if (!retry.ok) throw new Error(`iDFace request failed: ${retry.status}`)
         return retry.json()

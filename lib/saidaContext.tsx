@@ -125,7 +125,6 @@ interface SaidaCtx {
   realtimeStatus: 'online' | 'connecting' | 'offline'
   isLoadingCalls: boolean
   // actions
-  readRFID: (code: string) => { guardian: Guardian | null; error?: string }
   callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null) => PickupCall | null
   blockAttempt: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, rfidCode: string | undefined, blockType: 'proibido' | 'dia_restrito', blockReason: string, studentPhoto?: string | null) => PickupCall
   confirmPickup: (callId: string) => void
@@ -133,15 +132,6 @@ interface SaidaCtx {
   recallStudent: (callId: string, speakFn: (text: string) => void) => void
   revertCall: (callId: string) => void
   addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
-  addGuardian: (g: Omit<Guardian, 'id'>) => Guardian
-  updateGuardian: (id: string, data: Partial<Guardian>) => void
-  removeGuardian: (id: string) => void
-  addRFID: (guardianId: string, rfidCode: string) => GuardianRFID
-  removeRFID: (id: string) => void
-  linkStudentGuardian: (studentId: string, guardianId: string, canPickup?: boolean) => void
-  unlinkStudentGuardian: (id: string) => void
-  getGuardiansForStudent: (studentId: string) => (Guardian & { canPickup: boolean })[]
-  getStudentsForGuardian: (guardianId: string) => string[]
   updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
   clearCalls: () => void
@@ -158,9 +148,6 @@ export function useSaida() {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
-  const [guardians, setGuardians] = useSupabaseArray<Guardian>('saida/guardians', [], { enabled })
-  const [rfidMap, setRfidMap] = useSupabaseArray<GuardianRFID>('saida/rfid', [], { enabled })
-  const [studentGuardians, setStudentGuardians] = useSupabaseArray<StudentGuardian>('saida/student_guardians', [], { enabled })
   const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
@@ -320,16 +307,6 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     setLogs(prev => [entry, ...prev].slice(0, 500))
   }, [])
 
-  // ─── readRFID ─────────────────────────────────────────────────────────────
-  const readRFID = useCallback((code: string) => {
-    const rfid = rfidMap.find(r => r.rfidCode === code && r.active)
-    if (!rfid) return { guardian: null, error: 'RFID não encontrado.' }
-    const g = guardians.find(g => g.id === rfid.guardianId)
-    if (!g) return { guardian: null, error: 'Responsável não vinculado ao RFID.' }
-    if (!g.active) return { guardian: null, error: 'Responsável inativo. Acesso bloqueado.' }
-    addLog('RFID_READ', `Leitura RFID: ${code} → ${g.name}`)
-    return { guardian: g }
-  }, [rfidMap, guardians, addLog])
 
   // ─── callStudent ──────────────────────────────────────────────────────────
   const callStudent = useCallback((
@@ -451,59 +428,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     return call
   }, [emit, addLog, sendBroadcast])
 
-  // ─── Guardian CRUD ────────────────────────────────────────────────────────
-  const addGuardian = useCallback((g: Omit<Guardian, 'id'>): Guardian => {
-    const newG = { ...g, id: uid() }
-    setGuardians(prev => [...prev, newG])
-    addLog('GUARDIAN_ADD', `Responsável cadastrado: ${newG.name}`)
-    return newG
-  }, [addLog])
-  const updateGuardian = useCallback((id: string, data: Partial<Guardian>) => {
-    setGuardians(prev => prev.map(g => g.id === id ? { ...g, ...data } : g))
-  }, [])
-  const removeGuardian = useCallback((id: string) => {
-    setGuardians(prev => prev.filter(g => g.id !== id))
-    setRfidMap(prev => prev.filter(r => r.guardianId !== id))
-    setStudentGuardians(prev => prev.filter(sg => sg.guardianId !== id))
-  }, [])
 
-  // ─── RFID CRUD ────────────────────────────────────────────────────────────
-  const addRFID = useCallback((guardianId: string, rfidCode: string): GuardianRFID => {
-    const entry: GuardianRFID = { id: uid(), guardianId, rfidCode: rfidCode.trim(), active: true }
-    setRfidMap(prev => [...prev, entry])
-    addLog('RFID_ADD', `RFID ${rfidCode} vinculado`)
-    return entry
-  }, [addLog])
-  const removeRFID = useCallback((id: string) => {
-    setRfidMap(prev => prev.filter(r => r.id !== id))
-  }, [])
-
-  // ─── Student-Guardian links ───────────────────────────────────────────────
-  const linkStudentGuardian = useCallback((studentId: string, guardianId: string, canPickup = true) => {
-    const exists = studentGuardians.find(sg => sg.studentId === studentId && sg.guardianId === guardianId)
-    if (exists) return
-    const entry: StudentGuardian = { id: uid(), studentId, guardianId, canPickup }
-    setStudentGuardians(prev => [...prev, entry])
-  }, [studentGuardians])
-  const unlinkStudentGuardian = useCallback((id: string) => {
-    setStudentGuardians(prev => prev.filter(sg => sg.id !== id))
-  }, [])
-
-  const getGuardiansForStudent = useCallback((studentId: string) =>
-    studentGuardians
-      .filter(sg => sg.studentId === studentId && sg.canPickup)
-      .map(sg => {
-        const g = guardians.find(g => g.id === sg.guardianId)
-        return g ? { ...g, canPickup: sg.canPickup } : null
-      })
-      .filter(Boolean) as (Guardian & { canPickup: boolean })[],
-  [studentGuardians, guardians])
-
-  const getStudentsForGuardian = useCallback((guardianId: string) =>
-    studentGuardians
-      .filter(sg => sg.guardianId === guardianId && sg.canPickup)
-      .map(sg => sg.studentId),
-  [studentGuardians])
 
   // ─── Config ───────────────────────────────────────────────────────────────
   const updateConfig = useCallback((patch: Partial<SaidaConfig>) => {
@@ -556,15 +481,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
   return (
     <Ctx.Provider value={{
-      guardians, rfidMap, studentGuardians, activeCalls, logs,
+      guardians: [], rfidMap: [], studentGuardians: [], activeCalls, logs,
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      readRFID, callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, addSpecialAuth,
-      addGuardian, updateGuardian, removeGuardian,
-      addRFID, removeRFID,
-      linkStudentGuardian, unlinkStudentGuardian,
-      getGuardiansForStudent, getStudentsForGuardian,
+      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, addSpecialAuth,
       updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}

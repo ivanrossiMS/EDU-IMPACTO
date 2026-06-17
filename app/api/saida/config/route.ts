@@ -7,16 +7,25 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 
+let memoryCache: any = null;
+let cacheTime: number = 0;
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
   try {
+    // Return from cache if less than 60s old
+    if (memoryCache && (Date.now() - cacheTime < 60000)) {
+      return NextResponse.json(memoryCache, {
+        headers: { 
+          'Cache-Control': 'no-store, max-age=0',
+          'Pragma': 'no-cache'
+        }
+      })
+    }
+
     const supabase = await createProtectedClient()
-    
-    // Verify auth
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
     const { data, error } = await supabase.from('saida_config').select('*')
     if (error) {
@@ -26,7 +35,10 @@ export async function GET(request: Request) {
     
     // Extract everything from jsonb 'dados' to keep interface flat
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
-    console.log('[saida_config GET] returning:', JSON.stringify(result))
+    
+    // Update memory cache
+    memoryCache = result;
+    cacheTime = Date.now();
     
     return NextResponse.json(result, {
       headers: { 
@@ -47,10 +59,6 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const supabase = await createProtectedClient()
-    
-    // Verify auth
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('Não autorizado')
 
     // Use service role for upsert to bypass RLS for configuration
     const adminSupabase = createClient(
@@ -74,7 +82,10 @@ export async function POST(request: Request) {
       throw new Error(error.message)
     }
 
-    console.log('[saida_config POST] Success data:', JSON.stringify(data))
+    // Clear cache on update
+    memoryCache = null;
+    cacheTime = 0;
+
     return NextResponse.json({ id: data.id, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {
     console.error('[saida_config POST] Catch Error:', err)

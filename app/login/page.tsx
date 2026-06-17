@@ -850,7 +850,7 @@ export default function LoginPage() {
         <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)' }}>Bem-vindo. Onde você deseja entrar?</p>
       </div>
 
-      <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
+      <div style={{ display:'flex', gap:20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
         <button type="button" 
           onClick={async () => {
              const p = pendingAuth?.perfil;
@@ -878,7 +878,7 @@ export default function LoginPage() {
              if (p === 'Professor') window.location.href = '/professor';
              else window.location.href = '/dashboard';
           }}
-          style={{ flex:1, padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
           onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
           onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
           <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #3b82f6, #2563eb)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(59,130,246,0.4)' }}>🏢</div>
@@ -898,13 +898,27 @@ export default function LoginPage() {
                  window.location.href = '/agenda-digital/selecionar-aluno';
              }
           }}
-          style={{ flex:1, padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
+          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
           onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
           onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
           <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #8b5cf6, #6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(139,92,246,0.4)' }}>📱</div>
           <div>
             <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Agenda Digital</div>
             <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Comunicação Diária</div>
+          </div>
+        </button>
+
+        <button type="button" 
+          onClick={() => {
+             window.location.href = '/gestao-pessoas';
+          }}
+          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👥</div>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão de Pessoas</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>RH, SST e NR-01</div>
           </div>
         </button>
       </div>

@@ -321,18 +321,24 @@ function StudentCard({
           </button>
         ) : (
         <div style={{
-          width: 54, height: 54, borderRadius: 16, flexShrink: 0,
+          height: 54, padding: '0 18px', borderRadius: 16, flexShrink: 0,
           background: blocked
             ? 'rgba(255,255,255,0.04)'
             : `linear-gradient(135deg, #06b6d4, #6366f1)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           boxShadow: blocked ? 'none' : `0 6px 20px ${accent}45`,
           border: blocked ? '1px solid rgba(255,255,255,0.06)' : 'none',
           transition: 'all 0.2s',
         }}>
           {isProibido
             ? <ShieldOff size={22} color="#ef444480"/>
-            : <Megaphone size={22} color="#fff"/>}
+            : (
+              <>
+                <Megaphone size={20} color={blocked ? "rgba(255,255,255,0.4)" : "#fff"}/>
+                <span style={{ color: blocked ? 'rgba(255,255,255,0.4)' : '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>CHAMAR ALUNO</span>
+              </>
+            )
+          }
         </div>
         )}
       </div>

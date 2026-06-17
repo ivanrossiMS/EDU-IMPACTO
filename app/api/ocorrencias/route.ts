@@ -25,6 +25,9 @@ export async function GET(request: Request) {
   query = query.order('created_at', { ascending: false })
   if (alunoId) {
     query = query.or(`aluno_id.eq.${alunoId},dados->>aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
+  } else {
+    // Prevent full table scans on global queries
+    query = query.limit(100)
   }
 
   const { data, error } = await query;

@@ -4,9 +4,17 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export const dynamic = 'force-dynamic'
 
+let memoryCache: any = null;
+let cacheTime: number = 0;
+
 export async function GET() {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
+
+  // Return from cache if less than 60s old
+  if (memoryCache && (Date.now() - cacheTime < 60000)) {
+    return NextResponse.json({ data: memoryCache })
+  }
 
   const supabase = await createProtectedClient();
   const { data, error } = await supabase
@@ -17,6 +25,10 @@ export async function GET() {
     unidades: row.unidades ?? [],
     ...(row.dados || {}),
   }))
+
+  memoryCache = result;
+  cacheTime = Date.now();
+
   return NextResponse.json({ data: result })
 }
 
@@ -44,12 +56,21 @@ export async function POST(request: Request) {
       const { error: delErr } = await supabase.from('mantenedores').delete().not('id', 'in', `(${incomingIds.join(',')})`);
       if (delErr) console.error('Erro ao excluir mantenedores removidos:', delErr);
 
+      // Limpar cache
+      memoryCache = null;
+      cacheTime = 0;
+
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
     const { data, error } = await supabase
       .from('mantenedores').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // Limpar cache
+    memoryCache = null;
+    cacheTime = 0;
+
     return NextResponse.json({ ...data, unidades: data.unidades ?? [], ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

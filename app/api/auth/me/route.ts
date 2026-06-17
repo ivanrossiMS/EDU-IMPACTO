@@ -15,7 +15,13 @@ export async function GET() {
       cookies: {
         getAll() { return cookieStore.getAll() },
         setAll(cookiesToSet) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+          try { 
+            cookiesToSet.forEach(({ name, value, options }) => {
+              const expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 31536000, expires })
+            }) 
+          } catch {}
         },
       },
     }

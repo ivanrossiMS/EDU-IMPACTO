@@ -154,7 +154,17 @@ export async function POST(request: NextRequest) {
                }
             })
             cookiesToSet.forEach(({ name, value, options }) => {
-              try { cookieStore.set({ name, value, ...options, maxAge: options.maxAge || 31536000 }) } catch(e) {}
+              try { 
+                const expires = new Date();
+                expires.setFullYear(expires.getFullYear() + 1);
+                cookieStore.set({ 
+                  name, 
+                  value, 
+                  ...options, 
+                  maxAge: options.maxAge || 31536000,
+                  expires 
+                }) 
+              } catch(e) {}
             })
           },
         },
