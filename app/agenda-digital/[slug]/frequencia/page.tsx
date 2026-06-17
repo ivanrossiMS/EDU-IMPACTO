@@ -262,54 +262,25 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           .ad-freq-cal-cell {
             min-height: 50px !important;
           }
+          .ad-banner-global {
+            flex-direction: column !important;
+            padding: 32px 24px !important;
+          }
+          .ad-banner-global > div:first-child {
+            max-width: 100% !important;
+            margin-bottom: 24px !important;
+          }
+          .ad-banner-catraca {
+            position: relative !important;
+            right: auto !important;
+            bottom: -32px !important;
+            margin: 0 auto !important;
+            display: flex !important;
+            justify-content: center !important;
+          }
         }
       `}} />
 
-      {/* Header / Banner Premium */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        style={{
-          background: 'linear-gradient(90deg, #4f46e5 0%, #6d28d9 100%)',
-          borderRadius: 24,
-          padding: '32px 40px',
-          marginBottom: 32,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 15px 35px rgba(79, 70, 229, 0.25)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}
-      >
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', zIndex: 1, maxWidth: '70%' }}>
-          <div style={{ border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>
-            <Info size={16} color="#fff" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h4 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#fff', marginBottom: 12, letterSpacing: '-0.02em' }}>
-              Como a frequência é registrada?
-            </h4>
-            <p style={{ margin: 0, fontSize: 15, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6, fontWeight: 500 }}>
-              A entrada do aluno é computada automaticamente através da catraca de acesso. A saída é registrada no momento em que você chama o aluno pelo painel.
-            </p>
-          </div>
-        </div>
-
-        {/* Catraca Illustration Overlay */}
-        <div style={{ position: 'absolute', right: -10, bottom: -20, opacity: 0.95, zIndex: 0 }}>
-          <div style={{ width: 140, height: 200, background: '#f8fafc', borderTopLeftRadius: 16, borderTopRightRadius: 16, position: 'relative', boxShadow: '-10px 10px 40px rgba(0,0,0,0.3)', border: '4px solid #fff' }}>
-            <div style={{ width: 64, height: 90, background: '#0f172a', position: 'absolute', top: 24, left: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.5)' }}>
-               <div style={{ width: 36, height: 36, border: '2.5px solid #22c55e', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <Lock size={16} color="#22c55e" strokeWidth={3} />
-               </div>
-            </div>
-            <div style={{ width: 80, height: 16, background: '#e2e8f0', position: 'absolute', top: 140, left: 26, borderRadius: 8 }} />
-            <div style={{ width: 60, height: 60, background: '#f1f5f9', position: 'absolute', top: 60, right: -40, borderRadius: '0 30px 30px 0', border: '4px solid #fff', borderLeft: 'none' }} />
-          </div>
-        </div>
-      </motion.div>
 
       {/* Calendário Dinâmico Interativo */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ background: '#fff', borderRadius: 24, boxShadow: '0 10px 40px rgba(0,0,0,0.05)', overflow: 'hidden', padding: '32px', marginBottom: 32 }}>
@@ -569,6 +540,54 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Header / Banner Premium Moved to Bottom */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="ad-banner-global"
+        style={{
+          background: 'linear-gradient(90deg, #4f46e5 0%, #6d28d9 100%)',
+          borderRadius: 24,
+          padding: '32px 40px',
+          marginBottom: 32,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 15px 35px rgba(79, 70, 229, 0.25)',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', zIndex: 1, maxWidth: '70%' }}>
+          <div style={{ border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>
+            <Info size={16} color="#fff" strokeWidth={2.5} />
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#fff', marginBottom: 12, letterSpacing: '-0.02em' }}>
+              Como a frequência é registrada?
+            </h4>
+            <p style={{ margin: 0, fontSize: 15, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6, fontWeight: 500 }}>
+              A entrada do aluno é computada automaticamente através da catraca de acesso. A saída é registrada no momento em que você chama o aluno pelo painel.
+            </p>
+          </div>
+        </div>
+
+        {/* Catraca Illustration Overlay */}
+        <div className="ad-banner-catraca" style={{ position: 'absolute', right: -10, bottom: -20, opacity: 0.95, zIndex: 0 }}>
+          <div style={{ width: 140, height: 200, background: '#f8fafc', borderTopLeftRadius: 16, borderTopRightRadius: 16, position: 'relative', boxShadow: '-10px 10px 40px rgba(0,0,0,0.3)', border: '4px solid #fff' }}>
+            <div style={{ width: 64, height: 90, background: '#0f172a', position: 'absolute', top: 24, left: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.5)' }}>
+               <div style={{ width: 36, height: 36, border: '2.5px solid #22c55e', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 <Lock size={16} color="#22c55e" strokeWidth={3} />
+               </div>
+            </div>
+            <div style={{ width: 80, height: 16, background: '#e2e8f0', position: 'absolute', top: 140, left: 26, borderRadius: 8 }} />
+            <div style={{ width: 60, height: 60, background: '#f1f5f9', position: 'absolute', top: 60, right: -40, borderRadius: '0 30px 30px 0', border: '4px solid #fff', borderLeft: 'none' }} />
+          </div>
+        </div>
+      </motion.div>
+
 
     </div>
   )
