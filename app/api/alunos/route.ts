@@ -55,12 +55,20 @@ export async function GET(request: Request) {
       query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%`)
     }
 
-    if (status !== 'todos' && status !== 'todos_com_inativos') {
-      query = query.eq('status', status)
-    } else if (status === 'todos') {
-      // Regra de Negócio: Alunos inativos não devem aparecer globalmente (em nenhuma turma do ERP) por padrão
+    if (status === 'ativo') {
+      // Se selecionou Apenas Ativos, pega matriculados/nulos
       query = query.or('status.neq.inativo,status.is.null')
+    } else if (status === 'inativo') {
+      // Se selecionou Apenas Inativos
+      query = query.eq('status', 'inativo')
+    } else if (status === 'todos') {
+      // Regra de Negócio: Se for todos (Ativos) e NÃO tiver busca, esconde inativos
+      if (!search) {
+        query = query.or('status.neq.inativo,status.is.null')
+      }
+      // Se tiver busca, 'todos' significa buscar também nos inativos para que a busca encontre o aluno
     }
+    // se for todos_com_inativos, não aplica filtro de status
 
     if (turma) {
       query = query.eq('turma', turma)
