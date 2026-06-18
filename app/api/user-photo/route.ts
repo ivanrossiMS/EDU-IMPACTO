@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Faltam parâmetros obrigatórios: userId, fotoUrl' }, { status: 400 })
     }
 
-    const loggedUser = sessionData.session.user
+    const loggedUser = user
     if (loggedUser.id !== userId) {
       return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 })
     }
