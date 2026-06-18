@@ -18,7 +18,7 @@ export async function GET(req: Request) {
       .from('alunos')
       .select('id, nome, data_nascimento, turma, foto')
       .ilike('data_nascimento', `%${monthStr}%`)
-      .eq('status', 'ativo')
+      .or('status.neq.inativo,status.is.null')
 
     if (error) {
       console.error('[API alunos/aniversariantes] erro:', error)
