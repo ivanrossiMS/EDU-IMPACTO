@@ -319,9 +319,11 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
 
   if (!hydrated) {
     return (
-      <AnimatePresence>
-        {showSplash && <PremiumLoader />}
-      </AnimatePresence>
+      <>
+        <AnimatePresence>
+          {showSplash && <PremiumLoader key="global-loader" />}
+        </AnimatePresence>
+      </>
     )
   }
 
@@ -331,33 +333,41 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
     const isAllowedPath = pathname === '/' || pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/esqueci-senha') || pathname.startsWith('/atualizar-senha')
     if (!isAllowedPath) {
       return (
-        <AnimatePresence>
-          {showSplash && <PremiumLoader />}
+        <>
+          <AnimatePresence>
+            {showSplash && <PremiumLoader key="global-loader" />}
+          </AnimatePresence>
           <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
-        </AnimatePresence>
+        </>
       )
     }
     if (pathname === '/') {
       return (
-        <AnimatePresence>
-          {showSplash && <PremiumLoader />}
-        </AnimatePresence>
+        <>
+          <AnimatePresence>
+            {showSplash && <PremiumLoader key="global-loader" />}
+          </AnimatePresence>
+        </>
       )
     }
   }
 
   if (currentUser && pathname === '/') {
     return (
-      <AnimatePresence>
-        {showSplash && <PremiumLoader />}
-      </AnimatePresence>
+      <>
+        <AnimatePresence>
+          {showSplash && <PremiumLoader key="global-loader" />}
+        </AnimatePresence>
+      </>
     )
   }
 
   return (
-    <AnimatePresence>
-      {showSplash && <PremiumLoader />}
+    <>
+      <AnimatePresence>
+        {showSplash && <PremiumLoader key="global-loader" />}
+      </AnimatePresence>
       {children}
-    </AnimatePresence>
+    </>
   )
 }
