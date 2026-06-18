@@ -157,7 +157,7 @@ export default function DashboardPage() {
         nome: a.nome,
         dia: parseInt(a.dataNascimento?.split('-')[2] || '0'),
         turma: turmaNome,
-        anoLetivoId: tObj?.ano ? String(tObj.ano) : tObj?.ano_letivo ? String(tObj.ano_letivo) : 'Todos',
+        anoLetivoId: (tObj as any)?.ano ? String((tObj as any).ano) : (tObj as any)?.ano_letivo ? String((tObj as any).ano_letivo) : 'Todos',
         foto: a.foto || null,
         timestamp: new Date().getTime()
       }
