@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
-    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step } = body as { 
+    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step, inativarAusentes } = body as { 
       rows: any[][]; 
       mapping: Record<string, string>; 
       config: string;
