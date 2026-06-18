@@ -279,30 +279,42 @@ export default function CalendarioPage() {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const [resAlunos, resProfs] = await Promise.all([
-          fetch('/api/alunos?limit=2000').then(r => r.json()),
-          fetch('/api/funcionarios?limit=500').then(r => r.json())
-        ])
-        const todos = [
-          ...(resAlunos.data || []).map((a: any) => ({ ...a, tipo: 'Aluno' })),
-          ...(resProfs.data || []).map((p: any) => ({ ...p, tipo: 'Colaborador' }))
-        ]
         const mesView = month + 1
-        const niversMes = todos.filter((p: any) => {
-          const data = p.dataNasc || p.data_nascimento || p.nascimento
+        const [resAlunos, resProfs] = await Promise.all([
+          fetch(`/api/alunos/aniversariantes?mes=${mesView}`).then(r => r.json()),
+          fetch('/api/rh/funcionarios?lightweight=true').then(r => r.json())
+        ])
+        
+        // Alunos (A API de aniversariantes retorna dataNascimento com N maiúsculo)
+        const alunosAniversariantes = (resAlunos.data || []).map((a: any) => {
+          const dia = parseInt(a.dataNascimento?.split('-')[2] || '0')
+          return { ...a, tipo: 'Aluno', dia }
+        })
+
+        // Funcionários
+        const funcionariosArray = Array.isArray(resProfs) ? resProfs : []
+        const funcionariosAniversariantes = funcionariosArray.filter((p: any) => {
+          const data = p.data_nascimento || p.dataNascimento
           if (!data) return false
           const m = parseInt(data.split('-')[1])
           return m === mesView
         }).map((p: any) => {
-          const data = p.dataNasc || p.data_nascimento || p.nascimento
-          const dia = parseInt(data.split('-')[2])
+          const data = p.data_nascimento || p.dataNascimento
+          const dia = parseInt(data.split('-')[2] || '0')
+          return { ...p, tipo: 'Colaborador', dia }
+        })
+
+        const todos = [...alunosAniversariantes, ...funcionariosAniversariantes]
+        
+        const niversMes = todos.map((p: any) => {
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
             const diaHoje = hoje.getDate()
-            isProximo = dia >= diaHoje && dia <= (diaHoje + 7)
+            isProximo = p.dia >= diaHoje && p.dia <= (diaHoje + 7)
           }
-          return { ...p, dia, isProximo }
+          return { ...p, isProximo }
         }).sort((a: any, b: any) => a.dia - b.dia)
+
         setAniversariantes(niversMes)
       } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
     }

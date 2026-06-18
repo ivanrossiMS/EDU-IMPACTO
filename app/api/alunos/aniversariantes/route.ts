@@ -7,10 +7,16 @@ export async function GET(req: Request) {
   try {
     const supabase = await createProtectedClient()
     
-    // Obtém o mês atual (01 a 12)
-    const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0')
+    const { searchParams } = new URL(req.url)
+    const mesQuery = searchParams.get('mes')
+    
+    // Obtém o mês atual ou o mês solicitado (01 a 12)
+    const currentMonth = mesQuery 
+      ? String(mesQuery).padStart(2, '0') 
+      : String(new Date().getMonth() + 1).padStart(2, '0')
+      
     const currentDay = String(new Date().getDate()).padStart(2, '0')
-    const todayStr = `-${currentMonth}-${currentDay}`
+    const todayStr = `-${String(new Date().getMonth() + 1).padStart(2, '0')}-${currentDay}`
     const monthStr = `-${currentMonth}-`
 
     // Buscamos apenas os campos necessários, usando o campo nativo data_nascimento
