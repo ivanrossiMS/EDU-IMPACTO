@@ -1509,9 +1509,10 @@ export default function AlunosPage() {
                 value={statusFiltro}
                 onChange={e => setStatusFiltro(e.target.value)}
               >
-                <option value="todos">Todos Status</option>
-                <option value="ativo">Ativos</option>
-                <option value="inativo">Inativos</option>
+                <option value="todos">Todos (Ativos)</option>
+                <option value="todos_com_inativos">Todos (Com inativos)</option>
+                <option value="ativo">Apenas Ativos</option>
+                <option value="inativo">Apenas Inativos</option>
               </select>
               
               <button onClick={() => setIsFiltrosAvancadosModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>

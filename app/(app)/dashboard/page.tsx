@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 
 // ── Helpers
 const fmtPct = (v: number) => `${v.toFixed(1)}%`
@@ -56,7 +56,12 @@ export default function DashboardPage() {
   const [refreshKey] = useState(0)
 
   // ── Context Data (Calendar & Tasks)
-  const { tarefas = [], eventosAgenda = [], turmas = [] } = useData()
+  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [] } = useData()
+
+  // ── Modais
+  const [modalAnivOpen, setModalAnivOpen] = useState(false)
+  const [anivFiltroAno, setAnivFiltroAno] = useState('Todos')
+  const [anivFiltroTurma, setAnivFiltroTurma] = useState('Todas')
 
   // ── Data for Stats
   const { data: aniversariantesList } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
@@ -142,15 +147,22 @@ export default function DashboardPage() {
       : (aniversariantesList as any)?.data || []
       
     if (!list || list.length === 0) return []
-    return list.map((a: any) => ({
-      id: a.id,
-      nome: a.nome,
-      dia: parseInt(a.dataNascimento.split('-')[2] || '0'),
-      turma: a.turma || 'S/T',
-      foto: null,
-      timestamp: new Date().getTime()
-    }))
-  }, [aniversariantesList])
+    return list.map((a: any) => {
+      let turmaNome = a.turma || 'S/T'
+      const tObj = turmas.find((t: any) => t.id === a.turma || t.codigo === a.turma)
+      if (tObj) turmaNome = tObj.nome
+
+      return {
+        id: a.id,
+        nome: a.nome,
+        dia: parseInt(a.dataNascimento?.split('-')[2] || '0'),
+        turma: turmaNome,
+        anoLetivoId: tObj?.anoLetivo || 'Todos',
+        foto: a.foto || null,
+        timestamp: new Date().getTime()
+      }
+    }).sort((a: any, b: any) => a.dia - b.dia)
+  }, [aniversariantesList, turmas])
 
   const ordersSummary = useMemo(() => {
     const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
@@ -536,7 +548,12 @@ export default function DashboardPage() {
             
             {aniversariantes.length > 3 && (
               <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <Link href="/academico/alunos" style={{ fontSize: '12px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: '#fdf2f8', padding: '8px 24px', borderRadius: '20px' }}>Ver todos</Link>
+                <button 
+                  onClick={() => setModalAnivOpen(true)} 
+                  style={{ fontSize: '12px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: '#fdf2f8', padding: '8px 24px', borderRadius: '20px', border: 'none', cursor: 'pointer' }}
+                >
+                  Ver todos
+                </button>
               </div>
             )}
           </div>
@@ -581,6 +598,111 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {/* ── Modal de Aniversariantes ──────────────────────────── */}
+      <AnimatePresence>
+        {modalAnivOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setModalAnivOpen(false)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }} 
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              style={{ 
+                position: 'relative', width: '100%', maxWidth: 800, maxHeight: '85vh', 
+                background: '#fff', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                display: 'flex', flexDirection: 'column', overflow: 'hidden'
+              }}
+            >
+              {/* Header */}
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(to right, #fdf2f8, #fff)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 16, background: '#fbcfe8', color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Cake size={24} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Aniversariantes do Mês</h2>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0', fontWeight: 600 }}>
+                      Mês de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setModalAnivOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', transition: 'all 0.2s' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div style={{ padding: '20px 32px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase' }}>Ano Letivo</label>
+                  <select 
+                    value={anivFiltroAno} 
+                    onChange={e => { setAnivFiltroAno(e.target.value); setAnivFiltroTurma('Todas') }}
+                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: '#1e293b', outline: 'none' }}
+                  >
+                    <option value="Todos">Todos os Anos Letivos</option>
+                    {cfgCalendarioLetivo.map((c: any) => (
+                      <option key={c.id} value={c.id}>{c.ano}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase' }}>Turma</label>
+                  <select 
+                    value={anivFiltroTurma} 
+                    onChange={e => setAnivFiltroTurma(e.target.value)}
+                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: '#1e293b', outline: 'none' }}
+                  >
+                    <option value="Todas">Todas as Turmas</option>
+                    {turmas.filter((t: any) => anivFiltroAno === 'Todos' || t.anoLetivo === anivFiltroAno).map((t: any) => (
+                      <option key={t.id} value={t.nome}>{t.nome}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* List */}
+              <div style={{ padding: 32, overflowY: 'auto', flex: 1, background: '#fff' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+                  {aniversariantes
+                    .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
+                    .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma)
+                    .map((aniv: any) => (
+                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: '16px', border: '1px solid #fce7f3', background: '#fffbfd' }}>
+                      <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: '2px solid #fbcfe8' }}>
+                        {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>Turma • {aniv.turma}</div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#ec4899', padding: '8px 12px', borderRadius: 12, color: '#fff' }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', opacity: 0.9 }}>Dia</span>
+                        <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{aniv.dia}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {aniversariantes
+                    .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
+                    .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma).length === 0 && (
+                    <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 15, fontWeight: 600 }}>
+                      Nenhum aniversariante encontrado para os filtros selecionados.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -55,8 +55,11 @@ export async function GET(request: Request) {
       query = query.or(`nome.ilike.%${search}%,id.ilike.%${search}%`)
     }
 
-    if (status !== 'todos') {
+    if (status !== 'todos' && status !== 'todos_com_inativos') {
       query = query.eq('status', status)
+    } else if (status === 'todos') {
+      // Regra de Negócio: Alunos inativos não devem aparecer globalmente (em nenhuma turma do ERP) por padrão
+      query = query.or('status.neq.inativo,status.is.null')
     }
 
     if (turma) {

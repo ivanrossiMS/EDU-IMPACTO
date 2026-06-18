@@ -124,10 +124,31 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 
 export default function CalendarioPage() {
   const { eventosAgenda = [], setEventosAgenda } = useData()
-  const [gruposManuais = []] = useSupabaseArray<{nome: string}>('agenda/grupos')
-  const turmasNomes = gruposManuais.map(t => t.nome)
+  const [turmas = []] = useSupabaseArray<any>('turmas')
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
+
+  const anosLetivos = useMemo(() => {
+    const anos = new Set<string>();
+    turmas.forEach(t => {
+      if (t.ano) anos.add(String(t.ano));
+      if (t.ano_letivo) anos.add(String(t.ano_letivo));
+    });
+    return Array.from(anos).sort().reverse();
+  }, [turmas])
+
+  const [selectedAno, setSelectedAno] = useState<string>('')
+
+  const turmasNomes = useMemo(() => turmas.map(t => t.nome).filter((v, i, a) => v && a.indexOf(v) === i).sort(), [turmas])
+
+  const turmasFiltradas = useMemo(() => {
+    if (!selectedAno) return [];
+    return turmas
+      .filter(t => String(t.ano) === selectedAno || String(t.ano_letivo) === selectedAno)
+      .map(t => t.nome)
+      .filter((v, i, a) => v && a.indexOf(v) === i)
+      .sort();
+  }, [turmas, selectedAno])
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
@@ -733,30 +754,52 @@ export default function CalendarioPage() {
                 <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>{showSelectionModal.type === 'turmas' ? '🎯 Selecionar Grupos' : '👤 Selecionar Usuário'}</h3>
                 <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
               </div>
+
+              {showSelectionModal.type === 'turmas' && (
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Selecione o Ano Letivo</label>
+                  <select 
+                    className="form-input" 
+                    style={{ width: '100%', height: 48, borderRadius: 14, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }}
+                    value={selectedAno}
+                    onChange={e => setSelectedAno(e.target.value)}
+                  >
+                    <option value="">Selecione o Ano Letivo...</option>
+                    {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+              )}
               
               <div style={{ position: 'relative', marginBottom: 20 }}>
                 <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input autoFocus className="form-input" style={{ paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
+                <input autoFocus className="form-input" style={{ paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} disabled={showSelectionModal.type === 'turmas' && !selectedAno} />
               </div>
 
               <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
                 {showSelectionModal.type === 'turmas' ? (
-                  turmasNomes.filter(t => t.toLowerCase().includes(searchTermSelection.toLowerCase())).map(t => {
-                    const isSelected = visibilidade.turmasSel.includes(t)
-                    return (
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        key={t} 
-                        onClick={() => setVisibilidade(prev => ({ ...prev, turmasSel: isSelected ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t] }))} 
-                        style={{ width: '100%', padding: '14px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {isSelected && <Check size={14} color="#fff" strokeWidth={4} />}
-                        </div>
-                        <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#1e40af' : '#475569' }}>{t}</span>
-                      </motion.button>
-                    )
-                  })
+                  !selectedAno ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                      <Calendar size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                      <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Selecione um ano letivo acima para ver as turmas</p>
+                    </div>
+                  ) : (
+                    turmasFiltradas.filter(t => t.toLowerCase().includes(searchTermSelection.toLowerCase())).map(t => {
+                      const isSelected = visibilidade.turmasSel.includes(t)
+                      return (
+                        <motion.button 
+                          whileTap={{ scale: 0.98 }}
+                          key={t} 
+                          onClick={() => setVisibilidade(prev => ({ ...prev, turmasSel: isSelected ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t] }))} 
+                          style={{ width: '100%', padding: '14px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                        >
+                          <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {isSelected && <Check size={14} color="#fff" strokeWidth={4} />}
+                          </div>
+                          <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#1e40af' : '#475569' }}>{t}</span>
+                        </motion.button>
+                      )
+                    })
+                  )
                 ) : (
                   usuariosAtivos.filter(u => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map(u => {
                     const isSelected = visibilidade.usuario === u.nome

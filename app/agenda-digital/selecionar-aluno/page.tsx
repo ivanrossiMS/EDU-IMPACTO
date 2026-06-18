@@ -6,7 +6,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2 } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -522,6 +522,38 @@ const SELECTOR_STYLES = `
           box-shadow: 0 10px 25px rgba(244, 63, 94, 0.05);
         }
 
+        .premium-logout-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 12px 20px;
+          border-radius: 16px;
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          font-weight: 700;
+          font-size: 14px;
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          margin-left: auto;
+        }
+        .premium-logout-btn:hover {
+          background: #ef4444;
+          color: white;
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
+        }
+        .dark .premium-logout-btn {
+          background: rgba(248, 113, 113, 0.1);
+          color: #f87171;
+          border-color: rgba(248, 113, 113, 0.2);
+        }
+        .dark .premium-logout-btn:hover {
+          background: #f87171;
+          color: #0f172a;
+        }
+
         /* Mobile Adjustments */
         @media (max-width: 768px) {
           .premium-selector-container::before {
@@ -535,16 +567,23 @@ const SELECTOR_STYLES = `
           }
           .premium-welcome-card {
             padding: 20px;
-            gap: 18px;
+            gap: 14px;
             border-radius: 24px;
             margin-top: 48px;
           }
+          .premium-logout-btn {
+            padding: 10px 12px;
+            border-radius: 12px;
+          }
+          .premium-logout-text {
+            display: none;
+          }
           .welcome-avatar-wrapper {
-            width: 72px;
-            height: 72px;
+            width: 64px;
+            height: 64px;
           }
           .welcome-greeting {
-            font-size: 24px;
+            font-size: 22px;
           }
           .welcome-tagline {
             font-size: 13px;
@@ -756,6 +795,17 @@ function SelecionarAlunoContent() {
             Seja bem-vindo(a) à Agenda Digital do Impacto. Selecione um perfil para gerenciar comunicados e relatórios.
           </p>
         </div>
+        <button 
+          onClick={async () => {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+          }}
+          className="premium-logout-btn"
+          title="Sair da Conta"
+        >
+          <LogOut size={18} strokeWidth={2.5} />
+          <span className="premium-logout-text">Sair</span>
+        </button>
       </header>
 
       {/* Main content Area */}

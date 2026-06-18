@@ -34,6 +34,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
   const [tipoResponsavelConfig, setTipoResponsavelConfig] = useState<'acrescentar' | 'substituir'>('acrescentar')
   const [tipoTurmaConfig, setTipoTurmaConfig] = useState<'acrescentar' | 'substituir'>('acrescentar')
   const [hasHeaders, setHasHeaders] = useState(true)
+  const [inativarAusentes, setInativarAusentes] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ linha: number; msg: string }[]>([])
   const [errorQuery, setErrorQuery] = useState('')
@@ -276,7 +277,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             rows: hasHeaders ? data.slice(1) : data,
-            mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, step,
+            mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, step, inativarAusentes,
             headers: hasHeaders ? data[0] : null,
           })
         })
@@ -599,6 +600,54 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
                         >
                           🔄 Substituir a turma atual
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {step === 2 && (
+                    <div style={{
+                      background: 'hsl(var(--bg-elevated))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 16,
+                      padding: '16px 20px',
+                      marginBottom: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      flexWrap: 'wrap'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          color: '#ef4444',
+                          borderRadius: 10,
+                          width: 40,
+                          height: 40,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <AlertTriangle size={20} />
+                        </div>
+                        <div>
+                          <h4 style={{ fontSize: 14, fontWeight: 800, margin: 0, color: '#ef4444' }}>Limpeza de Cadastros (Inativação)</h4>
+                          <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: '2px 0 0 0' }}>
+                            Deseja inativar alunos que constam no sistema mas não constam nesta planilha?
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <div style={{ position: 'relative', width: 44, height: 24, background: inativarAusentes ? '#ef4444' : 'hsl(var(--border-subtle))', borderRadius: 12, transition: 'all 0.3s' }}>
+                            <div style={{ position: 'absolute', top: 2, left: inativarAusentes ? 22 : 2, width: 20, height: 20, background: '#fff', borderRadius: '50%', transition: 'all 0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} />
+                          </div>
+                          <input type="checkbox" checked={inativarAusentes} onChange={(e) => setInativarAusentes(e.target.checked)} style={{ display: 'none' }} />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: inativarAusentes ? '#ef4444' : 'hsl(var(--text-muted))' }}>
+                            {inativarAusentes ? 'Sim, inativar ausentes' : 'Não inativar'}
+                          </span>
+                        </label>
                       </div>
                     </div>
                   )}

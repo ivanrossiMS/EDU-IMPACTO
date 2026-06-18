@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       hasHeaders: boolean;
       headers: any[] | null;
       step?: number;
+      inativarAusentes?: boolean;
     }
 
     const stringHeaders = headers ? headers.map(h => String(h ?? '').trim()) : null
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     let atualizados = 0
     let erros = 0
     const erroDetails: { linha: number; msg: string }[] = []
+    const processedAlunoIds: string[] = []
     
     // Carregar todas as turmas em memória para vinculação flexível (Insensível a acentos/caixa)
     const { data: allTurmas } = await supabase.from('turmas').select('id, nome, dados')
@@ -285,6 +287,10 @@ export async function POST(request: Request) {
 
         if (isUpdate) atualizados++
         else inseridos++
+        
+        if (finalAlunoData.id) {
+          processedAlunoIds.push(finalAlunoData.id)
+        }
 
         // 4. Processar Responsáveis
         const processResp = async (respData: any) => {
@@ -510,6 +516,22 @@ export async function POST(request: Request) {
       } catch (e: any) {
         erros++
         erroDetails.push({ linha: index + 2, msg: e.message })
+      }
+    }
+
+    if (step === 2 && inativarAusentes && processedAlunoIds.length > 0) {
+      console.log(`[Import] Inativando alunos ausentes... Mantendo ativos apenas os ${processedAlunoIds.length} alunos processados.`)
+      const { error: inativacaoError } = await supabase
+        .from('alunos')
+        .update({ status: 'inativo' })
+        .not('id', 'in', `(${processedAlunoIds.join(',')})`)
+        .neq('status', 'inativo') // opcional, para não atualizar atoa
+
+      if (inativacaoError) {
+        console.error('[Import] Erro ao inativar alunos ausentes:', inativacaoError)
+        erroDetails.push({ linha: 0, msg: `Erro ao inativar alunos ausentes: ${inativacaoError.message}` })
+      } else {
+        console.log('[Import] Inativação concluída com sucesso.')
       }
     }
 

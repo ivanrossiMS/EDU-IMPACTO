@@ -62,6 +62,7 @@ export async function GET(request: Request) {
         .from('alunos')
         .select('id, turma')
         .in('turma', turmasIds)
+        .or('status.neq.inativo,status.is.null')
         
       // Mapeia a contagem para cada turma
       data.forEach((t: any) => {

@@ -11,6 +11,7 @@ export async function GET(req: Request) {
     const { data, error } = await supabase
       .from('alunos')
       .select('id, nome, matricula, turma, status')
+      .or('status.neq.inativo,status.is.null')
       .order('nome')
 
     if (error) {
