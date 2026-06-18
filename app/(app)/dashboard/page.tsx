@@ -157,7 +157,7 @@ export default function DashboardPage() {
         nome: a.nome,
         dia: parseInt(a.dataNascimento?.split('-')[2] || '0'),
         turma: turmaNome,
-        anoLetivoId: tObj?.anoLetivo || 'Todos',
+        anoLetivoId: tObj?.ano ? String(tObj.ano) : tObj?.ano_letivo ? String(tObj.ano_letivo) : 'Todos',
         foto: a.foto || null,
         timestamp: new Date().getTime()
       }
@@ -650,7 +650,7 @@ export default function DashboardPage() {
                   >
                     <option value="Todos">Todos os Anos Letivos</option>
                     {cfgCalendarioLetivo.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.ano}</option>
+                      <option key={c.id} value={String(c.ano)}>{c.ano}</option>
                     ))}
                   </select>
                 </div>
@@ -662,7 +662,7 @@ export default function DashboardPage() {
                     style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: '#1e293b', outline: 'none' }}
                   >
                     <option value="Todas">Todas as Turmas</option>
-                    {turmas.filter((t: any) => anivFiltroAno === 'Todos' || t.anoLetivo === anivFiltroAno).map((t: any) => (
+                    {turmas.filter((t: any) => anivFiltroAno === 'Todos' || String(t.ano || t.ano_letivo) === anivFiltroAno).map((t: any) => (
                       <option key={t.id} value={t.nome}>{t.nome}</option>
                     ))}
                   </select>
