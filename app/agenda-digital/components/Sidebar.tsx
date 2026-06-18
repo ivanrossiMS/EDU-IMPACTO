@@ -56,6 +56,7 @@ export function ADSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { currentUser, setCurrentUser, theme, setTheme, loadingPath, setLoadingPath } = useApp()
+  const { adConfig } = useAgendaDigital()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
@@ -143,6 +144,7 @@ export function ADSidebar() {
 
         { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
+        { id: 'financeiro', label: 'Financeiro', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
         { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
         { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
@@ -151,6 +153,10 @@ export function ADSidebar() {
         if (alunoId === 'colaborador') {
           return ['comunicados', 'fotos/vídeos', 'Agenda', 'Perfil'].includes(item.label)
         }
+        if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+        if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
+        if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
+        if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
         return true
       })
     }
@@ -452,14 +458,10 @@ export function ADSidebar() {
                   )}
 
                   {[
-                    { 
-                      label: 'Comunicados', 
-                      href: `/agenda-digital/${alunoId}/comunicados`, 
-                      icon: Bell
-                    },
-
+                    { label: 'Comunicados', href: `/agenda-digital/${alunoId}/comunicados`, icon: Bell },
                     { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
+                    { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
                     { label: 'Ocorrências', href: `/agenda-digital/${alunoId}/ocorrencias`, icon: AlertTriangle },
                     { label: 'Notas', href: `/agenda-digital/${alunoId}/notas`, icon: GraduationCap },
@@ -468,6 +470,10 @@ export function ADSidebar() {
                     if (alunoId === 'colaborador') {
                       return ['Comunicados', 'Fotos/Vídeos', 'Calendário', 'Meu Perfil'].includes(item.label)
                     }
+                    if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+                    if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
+                    if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
+                    if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
                     return true
                   }).map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)

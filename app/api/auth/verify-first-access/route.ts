@@ -23,12 +23,14 @@ export async function POST(request: Request) {
     )
     
     // ── 1. Check system_users by email ──────────────────────────────
-    const { data: sysUser } = await supabaseAdmin
+    const { data: sysUserRows } = await supabaseAdmin
       .from('system_users')
       .select('id, nome, email, cargo, perfil, status, senha_definida')
       .eq('email', q)
       .eq('status', 'ativo')
-      .maybeSingle()
+      .limit(1)
+    
+    const sysUser = sysUserRows?.[0]
     
     if (sysUser) {
       if (sysUser.senha_definida === true) {

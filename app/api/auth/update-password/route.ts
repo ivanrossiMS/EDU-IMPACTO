@@ -44,11 +44,12 @@ export async function POST(request: Request) {
 
       // Busca usuário por email virtual — mais eficiente que listUsers
       const findByEmail = async (em: string) => {
-        const { data: found } = await supabaseAdmin
+        const { data: foundRows } = await supabaseAdmin
           .from('system_users')
           .select('id')
           .eq('email', em)
-          .maybeSingle()
+          .limit(1)
+        const found = foundRows?.[0]
         if (found?.id) {
           // Tenta buscar direto pelo ID no Auth
           const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(found.id).catch(() => ({ data: { user: null } }))
@@ -129,11 +130,12 @@ export async function POST(request: Request) {
       }
 
       // Busca usuário por email diretamente (sem carregar 1000 usuários)
-      const { data: sysUserByEmail } = await supabaseAdmin
+      const { data: sysUserByEmailRows } = await supabaseAdmin
         .from('system_users')
         .select('id')
         .eq('email', targetEmail)
-        .maybeSingle()
+        .limit(1)
+      const sysUserByEmail = sysUserByEmailRows?.[0]
       let existing: any = null
       if (sysUserByEmail?.id) {
         const { data: { user } } = await supabaseAdmin.auth.admin.getUserById(sysUserByEmail.id).catch(() => ({ data: { user: null } }))

@@ -163,8 +163,12 @@ export async function POST(req: Request) {
 
     const mode = url.searchParams.get('mode') || 'only_missing'
 
-    // Identificar alunos sem foto (sem foto cadastrada ou com string menor que 50 bytes)
-    const studentsWithoutPhoto = students.filter(s => !s.foto || s.foto.length < 50)
+    // Identificar alunos sem foto (sem foto cadastrada, string menor que 50 bytes, ou avatar SVG simulado)
+    const studentsWithoutPhoto = students.filter(s => 
+      !s.foto || 
+      s.foto.length < 50 || 
+      s.foto.startsWith('data:image/svg+xml')
+    )
 
     // Definir alunos alvos com base no modo selecionado
     const targetStudents = mode === 'all' ? students : studentsWithoutPhoto

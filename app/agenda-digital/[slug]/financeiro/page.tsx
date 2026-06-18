@@ -330,7 +330,7 @@ export default function ADFinanceiroPageMock() {
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             style={{ 
-              position: 'fixed', left: 0, right: 0, margin: '0 auto', maxWidth: 800,
+              position: 'fixed', left: 0, right: 0, bottom: 32, margin: '0 auto', maxWidth: 800,
               background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'none', WebkitBackdropFilter: 'none',
               borderRadius: 24, padding: '16px 24px',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
