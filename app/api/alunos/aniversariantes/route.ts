@@ -13,12 +13,11 @@ export async function GET(req: Request) {
     const todayStr = `-${currentMonth}-${currentDay}`
     const monthStr = `-${currentMonth}-`
 
-    // Buscamos apenas os campos necessários, filtramos onde dados->>dataNascimento contenha o mês atual.
-    // Como Supabase filtra string JSONB via ilike
+    // Buscamos apenas os campos necessários, usando o campo nativo data_nascimento
     const { data, error } = await supabase
       .from('alunos')
-      .select('id, nome, dados')
-      .ilike('dados->>dataNascimento', `%${monthStr}%`)
+      .select('id, nome, data_nascimento, turma, foto')
+      .ilike('data_nascimento', `%${monthStr}%`)
       .eq('status', 'ativo')
 
     if (error) {
@@ -27,11 +26,13 @@ export async function GET(req: Request) {
     }
 
     const formatData = (aluno: any) => {
-       const dataNasc = aluno.dados?.dataNascimento || ''
+       const dataNasc = aluno.data_nascimento || ''
        return {
          id: aluno.id,
          nome: aluno.nome,
          dataNascimento: dataNasc,
+         turma: aluno.turma,
+         foto: aluno.foto,
          hoje: dataNasc.includes(todayStr)
        }
     }

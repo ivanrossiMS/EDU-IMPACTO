@@ -795,17 +795,6 @@ function SelecionarAlunoContent() {
             Seja bem-vindo(a) à Agenda Digital do Impacto. Selecione um perfil para gerenciar comunicados e relatórios.
           </p>
         </div>
-        <button 
-          onClick={async () => {
-            await fetch('/api/auth/logout', { method: 'POST' });
-            window.location.href = '/login';
-          }}
-          className="premium-logout-btn"
-          title="Sair da Conta"
-        >
-          <LogOut size={18} strokeWidth={2.5} />
-          <span className="premium-logout-text">Sair</span>
-        </button>
       </header>
 
       {/* Main content Area */}
@@ -905,6 +894,31 @@ function SelecionarAlunoContent() {
           </section>
         )}
       </main>
+
+      {/* Footer Area with Logout */}
+      <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
+        <button 
+          onClick={async () => {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login';
+          }}
+          className="premium-logout-btn"
+          style={{ width: '100%', maxWidth: 320, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 16, background: '#fff', border: '1.5px solid #ffe4e6', color: '#f43f5e', fontSize: 16, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 14px rgba(244,63,94,0.08)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#fff1f2';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 24px rgba(244,63,94,0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#fff';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 14px rgba(244,63,94,0.08)';
+          }}
+        >
+          <LogOut size={20} strokeWidth={2.5} />
+          <span>Sair com segurança</span>
+        </button>
+      </footer>
     </div>
   )
 }
