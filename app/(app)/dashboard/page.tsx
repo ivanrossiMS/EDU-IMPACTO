@@ -335,62 +335,6 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '24px', padding: '32px 40px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px rgba(99, 102, 241, 0.2)', flexWrap: 'wrap', gap: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div style={{ width: 64, height: 64, background: 'rgba(255,255,255,0.2)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
-            <Users size={32} color="#fff" />
-          </div>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Engajamento do Sistema</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div style={{ fontSize: '36px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>{statsUsuarios.total}</div>
-              <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
-            </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginTop: 8, fontWeight: 500 }}>Já realizaram o primeiro acesso à plataforma</div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.totalGeral > 0 ? (statsUsuarios.total / statsUsuarios.totalGeral) * 100 : 0}%`, height: '100%', background: '#34d399', borderRadius: 2 }} />
-            </div>
-          </div>
-        </div>
-        
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          {/* Card Colaboradores */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} /> Colaboradores</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.colab}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
-            </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
-            </div>
-          </div>
-          {/* Card Alunos */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} /> Alunos</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.alunos}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
-            </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
-            </div>
-          </div>
-          {/* Card Responsáveis */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Responsáveis</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.resps}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
-            </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ═══ Main Area Grid (4 Columns) ═══════════════════════════════════ */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, alignItems: 'start' }}>
 
@@ -601,6 +545,63 @@ export default function DashboardPage() {
 
       </div>
 
+      {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
+      <div style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '24px', padding: '32px 40px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px rgba(99, 102, 241, 0.2)', flexWrap: 'wrap', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{ width: 64, height: 64, background: 'rgba(255,255,255,0.2)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
+            <Users size={32} color="#fff" />
+          </div>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Engajamento do Sistema</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div style={{ fontSize: '36px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>{statsUsuarios.total}</div>
+              <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
+            </div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginTop: 8, fontWeight: 500 }}>Já realizaram o primeiro acesso à plataforma</div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.totalGeral > 0 ? (statsUsuarios.total / statsUsuarios.totalGeral) * 100 : 0}%`, height: '100%', background: '#34d399', borderRadius: 2 }} />
+            </div>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {/* Card Colaboradores */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} /> Colaboradores</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.colab}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+          {/* Card Alunos */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} /> Alunos</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.alunos}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+          {/* Card Responsáveis */}
+          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Responsáveis</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.resps}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
+            </div>
+            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
       {/* ── Modal de Aniversariantes ──────────────────────────── */}
       <AnimatePresence>
         {modalAnivOpen && (
