@@ -8,7 +8,7 @@ import { useData, Tarefa } from '@/lib/dataContext'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
-  CheckCircle, CalendarDays, Cake, ShieldCheck, X
+  CheckCircle, CalendarDays, Cake, ShieldCheck, X, Loader2
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
@@ -284,7 +284,53 @@ export default function DashboardPage() {
     }
   }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
-  if (loadKpis) return <DashboardSkeleton />
+  if (loadKpis) {
+    return (
+      <div style={{
+        height: 'calc(100vh - 120px)',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(255, 255, 255, 0.4)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderRadius: '32px',
+        border: '1px solid rgba(255,255,255,0.8)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.04)',
+      }}>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          padding: '28px 40px',
+          borderRadius: '24px',
+          boxShadow: '0 8px 32px rgba(31, 38, 135, 0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 16,
+          border: '1px solid rgba(255, 255, 255, 0.6)'
+        }}>
+          <Loader2 size={40} className="animate-spin" style={{ color: '#4f46e5' }} />
+          <div style={{
+            fontSize: '16px',
+            fontWeight: 800,
+            letterSpacing: '-0.01em',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #ec4899 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontFamily: 'Outfit, sans-serif'
+          }}>
+            SINCRONIZANDO HUB...
+          </div>
+        </div>
+        <style>{`
+          .animate-spin { animation: spin 1s linear infinite; }
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        `}</style>
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
