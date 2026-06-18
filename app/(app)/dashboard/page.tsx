@@ -8,7 +8,7 @@ import { useData, Tarefa } from '@/lib/dataContext'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
-  CheckCircle, CalendarDays, Cake, ShieldCheck
+  CheckCircle, CalendarDays, Cake, ShieldCheck, X
 } from 'lucide-react'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
