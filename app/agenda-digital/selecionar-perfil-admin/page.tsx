@@ -4,7 +4,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell } from 'lucide-react'
+import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -43,7 +43,7 @@ function formatShortName(name: string): string {
 }
 
 function SelecionarPerfilAdminContent() {
-  const { currentUser } = useApp()
+  const { currentUser, setCurrentUser } = useApp()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
 
@@ -618,7 +618,68 @@ function SelecionarPerfilAdminContent() {
             </Link>
           </div>
         </section>
+
+        {/* LOGOUT BUTTON */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }} className="animate-reveal delay-2">
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                setCurrentUser(null);
+                window.location.href = '/login';
+              } catch (err) {
+                window.location.href = '/login';
+              }
+            }}
+            className="logout-button-modern"
+          >
+            <LogOut size={18} strokeWidth={2.5} />
+            <span>Sair do Sistema</span>
+          </button>
+        </div>
       </main>
+
+      <style dangerouslySetInnerHTML={{__html: `
+        .logout-button-modern {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 28px;
+          background: rgba(239, 68, 68, 0.08);
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          border-radius: 100px;
+          color: #ef4444;
+          font-weight: 700;
+          font-size: 14px;
+          font-family: 'Outfit', sans-serif;
+          letter-spacing: 0.02em;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.0);
+        }
+
+        .logout-button-modern:hover {
+          background: rgba(239, 68, 68, 0.15);
+          border-color: rgba(239, 68, 68, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.15);
+        }
+
+        .logout-button-modern:active {
+          transform: translateY(1px);
+        }
+
+        .dark .logout-button-modern {
+          background: rgba(239, 68, 68, 0.1);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #f87171;
+        }
+
+        .dark .logout-button-modern:hover {
+          background: rgba(239, 68, 68, 0.2);
+          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.2);
+        }
+      `}} />
     </div>
   )
 }
