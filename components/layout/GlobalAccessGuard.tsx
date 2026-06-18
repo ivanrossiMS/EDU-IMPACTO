@@ -2,6 +2,8 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
+import { PremiumLoader } from '@/components/PremiumLoader'
+import { AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 
 function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, isFamilyOrStudent?: boolean }) {
@@ -317,9 +319,9 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
 
   if (!hydrated) {
     return (
-      <>
-        {showSplash && <ModernSplashScreen isFading={false} />}
-      </>
+      <AnimatePresence>
+        {showSplash && <PremiumLoader />}
+      </AnimatePresence>
     )
   }
 
@@ -329,33 +331,33 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
     const isAllowedPath = pathname === '/' || pathname.startsWith('/agenda-digital') || pathname === '/login' || pathname.startsWith('/api') || pathname.startsWith('/esqueci-senha') || pathname.startsWith('/atualizar-senha')
     if (!isAllowedPath) {
       return (
-        <>
-          {showSplash && <ModernSplashScreen isFading={isFading} />}
+        <AnimatePresence>
+          {showSplash && <PremiumLoader />}
           <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
-        </>
+        </AnimatePresence>
       )
     }
     if (pathname === '/') {
       return (
-        <>
-          {showSplash && <ModernSplashScreen isFading={isFading} />}
-        </>
+        <AnimatePresence>
+          {showSplash && <PremiumLoader />}
+        </AnimatePresence>
       )
     }
   }
 
   if (currentUser && pathname === '/') {
     return (
-      <>
-        {showSplash && <ModernSplashScreen isFading={isFading} />}
-      </>
+      <AnimatePresence>
+        {showSplash && <PremiumLoader />}
+      </AnimatePresence>
     )
   }
 
   return (
-    <>
-      {showSplash && <ModernSplashScreen isFading={isFading} />}
+    <AnimatePresence>
+      {showSplash && <PremiumLoader />}
       {children}
-    </>
+    </AnimatePresence>
   )
 }

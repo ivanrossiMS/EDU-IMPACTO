@@ -197,6 +197,7 @@ export function PremiumLoader() {
               stroke="url(#gradient-ring)"
               strokeWidth={strokeWidth}
               strokeDasharray={circumference}
+              initial={{ strokeDashoffset: circumference }}
               animate={{ strokeDashoffset }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               strokeLinecap="round"
