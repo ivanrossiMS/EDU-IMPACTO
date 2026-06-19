@@ -45,6 +45,12 @@ function formatShortName(name: string): string {
 }
 
 const SELECTOR_STYLES = `
+        /* Make parent wrappers transparent so portal background shows through */
+        .agenda-digital-wrapper, 
+        .ad-main-scroll {
+          background: transparent !important;
+        }
+
         .premium-selector-container {
           max-width: 800px;
           width: 100%;
@@ -58,22 +64,6 @@ const SELECTOR_STYLES = `
           gap: 36px;
           position: relative;
           z-index: 1;
-        }
-
-        /* Ambient Glowing Backgrounds */
-        .premium-selector-container::before {
-          content: '';
-          position: absolute;
-          width: 500px;
-          height: 500px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
-          top: -100px;
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: -1;
-          pointer-events: none;
-          filter: blur(40px);
         }
 
         /* Animations */
@@ -762,8 +752,9 @@ function SelecionarAlunoContent() {
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
 
   return (
-    <div className="premium-selector-container">
-      {/* Dynamic styles block for modern theme design */}
+    <>
+      <div className="premium-selector-container">
+        {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
 
       {/* Full-screen Loading Overlay */}
@@ -920,6 +911,7 @@ function SelecionarAlunoContent() {
         </button>
       </footer>
     </div>
+    </>
   )
 }
 

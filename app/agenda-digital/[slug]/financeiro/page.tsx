@@ -28,6 +28,7 @@ export default function ADFinanceiroPageMock() {
 
   // Auto-selecionar os vencidos e o próximo a vencer
   useEffect(() => {
+    console.log('Financeiro loaded');
     const toPay = MOCK_DATA.filter(i => i.situacao === 'Atrasado' || i.id === '5').map(i => i.id)
     setSelectedIds(toPay)
   }, [])
@@ -112,9 +113,15 @@ export default function ADFinanceiroPageMock() {
           .ad-fin-sticky-footer {
             flex-direction: column !important;
             gap: 12px !important;
-            padding: 12px !important;
+            padding: 16px !important;
             text-align: center !important;
-            bottom: 70px !important; /* Above bottom nav */
+            bottom: 76px !important; /* Above bottom nav */
+            border-radius: 24px 24px 0 0 !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            border-bottom: none !important;
+            border-left: none !important;
+            border-right: none !important;
           }
           .ad-fin-footer-btn { width: 100% !important; justify-content: center !important; padding: 12px 20px !important; }
           .ad-fin-footer-total { font-size: 22px !important; }
@@ -330,9 +337,10 @@ export default function ADFinanceiroPageMock() {
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             style={{ 
-              position: 'fixed', left: 0, right: 0, bottom: 32, margin: '0 auto', maxWidth: 800,
+              position: 'fixed', left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 800,
               background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'none', WebkitBackdropFilter: 'none',
-              borderRadius: 24, padding: '16px 24px',
+              borderRadius: '24px 24px 0 0', padding: '16px 24px',
+              borderBottom: 'none',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               boxShadow: '0 20px 40px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.5) inset',
               border: '1px solid rgba(0,0,0,0.05)',

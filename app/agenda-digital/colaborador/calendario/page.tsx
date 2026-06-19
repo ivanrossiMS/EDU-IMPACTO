@@ -131,6 +131,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 // Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function ADCalendarioPage() {
+  const { cfgCalendarioLetivo = [] } = useData()
   const [eventosAgenda, setEventosAgenda, { setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
 
@@ -168,41 +169,66 @@ export default function ADCalendarioPage() {
   const turmasNomes = turmas.map((t: any) => t.nome)
 
   const { chatGroups = [] } = useAgendaDigital()
+  const [selectedAno, setSelectedAno] = useState<string>('todos')
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
+
+  const anosLetivos = useMemo(() => {
+    const anos = new Set<string>();
+    cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
+    turmas.forEach(t => {
+      if (t.ano) anos.add(String(t.ano));
+      if (t.ano_letivo) anos.add(String(t.ano_letivo));
+    });
+    return Array.from(anos).sort().reverse();
+  }, [turmas, cfgCalendarioLetivo])
 
   const turmaOptions = React.useMemo(() => {
     if (!currentUser?.id) return [];
     const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
     
-    const userGroups = (chatGroups || []).filter((g: any) => {
-      let colabs = g.colaboradoresIds;
-      if (typeof colabs === 'string') {
-        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+    let baseTurmas = [];
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') {
+      baseTurmas = turmas;
+    } else {
+      const userGroups = (chatGroups || []).filter((g: any) => {
+        let colabs = g.colaboradoresIds;
+        if (typeof colabs === 'string') {
+          try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+        }
+        if (!Array.isArray(colabs)) colabs = [];
+        return colabs.some((id: any) => String(id) === String(currentUser.id));
+      });
+
+      const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
+      const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+        const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+        return a === '';
+      });
+      
+      if (hasGlobalWithoutYear) {
+        baseTurmas = turmas;
+      } else {
+        const globalYears = new Set(globalGroups.map((g: any) => {
+          return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+        }).filter((a: string) => a !== ''));
+
+        baseTurmas = turmas.filter((t: any) => {
+           const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+           if (globalYears.has(tAno)) return true;
+           return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+        });
       }
-      if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id) === String(currentUser.id));
-    });
+    }
 
-    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
-      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-      return a === '';
-    });
-    
-    if (hasGlobalWithoutYear) return turmas;
-    
-    const globalYears = new Set(globalGroups.map((g: any) => {
-      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-    }).filter((a: string) => a !== ''));
+    if (selectedAno !== 'todos') {
+      return baseTurmas.filter(t => {
+        const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+        return tAno === selectedAno;
+      });
+    }
 
-    const accessibleTurmas = turmas.filter((t: any) => {
-       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-       if (globalYears.has(tAno)) return true;
-       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
-    });
-    return accessibleTurmas
-  }, [turmas, chatGroups, currentUser])
+    return baseTurmas;
+  }, [turmas, chatGroups, currentUser, selectedAno])
 
   const selectedTurmaName = React.useMemo(() => {
     if (selectedTurmaId === 'all') return 'Todas as turmas'
@@ -444,11 +470,15 @@ export default function ADCalendarioPage() {
           >
             <Plus size={16} /> <span>Novo Evento</span>
           </button>
+          
           <TurmaDropdown 
             turmaOptions={turmaOptions} 
             selectedTurmaId={selectedTurmaId} 
             setSelectedTurmaId={setSelectedTurmaId} 
-            selectedTurmaName={selectedTurmaName} 
+            selectedTurmaName={selectedTurmaName}
+            anosLetivos={anosLetivos}
+            selectedAno={selectedAno}
+            setSelectedAno={setSelectedAno}
           />
         </div>
       </div>

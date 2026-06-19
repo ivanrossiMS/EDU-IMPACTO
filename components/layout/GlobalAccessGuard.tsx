@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 
 function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, isFamilyOrStudent?: boolean }) {
   const router = useRouter()
+  const { currentUser, setCurrentUser } = useApp()
   const [mounted, setMounted] = useState(false)
   
   useEffect(() => {
@@ -169,30 +170,85 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           </p>
         </div>
 
-        <button
-          onClick={() => router.push(isFamilyOrStudent ? '/agenda-digital' : '/dashboard')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '12px 28px',
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.9) 0%, rgba(37,99,235,0.9) 100%)',
-            border: 'none',
-            borderRadius: 10,
-            color: 'white',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-            letterSpacing: '0.01em',
-            boxShadow: '0 4px 24px rgba(59,130,246,0.3)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          {isFamilyOrStudent ? 'Voltar para a Agenda Digital' : 'Voltar ao Hub Executivo'}
-        </button>
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+          {currentUser && (
+            <button
+              onClick={() => router.push(isFamilyOrStudent ? '/agenda-digital' : '/dashboard')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '12px 28px',
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.9) 0%, rgba(37,99,235,0.9) 100%)',
+                border: 'none',
+                borderRadius: 10,
+                color: 'white',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                letterSpacing: '0.01em',
+                boxShadow: '0 4px 24px rgba(59,130,246,0.3)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(59,130,246,0.4)'
+              }}
+              onMouseLeave={e => {
+                ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
+                ;(e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(59,130,246,0.3)'
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              {isFamilyOrStudent ? 'Voltar para a Agenda Digital' : 'Voltar ao Hub Executivo'}
+            </button>
+          )}
+
+          <button
+            onClick={async () => {
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' })
+                setCurrentUser?.(null)
+                window.location.href = '/login'
+              } catch (err) {
+                window.location.href = '/login'
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '12px 28px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              borderRadius: 10,
+              color: '#ef4444',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              letterSpacing: '0.01em',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={e => {
+              ;(e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'
+              ;(e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)'
+            }}
+            onMouseLeave={e => {
+              ;(e.currentTarget as HTMLElement).style.transform = 'translateY(0)'
+              ;(e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.1)'
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Sair do Sistema
+          </button>
+        </div>
       </div>
 
       <style>{`

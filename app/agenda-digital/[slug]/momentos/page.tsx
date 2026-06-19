@@ -236,7 +236,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         
         /* Inject dynamic, highly colorful full-viewport premium warm-cool pastel gradient */
         .ad-main-scroll {
-          background: linear-gradient(135deg, #e0e7ff 0%, #fce7f3 40%, #fef3c7 75%, #ecfdf5 100%) !important;
+          background: transparent !important;
           position: relative !important;
         }
 

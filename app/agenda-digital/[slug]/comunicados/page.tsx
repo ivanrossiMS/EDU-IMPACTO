@@ -256,7 +256,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   }
 
   return (
-    <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)' }}>
+    <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'transparent' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
           0%, 100% {

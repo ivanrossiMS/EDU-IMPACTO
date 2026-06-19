@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Mail, ArrowLeft, Send, CheckCircle2, AlertCircle, Shield, Lock, HelpCircle, BookOpen } from 'lucide-react';
+import { BackgroundEffects } from '@/components/ui/LoginBackground';
 
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
@@ -44,22 +45,7 @@ export default function EsqueciSenha() {
         fontFamily: 'var(--font-inter), -apple-system, sans-serif' 
       }}
     >
-      {/* Dotted Pattern Background */}
-      <div 
-        style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-          opacity: 0.2,
-          pointerEvents: 'none',
-          backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)',
-          backgroundSize: '24px 24px',
-        }}
-      />
-
-      {/* Glow Orbs */}
-      <div style={{ position: 'absolute', top: 0, right: 0, width: '400px', height: '400px', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0, pointerEvents: 'none', backgroundColor: 'rgba(29, 78, 216, 0.15)', transform: 'translate(20%, -20%)' }} />
-      <div style={{ position: 'absolute', bottom: 0, left: 0, width: '400px', height: '400px', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0, pointerEvents: 'none', backgroundColor: 'rgba(29, 78, 216, 0.15)', transform: 'translate(-20%, 20%)' }} />
+      <BackgroundEffects />
 
       <div style={{ position: 'relative', zIndex: 10, width: '100%', maxWidth: '500px', padding: '0 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         

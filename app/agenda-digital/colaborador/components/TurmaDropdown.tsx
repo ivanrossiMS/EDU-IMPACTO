@@ -7,9 +7,15 @@ interface TurmaDropdownProps {
   selectedTurmaId: string
   setSelectedTurmaId: (id: string) => void
   selectedTurmaName: string
+  anosLetivos?: string[]
+  selectedAno?: string
+  setSelectedAno?: (ano: string) => void
 }
 
-export function TurmaDropdown({ turmaOptions, selectedTurmaId, setSelectedTurmaId, selectedTurmaName }: TurmaDropdownProps) {
+export function TurmaDropdown({ 
+  turmaOptions, selectedTurmaId, setSelectedTurmaId, selectedTurmaName,
+  anosLetivos = [], selectedAno = 'todos', setSelectedAno
+}: TurmaDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -66,10 +72,40 @@ export function TurmaDropdown({ turmaOptions, selectedTurmaId, setSelectedTurmaI
               minWidth: '220px',
               boxShadow: '0 12px 40px rgba(0,0,0,0.08)',
               zIndex: 1000,
-              maxHeight: '300px',
-              overflowY: 'auto'
+              maxHeight: '400px',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4
             }}
           >
+            {anosLetivos && anosLetivos.length > 0 && setSelectedAno && (
+              <div style={{ padding: '4px', marginBottom: '8px', borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: '12px' }}>
+                <label style={{ fontSize: '11px', fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: '6px', display: 'block', paddingLeft: '4px' }}>
+                  Filtrar por Ano Letivo
+                </label>
+                <select
+                  value={selectedAno}
+                  onChange={e => { setSelectedAno(e.target.value); setSelectedTurmaId('all'); }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    background: '#f8fafc',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: 'hsl(var(--text-main))',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="todos">Todos os anos letivos</option>
+                  {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            )}
+
             <button
               onClick={() => { setSelectedTurmaId('all'); setIsOpen(false) }}
               style={{

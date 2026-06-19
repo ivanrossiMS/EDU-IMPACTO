@@ -19,6 +19,7 @@ const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; b
   F: { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca', label: 'F', glow: 'rgba(239, 68, 68, 0.2)' },
   J: { bg: '#fef3c7', color: '#b45309', border: '#fde68a', label: 'J', glow: 'rgba(245, 158, 11, 0.2)' },
   A: { bg: '#e5e7eb', color: '#374151', border: '#d1d5db', label: 'A', glow: 'rgba(107, 114, 128, 0.2)' },
+  '-': { bg: 'transparent', color: '#94a3b8', border: '1px dashed #cbd5e1', label: '-', glow: 'none' },
 }
 
 function renderRegrasModal(isOpen: boolean, onClose: () => void) {
@@ -295,6 +296,20 @@ export default function FrequenciaPage() {
   const [buscaRelatorio, setBuscaRelatorio] = useState('')
   const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
 
+  // Filtros do modal de relatório
+  const [relatorioAno, setRelatorioAno] = useState('')
+  const [relatorioData, setRelatorioData] = useState(todayStr())
+  const [relatorioTurno, setRelatorioTurno] = useState('')
+
+  // Modal Registro Manual
+  const [showRegistroManualModal, setShowRegistroManualModal] = useState(false)
+  const [registroManualAno, setRegistroManualAno] = useState('')
+  const [registroManualData, setRegistroManualData] = useState(todayStr())
+  const [registroManualTurno, setRegistroManualTurno] = useState('')
+  const [buscaRegistroManual, setBuscaRegistroManual] = useState('')
+  const [absencesManual, setAbsencesManual] = useState<Record<string, Record<string, PresStatus>>>({})
+  const [salvandoManual, setSalvandoManual] = useState(false)
+
   // Auto-open sync modal on page load
   useEffect(() => {
     setShowAcessosModal(true)
@@ -395,7 +410,7 @@ export default function FrequenciaPage() {
       return 'F'
     }
     
-    return 'P'
+    return '-'
   }, [absences])
 
   const setStatus = (alunoId: string, dia: string, tempoId: string, statusNext: PresStatus) => {
@@ -425,7 +440,7 @@ export default function FrequenciaPage() {
         const studentDay = absences[String(a.id)]?.[dia] || {}
         const tempos: Record<string, PresStatus> = {}
         schedule.tempos.forEach(t => {
-          tempos[t.id] = studentDay[t.id] || 'P'
+          tempos[t.id] = studentDay[t.id] || '-'
         })
         
         // Aplicar as regras específicas do segmento
@@ -470,6 +485,79 @@ export default function FrequenciaPage() {
     }
   }
 
+  // Ação de salvar registros manuais do modal global
+  const handleSaveManualRegistro = async () => {
+    setSalvandoManual(true)
+    const recordsToSave: any[] = []
+    
+    for (const alunoId of Object.keys(absencesManual)) {
+      const aluno = alunos.find(a => String(a.id) === String(alunoId))
+      if (!aluno) continue
+      
+      const turmaObj = turmas.find(t => String(t.id) === String(aluno.turma))
+      if (!turmaObj) continue
+
+      const schedule = getTurmaSchedule(turmaObj)
+      const studentDay = absencesManual[alunoId] || {}
+      
+      const tempos: Record<string, PresStatus> = {}
+      const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
+
+      schedule.tempos.forEach(t => {
+        if (studentDay[t.id]) {
+           tempos[t.id] = studentDay[t.id]
+        } else if (existingFreq && existingFreq.tempos) {
+           tempos[t.id] = existingFreq.tempos[t.id] || 'F'
+        } else {
+           tempos[t.id] = 'F'
+        }
+      })
+      
+      const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+      
+      recordsToSave.push({
+        id: existingFreq?.id,
+        alunoId: aluno.id,
+        turmaId: turmaObj.id,
+        data: registroManualData,
+        anoLetivo: turmaObj.ano || filtroAno,
+        presente: calc.presente,
+        justificativa: calc.justificativa,
+        tempos: calc.temposEfetivos
+      })
+    }
+
+    if (recordsToSave.length === 0) {
+      setSalvandoManual(false)
+      setShowRegistroManualModal(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/academico/frequencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recordsToSave)
+      })
+
+      if (response.ok) {
+        if (refetchAllFreqs) refetchAllFreqs()
+        setAbsencesManual({})
+        setTimeout(() => {
+          setSalvandoManual(false)
+          setShowRegistroManualModal(false)
+        }, 500)
+      } else {
+        const err = await response.json()
+        alert('Erro ao salvar: ' + (err.error || response.statusText))
+        setSalvandoManual(false)
+      }
+    } catch (error: any) {
+      alert('Erro na requisição: ' + error.message)
+      setSalvandoManual(false)
+    }
+  }
+
   // Calc freq geral do aluno na turma (baseado em tempos)
   const calcFreqGeral = useCallback((alunoId: string) => {
     const datasAtivas = new Set<string>()
@@ -499,11 +587,12 @@ export default function FrequenciaPage() {
   }, [absences, turmaObj, getStatus])
 
   // Obter lista de alunos ausentes no dia (respeitando escopo global ou de turma)
-  const getAbsenteesList = useCallback(() => {
+  const getAbsenteesList = useCallback((overrideData?: string) => {
+    const targetData = overrideData || dataSel
     const list: any[] = []
     
-    // Obter todas as frequências correspondentes à data selecionada (dataSel)
-    const freqsNoDia = (allFreqs || []).filter(f => String(f.data).startsWith(dataSel))
+    // Obter todas as frequências correspondentes à data selecionada
+    const freqsNoDia = (allFreqs || []).filter(f => String(f.data).startsWith(targetData))
     
     // Criar um mapeamento rápido de frequência por aluno
     const freqMap = new Map<string, any>()
@@ -549,7 +638,7 @@ export default function FrequenciaPage() {
         // Se a turma do aluno teve chamada lançada nesse dia (pela catraca ou manual), ele faltou (F).
         // Se a turma não teve nenhuma chamada, assumimos Presença padrão.
         const turmaTeveChamada = turmasComChamada.has(String(aluno.turma))
-        const defaultStatus: PresStatus = turmaTeveChamada ? 'F' : 'P'
+        const defaultStatus: PresStatus = turmaTeveChamada ? 'F' : '-'
         schedule.tempos.forEach(t => {
           tempos[t.id] = defaultStatus
         })
@@ -577,6 +666,7 @@ export default function FrequenciaPage() {
           nome: aluno.nome,
           turmaId: aluno.turma,
           turmaNome: tObj.nome,
+          anoLetivo: String(tObj.ano || ''),
           turno: aluno.turno || tObj.turno || 'N/A',
           segmento: schedule.segmento,
           responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
@@ -593,14 +683,15 @@ export default function FrequenciaPage() {
   }, [alunos, turmas, turmaSel, dataSel, filtroSegmento, filtroBusca, allFreqs, alunosDaTurma])
 
   // Ação de Impressão do Relatório de Faltas
-  const handlePrintRelatorio = () => {
-    const list = getAbsenteesList()
+  const handlePrintRelatorio = (overrideList?: any[], overrideData?: string) => {
+    const list = overrideList || getAbsenteesList()
+    const targetData = overrideData || dataSel
     const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
     
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    const formattedDate = new Date(dataSel + 'T00:00:00').toLocaleDateString('pt-BR')
+    const formattedDate = new Date(targetData + 'T00:00:00').toLocaleDateString('pt-BR')
     const rowsHtml = list.map(a => {
       const entryTime = a.horaRegistro 
         ? `Entrada: ${a.horaRegistro} (${getTempoEntrada(a.horaRegistro, a.segmento, a.turno) || ''})` 
@@ -686,12 +777,141 @@ export default function FrequenciaPage() {
     printWindow.document.close()
   }
 
+  // Ação de Impressão da Lista de Registro Manual
+  const handlePrintRegistroManual = (list: any[], data: string) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const formattedDate = new Date(data + 'T00:00:00').toLocaleDateString('pt-BR')
+    
+    // Agrupar por turma
+    const groupedByTurma = list.reduce((acc: Record<string, any[]>, student) => {
+      if (!acc[student.turmaNome]) acc[student.turmaNome] = []
+      acc[student.turmaNome].push(student)
+      return acc
+    }, {})
+
+    let contentHtml = ''
+
+    Object.keys(groupedByTurma).sort().forEach(turmaNome => {
+      const turmaStudents = groupedByTurma[turmaNome]
+      const tObj = turmas.find(t => t.nome === turmaNome)
+      const schedule = tObj ? getTurmaSchedule(tObj) : null
+      
+      if (!schedule) return
+
+      contentHtml += `
+        <div class="turma-section">
+          <div class="turma-header">
+            <h3>${turmaNome} <span class="badge">${schedule.segmento}</span></h3>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50%;">Aluno</th>
+                <th style="width: 15%;">Matrícula</th>
+                ${schedule.tempos.map((t:any) => `<th style="text-align: center;">${t.id}º T</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${turmaStudents.map(a => `
+                <tr>
+                  <td style="font-weight: 600; font-size: 12px;">${a.nome}</td>
+                  <td style="color: #64748b; font-size: 10px;">#${a.id}</td>
+                  ${schedule.tempos.map(() => `<td style="text-align: center;"><div class="check-box"></div></td>`).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `
+    })
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Lista de Verificação em Sala - ${formattedDate}</title>
+          <style>
+            body { font-family: 'Outfit', 'Inter', sans-serif; padding: 20px; color: #0f172a; margin: 0; background: #fff; }
+            .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .logo-placeholder { font-weight: 900; font-size: 18px; color: #2563eb; letter-spacing: -1px; }
+            .title { font-size: 22px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
+            .meta { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
+            
+            .turma-section { margin-bottom: 20px; page-break-inside: avoid; }
+            .turma-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; background: #f8fafc; padding: 8px 12px; border-left: 4px solid #3b82f6; border-radius: 4px; }
+            .turma-header h3 { margin: 0; font-size: 15px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+            .badge { font-size: 9px; padding: 2px 8px; background: #e2e8f0; color: #475569; border-radius: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+            
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border-bottom: 1px solid #f1f5f9; padding: 6px 12px; text-align: left; }
+            th { font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; background: #fafaf9; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            tr:last-child td { border-bottom: none; }
+            .check-box { width: 14px; height: 14px; border: 1.5px solid #cbd5e1; border-radius: 3px; display: inline-block; }
+            
+            .instructions { background: #fef8c4; border: 1px solid #fde047; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 12px; color: #854d0e; display: flex; gap: 12px; align-items: center; }
+            .instructions-icon { font-size: 20px; }
+            
+            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+            .signature-row { display: flex; justify-content: space-around; margin-top: 50px; }
+            .signature-box { border-top: 1px solid #cbd5e1; width: 200px; text-align: center; padding-top: 8px; font-size: 11px; color: #475569; font-weight: 600; }
+            
+            @media print {
+              body { padding: 0; }
+              @page { margin: 1.5cm; }
+              .instructions { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Lista de Verificação em Sala</h1>
+              <div class="meta">Alunos sem identificação na catraca | Data: <strong>${formattedDate}</strong></div>
+            </div>
+            <div class="logo-placeholder">EDU-IMPACTO</div>
+          </div>
+          
+          <div class="instructions no-print">
+            <div class="instructions-icon">📋</div>
+            <div>
+              <strong>Instruções de Preenchimento:</strong><br>
+              Utilize esta folha para verificar a presença física dos alunos listados em sala de aula.<br>
+              Assinale <strong>P</strong> (Presença), <strong>F</strong> (Falta) ou <strong>J</strong> (Justificada) nos quadrados correspondentes a cada tempo de aula.
+            </div>
+          </div>
+          
+          ${contentHtml}
+
+          <div class="signature-row">
+            <div class="signature-box">Assinatura do Inspetor / Monitor</div>
+            <div class="signature-box">Assinatura da Coordenação</div>
+          </div>
+          
+          <div class="footer">
+            Gerado pelo sistema EDU-IMPACTO em ${new Date().toLocaleString('pt-BR')}
+          </div>
+          
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
   // Ação de Exportar CSV
-  const handleExportar = () => {
-    const list = getAbsenteesList()
+  const handleExportar = (overrideList?: any[], overrideData?: string) => {
+    const list = overrideList || getAbsenteesList()
+    const targetData = overrideData || dataSel
     const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
     
-    const formattedDate = dataSel.replace(/-/g, '')
+    const formattedDate = targetData.replace(/-/g, '')
     const headers = ['Nome', 'ID', 'Turma', 'Turno', 'Tempos com Falta', 'Horário de Entrada', 'Período de Entrada']
     const rows = list.map(a => [
       a.nome,
@@ -739,12 +959,10 @@ export default function FrequenciaPage() {
 
   // Abertura do Modal de Relatório com expansão padrão das turmas
   const handleOpenRelatorio = () => {
-    const allAbsentees = getAbsenteesList()
-    const initialExpanded: Record<string, boolean> = {}
-    allAbsentees.forEach(a => {
-      initialExpanded[a.turmaNome] = true
-    })
-    setTurmasExpandidas(initialExpanded)
+    setTurmasExpandidas({})
+    setRelatorioAno(filtroAno)
+    setRelatorioData(dataSel)
+    setRelatorioTurno('')
     setShowRelatorioModal(true)
   }
 
@@ -759,19 +977,24 @@ export default function FrequenciaPage() {
   const renderRelatorioModal = () => {
     if (!showRelatorioModal) return null
 
-    const allAbsentees = getAbsenteesList()
+    const allAbsentees = getAbsenteesList(relatorioData)
     
-    // Filtrar a lista de ausências com base na busca dentro do modal
-    const filteredAbsentees = allAbsentees.filter(a => 
-      a.nome.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
-      a.id.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
-      a.turmaNome.toLowerCase().includes(buscaRelatorio.toLowerCase())
-    )
+    // Filtrar a lista de ausências com base na busca dentro do modal e novos filtros
+    const filteredAbsentees = allAbsentees.filter(a => {
+      const matchBusca = a.nome.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
+                         a.id.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
+                         a.turmaNome.toLowerCase().includes(buscaRelatorio.toLowerCase())
+      
+      const matchAno = !relatorioAno || a.anoLetivo === relatorioAno
+      const matchTurno = !relatorioTurno || a.turno === relatorioTurno
+      
+      return matchBusca && matchAno && matchTurno
+    })
 
-    const totalFaltasTotal = allAbsentees.filter(a => a.faltasStr === 'Falta Total').length
-    const totalFaltasParcial = allAbsentees.length - totalFaltasTotal
+    const totalFaltasTotal = filteredAbsentees.filter(a => a.faltasStr === 'Falta Total').length
+    const totalFaltasParcial = filteredAbsentees.length - totalFaltasTotal
     const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
-    const formattedDate = new Date(dataSel + 'T00:00:00').toLocaleDateString('pt-BR')
+    const formattedDate = new Date(relatorioData + 'T00:00:00').toLocaleDateString('pt-BR')
 
     return (
       <div style={{
@@ -853,7 +1076,7 @@ export default function FrequenciaPage() {
             <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700, textTransform: 'uppercase' }}>Faltas Registradas</span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#991b1b', fontFamily: 'Outfit, sans-serif' }}>{allAbsentees.length}</h4>
+                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#991b1b', fontFamily: 'Outfit, sans-serif' }}>{filteredAbsentees.length}</h4>
               </div>
               <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <AlertCircle size={18} />
@@ -880,48 +1103,92 @@ export default function FrequenciaPage() {
           </div>
 
           {/* Barra de Filtros Interna */}
-          <div style={{ padding: '16px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
-              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-              <input
+          <div style={{ padding: '12px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            
+            {/* Top Row: All Filters */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+              
+              <select
                 className="form-input"
-                style={{ paddingLeft: '38px', height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                placeholder="Buscar por aluno, ID ou turma..."
-                value={buscaRelatorio}
-                onChange={e => setBuscaRelatorio(e.target.value)}
+                style={{ width: '100px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+                value={relatorioAno}
+                onChange={e => setRelatorioAno(e.target.value)}
+              >
+                <option value="">Anos</option>
+                {anosDisponiveis.map(ano => (
+                  <option key={ano} value={ano}>{ano}</option>
+                ))}
+              </select>
+
+              <input
+                type="date"
+                className="form-input"
+                style={{ width: '120px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+                value={relatorioData}
+                onChange={e => setRelatorioData(e.target.value)}
               />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={() => {
-                  const groupedKeys = Object.keys(filteredAbsentees.reduce((acc: Record<string, any>, student) => {
-                    acc[student.turmaNome] = true
-                    return acc
-                  }, {}))
-                  const next: Record<string, boolean> = {}
-                  groupedKeys.forEach(k => {
-                    next[k] = true
-                  })
-                  setTurmasExpandidas(next)
-                }}
-                style={{ fontSize: '12px', fontWeight: 700, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+
+              <select
+                className="form-input"
+                style={{ width: '110px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+                value={relatorioTurno}
+                onChange={e => setRelatorioTurno(e.target.value)}
               >
-                Expandir Todas
-              </button>
-              <button
-                onClick={() => setTurmasExpandidas({})}
-                style={{ fontSize: '12px', fontWeight: 700, padding: '8px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
-              >
-                Recolher Todas
-              </button>
+                <option value="">Turnos</option>
+                <option value="Matutino">Matutino</option>
+                <option value="Vespertino">Vespertino</option>
+                <option value="Noturno">Noturno</option>
+                <option value="Integral">Integral</option>
+              </select>
+
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  className="form-input"
+                  style={{ paddingLeft: '30px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', width: '100%', margin: 0 }}
+                  placeholder="Buscar aluno, ID ou turma..."
+                  value={buscaRelatorio}
+                  onChange={e => setBuscaRelatorio(e.target.value)}
+                />
+              </div>
+
             </div>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-              Exibindo {filteredAbsentees.length} de {allAbsentees.length} registros
+
+            {/* Bottom Row: Actions & Info */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button
+                  onClick={() => {
+                    const groupedKeys = Object.keys(filteredAbsentees.reduce((acc: Record<string, any>, student) => {
+                      acc[student.turmaNome] = true
+                      return acc
+                    }, {}))
+                    const next: Record<string, boolean> = {}
+                    groupedKeys.forEach(k => {
+                      next[k] = true
+                    })
+                    setTurmasExpandidas(next)
+                  }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                >
+                  Expandir Todas
+                </button>
+                <button
+                  onClick={() => setTurmasExpandidas({})}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                >
+                  Recolher Todas
+                </button>
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                Exibindo {filteredAbsentees.length} de {allAbsentees.length} registros
+              </div>
             </div>
+
           </div>
 
           {/* Tabela / Lista de Faltantes Agrupada por Turma */}
@@ -1118,7 +1385,6 @@ export default function FrequenciaPage() {
             )}
           </div>
 
-          {/* Footer do Modal */}
           <div style={{
             padding: '20px 32px',
             borderTop: '1px solid #f1f5f9',
@@ -1129,7 +1395,7 @@ export default function FrequenciaPage() {
           }}>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={handlePrintRelatorio}
+                onClick={() => handlePrintRelatorio(filteredAbsentees, relatorioData)}
                 style={{
                   padding: '10px 18px',
                   background: '#fff',
@@ -1151,7 +1417,7 @@ export default function FrequenciaPage() {
                 <span>Imprimir PDF</span>
               </button>
               <button
-                onClick={handleExportar}
+                onClick={() => handleExportar(filteredAbsentees, relatorioData)}
                 style={{
                   padding: '10px 18px',
                   background: '#fff',
@@ -1195,6 +1461,260 @@ export default function FrequenciaPage() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Render do Modal de Registro Manual de Não Identificados
+  const renderRegistroManualModal = () => {
+    if (!showRegistroManualModal) return null
+
+    const allAbsentees = getAbsenteesList(registroManualData)
+    
+    // Filtro do próprio modal
+    const filteredAbsentees = allAbsentees.filter(a => {
+      const matchBusca = a.nome.toLowerCase().includes(buscaRegistroManual.toLowerCase()) ||
+                         a.id.toLowerCase().includes(buscaRegistroManual.toLowerCase()) ||
+                         a.turmaNome.toLowerCase().includes(buscaRegistroManual.toLowerCase())
+      
+      const matchAno = !registroManualAno || a.anoLetivo === registroManualAno
+      const matchTurno = !registroManualTurno || a.turno === registroManualTurno
+      
+      return matchBusca && matchAno && matchTurno
+    })
+
+    // Agrupar por turma
+    const groupedByTurma = filteredAbsentees.reduce((acc: Record<string, any[]>, student) => {
+      if (!acc[student.turmaNome]) acc[student.turmaNome] = []
+      acc[student.turmaNome].push(student)
+      return acc
+    }, {})
+
+    // Ordenar turmas alfabeticamente
+    const sortedTurmas = Object.keys(groupedByTurma).sort()
+
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)',
+        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+      }}>
+        <div style={{
+          background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '900px', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden'
+        }}>
+          {/* Header do Modal */}
+          <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ background: '#fef3c7', color: '#d97706', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={24} />
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 800, color: '#0f172a' }}>Registrar Não Identificados</h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Registre faltas ou presenças manualmente para os alunos sem biometria</p>
+              </div>
+            </div>
+            <button onClick={() => setShowRegistroManualModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#94a3b8' }}>
+              <X size={24} />
+            </button>
+          </div>
+
+          {/* Barra de Filtros Interna */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%', background: '#fafaf9' }}>
+            <select
+              className="form-input"
+              style={{ width: '100px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              value={registroManualAno}
+              onChange={e => setRegistroManualAno(e.target.value)}
+            >
+              <option value="">Anos</option>
+              {anosDisponiveis.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+            </select>
+
+            <input
+              type="date"
+              className="form-input"
+              style={{ width: '120px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              value={registroManualData}
+              onChange={e => setRegistroManualData(e.target.value)}
+            />
+
+            <select
+              className="form-input"
+              style={{ width: '110px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              value={registroManualTurno}
+              onChange={e => setRegistroManualTurno(e.target.value)}
+            >
+              <option value="">Turnos</option>
+              <option value="Matutino">Matutino</option>
+              <option value="Vespertino">Vespertino</option>
+              <option value="Noturno">Noturno</option>
+              <option value="Integral">Integral</option>
+            </select>
+
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <input
+                className="form-input"
+                style={{ paddingLeft: '30px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', width: '100%', margin: 0 }}
+                placeholder="Buscar aluno, ID ou turma..."
+                value={buscaRegistroManual}
+                onChange={e => setBuscaRegistroManual(e.target.value)}
+              />
+            </div>
+            
+            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, paddingLeft: '12px' }}>
+              Exibindo {filteredAbsentees.length} alunos
+            </div>
+          </div>
+
+          {/* Lista de Alunos e Tempos */}
+          <div style={{ padding: '20px 16px', overflowY: 'auto', flex: 1 }}>
+            {filteredAbsentees.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
+                <Users size={48} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
+                <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>Nenhum aluno faltando registro nesta data.</p>
+              </div>
+            ) : (
+              sortedTurmas.map(turmaNome => {
+                const turmaStudents = groupedByTurma[turmaNome]
+                const tObj = turmas.find(t => t.nome === turmaNome)
+                const schedule = tObj ? getTurmaSchedule(tObj) : null
+
+                if (!schedule) return null
+
+                return (
+                  <div key={turmaNome} style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#334155' }}>{turmaNome}</span>
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', background: '#e2e8f0', color: '#475569', borderRadius: '12px' }}>
+                        {schedule.segmento}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {turmaStudents.map(aluno => {
+                        const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
+                        
+                        return (
+                          <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #f1f5f9', borderRadius: '12px', gap: '12px' }}>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>{aluno.nome}</div>
+                              <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{aluno.id}</div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginRight: '8px', paddingRight: '12px', borderRight: '1px dashed #cbd5e1' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>TODOS</span>
+                                <div style={{ display: 'flex', background: '#f8fafc', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0' }}>
+                                  <button
+                                    onClick={() => setAbsencesManual(prev => {
+                                      const newData = { ...(prev[aluno.id] || {}) }
+                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'P')
+                                      return { ...prev, [aluno.id]: newData }
+                                    })}
+                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
+                                    title="Marcar todos como Presença"
+                                  >P</button>
+                                  <button
+                                    onClick={() => setAbsencesManual(prev => {
+                                      const newData = { ...(prev[aluno.id] || {}) }
+                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'F')
+                                      return { ...prev, [aluno.id]: newData }
+                                    })}
+                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
+                                    title="Marcar todos como Falta"
+                                  >F</button>
+                                  <button
+                                    onClick={() => setAbsencesManual(prev => {
+                                      const newData = { ...(prev[aluno.id] || {}) }
+                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'J')
+                                      return { ...prev, [aluno.id]: newData }
+                                    })}
+                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
+                                    title="Marcar todos como Justificado"
+                                  >J</button>
+                                </div>
+                              </div>
+                              {schedule.tempos.map((t: any) => {
+                                let defaultStatus: PresStatus = 'F'
+                                if (existingFreq && existingFreq.tempos) {
+                                  defaultStatus = existingFreq.tempos[t.id] || 'F'
+                                } else if (existingFreq && !existingFreq.tempos) {
+                                  defaultStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
+                                }
+
+                                const currentStatus = absencesManual[aluno.id]?.[t.id] || defaultStatus
+
+                                return (
+                                  <div key={t.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{t.id}º T</span>
+                                    <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
+                                      <button
+                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'P' } }))}
+                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'P' ? '#22c55e' : 'transparent', color: currentStatus === 'P' ? '#fff' : '#64748b' }}
+                                      >
+                                        P
+                                      </button>
+                                      <button
+                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'F' } }))}
+                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'F' ? '#ef4444' : 'transparent', color: currentStatus === 'F' ? '#fff' : '#64748b' }}
+                                      >
+                                        F
+                                      </button>
+                                      <button
+                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'J' } }))}
+                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'J' ? '#f59e0b' : 'transparent', color: currentStatus === 'J' ? '#fff' : '#64748b' }}
+                                      >
+                                        J
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {/* Footer do Modal */}
+          <div style={{
+            padding: '20px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', flexWrap: 'wrap', gap: '12px'
+          }}>
+            <button
+              onClick={() => handlePrintRegistroManual(filteredAbsentees, registroManualData)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#fff'; }}
+            >
+              <Printer size={16} />
+              Imprimir Ficha
+            </button>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => setShowRegistroManualModal(false)}
+                style={{ padding: '10px 24px', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSaveManualRegistro}
+                disabled={salvandoManual}
+                style={{
+                  padding: '10px 24px', background: salvandoManual ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: salvandoManual ? 'not-allowed' : 'pointer', transition: 'background 0.2s'
+                }}
+              >
+                {salvandoManual ? 'Salvando...' : 'Salvar Registros'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1368,11 +1888,18 @@ export default function FrequenciaPage() {
               <span>Relatório</span>
             </button>
             <button 
-              onClick={handleExportar}
-              style={{ height: '42px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+              onClick={() => {
+                setRegistroManualAno(filtroAno)
+                setRegistroManualData(dataSel)
+                setRegistroManualTurno('')
+                setBuscaRegistroManual('')
+                setAbsencesManual({})
+                setShowRegistroManualModal(true)
+              }}
+              style={{ height: '42px', padding: '0 20px', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(245, 158, 11, 0.2)' }}
             >
-              <Download size={16} />
-              <span>Exportar</span>
+              <Users size={16} />
+              <span>Registrar Não Identificados</span>
             </button>
           </div>
         </div>
@@ -1687,6 +2214,7 @@ export default function FrequenciaPage() {
         </div>
         {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
         {renderRelatorioModal()}
+        {renderRegistroManualModal()}
         <SyncAcessosModal 
           isOpen={showAcessosModal} 
           onClose={() => setShowAcessosModal(false)}
@@ -1854,6 +2382,10 @@ export default function FrequenciaPage() {
             <span style={{ width: '12px', height: '12px', background: '#f59e0b', borderRadius: '3px' }}></span>
             <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 600 }}>Justificada (J)</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px', borderLeft: '1px solid #cbd5e1', paddingLeft: '12px' }}>
+            <span style={{ width: '12px', height: '12px', background: 'transparent', border: '1px dashed #cbd5e1', borderRadius: '3px' }}></span>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Sem registro (-)</span>
+          </div>
         </div>
       </div>
 
@@ -1997,7 +2529,7 @@ export default function FrequenciaPage() {
                                   <div key={tempo.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                                     <button
                                       onClick={() => {
-                                        const nextStatus = status === 'P' ? 'F' : (status === 'F' ? 'J' : 'P')
+                                        const nextStatus = status === '-' ? 'P' : (status === 'P' ? 'F' : (status === 'F' ? 'J' : '-'))
                                         setStatus(aluno.id, dia, tempo.id, nextStatus)
                                       }}
                                       title={`${tempo.label}: ${tempo.horario}`}
@@ -2073,6 +2605,7 @@ export default function FrequenciaPage() {
       </div>
       {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
       {renderRelatorioModal()}
+      {renderRegistroManualModal()}
       <SyncAcessosModal 
         isOpen={showAcessosModal} 
         onClose={() => setShowAcessosModal(false)}

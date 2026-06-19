@@ -5,6 +5,7 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar } from 'lucide-react'
+import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -123,19 +124,20 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 }
 
 export default function CalendarioPage() {
-  const { eventosAgenda = [], setEventosAgenda } = useData()
+  const { eventosAgenda = [], setEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
 
   const anosLetivos = useMemo(() => {
     const anos = new Set<string>();
+    cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
     turmas.forEach(t => {
       if (t.ano) anos.add(String(t.ano));
       if (t.ano_letivo) anos.add(String(t.ano_letivo));
     });
     return Array.from(anos).sort().reverse();
-  }, [turmas])
+  }, [turmas, cfgCalendarioLetivo])
 
   const [selectedAno, setSelectedAno] = useState<string>('')
 
@@ -166,6 +168,20 @@ export default function CalendarioPage() {
   const [filtroTurma, setFiltroTurma] = useState('todas')
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [filtroUsuario, setFiltroUsuario] = useState('todos')
+  const [filtroAnoLetivoPrincipal, setFiltroAnoLetivoPrincipal] = useState<string>('todos')
+
+  const turmasFiltroBar = useMemo(() => {
+    if (filtroAnoLetivoPrincipal === 'todos') return turmasNomes
+    return turmas
+      .filter(t => String(t.ano || t.ano_letivo) === filtroAnoLetivoPrincipal)
+      .map(t => t.nome)
+      .filter((v, i, a) => v && a.indexOf(v) === i)
+      .sort()
+  }, [turmas, turmasNomes, filtroAnoLetivoPrincipal])
+
+  const turmaDropdownOptions = useMemo(() => {
+    return turmasFiltroBar.map(t => ({ id: t, nome: t }));
+  }, [turmasFiltroBar]);
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -447,10 +463,17 @@ export default function CalendarioPage() {
 
       <div className="ad-calendar-filter-bar" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px', background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
         <Filter size={13} style={{ color: 'hsl(var(--text-muted))' }} />
-        <select className="form-input" style={{ width: 'auto', fontSize: 12, minWidth: 160 }} value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)}>
-          <option value="todas">Todos os grupos</option>
-          {turmasNomes.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        
+        <TurmaDropdown 
+          turmaOptions={turmaDropdownOptions} 
+          selectedTurmaId={filtroTurma === 'todas' ? 'all' : filtroTurma} 
+          setSelectedTurmaId={id => setFiltroTurma(id === 'all' ? 'todas' : id)} 
+          selectedTurmaName={filtroTurma === 'todas' ? 'Todos os grupos' : filtroTurma}
+          anosLetivos={anosLetivos}
+          selectedAno={filtroAnoLetivoPrincipal}
+          setSelectedAno={ano => { setFiltroAnoLetivoPrincipal(ano); setFiltroTurma('todas'); }}
+        />
+
         <select className="form-input" style={{ width: 'auto', fontSize: 12, minWidth: 160 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
           <option value="todos">Todos os tipos</option>
           {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}

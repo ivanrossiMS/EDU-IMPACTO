@@ -25,7 +25,7 @@ export default function ADMomentosPage() {
   
   const { currentUser } = useApp()
   
-  const { turmas = [] } = useData()
+  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
   
   
   
@@ -99,27 +99,28 @@ export default function ADMomentosPage() {
     return accessibleTurmas
   }, [turmas, chatGroups, currentUser])
 
-  const availableYears = React.useMemo(() => {
-    const years = new Set<string>()
-    turmaOptions.forEach((t: any) => {
-      const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || new Date().getFullYear())
-      if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
-    })
-    return Array.from(years).sort((a, b) => b.localeCompare(a)) // Descending
-  }, [turmaOptions])
+  const anosLetivos = React.useMemo(() => {
+    const anos = new Set<string>();
+    cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
+    turmas.forEach(t => {
+      if (t.ano) anos.add(String(t.ano));
+      if (t.ano_letivo) anos.add(String(t.ano_letivo));
+    });
+    return Array.from(anos).sort().reverse();
+  }, [turmas, cfgCalendarioLetivo])
 
   useEffect(() => {
-    if (!selectedYear && availableYears.length > 0) {
-      setSelectedYear(availableYears[0])
+    if (!selectedYear && anosLetivos.length > 0) {
+      setSelectedYear(anosLetivos[0])
     }
-  }, [availableYears, selectedYear])
+  }, [anosLetivos, selectedYear])
 
   useEffect(() => {
     setSelectedTurmaId('all')
   }, [selectedYear])
 
   const filteredTurmas = React.useMemo(() => {
-    if (!selectedYear || selectedYear === 'all') return turmaOptions
+    if (!selectedYear || selectedYear === 'todos') return turmaOptions
     return turmaOptions.filter((t: any) => {
       const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || new Date().getFullYear())
       return year === selectedYear
@@ -464,36 +465,15 @@ export default function ADMomentosPage() {
               Fotos/Vídeos da Turma
             </h2>
             <div style={{ marginTop: 8, position: 'relative', zIndex: 50, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                {availableYears.length > 0 && (
-                  <div style={{ width: 140 }}>
-                    <select
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(e.target.value)}
-                      style={{
-                        width: '100%', height: 38, borderRadius: '12px', padding: '0 32px 0 16px',
-                        border: '1px solid hsl(var(--border-subtle, 220 13% 91%))', 
-                        background: 'hsl(var(--bg-surface, 0 0% 100%))',
-                        color: 'hsl(var(--text-main, 220 39% 11%))', 
-                        fontSize: '14px', fontWeight: 600,
-                        outline: 'none', cursor: 'pointer', appearance: 'none',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                        backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'14\\\' height=\\\'14\\\' viewBox=\\\'0 0 24 24\\\' fill=\\\'none\\\' stroke=\\\'rgba(15,23,42,0.85)\\\' stroke-width=\\\'2\\\' stroke-linecap=\\\'round\\\' stroke-linejoin=\\\'round\\\'%3E%3Cpath d=\\\'m6 9 6 6 6-6\\\'/%3E%3C/svg%3E")',
-                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center'
-                      }}
-                    >
-                      <option value="all">Todos os Anos</option>
-                      {availableYears.map(year => (
-                        <option key={year} value={year}>{year}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
                 <div style={{ maxWidth: 300, width: '100%' }}>
                   <TurmaDropdown 
-                    turmaOptions={[{id: 'all', nome: 'Todas as Turmas'}, ...filteredTurmas]} 
+                    turmaOptions={filteredTurmas} 
                     selectedTurmaId={selectedTurmaId} 
                     setSelectedTurmaId={setSelectedTurmaId} 
                     selectedTurmaName={selectedTurmaName} 
+                    anosLetivos={anosLetivos}
+                    selectedAno={selectedYear}
+                    setSelectedAno={setSelectedYear}
                   />
                 </div>
               <button onClick={() => setShowModal(true)} style={{

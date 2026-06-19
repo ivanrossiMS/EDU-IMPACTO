@@ -1,4 +1,4 @@
-export type PresStatus = 'P' | 'F' | 'J' | 'A'
+export type PresStatus = 'P' | 'F' | 'J' | 'A' | '-'
 
 export interface TempoConfig {
   id: string

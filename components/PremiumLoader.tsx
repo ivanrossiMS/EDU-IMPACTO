@@ -215,7 +215,21 @@ export function PremiumLoader() {
           <div className="relative z-10 w-28 h-28 rounded-3xl glass-panel-custom flex flex-col items-center justify-center overflow-hidden pulse-energy">
             <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none" />
             <div className="scanner" />
-            <img src="/logo-impacto.png" alt="Impacto Edu" className="w-16 h-16 object-contain relative z-10 drop-shadow-lg" />
+            <motion.img 
+              src="/logo-impacto.png" 
+              alt="Impacto Edu" 
+              className="w-16 h-16 object-contain relative z-10 rounded-2xl"
+              animate={{ 
+                y: [-4, 4, -4],
+                scale: [0.95, 1.05, 0.95],
+                filter: [
+                  'drop-shadow(0 0 8px rgba(0, 229, 255, 0.3))',
+                  'drop-shadow(0 0 16px rgba(0, 229, 255, 0.8))',
+                  'drop-shadow(0 0 8px rgba(0, 229, 255, 0.3))'
+                ]
+              }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            />
           </div>
 
           {/* Percentual Flutuante (estilo futurista) */}

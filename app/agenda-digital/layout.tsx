@@ -15,6 +15,7 @@ import { ADSidebar } from './components/Sidebar'
 import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
+import { TechSkyBackground } from '@/components/ui/TechSkyBackground'
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
@@ -146,7 +147,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
 
   return (
-    <div className="agenda-digital-wrapper" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'hsl(var(--bg-main))' }}>
+    <>
+      <TechSkyBackground />
+      <div className="agenda-digital-wrapper" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'transparent' }}>
         <style dangerouslySetInnerHTML={{__html: `
           /* Esconde a interface do ERP */
           .sidebar { display: none !important; }
@@ -161,7 +164,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             overflow-y: auto;
             overflow-x: hidden;
             position: relative;
-            background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%);
+            background: transparent;
           }
 
           .ad-content-inner {
@@ -186,9 +189,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             padding-top: 0px !important;
           }
 
-          .ad-fin-sticky-footer {
-            bottom: 32px !important;
-          }
 
           @media (max-width: 1024px) {
             /* .ad-sidebar-container handled by component logic */
@@ -214,10 +214,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               object-fit: cover !important;
               margin: 0 !important;
             }
-            .ad-fin-sticky-footer {
-              bottom: 95px !important;
-              z-index: 9998 !important;
-            }
+
             .ad-content-inner {
               padding: 16px !important;
               padding-top: calc(16px + env(safe-area-inset-top, 0px)) !important;
@@ -278,6 +275,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
-    </div>
+      </div>
+    </>
   )
 }
