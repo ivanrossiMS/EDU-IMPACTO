@@ -104,7 +104,6 @@ export default function ADMomentosPage() {
     cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
     turmas.forEach(t => {
       if (t.ano) anos.add(String(t.ano));
-      if (t.ano_letivo) anos.add(String(t.ano_letivo));
     });
     return Array.from(anos).sort().reverse();
   }, [turmas, cfgCalendarioLetivo])
