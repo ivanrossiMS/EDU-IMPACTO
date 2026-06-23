@@ -5,6 +5,10 @@ import { ControliDClient } from '@/lib/controlid'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
+function isLocalIp(ip: string) {
+  return /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(ip)
+}
+
 /**
  * POST /api/portaria/dispositivos/comando
  * Executa comandos remotos e diagnósticos em tempo real no hardware iDFace.
@@ -42,7 +46,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Endereço IP do dispositivo não configurado.' }, { status: 400 })
     }
 
-    // 2. Inicializar cliente iDFace
+    const isLocal = isLocalIp(device.ip)
+
+    // Se a catraca está na rede local, comandos remotos não funcionam pela nuvem (Netlify).
+    if (isLocal) {
+      if (comando === 'ping') {
+        // Ping passivo: checa apenas se mandou evento recente (últimos 15 min)
+        const lastComm = device.ultima_comunicacao ? new Date(device.ultima_comunicacao) : null
+        const now = new Date()
+        
+        if (lastComm && (now.getTime() - lastComm.getTime() < 15 * 60 * 1000)) {
+          return NextResponse.json({ 
+            success: true, 
+            result: { online: true, info: { serial: device.id, msg: 'Ping Passivo: Catraca enviou sinal há pouco tempo' } } 
+          })
+        } else {
+          return NextResponse.json({ 
+            error: 'Sem comunicação nos últimos 15 min. Impossível verificar status em tempo real pois o IP é Local (192.168.x.x).' 
+          }, { status: 400 })
+        }
+      } else {
+        // Outros comandos
+        return NextResponse.json({ 
+          error: 'IP Privado detectado. A nuvem não pode enviar comandos para a rede local da escola. Use o script Sincronizar_Catraca.py para configurações.' 
+        }, { status: 400 })
+      }
+    }
+
+    // 2. Inicializar cliente iDFace (somente para IPs Públicos)
     const client = new ControliDClient({
       ip: device.ip,
       port: device.porta || 443,
