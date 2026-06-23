@@ -191,3 +191,56 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
+
+// ── DELETE — desfaz registros criados pelo totem num determinado dia ──────────
+// Só apaga registros com dados->>'origem' = 'totem', nunca os manuais ou da catraca
+export async function DELETE(request: Request) {
+  if (!validarToken(request)) {
+    return NextResponse.json(
+      { error: 'Não autorizado. Token inválido.' },
+      { status: 401 }
+    )
+  }
+
+  const { searchParams } = new URL(request.url)
+  const data = normalizarData(searchParams.get('data')) || new Date().toISOString().split('T')[0]
+  const admin = getAdminClient()
+
+  try {
+    // Busca apenas os registros criados pelo totem (tag origem='totem')
+    const { data: registros, error: errBusca } = await admin
+      .from('frequencias')
+      .select('id')
+      .eq('data', data)
+      .eq('dados->>origem', 'totem')
+
+    if (errBusca) throw new Error(errBusca.message)
+
+    const ids = (registros || []).map((r: any) => r.id)
+
+    if (ids.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        data,
+        removidos: 0,
+        mensagem: 'Nenhum registro do totem encontrado para esta data.',
+      })
+    }
+
+    const { error: errDel } = await admin
+      .from('frequencias')
+      .delete()
+      .in('id', ids)
+
+    if (errDel) throw new Error(errDel.message)
+
+    return NextResponse.json({
+      ok: true,
+      data,
+      removidos: ids.length,
+      mensagem: `${ids.length} registro(s) do totem removidos com sucesso.`,
+    })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
