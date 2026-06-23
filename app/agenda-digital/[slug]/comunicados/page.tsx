@@ -187,12 +187,20 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     })
 
     try {
-      const { data: dbCom } = await supabase.from('comunicados').select('dados').eq('id', comunicadoId).single();
+      const res = await fetch(`/api/comunicados?id=${comunicadoId}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const dataArr = await res.json();
+      const dbCom = dataArr[0]; // GET returns array
+      
       if (dbCom) {
         const dados = dbCom.dados || {};
         const newCiencias = { ...(dados.ciencias || {}), [resolvedParams.slug]: nowIso };
         dados.ciencias = newCiencias;
-        await supabase.from('comunicados').update({ dados }).eq('id', comunicadoId);
+        await fetch(`/api/comunicados`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: comunicadoId, dados })
+        });
       }
     } catch (e) { console.error('Failed to save ciencia', e) }
   }

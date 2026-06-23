@@ -264,6 +264,25 @@ export async function POST(request: Request) {
   }
 }
 
+export async function PUT(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  const authClient = await createProtectedClient();
+  const supabase = authClient;
+  try {
+    const { id, dados } = await request.json()
+    if (!id || !dados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+
+    const { data, error } = await supabase.from('comunicados').update({ dados }).eq('id', id).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    return NextResponse.json(normalizeRow(data))
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 })
+  }
+}
+
 export async function DELETE(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse

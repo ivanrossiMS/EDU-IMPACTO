@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { supabase } from '@/lib/supabase';
+
 import { getOptimizedUrl } from '@/lib/utils/image';
 
 // In-memory cache to share across instances and avoid duplicate requests
@@ -24,37 +24,18 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
 
   const promise = (async () => {
     try {
-      let query = supabase.from('system_users').select('dados');
-      
-      if (userId) {
-        if (isValidUuid(userId)) {
-          query = query.or(`id.eq."${userId}",auth_id.eq."${userId}"`);
-        } else {
-          query = query.eq('id', userId);
-        }
-      } else if (name) {
-        query = query.eq('nome', name);
-      } else {
-        return null;
-      }
-
-      const { data, error } = await query.maybeSingle();
-
       let foto = null;
 
-      if (data && data.dados && typeof data.dados === 'object') {
-        foto = (data.dados as any).foto || (data.dados as any).fotoUrl;
-      }
-
-      // API Fallback for users not in system_users (e.g. Master Admin)
-      if (!foto && userId && isValidUuid(userId)) {
+      if (userId && isValidUuid(userId)) {
         try {
           const res = await fetch(`/api/user-photo?id=${userId}`);
           if (res.ok) {
             const json = await res.json();
             if (json.foto) foto = json.foto;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('[UserAvatar] Error fetching photo from API:', e);
+        }
       }
 
       if (foto) {
