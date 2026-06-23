@@ -13,11 +13,11 @@ import { getInitials } from '@/lib/utils'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams } from 'next/navigation'
-import React, { use, useState, useEffect } from 'react'
+import React, { use, useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
-  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck
+  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send
 } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
@@ -34,7 +34,7 @@ function abbreviateName(name: string): string {
   return `${first} ${middle} ${last}`;
 }
 
-function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, currentUser: any, vinculo?: any }) {
+function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled' && c.status !== 'blocked')
@@ -141,18 +141,24 @@ function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, curren
   }, [aluno?.dados, currentUser]);
 
   const isActive = call && (call.status === 'waiting' || call.status === 'called')
+  const isSpecialAuth = call?.status === 'special_auth'
   const isBlocked = call?.status === 'blocked'
   const isConfirmed = call?.status === 'confirmed' || localConfirmed
 
   const handleCall = () => {
-    if (isActive || isConfirmed || isProibido || isDiaRestrito) return
-    const gName = currentUser.nome || 'Responsável'
-    const gId = currentUser.id || 'usr-fam'
-    callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
+    if (isActive || isConfirmed || isProibido || isDiaRestrito || isSpecialAuth) return
+    if (onOpenModal) {
+      onOpenModal()
+    } else {
+      const gName = currentUser.nome || 'Responsável'
+      const gId = currentUser.id || 'usr-fam'
+      callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
+    }
   }
 
   const baseBtnStyle: React.CSSProperties = {
-    height: 56,
+    height: '100%',
+    minHeight: 56,
     borderRadius: 24,
     fontWeight: 800,
     fontSize: 16,
@@ -165,7 +171,7 @@ function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, curren
     transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     whiteSpace: 'nowrap',
     width: '100%',
-    padding: '0 24px',
+    padding: '0 16px',
     fontFamily: 'Outfit, Inter, sans-serif',
   }
 
@@ -243,6 +249,65 @@ function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, curren
     try {
       return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     } catch { return '' }
+  }
+
+  if (isSpecialAuth) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+        <button 
+          onClick={() => cancelCall(call.id)}
+          title="Cancelar autorização"
+          style={{
+            width: 48, height: 48, borderRadius: 20, cursor: 'pointer',
+            background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s', flexShrink: 0
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+        >
+          <X size={22} />
+        </button>
+        <div style={{
+          ...baseBtnStyle,
+          width: 'auto',
+          flex: 1,
+          height: 48,
+          borderRadius: 20,
+          background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
+          backgroundSize: '300% 300%',
+          border: 'none',
+          color: 'white',
+          boxShadow: '0 4px 16px rgba(245,158,11,0.28)',
+          cursor: 'default',
+          padding: '0 12px',
+          justifyContent: 'flex-start',
+        }} className="ad-sab-active">
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
+            flexShrink: 0,
+          }} className="sab-pulse-dot" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Auth. Ativa</span>
+            <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+              {call?.guardianName ? call.guardianName.split('—')[0].trim() : 'Aguardando portaria'}
+            </span>
+          </div>
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontWeight: 600, flexShrink: 0 }}>
+            {formatTime(call?.calledAt)}
+          </span>
+        </div>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes sab-gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+          @keyframes sab-pulseDot { 0%{box-shadow:0 0 0 0 rgba(255,255,255,0.7)} 70%{box-shadow:0 0 0 8px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
+          @keyframes sab-popIn { 0%{transform:scale(0.94);opacity:0} 100%{transform:scale(1);opacity:1} }
+          .ad-sab-active { animation: sab-gradientShift 2.5s ease infinite, sab-popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+          .sab-pulse-dot { animation: sab-pulseDot 1.5s ease-out infinite; }
+        `}} />
+      </div>
+    )
   }
 
   if (isActive) {
@@ -330,6 +395,8 @@ function StudentCallButton({ aluno, currentUser, vinculo }: { aluno: any, curren
   )
 }
 
+
+
 export default function ADInnerLayout({ 
   children,
   params 
@@ -337,14 +404,22 @@ export default function ADInnerLayout({
   children: React.ReactNode, 
   params: any
 }) {
+
   const queryClient = useQueryClient();
   const [profileData, setProfileData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [switcherOpen, setSwitcherOpen] = useState(false)
+  // ── Autorização Especial ──────────────────────────────────────────────────
+  const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
+  const [specialAuthText, setSpecialAuthText] = useState('')
+  const [specialAuthSending, setSpecialAuthSending] = useState(false)
+  const [specialAuthSent, setSpecialAuthSent] = useState(false)
+  const specialAuthTextRef = useRef<HTMLTextAreaElement>(null)
 
   const { turmas = [] } = useData();
   const { adConfig, setAdLoading } = useAgendaDigital();
   const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
+  const { callStudent, addSpecialAuth } = useSaida()
   const pathname = usePathname()
   const router = useRouter()
   const paramsHook = useParams<{ slug: string }>()
@@ -466,6 +541,60 @@ export default function ADInnerLayout({
     return true
   })
 
+  // ── Handler de Autorização Especial e Chamada Normal ────────────────────
+  const handleNormalCallConfirm = useCallback(() => {
+    if (!aluno) return
+    const gName = currentUser?.nome || 'Responsável'
+    const gId = currentUser?.id || 'usr-fam'
+    callStudent(aluno.id, aluno.nome, cleanTurma, gId, gName, 'manual', undefined, aluno.foto)
+    setIsSpecialAuthModalOpen(false)
+  }, [aluno, cleanTurma, currentUser, callStudent])
+  const handleSpecialAuthConfirm = useCallback(async () => {
+    if (!specialAuthText.trim() || !aluno) return
+    setSpecialAuthSending(true)
+    try {
+      // 1. Broadcast via Supabase Realtime (updates Gestão de Chamadas instantly)
+      const newCall = addSpecialAuth(
+        aluno.id,
+        aluno.nome,
+        cleanTurma,
+        specialAuthText.trim(),
+        currentUser?.nome || 'Responsável',
+        aluno.foto || aluno.imagem1 || null,
+      )
+
+      // 2. Persist to DB so the record survives page reloads
+      await fetch('/api/saida/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: newCall.id,
+          studentId: newCall.studentId,
+          studentName: newCall.studentName,
+          studentClass: newCall.studentClass,
+          studentPhoto: newCall.studentPhoto,
+          guardianId: newCall.guardianId,
+          guardianName: newCall.guardianName,
+          operatorId: newCall.operatorId,
+          calledAt: newCall.calledAt,
+          status: 'special_auth',
+          source: 'agenda_digital',
+        })
+      }).catch(err => console.warn('[SpecialAuth] DB persist failed (call still broadcast):', err))
+
+      setSpecialAuthSent(true)
+      setTimeout(() => {
+        setIsSpecialAuthModalOpen(false)
+        setSpecialAuthText('')
+        setSpecialAuthSent(false)
+      }, 2200)
+    } catch (err) {
+      console.error('Erro ao registrar autorização especial:', err)
+    } finally {
+      setSpecialAuthSending(false)
+    }
+  }, [specialAuthText, aluno, cleanTurma, currentUser, addSpecialAuth])
+
   return (
     <>
     <AnimatePresence>
@@ -506,7 +635,222 @@ export default function ADInnerLayout({
         </motion.div>
       
 </motion.div>
-)}</AnimatePresence>
+)}
+
+{/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
+{isSpecialAuthModalOpen && (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      width: '100vw', background: 'rgba(10,10,20,0.88)',
+      zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      padding: '0 16px',
+    }}
+    onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
+  >
+    <motion.div
+      initial={{ scale: 0.92, opacity: 0, y: 24 }}
+      animate={{ scale: 1, opacity: 1, y: 0 }}
+      exit={{ scale: 0.92, opacity: 0, y: 24 }}
+      transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+      className="ad-modal-container"
+      style={{
+        background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)',
+        borderRadius: 28,
+        padding: '28px 28px 24px',
+        width: '100%',
+        maxWidth: 440,
+        boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Decorative gradient blob */}
+      <div style={{
+        position: 'absolute', top: -60, right: -60, width: 200, height: 200,
+        background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)',
+        borderRadius: '50%', pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', bottom: -40, left: -40, width: 160, height: 160,
+        background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)',
+        borderRadius: '50%', pointerEvents: 'none',
+      }} />
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(99,102,241,0.4)',
+              flexShrink: 0,
+            }}>
+              <Megaphone size={18} color="#fff" strokeWidth={2.5} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
+                Opções de Retirada
+              </h3>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.3 }}>
+                Como deseja retirar o(a) aluno(a)?
+              </p>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
+          style={{
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+            flexShrink: 0,
+          }}
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      {/* Student Card */}
+      <div style={{
+        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
+        gap: 14, marginBottom: 24, position: 'relative', zIndex: 1,
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
+          background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontWeight: 900, color: '#fff',
+          boxShadow: '0 4px 16px rgba(168,85,247,0.35)',
+        }}>
+          {aluno?.foto
+            ? <img src={aluno.foto} alt={aluno?.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : getInitials(aluno?.nome || '')
+          }
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {abbreviateName(aluno?.nome || '')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>Turma:</span>
+            <span style={{
+              fontSize: 11, fontWeight: 800, color: '#a78bfa',
+              background: 'rgba(167,139,250,0.12)', padding: '2px 8px', borderRadius: 100,
+              border: '1px solid rgba(167,139,250,0.2)',
+            }}>{cleanTurma}</span>
+          </div>
+        </div>
+        {/* Verified badge */}
+        <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="#6366f1"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        </div>
+      </div>
+
+      {/* Primary Action: Normal Call */}
+      <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
+        <button
+          onClick={handleNormalCallConfirm}
+          disabled={specialAuthSending || specialAuthSent}
+          style={{
+            width: '100%', height: 56, borderRadius: 16, border: 'none',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
+            boxShadow: '0 8px 24px rgba(16,185,129,0.3)',
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+        >
+          <Megaphone size={18} strokeWidth={2.5} />
+          <span>Eu vim buscar (Chamar Aluno)</span>
+        </button>
+      </div>
+
+      {/* Divider */}
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ou Outra Pessoa</span>
+        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+      </div>
+
+      {/* Text Field */}
+      <div style={{ position: 'relative', zIndex: 1, marginBottom: 20 }}>
+        <label style={{
+          display: 'block', fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.6)',
+          textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
+        }}>
+          Quem irá buscar + Observação <span style={{ color: '#f87171' }}>*</span>
+        </label>
+        <textarea
+          ref={specialAuthTextRef}
+          value={specialAuthText}
+          onChange={e => setSpecialAuthText(e.target.value)}
+          placeholder="Ex: Avó Maria Silva — irá buscar às 17h30, carro prata..."
+          rows={3}
+          disabled={specialAuthSending || specialAuthSent}
+          style={{
+            width: '100%', padding: '12px 14px', borderRadius: 14,
+            border: `1.5px solid ${specialAuthText.trim() ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.12)'}`,
+            background: 'rgba(255,255,255,0.05)', fontSize: 13, color: '#fff',
+            outline: 'none', resize: 'none', fontFamily: 'Outfit, sans-serif',
+            lineHeight: 1.5, boxSizing: 'border-box', transition: 'border-color 0.2s',
+          }}
+        />
+        {!specialAuthText.trim() && (
+          <p style={{ fontSize: 10, color: '#f87171', margin: '5px 0 0', fontWeight: 600 }}>
+            Campo obrigatório caso vá usar autorização especial.
+          </p>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 10, position: 'relative', zIndex: 1 }}>
+        <button
+          onClick={handleSpecialAuthConfirm}
+          disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent}
+          style={{
+            width: '100%', height: 46, borderRadius: 14, border: 'none',
+            background: specialAuthSent
+              ? 'linear-gradient(135deg, #10b981, #059669)'
+              : !specialAuthText.trim() || specialAuthSending
+                ? 'rgba(255,255,255,0.08)'
+                : 'linear-gradient(135deg, #f59e0b, #d97706)',
+            color: !specialAuthText.trim() && !specialAuthSent ? 'rgba(255,255,255,0.35)' : '#fff',
+            fontSize: 13, fontWeight: 800, cursor: specialAuthText.trim() && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
+            boxShadow: specialAuthText.trim() && !specialAuthSending && !specialAuthSent
+              ? '0 8px 24px rgba(245,158,11,0.35)'
+              : 'none',
+          }}
+        >
+          {specialAuthSent ? (
+            <><CheckCircle2 size={16} /> Autorização Enviada!</>
+          ) : specialAuthSending ? (
+            <><Loader2 size={16} className="spin-anim" /> Enviando...</>
+          ) : (
+            <><Send size={15} /> Confirmar Autorização Especial</>
+          )}
+        </button>
+      </div>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin-anim { 100% { transform: rotate(360deg); } }
+        .spin-anim { animation: spin-anim 0.9s linear infinite; }
+      `}} />
+    </motion.div>
+  </motion.div>
+)}
+</AnimatePresence>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
@@ -820,10 +1164,16 @@ export default function ADInnerLayout({
             border-radius: 6px !important;
             font-size: 8.5px !important;
             padding: 0 8px !important;
+            flex: 1 !important;
           }
           .ad-family-mini-btn svg {
             width: 9px !important;
             height: 9px !important;
+          }
+          .ad-special-auth-btn {
+            height: 40px !important;
+            border-radius: 14px !important;
+            font-size: 12px !important;
           }
         }
         .ad-student-banner {
@@ -1697,43 +2047,48 @@ export default function ADInnerLayout({
             </div>
           </div>
 
-          {/* AREA 3: AÇÕES LATERAIS (À direita) - Botão Portaria */}
+          {/* AREA 3: AÇÕES LATERAIS (À direita) - Botão Portaria + Autorização Especial */}
           {currentUser && currentUser.cargo !== 'Aluno' && (
             <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '240px' }}>
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', width: '100%' }}>
                 {adConfig?.permissoes?.chamadaAlunoPortaria !== false ? (
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <StudentCallButton aluno={aluno} currentUser={currentUser} vinculo={profileData?.vinculo} />
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                    <StudentCallButton 
+                      aluno={aluno} 
+                      currentUser={currentUser} 
+                      vinculo={profileData?.vinculo} 
+                      onOpenModal={() => { 
+                        setIsSpecialAuthModalOpen(true); 
+                      }} 
+                    />
                   </div>
                 ) : (
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 48, background: 'rgba(0,0,0,0.02)', borderRadius: 16, border: '1px dashed rgba(0,0,0,0.05)' }}>
-                    <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Chamada Indisponível</span>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 74, background: 'rgba(0,0,0,0.02)', borderRadius: 24, border: '1px dashed rgba(0,0,0,0.05)' }}>
+                    <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Indisponível</span>
                   </div>
                 )}
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0, width: '115px' }}>
                   <Link 
                     href="/agenda-digital/selecionar-aluno"
                     title="Trocar de Aluno"
                     className="ad-family-mini-btn ad-switch-student-btn"
                     style={{
-                      height: 26,
-                      padding: '0 10px',
-                      borderRadius: 8,
+                      flex: 1,
+                      minHeight: 34,
+                      padding: '0 8px',
+                      borderRadius: 16,
                       border: '1px solid rgba(99, 102, 241, 0.15)',
                       background: 'rgba(99, 102, 241, 0.06)',
                       color: 'hsl(var(--primary))',
                       display: 'flex',
+                      flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 6,
+                      gap: 4,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease-in-out',
                       boxShadow: '0 2px 8px rgba(99, 102, 241, 0.04)',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      fontFamily: 'Outfit, sans-serif',
-                      whiteSpace: 'nowrap',
                       textDecoration: 'none'
                     }}
                     onMouseEnter={e => {
@@ -1749,8 +2104,8 @@ export default function ADInnerLayout({
                       e.currentTarget.style.boxShadow = '0 2px 8px rgba(99, 102, 241, 0.04)'
                     }}
                   >
-                    <Users size={11} strokeWidth={2.5} />
-                    <span>Trocar aluno</span>
+                    <Users size={14} strokeWidth={2.5} />
+                    <span style={{ fontSize: 10, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Trocar aluno</span>
                   </Link>
 
                   <button 
@@ -1764,23 +2119,21 @@ export default function ADInnerLayout({
                     title="Sair da Conta"
                     className="ad-family-mini-btn ad-logout-btn"
                     style={{
-                      height: 26,
-                      padding: '0 10px',
-                      borderRadius: 8,
+                      flex: 1,
+                      minHeight: 34,
+                      padding: '0 8px',
+                      borderRadius: 16,
                       border: '1px solid rgba(239, 68, 68, 0.15)',
                       background: 'rgba(239, 68, 68, 0.06)',
                       color: '#ef4444',
                       display: 'flex',
+                      flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 6,
+                      gap: 4,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease-in-out',
-                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.04)',
-                      fontSize: 10,
-                      fontWeight: 800,
-                      fontFamily: 'Outfit, sans-serif',
-                      whiteSpace: 'nowrap'
+                      boxShadow: '0 2px 8px rgba(239, 68, 68, 0.04)'
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
@@ -1795,8 +2148,8 @@ export default function ADInnerLayout({
                       e.currentTarget.style.boxShadow = '0 2px 8px rgba(239, 68, 68, 0.04)'
                     }}
                   >
-                    <LogOut size={11} strokeWidth={2.5} />
-                    <span>Sair</span>
+                    <LogOut size={14} strokeWidth={2.5} />
+                    <span style={{ fontSize: 10, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Sair</span>
                   </button>
                 </div>
               </div>

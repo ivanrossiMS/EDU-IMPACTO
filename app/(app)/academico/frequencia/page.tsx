@@ -501,9 +501,9 @@ export default function FrequenciaPage() {
         if (studentDay[t.id]) {
            tempos[t.id] = studentDay[t.id]
         } else if (existingFreq && existingFreq.tempos) {
-           tempos[t.id] = existingFreq.tempos[t.id] || 'F'
+           tempos[t.id] = existingFreq.tempos[t.id] || '-'
         } else {
-           tempos[t.id] = 'F'
+           tempos[t.id] = '-'
         }
       })
       
@@ -1651,6 +1651,15 @@ export default function FrequenciaPage() {
                                     style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
                                     title="Marcar todos como Justificado"
                                   >J</button>
+                                  <button
+                                    onClick={() => setAbsencesManual(prev => {
+                                      const newData = { ...(prev[aluno.id] || {}) }
+                                      schedule.tempos.forEach((t: any) => newData[t.id] = '-')
+                                      return { ...prev, [aluno.id]: newData }
+                                    })}
+                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
+                                    title="Limpar todos (Sem registro)"
+                                  >SR</button>
                                 </div>
                               </div>
                               {schedule.tempos.map((t: any) => {
@@ -1684,6 +1693,13 @@ export default function FrequenciaPage() {
                                         style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'J' ? '#f59e0b' : 'transparent', color: currentStatus === 'J' ? '#fff' : '#64748b' }}
                                       >
                                         J
+                                      </button>
+                                      <button
+                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: '-' } }))}
+                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === '-' ? '#94a3b8' : 'transparent', color: currentStatus === '-' ? '#fff' : '#64748b' }}
+                                        title="Limpar (Sem registro)"
+                                      >
+                                        SR
                                       </button>
                                     </div>
                                   </div>

@@ -148,6 +148,8 @@ export function useSaida() {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
+  // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
+  // is ALWAYS active so all clients (including Família/mobile) receive live updates.
   const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })

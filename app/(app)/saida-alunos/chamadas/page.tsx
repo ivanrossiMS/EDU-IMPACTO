@@ -1180,6 +1180,7 @@ function ChamadasContent() {
     setStudentSearch('')
   }
 
+  const allCalls  = activeCalls.filter(c => c.status !== 'special_auth')
   const waiting   = activeCalls.filter(c => c.status === 'waiting' || c.status === 'called')
   const confirmed = activeCalls.filter(c => c.status === 'confirmed')
   const cancelled = activeCalls.filter(c => c.status === 'cancelled')
@@ -1195,6 +1196,7 @@ function ChamadasContent() {
 
     list.sort((a, b) => b._parsedTime - a._parsedTime)
 
+    if (filter === 'all')       list = list.filter(c => c.status !== 'special_auth')
     if (filter === 'waiting')   list = list.filter(c => c.status === 'waiting' || c.status === 'called')
     if (filter === 'confirmed') list = list.filter(c => c.status === 'confirmed')
     if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
@@ -1208,7 +1210,7 @@ function ChamadasContent() {
   }, [activeCalls, filter, callSearch])
 
   const FILTERS = [
-    { key: 'all'       as FilterType, label: 'Todos',       color: '#818cf8', count: mounted ? activeCalls.length : 0 },
+    { key: 'all'       as FilterType, label: 'Todos',       color: '#818cf8', count: mounted ? allCalls.length : 0 },
     { key: 'waiting'   as FilterType, label: 'Aguardando',  color: '#f59e0b', count: mounted ? waiting.length    : 0 },
     { key: 'confirmed' as FilterType, label: 'Confirmados', color: '#10b981', count: mounted ? confirmed.length  : 0 },
     { key: 'cancelled' as FilterType, label: 'Cancelados',  color: '#94a3b8', count: mounted ? cancelled.length  : 0 },
