@@ -69,6 +69,21 @@ export async function POST(req: NextRequest) {
           return
         }
 
+        const isLocalIp = (ip: string) => /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|127\.|localhost)/.test(ip)
+        
+        const allLocal = devices.every(d => d.ip && isLocalIp(d.ip))
+        const hasLocal = devices.some(d => d.ip && isLocalIp(d.ip))
+        
+        if (dispositivoId && hasLocal) {
+          send({ status: 'error', error: 'IP Privado detectado. A nuvem não pode baixar logs da rede local da escola. Use a opção 1 do Sincronizar_Catraca.sh (ou .py) no computador da portaria.' })
+          controller.close()
+          return
+        } else if (allLocal) {
+          send({ status: 'error', error: 'IPs Privados detectados nas catracas. A nuvem não pode baixar logs da rede local da escola. Use a opção 1 do Sincronizar_Catraca.sh (ou .py) no computador da portaria.' })
+          controller.close()
+          return
+        }
+
         // ── ETAPA 1: Buscar todos os logs da catraca ──────────────────────────────
         send({ status: 'fetching', message: 'Buscando registros na memória da catraca...' })
 

@@ -7,7 +7,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { 
   BookMarked, Plus, Search, Calendar, Edit, Trash2, Filter, 
   Sparkles, CheckCircle, AlertTriangle, Clock, ArrowRight, ChevronDown,
-  ArrowLeft, BookOpen, ClipboardList, ListChecks, School
+  ArrowLeft, BookOpen, ClipboardList, ListChecks, School, Printer
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { ListSkeleton } from '@/components/skeletons/ListSkeleton'
@@ -216,6 +216,148 @@ export default function ConteudosTarefasPage() {
     setModalOpen(true)
   }
 
+  const handlePrintConteudo = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const registrosDaTurma = registros.filter(r => r.turma_id === turmaSel)
+    const registrosParaImpressao = [...registrosDaTurma].sort((a, b) => b.data.localeCompare(a.data))
+
+    // Grouping records by month and year
+    const grouped: Record<string, Registro[]> = {}
+    registrosParaImpressao.forEach(r => {
+      // r.data is usually YYYY-MM-DD
+      const dateObj = new Date(r.data + 'T12:00:00')
+      const monthYear = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).toUpperCase()
+      if (!grouped[monthYear]) grouped[monthYear] = []
+      grouped[monthYear].push(r)
+    })
+
+    const dataAtual = new Date().toLocaleDateString('pt-BR')
+
+    let contentHtml = ''
+    
+    Object.keys(grouped).forEach(month => {
+      contentHtml += `
+        <div class="month-section">
+          <div class="month-title">${month}</div>
+          <table class="content-table">
+            <thead>
+              <tr>
+                <th style="width: 15%;">Data</th>
+                <th style="width: 25%;">Disciplina</th>
+                <th style="width: 60%;">Conteúdo / Observações</th>
+              </tr>
+            </thead>
+            <tbody>
+      `
+      grouped[month].forEach(r => {
+        const dataFormatada = new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR')
+        
+        let obsHtml = ''
+        if (r.observacoes) {
+          const obsClean = r.observacoes.replace(/\[Lançado por:.*?\]/g, '').replace(/\[Editado por:.*?\]/g, '').trim()
+          if (obsClean) {
+            obsHtml = `<div class="obs-text"><strong>Obs:</strong> ${obsClean.replace(/\\n/g, '<br>')}</div>`
+          }
+        }
+        
+        const conteudoFormatted = r.conteudo.replace(/\\n/g, '<br>').replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')
+
+        contentHtml += `
+              <tr>
+                <td class="col-date">${dataFormatada}</td>
+                <td class="col-disc"><strong>${r.disciplina}</strong><br><span class="badge-aulas">${r.aulas} aula(s)</span></td>
+                <td class="col-content">
+                  <div class="content-text">${conteudoFormatted}</div>
+                  ${obsHtml}
+                </td>
+              </tr>
+        `
+      })
+      contentHtml += `
+            </tbody>
+          </table>
+        </div>
+      `
+    })
+
+    if (Object.keys(grouped).length === 0) {
+      contentHtml = `<div style="text-align: center; padding: 40px; color: #64748b;">Nenhum conteúdo lançado para esta turma.</div>`
+    }
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Diário Digital - Conteúdos Lançados</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Inter:wght@400;500;600&display=swap');
+            
+            body { font-family: 'Inter', sans-serif; padding: 20px; color: #0f172a; margin: 0; background: #fff; font-size: 12px; }
+            .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 20px; }
+            .logo-placeholder { font-family: 'Outfit', sans-serif; font-weight: 900; font-size: 18px; color: #2563eb; letter-spacing: -0.5px; }
+            .title { font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 800; margin: 0; letter-spacing: -0.5px; color: #0f172a; }
+            .meta { font-size: 12px; color: #64748b; margin-top: 4px; font-weight: 500; }
+            
+            .month-section { margin-bottom: 30px; page-break-inside: avoid; }
+            .month-title { font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 800; color: #1e293b; background: #f8fafc; padding: 8px 12px; border-left: 4px solid #3b82f6; border-radius: 4px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+            
+            .content-table { width: 100%; border-collapse: collapse; }
+            .content-table th, .content-table td { border-bottom: 1px solid #f1f5f9; padding: 10px 12px; text-align: left; vertical-align: top; }
+            .content-table th { font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; background: #fafaf9; }
+            .content-table tr:nth-child(even) { background-color: #f8fafc; }
+            .content-table tr:last-child td { border-bottom: none; }
+            
+            .col-date { font-weight: 600; color: #334155; font-size: 11px; white-space: nowrap; }
+            .col-disc { font-size: 11px; color: #0f172a; }
+            .badge-aulas { display: inline-block; margin-top: 4px; font-size: 9px; padding: 2px 6px; background: #e0e7ff; color: #4338ca; border-radius: 4px; font-weight: 600; }
+            
+            .col-content { font-size: 11px; color: #334155; line-height: 1.5; }
+            .content-text { margin-bottom: 4px; }
+            .obs-text { margin-top: 6px; padding: 6px 8px; background: #fffbeb; border-left: 2px solid #f59e0b; font-size: 10px; color: #92400e; border-radius: 0 4px 4px 0; }
+            
+            .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+            .signature-row { display: flex; justify-content: space-around; margin-top: 60px; page-break-inside: avoid; }
+            .signature-box { border-top: 1px solid #cbd5e1; width: 220px; text-align: center; padding-top: 8px; font-size: 11px; color: #475569; font-weight: 600; }
+            
+            @media print {
+              body { padding: 0; }
+              @page { margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Conteúdos Lançados - ${turmaSel}</h1>
+              <div class="meta">Diário Digital | Emitido em: <strong>${dataAtual}</strong></div>
+            </div>
+            <div class="logo-placeholder">EDU-IMPACTO</div>
+          </div>
+          
+          ${contentHtml}
+
+          <div class="signature-row">
+            <div class="signature-box">Assinatura do Professor(a)</div>
+            <div class="signature-box">Visto da Coordenação</div>
+          </div>
+          
+          <div class="footer">
+            Documento gerado pelo sistema EDU-IMPACTO em ${new Date().toLocaleString('pt-BR')}
+          </div>
+          
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
   // Filtragem de Turmas para a Home
   const turmasFiltradas = turmas.filter(t =>
     (filtroAno === 'todos' || String(t.ano) === filtroAno) &&
@@ -406,13 +548,22 @@ export default function ConteudosTarefasPage() {
               </div>
             </div>
             
-            <button 
-              onClick={() => openNew()}
-              style={{ height: '44px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Plus size={16} />
-              <span>Novo Lançamento</span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                onClick={handlePrintConteudo}
+                style={{ height: '44px', padding: '0 16px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+              >
+                <Printer size={16} />
+                <span>Imprimir</span>
+              </button>
+              <button 
+                onClick={() => openNew()}
+                style={{ height: '44px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+              >
+                <Plus size={16} />
+                <span>Novo Lançamento</span>
+              </button>
+            </div>
           </div>
 
           {/* Listagem Paginada */}

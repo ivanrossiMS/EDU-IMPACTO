@@ -403,13 +403,7 @@ export default function FrequenciaPage() {
       return studentDay[tempoId]
     }
     
-    // Se já houver qualquer registro lançado para este dia nesta turma,
-    // o padrão para alunos sem registro passa a ser Falta (pois não passaram na catraca / não foram lançados).
-    const temAlgumRegistroNoDia = Object.keys(absences).some(aId => !!absences[aId]?.[dia])
-    if (temAlgumRegistroNoDia) {
-      return 'F'
-    }
-    
+    // O padrão absoluto para qualquer aluno sem registro é '-'
     return '-'
   }, [absences])
 
@@ -635,10 +629,7 @@ export default function FrequenciaPage() {
         }
       } else {
         // Não tem registro no banco para esse dia.
-        // Se a turma do aluno teve chamada lançada nesse dia (pela catraca ou manual), ele faltou (F).
-        // Se a turma não teve nenhuma chamada, assumimos Presença padrão.
-        const turmaTeveChamada = turmasComChamada.has(String(aluno.turma))
-        const defaultStatus: PresStatus = turmaTeveChamada ? 'F' : '-'
+        const defaultStatus: PresStatus = '-'
         schedule.tempos.forEach(t => {
           tempos[t.id] = defaultStatus
         })
@@ -648,18 +639,32 @@ export default function FrequenciaPage() {
       const calc = calcularFrequenciaDia(tempos, schedule.segmento)
       
       const temposFaltosos: string[] = []
+      const temposSemRegistro: string[] = []
       schedule.tempos.forEach(t => {
         if (calc.temposEfetivos[t.id] === 'F') {
           temposFaltosos.push(t.id)
         }
+        if (calc.temposEfetivos[t.id] === '-') {
+          temposSemRegistro.push(t.id)
+        }
       })
 
-      if (temposFaltosos.length > 0) {
+      // Adicionamos à lista se o aluno tiver alguma Falta Efetiva OU se estiver totalmente Sem Registro
+      if (temposFaltosos.length > 0 || temposSemRegistro.length > 0) {
         const totalTempos = schedule.tempos.length
         const isInfantilOuFundI = schedule.segmento === 'Educação Infantil' || schedule.segmento === 'Ensino Fundamental I'
-        const isFaltaTotal = isInfantilOuFundI 
-          ? !calc.presente 
-          : temposFaltosos.length === totalTempos
+        
+        let faltasStr = ''
+        const onlySemRegistro = temposSemRegistro.length > 0 && temposFaltosos.length === 0
+        
+        if (onlySemRegistro) {
+          faltasStr = 'Sem Registro'
+        } else {
+          const isFaltaTotal = isInfantilOuFundI 
+            ? !calc.presente 
+            : temposFaltosos.length === totalTempos
+          faltasStr = isFaltaTotal ? 'Falta Total' : `Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`
+        }
 
         list.push({
           id: aluno.id,
@@ -670,10 +675,11 @@ export default function FrequenciaPage() {
           turno: aluno.turno || tObj.turno || 'N/A',
           segmento: schedule.segmento,
           responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
-          faltasStr: isFaltaTotal ? 'Falta Total' : `Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`,
+          faltasStr: faltasStr,
           faltasCount: temposFaltosos.length,
           totalTempos: totalTempos,
           temposFalta: temposFaltosos,
+          temposSemRegistro: temposSemRegistro,
           horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
         })
       }
@@ -1246,8 +1252,8 @@ export default function FrequenciaPage() {
                         </span>
                       </div>
                       <div>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444', background: '#fef2f2', padding: '4px 10px', borderRadius: '20px', border: '1px solid #fee2e2' }}>
-                          {students.length} {students.length === 1 ? 'faltoso' : 'faltosos'}
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', background: '#f8fafc', padding: '4px 10px', borderRadius: '20px', border: '1px solid #cbd5e1' }}>
+                          {students.length} {students.length === 1 ? 'pendência' : 'pendências'}
                         </span>
                       </div>
                     </div>
@@ -1265,6 +1271,15 @@ export default function FrequenciaPage() {
 
                         {students.map((student, idx) => {
                           const isTotal = student.faltasStr === 'Falta Total'
+                          const isSemRegistro = student.faltasStr === 'Sem Registro'
+                          
+                          let bgAvatar = isSemRegistro ? '#f1f5f9' : (isTotal ? '#fee2e2' : '#fef3c7')
+                          let textAvatar = isSemRegistro ? '#475569' : (isTotal ? '#ef4444' : '#d97706')
+                          
+                          let bgBadge = isSemRegistro ? '#f1f5f9' : (isTotal ? '#fee2e2' : '#fef3c7')
+                          let textBadge = isSemRegistro ? '#475569' : (isTotal ? '#991b1b' : '#92400e')
+                          let borderBadge = isSemRegistro ? '#cbd5e1' : (isTotal ? '#fecaca' : '#fde68a')
+
                           return (
                             <div 
                               key={student.id} 
@@ -1283,8 +1298,8 @@ export default function FrequenciaPage() {
                                   width: '32px', 
                                   height: '32px', 
                                   borderRadius: '50%', 
-                                  background: isTotal ? '#fee2e2' : '#fef3c7', 
-                                  color: isTotal ? '#ef4444' : '#d97706', 
+                                  background: bgAvatar, 
+                                  color: textAvatar, 
                                   display: 'flex', 
                                   alignItems: 'center', 
                                   justifyContent: 'center',
@@ -1310,9 +1325,9 @@ export default function FrequenciaPage() {
                                   borderRadius: '6px',
                                   fontSize: '11px',
                                   fontWeight: 800,
-                                  background: isTotal ? '#fee2e2' : '#fef3c7',
-                                  color: isTotal ? '#991b1b' : '#92400e',
-                                  border: `1px solid ${isTotal ? '#fecaca' : '#fde68a'}`,
+                                  background: bgBadge,
+                                  color: textBadge,
+                                  border: `1px solid ${borderBadge}`,
                                   whiteSpace: 'nowrap'
                                 }}>
                                   {student.faltasStr}
