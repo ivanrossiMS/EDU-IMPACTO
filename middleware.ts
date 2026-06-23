@@ -25,6 +25,7 @@ const PUBLIC_PATHS = [
   '/api/test',
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
+  '/api/academico/totem-frequencia', // catraca/totem — auth por token próprio (API_TOTEM_SECRET)
   '/api/saida/config',  // TV e tablet precisam acessar sem redirect
   '/api/saida/calls',   // TV e tablet precisam acessar sem redirect
   '/recibo',            // recibos públicos
