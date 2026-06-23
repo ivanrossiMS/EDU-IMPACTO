@@ -1654,9 +1654,9 @@ export default function FrequenciaPage() {
                                 </div>
                               </div>
                               {schedule.tempos.map((t: any) => {
-                                let defaultStatus: PresStatus = 'F'
+                                let defaultStatus: PresStatus = '-'
                                 if (existingFreq && existingFreq.tempos) {
-                                  defaultStatus = existingFreq.tempos[t.id] || 'F'
+                                  defaultStatus = existingFreq.tempos[t.id] || '-'
                                 } else if (existingFreq && !existingFreq.tempos) {
                                   defaultStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
                                 }
