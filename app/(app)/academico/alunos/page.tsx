@@ -16,6 +16,7 @@ import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
+import { formatPhone } from '@/lib/utils'
 function formatName(fullName: string) {
   if (!fullName) return ''
   const parts = fullName.trim().split(/\s+/)
@@ -1998,7 +1999,7 @@ export default function AlunosPage() {
                       </div>
                       <div style={{ flex: '1' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
-                        <input className="form-input" placeholder="(00) 00000-0000" value={formData.aluno.telefone || ''} onChange={e => handleInputChange('aluno', 'telefone', e.target.value)} />
+                        <input className="form-input" placeholder="(00)00000-0000" value={formData.aluno.telefone || ''} onChange={e => handleInputChange('aluno', 'telefone', formatPhone(e.target.value))} />
                       </div>
                       <div style={{ flex: '2' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>E-mail</label>
@@ -2314,7 +2315,7 @@ export default function AlunosPage() {
                       </div>
                       <div style={{ flex: '1.5' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone</label>
-                        <input className="form-input" placeholder="(00) 00000-0000" value={resp.telefone || ''} onChange={e => handleInputChange('responsaveis', 'telefone', e.target.value, index)} />
+                        <input className="form-input" placeholder="(00)00000-0000" value={resp.telefone || ''} onChange={e => handleInputChange('responsaveis', 'telefone', formatPhone(e.target.value), index)} />
                       </div>
                     </div>
 

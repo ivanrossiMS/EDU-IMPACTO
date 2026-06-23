@@ -7,6 +7,7 @@ import { UpdatingIndicator } from '@/components/skeletons/States'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import { useData } from '@/lib/dataContext'
+import { formatPhone } from '@/lib/utils'
 
 export default function ResponsaveisPage() {
   const queryClient = useQueryClient()
@@ -674,7 +675,7 @@ export default function ResponsaveisPage() {
                       </div>
                       <div style={{ flex: '1.5' }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Telefone *</label>
-                        <input className="form-input" placeholder="(00) 00000-0000" value={resp.telefone} onChange={e => handleInputChange('telefone', e.target.value, index)} />
+                        <input className="form-input" placeholder="(00)00000-0000" value={resp.telefone} onChange={e => handleInputChange('telefone', formatPhone(e.target.value), index)} />
                       </div>
                     </div>
 
