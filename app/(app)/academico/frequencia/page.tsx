@@ -816,8 +816,8 @@ export default function FrequenciaPage() {
             <tbody>
               ${turmaStudents.map(a => `
                 <tr>
-                  <td style="font-weight: 600; font-size: 12px;">${a.nome}</td>
-                  <td style="color: #64748b; font-size: 10px;">#${a.id}</td>
+                  <td style="font-weight: 600; font-size: 11px;">${a.nome}</td>
+                  <td style="color: #64748b; font-size: 9px;">#${a.id}</td>
                   ${schedule.tempos.map(() => `<td style="text-align: center;"><div class="check-box"></div></td>`).join('')}
                 </tr>
               `).join('')}
@@ -833,33 +833,33 @@ export default function FrequenciaPage() {
           <title>Lista de Verificação em Sala - ${formattedDate}</title>
           <style>
             body { font-family: 'Outfit', 'Inter', sans-serif; padding: 20px; color: #0f172a; margin: 0; background: #fff; }
-            .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
-            .logo-placeholder { font-weight: 900; font-size: 18px; color: #2563eb; letter-spacing: -1px; }
-            .title { font-size: 22px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
-            .meta { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
+            .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+            .logo-placeholder { font-weight: 900; font-size: 16px; color: #2563eb; letter-spacing: -1px; }
+            .title { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
+            .meta { font-size: 11px; color: #64748b; margin-top: 4px; font-weight: 500; }
             
-            .turma-section { margin-bottom: 20px; page-break-inside: avoid; }
-            .turma-header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; background: #f8fafc; padding: 8px 12px; border-left: 4px solid #3b82f6; border-radius: 4px; }
-            .turma-header h3 { margin: 0; font-size: 15px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px; }
-            .badge { font-size: 9px; padding: 2px 8px; background: #e2e8f0; color: #475569; border-radius: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+            .turma-section { margin-bottom: 12px; page-break-inside: avoid; }
+            .turma-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; background: #f8fafc; padding: 6px 10px; border-left: 4px solid #3b82f6; border-radius: 4px; }
+            .turma-header h3 { margin: 0; font-size: 13px; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 8px; }
+            .badge { font-size: 8px; padding: 2px 6px; background: #e2e8f0; color: #475569; border-radius: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
             
             table { width: 100%; border-collapse: collapse; }
-            th, td { border-bottom: 1px solid #f1f5f9; padding: 6px 12px; text-align: left; }
-            th { font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; background: #fafaf9; }
+            th, td { border-bottom: 1px solid #f1f5f9; padding: 4px 8px; text-align: left; }
+            th { font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; background: #fafaf9; }
             tr:nth-child(even) { background-color: #f8fafc; }
             tr:last-child td { border-bottom: none; }
-            .check-box { width: 14px; height: 14px; border: 1.5px solid #cbd5e1; border-radius: 3px; display: inline-block; }
+            .check-box { width: 12px; height: 12px; border: 1.5px solid #cbd5e1; border-radius: 2px; display: inline-block; }
             
-            .instructions { background: #fef8c4; border: 1px solid #fde047; padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 12px; color: #854d0e; display: flex; gap: 12px; align-items: center; }
-            .instructions-icon { font-size: 20px; }
+            .instructions { background: #fef8c4; border: 1px solid #fde047; padding: 10px; border-radius: 6px; margin-bottom: 16px; font-size: 11px; color: #854d0e; display: flex; gap: 10px; align-items: center; }
+            .instructions-icon { font-size: 18px; }
             
-            .footer { margin-top: 30px; text-align: center; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-            .signature-row { display: flex; justify-content: space-around; margin-top: 50px; }
-            .signature-box { border-top: 1px solid #cbd5e1; width: 200px; text-align: center; padding-top: 8px; font-size: 11px; color: #475569; font-weight: 600; }
+            .footer { margin-top: 20px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+            .signature-row { display: flex; justify-content: space-around; margin-top: 30px; }
+            .signature-box { border-top: 1px solid #cbd5e1; width: 180px; text-align: center; padding-top: 6px; font-size: 10px; color: #475569; font-weight: 600; }
             
             @media print {
               body { padding: 0; }
-              @page { margin: 1.5cm; }
+              @page { margin: 0.8cm; }
               .instructions { display: none; }
             }
           </style>
@@ -1880,13 +1880,7 @@ export default function FrequenciaPage() {
               <Info size={16} />
               <span>Regras de Cálculo</span>
             </button>
-            <button 
-              onClick={handleOpenRelatorio}
-              style={{ height: '42px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-            >
-              <Printer size={16} />
-              <span>Relatório</span>
-            </button>
+
             <button 
               onClick={() => {
                 setRegistroManualAno(filtroAno)
@@ -2351,15 +2345,9 @@ export default function FrequenciaPage() {
 
         {/* Ações da Turma */}
         <div style={{ display: 'flex', gap: '8px' }}>
+
           <button 
-            onClick={handleOpenRelatorio}
-            style={{ height: '42px', padding: '0 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-          >
-            <Printer size={14} />
-            <span>Relatório</span>
-          </button>
-          <button 
-            onClick={handleExportar}
+            onClick={() => handleExportar()}
             style={{ height: '42px', padding: '0 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
           >
             <Download size={14} />
