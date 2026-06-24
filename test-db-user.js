@@ -8,8 +8,9 @@ const supabase = createClient(
 
 async function run() {
   const { data, error } = await supabase
-    .from('simulados_disciplinas')
-    .select('*, system_users(nome)')
+    .from('system_users')
+    .select('*')
+    .eq('id', 'd7592809-9eff-4529-b6e1-044ed0e7e363')
     
   console.log("Error:", error)
   console.log("Data:", JSON.stringify(data, null, 2))
