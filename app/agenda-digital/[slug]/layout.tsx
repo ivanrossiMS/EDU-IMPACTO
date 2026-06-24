@@ -243,8 +243,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   const specialCount = new Set(specialAuthCalls.map(c => c.studentId)).size
 
   // Is the current student's call specifically active or special?
-  const call = myCalls.find(c => String(c.studentId) === String(aluno?.id))
-  const isBlocked = call?.status === 'blocked'
+  const myCall = myCalls.find(c => String(c.studentId) === String(aluno?.id))
+  const isBlocked = myCall?.status === 'blocked'
 
   // The button should be green ONLY if there is a confirmed call and NO pending calls AND NO active special authorizations
   const isConfirmed = (hasConfirmed && !hasPending && !hasSpecialAuth) || localConfirmed
