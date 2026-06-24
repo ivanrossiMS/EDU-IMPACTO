@@ -233,16 +233,36 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
   }, [activeCalls, gId, meusAlunosIds])
 
-  const pendingCalls = myCalls.filter(c => c.status === 'waiting' || c.status === 'called')
-  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed')
-  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth')
+  const [pendingStudentIds, confirmedStudentIds, specialStudentIds] = React.useMemo(() => {
+    const pending = new Set<string>()
+    const confirmed = new Set<string>()
+    const special = new Set<string>()
 
-  const hasPending = pendingCalls.length > 0
-  const hasConfirmed = confirmedCalls.length > 0
-  const hasSpecialAuth = specialAuthCalls.length > 0
+    for (const c of myCalls) {
+      const sId = String(c.studentId)
+      if (pending.has(sId) || confirmed.has(sId) || special.has(sId)) continue
+      
+      if (c.status === 'waiting' || c.status === 'called') {
+        pending.add(sId)
+      } else if (c.status === 'confirmed') {
+        confirmed.add(sId)
+      } else if (c.status === 'special_auth') {
+        special.add(sId)
+      }
+    }
+    return [pending, confirmed, special]
+  }, [myCalls])
 
-  const pendingCount = new Set(pendingCalls.map(c => c.studentId)).size
-  const specialCount = new Set(specialAuthCalls.map(c => c.studentId)).size
+  const pendingCalls = myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && pendingStudentIds.has(String(c.studentId)))
+  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed' && confirmedStudentIds.has(String(c.studentId)))
+  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && specialStudentIds.has(String(c.studentId)))
+
+  const hasPending = pendingStudentIds.size > 0
+  const hasConfirmed = confirmedStudentIds.size > 0
+  const hasSpecialAuth = specialStudentIds.size > 0
+
+  const pendingCount = pendingStudentIds.size
+  const specialCount = specialStudentIds.size
 
   // Is the current student's call specifically active or special?
   const myCall = myCalls.find(c => String(c.studentId) === String(aluno?.id))
