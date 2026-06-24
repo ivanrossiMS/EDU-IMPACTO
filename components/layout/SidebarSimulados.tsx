@@ -17,7 +17,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/simulados', icon: <LayoutDashboard size={18} /> },
-  { label: 'Simulados & Provas', href: '/simulados/gerenciamento', icon: <PenTool size={18} /> },
+  { label: 'Gerenciamento', href: '/simulados/gerenciamento', icon: <PenTool size={18} /> },
+  { label: 'Simulados', href: '/simulados/lista', icon: <FileText size={18} /> },
   { label: 'Bimestres', href: '/simulados/cadastros/bimestres', icon: <Layers size={18} /> },
   { label: 'Disciplinas', href: '/simulados/cadastros/disciplinas', icon: <BookOpen size={18} /> },
   { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
