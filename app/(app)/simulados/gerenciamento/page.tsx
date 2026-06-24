@@ -106,16 +106,16 @@ export default function GerenciamentoSimuladosPage() {
           </div>
         </div>
 
-        <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, overflow: 'hidden', paddingBottom: menuOpen ? 100 : 0 }}>
+        <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Título</th>
+                <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', borderTopLeftRadius: 20 }}>Título</th>
                 <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Séries</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Criação</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Progresso (Questões)</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
-                <th style={{ padding: '16px 24px', textAlign: 'right', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ações</th>
+                <th style={{ padding: '16px 24px', textAlign: 'right', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', borderTopRightRadius: 20 }}>Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -131,9 +131,9 @@ export default function GerenciamentoSimuladosPage() {
                     Nenhum simulado encontrado.
                   </td>
                 </tr>
-              ) : filtered.map(s => (
-                <tr key={s.id} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', transition: 'background 0.2s' }}>
-                  <td style={{ padding: '20px 24px' }}>
+              ) : filtered.map((s, index) => (
+                <tr key={s.id} style={{ borderBottom: index === filtered.length - 1 ? 'none' : '1px solid hsl(var(--border-subtle))', transition: 'background 0.2s' }}>
+                  <td style={{ padding: '20px 24px', borderBottomLeftRadius: index === filtered.length - 1 ? 20 : 0 }}>
                     <div style={{ fontWeight: 700, color: 'hsl(var(--text-primary))', fontSize: 15, marginBottom: 4 }}>{s.titulo}</div>
                     <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 13 }}>Aplicação: {s.dataAplicacao?.split('-').reverse().join('/') || '-'}</div>
                   </td>
@@ -162,7 +162,7 @@ export default function GerenciamentoSimuladosPage() {
                       <span style={{ padding: '6px 12px', borderRadius: 100, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Rascunho</span>
                     )}
                   </td>
-                  <td style={{ padding: '20px 24px', textAlign: 'right', position: 'relative' }}>
+                  <td style={{ padding: '20px 24px', textAlign: 'right', position: 'relative', borderBottomRightRadius: index === filtered.length - 1 ? 20 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
                       <Link href={`/simulados/imprimir/${s.id}`} target="_blank" style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(100, 116, 139, 0.1)', color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', textDecoration: 'none' }}>
                         <Printer size={16} />
