@@ -1365,15 +1365,15 @@ body::before {
   
   background-image: 
     /* Dotted Grid (Arc Browser style) */
-    radial-gradient(rgba(99, 102, 241, 0.035) 1px, transparent 1px),
-    radial-gradient(rgba(139, 92, 246, 0.025) 1px, transparent 1px),
+    radial-gradient(rgba(99, 102, 241, 0.12) 1px, transparent 1px),
+    radial-gradient(rgba(139, 92, 246, 0.08) 1px, transparent 1px),
     
     /* Mesh Gradient Orbs (Stripe / Linear style) */
-    radial-gradient(circle at 10% 0%, rgba(243, 247, 255, 1) 0%, transparent 45%),
-    radial-gradient(circle at 90% 10%, rgba(246, 242, 255, 1) 0%, transparent 40%),
-    radial-gradient(circle at 0% 100%, rgba(238, 244, 255, 1) 0%, transparent 45%),
-    radial-gradient(circle at 100% 100%, rgba(248, 250, 255, 1) 0%, transparent 45%),
-    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.9) 0%, transparent 60%);
+    radial-gradient(circle at 10% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(139, 92, 246, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 0% 100%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(236, 72, 153, 0.10) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5) 0%, transparent 60%);
     
   background-size: 
     24px 24px, 
@@ -1401,12 +1401,12 @@ body::after {
   
   background-image: 
     /* Curved lines (Arcs) */
-    radial-gradient(ellipse at 10% 50%, transparent 60%, rgba(99, 102, 241, 0.02) 60.5%, rgba(99, 102, 241, 0.02) 61%, transparent 61.5%),
-    radial-gradient(ellipse at 90% 50%, transparent 65%, rgba(139, 92, 246, 0.02) 65.5%, rgba(139, 92, 246, 0.02) 66%, transparent 66.5%),
+    radial-gradient(ellipse at 10% 50%, transparent 60%, rgba(99, 102, 241, 0.08) 60.5%, rgba(99, 102, 241, 0.08) 61%, transparent 61.5%),
+    radial-gradient(ellipse at 90% 50%, transparent 65%, rgba(139, 92, 246, 0.08) 65.5%, rgba(139, 92, 246, 0.08) 66%, transparent 66.5%),
     
     /* Hollow circles */
-    radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.03) 20.5%, rgba(59, 130, 246, 0.03) 21%, transparent 21.5%),
-    radial-gradient(circle at 25% 85%, transparent 15%, rgba(139, 92, 246, 0.025) 15.5%, rgba(139, 92, 246, 0.025) 16%, transparent 16.5%),
+    radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.12) 20.5%, rgba(59, 130, 246, 0.12) 21%, transparent 21.5%),
+    radial-gradient(circle at 25% 85%, transparent 15%, rgba(139, 92, 246, 0.10) 15.5%, rgba(139, 92, 246, 0.10) 16%, transparent 16.5%),
     
     /* Glass / Light reflections */
     linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.5) 30%, transparent 40%),
@@ -1421,10 +1421,10 @@ body::after {
 @media (max-width: 768px) {
   body::before {
     background-image: 
-      radial-gradient(rgba(99, 102, 241, 0.025) 1px, transparent 1px),
-      radial-gradient(circle at 20% 10%, rgba(243, 247, 255, 1) 0%, transparent 50%),
-      radial-gradient(circle at 80% 90%, rgba(246, 242, 255, 1) 0%, transparent 50%),
-      radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.9) 0%, transparent 60%);
+      radial-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+      radial-gradient(circle at 20% 10%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(139, 92, 246, 0.12) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5) 0%, transparent 60%);
     background-size: 
       24px 24px, 
       100% 100%, 100% 100%, 100% 100%;
@@ -1432,7 +1432,7 @@ body::after {
   
   body::after {
     background-image: 
-      radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.02) 20.5%, rgba(59, 130, 246, 0.02) 21%, transparent 21.5%),
+      radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.10) 20.5%, rgba(59, 130, 246, 0.10) 21%, transparent 21.5%),
       linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.4) 40%, transparent 50%);
   }
 }
