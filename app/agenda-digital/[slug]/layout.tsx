@@ -14,6 +14,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams } from 'next/navigation'
 import React, { use, useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
@@ -32,6 +33,41 @@ function abbreviateName(name: string): string {
     return p.charAt(0).toUpperCase() + '.';
   }).join(' ');
   return `${first} ${middle} ${last}`;
+}
+
+function PortalWrapper({ isOpen, children }: { isOpen: boolean, children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+      // Também previne a rolagem do wrapper principal
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'auto'
+    }
+    return () => {
+      document.body.style.overflow = ''
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'auto'
+    }
+  }, [isOpen])
+
+  if (!mounted || typeof document === 'undefined') return null
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && children}
+    </AnimatePresence>,
+    document.body
+  )
 }
 
 function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void }) {
@@ -597,10 +633,9 @@ export default function ADInnerLayout({
 
   return (
     <>
-    <AnimatePresence>
-{/* Student Switcher Overlay */}
-    {switcherOpen && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
+    {/* Student Switcher Overlay */}
+    <PortalWrapper isOpen={switcherOpen}>
+        <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
         width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
         <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -633,12 +668,11 @@ export default function ADInnerLayout({
             ))}
           </div>
         </motion.div>
-      
-</motion.div>
-)}
+      </motion.div>
+    </PortalWrapper>
 
 {/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
-{isSpecialAuthModalOpen && (
+<PortalWrapper isOpen={isSpecialAuthModalOpen}>
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -848,8 +882,7 @@ export default function ADInnerLayout({
       `}} />
     </motion.div>
   </motion.div>
-)}
-</AnimatePresence>
+</PortalWrapper>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
