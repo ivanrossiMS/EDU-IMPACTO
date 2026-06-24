@@ -647,7 +647,7 @@ export default function ADInnerLayout({
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/${aluno?.id}/comunicados`, icon: <Bell size={18} /> },
 
-    { label: 'Fotos/Vídeos', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
+    { label: 'Mídia', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: `/agenda-digital/${aluno?.id}/calendario`, icon: <Calendar size={18} /> },
     { label: 'Financeiro', href: `/agenda-digital/${aluno?.id}/financeiro`, icon: <DollarSign size={18} /> },
     { label: 'Frequência', href: `/agenda-digital/${aluno?.id}/frequencia`, icon: <BarChart2 size={18} /> },

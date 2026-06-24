@@ -560,7 +560,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           overflow: 'hidden'
         }}
       >
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', zIndex: 1, maxWidth: '70%' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', zIndex: 1 }}>
           <div style={{ border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>
             <Info size={16} color="#fff" strokeWidth={2.5} />
           </div>
@@ -571,19 +571,6 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             <p style={{ margin: 0, fontSize: 15, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6, fontWeight: 500 }}>
               A entrada do aluno é computada automaticamente através da catraca de acesso. A saída é registrada no momento em que você chama o aluno pelo painel.
             </p>
-          </div>
-        </div>
-
-        {/* Catraca Illustration Overlay */}
-        <div className="ad-banner-catraca" style={{ position: 'absolute', right: -10, bottom: -20, opacity: 0.95, zIndex: 0 }}>
-          <div style={{ width: 140, height: 200, background: '#f8fafc', borderTopLeftRadius: 16, borderTopRightRadius: 16, position: 'relative', boxShadow: '-10px 10px 40px rgba(0,0,0,0.3)', border: '4px solid #fff' }}>
-            <div style={{ width: 64, height: 90, background: '#0f172a', position: 'absolute', top: 24, left: 34, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 4px 10px rgba(0,0,0,0.5)' }}>
-               <div style={{ width: 36, height: 36, border: '2.5px solid #22c55e', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                 <Lock size={16} color="#22c55e" strokeWidth={3} />
-               </div>
-            </div>
-            <div style={{ width: 80, height: 16, background: '#e2e8f0', position: 'absolute', top: 140, left: 26, borderRadius: 8 }} />
-            <div style={{ width: 60, height: 60, background: '#f1f5f9', position: 'absolute', top: 60, right: -40, borderRadius: '0 30px 30px 0', border: '4px solid #fff', borderLeft: 'none' }} />
           </div>
         </div>
       </motion.div>

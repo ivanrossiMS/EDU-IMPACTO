@@ -45,7 +45,7 @@ const menuItems = [
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
 
-  { id: 'momentos', label: 'Fotos/Vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
+  { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
   { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
@@ -132,7 +132,7 @@ export function ADSidebar() {
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
 
-        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
+        { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
         { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
@@ -142,7 +142,7 @@ export function ADSidebar() {
       mobileTabs = [
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
 
-        { id: 'momentos', label: 'fotos/vídeos', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
+        { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
         { id: 'frequencia', label: 'Frequência', icon: BarChart2, href: `/agenda-digital/${alunoId}/frequencia` },
@@ -151,7 +151,7 @@ export function ADSidebar() {
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'fotos/vídeos', 'Agenda', 'Perfil'].includes(item.label)
+          return ['comunicados', 'Mídia', 'Agenda', 'Perfil'].includes(item.label)
         }
         if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
         if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
@@ -459,7 +459,7 @@ export function ADSidebar() {
 
                   {[
                     { label: 'Comunicados', href: `/agenda-digital/${alunoId}/comunicados`, icon: Bell },
-                    { label: 'Fotos/Vídeos', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
+                    { label: 'Mídia', href: `/agenda-digital/${alunoId}/momentos`, icon: ImageIcon },
                     { label: 'Calendário', href: `/agenda-digital/${alunoId}/calendario`, icon: Calendar },
                     { label: 'Financeiro', href: `/agenda-digital/${alunoId}/financeiro`, icon: DollarSign },
                     { label: 'Frequência', href: `/agenda-digital/${alunoId}/frequencia`, icon: BarChart2 },
@@ -468,7 +468,7 @@ export function ADSidebar() {
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
-                      return ['Comunicados', 'Fotos/Vídeos', 'Calendário', 'Meu Perfil'].includes(item.label)
+                      return ['Comunicados', 'Mídia', 'Calendário', 'Meu Perfil'].includes(item.label)
                     }
                     if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
                     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false

@@ -315,38 +315,65 @@ export default function ADPerfilPage() {
                     return (
                       <div key={i} style={{ padding: 20, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))', display: 'flex', flexDirection: 'column', gap: 16, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#c7d2fe'} onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div 
-                              onClick={() => {
-                                if (resp.id) {
-                                  setSelectedRespId(resp.id)
-                                  fileInputRef.current?.click()
-                                }
-                              }}
-                              style={{ 
-                                width: 44, height: 44, borderRadius: 14, 
-                                background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                                fontWeight: 800, color: '#475569', fontSize: 16,
-                                position: 'relative', overflow: 'hidden', cursor: resp.id ? 'pointer' : 'default'
-                              }}
-                            >
-                              {uploadingAvatarId === resp.id ? (
-                                <Loader2 size={20} className="animate-spin" color="#475569" />
-                              ) : displayFoto ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={displayFoto} alt={resp.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                getInitials(resp.nome)
-                              )}
-                              
-                              {/* Overlay de hover para edição */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                            <div style={{ position: 'relative' }}>
+                              <div 
+                                onClick={() => {
+                                  if (resp.id) {
+                                    setSelectedRespId(resp.id)
+                                    fileInputRef.current?.click()
+                                  }
+                                }}
+                                style={{ 
+                                  width: 62, height: 62, borderRadius: 20, 
+                                  background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                  fontWeight: 800, color: '#475569', fontSize: 20,
+                                  position: 'relative', overflow: 'hidden', cursor: resp.id ? 'pointer' : 'default',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                                }}
+                              >
+                                {uploadingAvatarId === resp.id ? (
+                                  <Loader2 size={24} className="animate-spin" color="#475569" />
+                                ) : displayFoto ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={displayFoto} alt={resp.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  getInitials(resp.nome)
+                                )}
+                                
+                                {/* Overlay de hover para edição */}
+                                {resp.id && !uploadingAvatarId && (
+                                  <div className="avatar-edit-overlay" style={{
+                                    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                                    background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    opacity: 0, transition: 'opacity 0.2s'
+                                  }}>
+                                    <Camera size={20} color="white" />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Ícone fixo indicador de edição */}
                               {resp.id && !uploadingAvatarId && (
-                                <div className="avatar-edit-overlay" style={{
-                                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-                                  background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  opacity: 0, transition: 'opacity 0.2s'
-                                }}>
-                                  <Camera size={18} color="white" />
+                                <div 
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: -4,
+                                    right: -4,
+                                    background: '#4f46e5',
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '2.5px solid #ffffff',
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                                    pointerEvents: 'none',
+                                    zIndex: 2
+                                  }}
+                                >
+                                  <Camera size={12} color="#ffffff" strokeWidth={2.5} />
                                 </div>
                               )}
                             </div>
