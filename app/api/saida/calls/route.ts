@@ -76,12 +76,21 @@ export async function POST(request: Request) {
       }
       
       const rows = body.map(buildRow)
+      
+      // Buscar status anterior para evitar disparos duplicados de notificação
+      const ids = rows.map((r: any) => r.id)
+      const { data: existingRows } = await supabase.from('saida_calls').select('id, dados').in('id', ids)
+      const existingStatusMap = new Map((existingRows || []).map(r => [r.id, r.dados?.status]))
+
       const { error } = await supabase.from('saida_calls').upsert(rows)
       if (error) throw new Error(error.message)
       
       // Processar Notificações de Saída
       for (const row of rows) {
-        if (row.dados?.status === 'confirmed' && row.dados?.studentId) {
+        const wasConfirmed = existingStatusMap.get(row.id) === 'confirmed'
+        const isConfirmed = row.dados?.status === 'confirmed'
+
+        if (isConfirmed && !wasConfirmed && row.dados?.studentId) {
           try {
             const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
             const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
@@ -109,10 +118,17 @@ export async function POST(request: Request) {
     }
 
     const row = buildRow(body)
+
+    // Buscar status anterior
+    const { data: existingRow } = await supabase.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
+    const wasConfirmed = existingRow?.dados?.status === 'confirmed'
+
     const { data, error } = await supabase.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
 
-    if (data.dados?.status === 'confirmed' && data.dados?.studentId) {
+    const isConfirmed = data.dados?.status === 'confirmed'
+
+    if (isConfirmed && !wasConfirmed && data.dados?.studentId) {
       try {
         const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
         const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
