@@ -249,7 +249,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   const isBlocked = myCall?.status === 'blocked'
 
   // The button should be green ONLY if there is a confirmed call and NO pending calls AND NO active special authorizations
-  const isConfirmed = (hasConfirmed && !hasPending && !hasSpecialAuth) || localConfirmed
+  const isConfirmed = (!hasPending && !hasSpecialAuth) && (hasConfirmed || localConfirmed)
 
   // We show active state if there is any pending call
   const isActiveState = hasPending
