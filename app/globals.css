@@ -1328,7 +1328,7 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
    ========================================================================== */
 
 /* Force global light variables to avoid conflicts with dark mode */
-body {
+.agenda-digital-wrapper {
   --bg-base: 220 20% 96%;
   --bg-surface: 0 0% 100%;
   --bg-elevated: 220 18% 94%;
@@ -1350,7 +1350,7 @@ body {
 }
 
 /* Base Premium Mesh & Grid */
-body::before {
+.agenda-digital-wrapper::before {
   content: '';
   position: fixed;
   top: 0;
@@ -1389,7 +1389,7 @@ body::before {
 }
 
 /* Decorative Geometric Elements (Framer / Modern Minimalist) */
-body::after {
+.agenda-digital-wrapper::after {
   content: '';
   position: fixed;
   top: 0;
@@ -1419,7 +1419,7 @@ body::after {
 
 /* Mobile Adjustments (Responsive & Performance) */
 @media (max-width: 768px) {
-  body::before {
+  .agenda-digital-wrapper::before {
     background-image: 
       radial-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
       radial-gradient(circle at 20% 10%, rgba(59, 130, 246, 0.12) 0%, transparent 50%),
@@ -1430,7 +1430,7 @@ body::after {
       100% 100%, 100% 100%, 100% 100%;
   }
   
-  body::after {
+  .agenda-digital-wrapper::after {
     background-image: 
       radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.10) 20.5%, rgba(59, 130, 246, 0.10) 21%, transparent 21.5%),
       linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.4) 40%, transparent 50%);
