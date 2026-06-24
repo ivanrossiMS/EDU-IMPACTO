@@ -124,7 +124,7 @@ export default function GerenciamentoSimuladosPage() {
                   </td>
                   <td style={{ padding: '20px 24px' }}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {(s.series || []).map((serie: string) => (
+                      {(s.turmas || []).map((serie: string) => (
                         <span key={serie} style={{ padding: '4px 8px', borderRadius: 6, background: 'rgba(100, 116, 139, 0.1)', color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600 }}>{serie}</span>
                       ))}
                     </div>

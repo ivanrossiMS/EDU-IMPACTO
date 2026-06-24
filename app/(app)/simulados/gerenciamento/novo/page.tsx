@@ -88,10 +88,9 @@ export default function NovoSimuladoPage() {
     try {
       const { data: simData, error: simError } = await supabase.from('simulados').insert([{
         titulo,
-        descricao,
         data_aplicacao: dataAplicacao,
         id_bimestre: bimestreId || null,
-        series,
+        turmas: series,
         status: 'rascunho'
       }]).select().single()
 
@@ -113,7 +112,7 @@ export default function NovoSimuladoPage() {
       router.push('/simulados/gerenciamento')
     } catch (err) {
       console.error(err)
-      alert('Erro ao criar simulado.')
+      alert('Erro ao criar simulado: ' + (err.message || JSON.stringify(err)))
     } finally {
       setLoading(false)
     }
