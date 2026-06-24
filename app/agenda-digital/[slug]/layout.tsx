@@ -220,6 +220,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     return meusAlunos.map((a: any) => String(a.id))
   }, [meusAlunos])
 
+  const gId = currentUser.id || 'usr-fam'
+
   // Find all active/recent calls for this guardian
   const myCalls = React.useMemo(() => {
     const calls = activeCalls.filter(c => 
