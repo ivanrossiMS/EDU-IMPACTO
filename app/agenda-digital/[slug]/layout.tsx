@@ -107,13 +107,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
           const isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
           
           if (isToday) {
-            // If we have a call object, verify it's the SAME call.
-            // If it's a different callId, it's a new call, ignore cache.
-            if (call && parsed.callId && call.id !== parsed.callId) {
-              setLocalConfirmed(false)
-            } else {
-              setLocalConfirmed(true)
-            }
+            setLocalConfirmed(true)
           } else {
             // Old cache from yesterday
             setLocalConfirmed(false)
