@@ -446,7 +446,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               justifyContent: 'center',
               boxShadow: '0 4px 12px rgba(0, 210, 255, 0.15)'
             }}>
-              <Bell size={22} color="#00D2FF" style={{ animation: 'floatBg 4s ease-in-out infinite' }} />
+              <Bell size={22} color="#00D2FF" />
             </div>
             <div>
               <h2 className="ad-com-header-title" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>

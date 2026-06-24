@@ -35,45 +35,22 @@ function abbreviateName(name: string): string {
   return `${first} ${middle} ${last}`;
 }
 
-function PortalWrapper({ isOpen, children }: { isOpen: boolean, children: React.ReactNode }) {
+function PortalWrapper({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
   
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-      // Também previne a rolagem do wrapper principal
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'auto'
-    }
-    return () => {
-      document.body.style.overflow = ''
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'auto'
-    }
-  }, [isOpen])
-
   if (!mounted || typeof document === 'undefined') return null
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && children}
-    </AnimatePresence>,
-    document.body
-  )
+  return createPortal(children, document.body)
 }
 
 function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
-  const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled' && c.status !== 'blocked')
+  const call = activeCalls.find(c => aluno && String(c.studentId) === String(aluno.id))
 
   // Unified effect for local confirmed state
   useEffect(() => {
@@ -84,12 +61,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     // 1. Read the cache first
     let cachedId: string | null = null
     let isToday = false
+    let cachedTime = 0
     try {
       const stored = localStorage.getItem(storageKey)
       if (stored) {
         const parsed = JSON.parse(stored)
         cachedId = parsed.callId
         isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
+        if (parsed.time) cachedTime = new Date(parsed.time).getTime()
       }
     } catch(e) {}
 
@@ -105,16 +84,32 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
       } catch (e) {}
     } else if (call && (call.status === 'waiting' || call.status === 'cancelled')) {
       // It was explicitly reverted or cancelled.
-      // BUT ONLY wipe if this is the SAME call that we have cached!
-      if (cachedId && cachedId !== call.id && isToday) {
-        // The DB is returning an OLD call, but we have a FRESHER cache for a NEW call!
-        // DO NOT WIPE! KEEP IT CONFIRMED!
-        setLocalConfirmed(true)
+      if (cachedId && isToday) {
+        const calledTime = call.calledAt ? new Date(call.calledAt).getTime() : 0
+        
+        if (cachedId !== call.id) {
+          if (calledTime > cachedTime) {
+            // The DB has a NEW call created AFTER the old confirmed cache.
+            // Wipe the stale cache so the button shows "Chamando Aluno"
+            setLocalConfirmed(false)
+            try { localStorage.removeItem(storageKey) } catch(e) {}
+          } else {
+            // The DB returned an OLD call, but we have a FRESHER cache
+            setLocalConfirmed(true)
+          }
+        } else if (call.status === 'waiting' && calledTime <= cachedTime) {
+          // The DB returned the SAME call as 'waiting', but its calledAt timestamp is OLDER
+          // than our confirmed cache. This means the Operator's DB save failed (DB lag).
+          // DO NOT WIPE! KEEP IT CONFIRMED!
+          setLocalConfirmed(true)
+        } else {
+          // Genuinely reverted (calledAt updated) or cancelled!
+          setLocalConfirmed(false)
+          try { localStorage.removeItem(storageKey) } catch(e) {}
+        }
       } else {
         setLocalConfirmed(false)
-        try {
-          localStorage.removeItem(storageKey)
-        } catch(e) {}
+        try { localStorage.removeItem(storageKey) } catch(e) {}
       }
     } else {
       // For 'called', 'special_auth', 'blocked', or !call
@@ -123,12 +118,10 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
         setLocalConfirmed(true)
       } else {
         setLocalConfirmed(false)
-        try {
-          localStorage.removeItem(storageKey)
-        } catch(e) {}
+        try { localStorage.removeItem(storageKey) } catch(e) {}
       }
     }
-  }, [call?.status, call?.id, call?.confirmedAt, call?.guardianName, aluno?.id])
+  }, [call?.status, call?.id, call?.confirmedAt, call?.guardianName, call?.calledAt, aluno?.id])
 
   const { isProibido, isDiaRestrito, diasPermitidos } = React.useMemo(() => {
     let proibido = false;
@@ -224,7 +217,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   }, [aluno?.dados, currentUser]);
 
   const isActive = call && (call.status === 'waiting' || call.status === 'called')
-  const isSpecialAuth = call?.status === 'special_auth'
+  const isSpecialAuth = call?.status === 'special_auth' || call?.guardianId === 'special'
   const isBlocked = call?.status === 'blocked'
   const isConfirmed = call?.status === 'confirmed' || localConfirmed
 
@@ -258,7 +251,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     fontFamily: 'Outfit, Inter, sans-serif',
   }
 
-  if (!call && !localConfirmed) {
+  if (!isActive && !isSpecialAuth && !isConfirmed && !isBlocked) {
     if (isProibido) {
       return (
         <div style={{
@@ -346,66 +339,6 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return { by: '', time: new Date().toISOString() }
   }
 
-  if (isSpecialAuth) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-        <button 
-          onClick={() => cancelCall(call.id)}
-          title="Cancelar autorização"
-          style={{
-            width: 48, height: 48, borderRadius: 20, cursor: 'pointer',
-            background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s', flexShrink: 0
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-        >
-          <X size={22} />
-        </button>
-        <div style={{
-          ...baseBtnStyle,
-          width: 'auto',
-          flex: 1,
-          height: 48,
-          borderRadius: 20,
-          background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
-          backgroundSize: '300% 300%',
-          border: 'none',
-          color: 'white',
-          boxShadow: '0 4px 16px rgba(245,158,11,0.28)',
-          cursor: 'default',
-          padding: '0 12px',
-          justifyContent: 'flex-start',
-        }} className="ad-sab-active">
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
-            flexShrink: 0,
-            marginTop: 4
-          }} className="sab-pulse-dot" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Auth. Ativa</span>
-            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 2 }}>
-              {call?.guardianName ? call.guardianName.split('—')[0].trim() : 'Aguardando portaria'}
-            </span>
-          </div>
-          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: 600, flexShrink: 0 }}>
-            {formatTime(call?.calledAt)}
-          </span>
-        </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes sab-gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
-          @keyframes sab-pulseDot { 0%{box-shadow:0 0 0 0 rgba(255,255,255,0.7)} 70%{box-shadow:0 0 0 8px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
-          @keyframes sab-popIn { 0%{transform:scale(0.94);opacity:0} 100%{transform:scale(1);opacity:1} }
-          .ad-sab-active { animation: sab-gradientShift 2.5s ease infinite, sab-popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
-          .sab-pulse-dot { animation: sab-pulseDot 1.5s ease-out infinite; }
-        `}} />
-      </div>
-    )
-  }
-
   const confData = getConfirmedData()
 
   if (isConfirmed) {
@@ -422,9 +355,9 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
         alignItems: 'center'
       }}>
         <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
           <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
-          <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
+          <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
             Retirado {confData.by ? `por ${confData.by} ` : ''}às {formatTime(confData.time)}
           </span>
         </div>
@@ -435,14 +368,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     )
   }
 
-  if (isActive) {
+  if (isSpecialAuth) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
         <button 
           onClick={() => cancelCall(call.id)}
-          title="Cancelar chamada"
+          title="Cancelar autorização"
           style={{
-            width: 48, height: 48, borderRadius: 20, cursor: 'pointer',
+            width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -450,33 +383,97 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
         >
-          <X size={22} />
+          <X size={24} />
         </button>
         <div style={{
           ...baseBtnStyle,
           width: 'auto',
           flex: 1,
-          height: 48,
-          borderRadius: 20,
+          height: 'auto',
+          minHeight: 56,
+          borderRadius: 24,
+          background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
+          backgroundSize: '300% 300%',
+          border: 'none',
+          color: 'white',
+          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
+          cursor: 'default',
+          padding: '12px 16px',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+        }} className="ad-sab-active">
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: '#fff',
+            boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
+            flexShrink: 0
+          }} className="sab-pulse-dot" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 12 }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Auth. Ativa</span>
+            <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
+              {call?.guardianName ? call.guardianName.split('—')[0].trim() : 'Aguardando portaria'}
+            </span>
+          </div>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0 }}>
+            {formatTime(call?.calledAt)}
+          </span>
+        </div>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes sab-gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+          @keyframes sab-pulseDot { 0%{box-shadow:0 0 0 0 rgba(255,255,255,0.7)} 70%{box-shadow:0 0 0 8px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
+          @keyframes sab-popIn { 0%{transform:scale(0.94);opacity:0} 100%{transform:scale(1);opacity:1} }
+          .ad-sab-active { animation: sab-gradientShift 2.5s ease infinite, sab-popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+          .sab-pulse-dot { animation: sab-pulseDot 1.5s ease-out infinite; }
+        `}} />
+      </div>
+    )
+  }
+
+
+  if (isActive) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
+        <button 
+          onClick={() => cancelCall(call.id)}
+          title="Cancelar chamada"
+          style={{
+            width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
+            background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s', flexShrink: 0
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+        >
+          <X size={24} />
+        </button>
+        <div style={{
+          ...baseBtnStyle,
+          width: 'auto',
+          flex: 1,
+          height: 'auto',
+          minHeight: 56,
+          borderRadius: 24,
           background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
           backgroundSize: '200% 200%',
           border: 'none',
           color: 'white',
-          boxShadow: '0 4px 12px rgba(245, 158, 11, 0.2)',
+          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
           cursor: 'default',
-          padding: '0 12px',
+          padding: '12px 16px',
+          alignItems: 'center',
         }}>
-          <Loader2 size={18} className="spin-anim" style={{ flexShrink: 0, marginTop: 2 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Chamando Aluno</span>
-            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 2 }}>
-              por {call?.guardianName} às {formatTime(call?.calledAt)}
+          <Loader2 size={24} className="spin-anim" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8 }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Chamando Aluno</span>
+            <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
+              por {call?.guardianName?.split(' ')[0]} às {formatTime(call?.calledAt)}
             </span>
           </div>
         </div>
         <style dangerouslySetInnerHTML={{__html: `
           @keyframes spin-anim { 100% { transform: rotate(360deg); } }
-          .spin-anim { animation: spin-anim 1s linear infinite; }
+          .spin-anim { animation: spin-anim 1.5s linear infinite; }
         `}} />
       </div>
     )
@@ -497,14 +494,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     )
   }
 
-  return (
-    <button className="btn-modern btn-chamar" onClick={handleCall} style={baseBtnStyle}>
-      <Megaphone size={18} />
-      <span className="ad-call-btn-label">
-        {isProibido ? 'Acesso Proibido' : isDiaRestrito ? 'Fora do Dia' : 'Chamar Aluno'}
-      </span>
-    </button>
-  )
+  return null
 }
 
 
@@ -597,6 +587,27 @@ export default function ADInnerLayout({
     if (setAdLoading) setAdLoading(isLoading);
     return () => { if (setAdLoading) setAdLoading(false); }
   }, [isLoading, setAdLoading]);
+
+  // Lock body scroll when modals are open
+  useEffect(() => {
+    if (switcherOpen || isSpecialAuthModalOpen) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.touchAction = 'none'
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'auto'
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.touchAction = ''
+      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
+      if (mainScroll) mainScroll.style.overflow = 'auto'
+    }
+  }, [switcherOpen, isSpecialAuthModalOpen])
 
   const aluno = profileData?.aluno || null
   const vinculo = profileData?.vinculo || null
@@ -710,9 +721,11 @@ export default function ADInnerLayout({
   return (
     <>
     {/* Student Switcher Overlay */}
-    <PortalWrapper isOpen={switcherOpen}>
-        <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
-        width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
+    <PortalWrapper>
+      <AnimatePresence>
+        {switcherOpen && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
         <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
@@ -745,24 +758,30 @@ export default function ADInnerLayout({
           </div>
         </motion.div>
       </motion.div>
+        )}
+      </AnimatePresence>
     </PortalWrapper>
 
 {/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
-<PortalWrapper isOpen={isSpecialAuthModalOpen}>
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      width: '100vw', height: '100vh', background: 'rgba(10,10,20,0.88)',
-      zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-      padding: '0 16px',
-    }}
-    onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
-  >
-    <motion.div
+<PortalWrapper>
+  <AnimatePresence>
+    {isSpecialAuthModalOpen && (
+      <motion.div
+        key="special-auth-modal-overlay"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(248, 250, 252, 0.45)',
+          zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+          padding: '0 16px', overscrollBehavior: 'none'
+        }}
+        onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
+      >
+        <motion.div
+          key="special-auth-modal-box"
       initial={{ scale: 0.92, opacity: 0, y: 24 }}
       animate={{ scale: 1, opacity: 1, y: 0 }}
       exit={{ scale: 0.92, opacity: 0, y: 24 }}
@@ -958,6 +977,8 @@ export default function ADInnerLayout({
       `}} />
     </motion.div>
   </motion.div>
+    )}
+  </AnimatePresence>
 </PortalWrapper>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>

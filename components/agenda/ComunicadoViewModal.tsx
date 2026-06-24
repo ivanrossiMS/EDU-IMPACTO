@@ -423,20 +423,14 @@ export function ComunicadoViewModal({
             height: 150%;
             border-radius: 42%;
             background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
-            animation: rotateWave 12s linear infinite;
             top: -120%;
             left: -25%;
           }
           .cvm-header-bg::after {
             background: linear-gradient(to left, rgba(255,255,255,0.05), rgba(255,255,255,0.15));
-            animation: rotateWave 18s linear infinite reverse;
             top: -110%;
             left: -10%;
             border-radius: 45%;
-          }
-          @keyframes rotateWave {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
           }
           .cvm-body {
             flex: 1;
@@ -586,8 +580,35 @@ export function ComunicadoViewModal({
             }}>
               {/* Title Block */}
               <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%)', color: '#fff', borderRadius: 16, padding: 12, flexShrink: 0, boxShadow: '0 8px 16px rgba(79,70,229,0.2)' }}>
-                  📣
+                <div style={{ 
+                  position: 'relative',
+                  width: 46,
+                  height: 46,
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.03) 100%)', 
+                  border: '1px solid rgba(99, 102, 241, 0.15)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                  borderRadius: 14, 
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0, 
+                  boxShadow: '0 8px 16px -4px rgba(99, 102, 241, 0.1), inset 0 2px 4px rgba(255, 255, 255, 0.6)' 
+                }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ filter: 'drop-shadow(0 2px 6px rgba(99,102,241,0.25))' }}>
+                    <path d="M21 15C21 15.5304 20.7893 16.0391 20.4142 16.4142C20.0391 16.7893 19.5304 17 19 17H7L3 21V5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H19C19.5304 3 20.0391 3.21071 20.4142 3.58579C20.7893 3.96086 21 4.46957 21 5V15Z" fill="url(#comIconFill)" stroke="url(#comIconStroke)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="16" cy="8" r="2.5" fill="#00D2FF" stroke="#ffffff" strokeWidth="1"/>
+                    <defs>
+                      <linearGradient id="comIconFill" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#6366f1" stopOpacity="0.15"/>
+                        <stop offset="1" stopColor="#8b5cf6" stopOpacity="0.05"/>
+                      </linearGradient>
+                      <linearGradient id="comIconStroke" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                        <stop stopColor="#6366f1"/>
+                        <stop offset="1" stopColor="#a855f7"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3, marginBottom: 8 }}>

@@ -141,6 +141,24 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  try {
+    const { id } = await request.json()
+    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
+
+    const supabase = await createProtectedClient()
+    const { error } = await supabase.from('saida_calls').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 })
+  }
+}
+
 function buildRow(body: any) {
   const { id, ...rest } = body
   return {

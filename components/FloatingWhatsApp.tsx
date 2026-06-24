@@ -69,25 +69,9 @@ export function FloatingWhatsApp() {
           pointer-events: auto;
           outline: none;
           transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-          animation: floatAndGlow 3s ease-in-out infinite;
           -webkit-tap-highlight-color: transparent;
         }
 
-        .fab-button::before {
-          content: '';
-          position: absolute;
-          top: 0; left: 0; right: 0; bottom: 0;
-          border-radius: 50%;
-          border: 2px solid #38D66B;
-          z-index: -1;
-          animation: sonarPing 1.8s cubic-bezier(0.25, 0.8, 0.25, 1) infinite;
-          pointer-events: none;
-        }
-
-        .fab-button.is-open::before {
-          animation: none;
-          display: none;
-        }
 
         /* Reflexo superior brilhante estilo Apple/Glassmorphism */
         .fab-button::after {
@@ -109,13 +93,8 @@ export function FloatingWhatsApp() {
             0 0 36px rgba(37, 196, 90, 0.4),
             inset 0 4px 6px rgba(255, 255, 255, 0.6),
             inset 0 -4px 6px rgba(0, 0, 0, 0.1);
-          animation-play-state: paused;
         }
 
-        .fab-button:hover::before {
-          animation-play-state: paused;
-          opacity: 0;
-        }
 
         .fab-button:active {
           transform: scale(0.96) !important;
@@ -123,7 +102,6 @@ export function FloatingWhatsApp() {
         }
 
         .fab-button.is-open {
-          animation: none;
           transform: scale(0.9) rotate(90deg) !important;
           box-shadow: 
             0 8px 16px rgba(37, 196, 90, 0.15), 
@@ -138,33 +116,6 @@ export function FloatingWhatsApp() {
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
         }
 
-        @keyframes floatAndGlow {
-          0% {
-            transform: translateY(0) scale(1);
-            box-shadow: 0 16px 32px rgba(37, 196, 90, 0.2), 0 0 24px rgba(37, 196, 90, 0.15), inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
-          }
-          50% {
-            transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 24px 40px rgba(37, 196, 90, 0.35), 0 0 32px rgba(37, 196, 90, 0.25), inset 0 4px 6px rgba(255, 255, 255, 0.6), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
-          }
-          100% {
-            transform: translateY(0) scale(1);
-            box-shadow: 0 16px 32px rgba(37, 196, 90, 0.2), 0 0 24px rgba(37, 196, 90, 0.15), inset 0 4px 6px rgba(255, 255, 255, 0.5), inset 0 -4px 6px rgba(0, 0, 0, 0.1);
-          }
-        }
-
-        @keyframes sonarPing {
-          0% {
-            transform: scale(1);
-            opacity: 1;
-            border-width: 4px;
-          }
-          100% {
-            transform: scale(1.8);
-            opacity: 0;
-            border-width: 0px;
-          }
-        }
 
         @media (max-width: 768px) {
           .fab-button {

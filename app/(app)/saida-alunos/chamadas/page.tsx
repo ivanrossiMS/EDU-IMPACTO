@@ -586,7 +586,7 @@ interface SpecialLaunch {
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { addSpecialAuth, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
+  const { addSpecialAuth, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
 
@@ -944,50 +944,62 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
               {/* MICRO ACTION BUTTONS */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 {/* BUTTON: CALL STUDENT */}
-                {!l.confirmedOut && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
-                    if (existingCall) {
-                      recallStudent(existingCall.id, () => {})
-                      showToast(`Aluno ${l.studentName} chamado novamente!`)
-                    } else {
-                      callStudent(
-                        l.studentId,
-                        l.studentName,
-                        l.studentClass,
-                        'special-auth',
-                        l.authorizedPerson,
-                        'manual',
-                        undefined,
-                        l.studentPhoto
-                      )
-                      showToast(`Aluno ${l.studentName} chamado na TV!`)
-                    }
-                  }}
-                  title="Chamar Aluno"
-                  style={{
-                    background: 'rgba(99,102,241,0.12)', border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#818cf8', transition: 'all 0.2s', flexShrink: 0,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = '#6366f1'
-                    e.currentTarget.style.color = '#fff'
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(99,102,241,0.4)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(99,102,241,0.12)'
-                    e.currentTarget.style.color = '#818cf8'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  <Megaphone size={11} />
-                </button>
-                )}
+                {(() => {
+                  if (l.confirmedOut) return null;
+                  const isCalling = (activeCalls || []).some(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                  const btnColor = isCalling ? '#f59e0b' : '#818cf8'
+                  const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
+                  const btnHoverColor = '#fff'
+                  const btnHoverBg = isCalling ? '#f59e0b' : '#6366f1'
+                  const btnShadow = isCalling ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)'
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                        if (existingCall) {
+                          recallStudent(existingCall.id, () => {})
+                          // We don't have showToast in scope easily if it's not passed, wait! showToast is available here!
+                          // Wait, showToast is defined outside. Let me keep the original logic.
+                          showToast(`Aluno ${l.studentName} chamado novamente!`)
+                        } else {
+                          callStudent(
+                            l.studentId,
+                            l.studentName,
+                            l.studentClass,
+                            'special-auth',
+                            l.authorizedPerson,
+                            'manual',
+                            undefined,
+                            l.studentPhoto
+                          )
+                          showToast(`Aluno ${l.studentName} chamado na TV!`)
+                        }
+                      }}
+                      title={isCalling ? "Aluno já está sendo chamado. Clique para rechamar" : "Chamar Aluno"}
+                      style={{
+                        background: btnBg, border: 'none', cursor: 'pointer',
+                        borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: btnColor, transition: 'all 0.2s', flexShrink: 0,
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = btnHoverBg
+                        e.currentTarget.style.color = btnHoverColor
+                        e.currentTarget.style.boxShadow = `0 0 8px ${btnShadow}`
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = btnBg
+                        e.currentTarget.style.color = btnColor
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}
+                    >
+                      <Megaphone size={11} />
+                    </button>
+                  )
+                })()}
 
                 {/* BUTTON: CONFIRM PICKUP */}
                 {!l.confirmedOut && (
@@ -1043,7 +1055,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   onClick={(e) => {
                     e.preventDefault(); e.stopPropagation();
                     if (window.confirm('Remover esta autorização especial?')) {
-                      cancelCall(l.id)
+                      deleteCall(l.id)
                     }
                   }}
                   title="Excluir Lançamento"

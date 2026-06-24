@@ -131,6 +131,7 @@ interface SaidaCtx {
   cancelCall: (callId: string) => void
   recallStudent: (callId: string, speakFn: (text: string) => void) => void
   revertCall: (callId: string) => void
+  deleteCall: (callId: string) => void
   addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
   updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
@@ -245,7 +246,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             } else if (event === 'RECALL_STUDENT') {
               setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
             } else if (event === 'REVERT_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt, confirmedAt: undefined } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt || new Date().toISOString(), confirmedAt: undefined } : c))
             } else if (event === 'CLEAR_ALL_CALLS') {
               setActiveCallsLocal?.([])
             }
@@ -294,7 +295,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
       }
       if (payload.event === 'REVERT_CALL' && d.callId) {
-        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: d.calledAt || now(), confirmedAt: undefined } : c))
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setActiveCallsLocal?.([])
@@ -319,7 +320,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     // Prevent duplicate active call
     const existing = activeCalls.find(c =>
       c.studentId === studentId &&
-      (c.status === 'called' || c.status === 'waiting')
+      (c.status === 'called' || c.status === 'waiting') &&
+      c.guardianId !== 'special' &&
+      c.guardianId !== 'special-auth'
     )
     if (existing) return null
 
@@ -403,13 +406,34 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const revertCall = useCallback((callId: string) => {
     const call = activeCalls.find(c => c.id === callId)
     if (!call) return
+    const currentNow = now()
     setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'waiting', calledAt: now(), confirmedAt: undefined } : c
+      c.id === callId ? { ...c, status: 'waiting', calledAt: currentNow, confirmedAt: undefined } : c
     ))
-    emit('REVERT_CALL', { callId, _remote: false })
-    sendBroadcast('REVERT_CALL', { callId, calledAt: now() })
+    emit('REVERT_CALL', { callId, calledAt: currentNow, _remote: false })
+    sendBroadcast('REVERT_CALL', { callId, calledAt: currentNow })
     addLog('REVERT', `Chamada revertida: ${call.studentName}`)
   }, [activeCalls, emit, addLog, sendBroadcast])
+
+  // ─── deleteCall ───────────────────────────────────────────────────────────
+  const deleteCall = useCallback(async (callId: string) => {
+    const call = activeCalls.find(c => c.id === callId)
+    if (!call) return
+    // Remove from local state
+    setActiveCalls(prev => prev.filter(c => c.id !== callId))
+    // Also delete from DB directly
+    try {
+      await fetch('/api/saida/calls', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: callId })
+      })
+    } catch (e) {
+      console.error('Failed to delete call', e)
+    }
+    // We don't need a custom broadcast because Supabase Realtime will send a DELETE event
+    addLog('DELETE', `Autorização especial deletada: ${call.studentName}`)
+  }, [activeCalls, setActiveCalls, addLog])
 
   // ─── addSpecialAuth ───────────────────────────────────────────────────────
   const addSpecialAuth = useCallback((
@@ -487,7 +511,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, addSpecialAuth,
+      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth,
       updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}
