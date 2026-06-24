@@ -1,18 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Users, Plus, Trash2, Edit2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 export default function ProfessoresPage() {
-  const [data, setRaw, { loading, refresh }] = useSupabaseArray<any>('simulados_professores', [])
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ nome: '', status: 'ativo' })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  const refresh = async () => {
+    setLoading(true)
+    const { data: profs } = await supabase.from('simulados_professores').select('*').order('nome')
+    setData(profs || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { refresh() }, [])
   
 
   const handleOpen = (item?: any) => {

@@ -1,18 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { BookOpen, Plus, Trash2, Edit2, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 export default function DisciplinasPage() {
-  const [data, setRaw, { loading, refresh }] = useSupabaseArray<any>('simulados_disciplinas', [])
+  const [data, setData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState({ nome: '', cor: '#3b82f6' })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  const refresh = async () => {
+    setLoading(true)
+    const { data: disc } = await supabase.from('simulados_disciplinas').select('*').order('nome')
+    setData(disc || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { refresh() }, [])
   
 
   const handleOpen = (item?: any) => {

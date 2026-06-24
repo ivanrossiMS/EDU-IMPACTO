@@ -84,7 +84,7 @@ export function useSupabaseCollection<T>(
     refreshIntervalMs?: number
     enabled?: boolean
   }
-): [T, (value: T | ((prev: T) => T)) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T>> }] {
+): [T, (value: T | ((prev: T) => T)) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T>>; refresh?: () => void }] {
   const lsKey = `edu-ls-${endpoint}`
   // Make sure initialValue is never undefined
   const safeInitialValue = initialValue !== undefined ? initialValue : ([] as any);
@@ -359,7 +359,7 @@ export function useSupabaseArray<T>(
   endpoint: string,
   initialValue: T[] = [],
   options?: { refreshIntervalMs?: number, noCache?: boolean, enabled?: boolean }
-): [T[], (value: T[] | ((prev: T[]) => T[])) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T[]>> }] {
+): [T[], (value: T[] | ((prev: T[]) => T[])) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T[]>>; refresh?: () => void }] {
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {
     ...options,
