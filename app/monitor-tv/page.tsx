@@ -378,7 +378,7 @@ function MonitorContent() {
       const currentTurmas = turmasRef.current
 
       if (payload.event === 'CALL_STUDENT') {
-        if (d.status === 'blocked') return // Não exibir nem falar alunos bloqueados/restritos
+        if (d.status === 'blocked' || d.status === 'special_auth') return // Não exibir nem falar autorizações e bloqueados
         setDisplayCalls(prev => {
           const next = prev.find(c => c.id === d.id) ? prev : [d, ...prev]
           return [...next].sort(byTimeDesc).slice(0, 25)
