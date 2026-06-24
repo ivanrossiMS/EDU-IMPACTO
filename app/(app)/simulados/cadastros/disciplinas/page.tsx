@@ -120,7 +120,7 @@ export default function DisciplinasPage() {
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{item.nome}</div>
                     <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
-                      Prof: {item.system_users?.nome || 'Não vinculado'} • {item.quantidade_questoes || 0} questões
+                      Prof: {professores.find(p => p.id === item.id_professor)?.nome || item.system_users?.nome || 'Não vinculado'} • {item.quantidade_questoes || 0} questões
                     </div>
                   </div>
                 </div>
