@@ -216,37 +216,45 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return { isProibido: proibido, isDiaRestrito: diaRestrito, diasPermitidos: dias };
   }, [aluno?.dados, currentUser]);
 
-  const gId = currentUser.id || 'usr-fam'
-  
+  const meusAlunosIds = React.useMemo(() => {
+    return (profileData?.meusAlunos || []).map((a: any) => String(a.id))
+  }, [profileData])
+
   // Find all active/recent calls for this guardian
   const myCalls = React.useMemo(() => {
-    return activeCalls.filter(c => 
-      String(c.guardianId) === String(gId) && 
+    const calls = activeCalls.filter(c => 
+      (String(c.guardianId) === String(gId) || (meusAlunosIds.includes(String(c.studentId)) && (c.guardianId === 'special' || c.guardianId === 'special-auth'))) && 
       (c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth' || c.status === 'confirmed')
     )
-  }, [activeCalls, gId])
+    // Sort by priority so that waiting/called > confirmed > special_auth
+    const priority: any = { 'waiting': 1, 'called': 2, 'confirmed': 3, 'special_auth': 4 }
+    return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
+  }, [activeCalls, gId, meusAlunosIds])
 
-  // Is there any pending call?
-  const hasPending = myCalls.some(c => c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth')
+  const pendingCalls = myCalls.filter(c => c.status === 'waiting' || c.status === 'called')
+  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed')
+  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth')
+
+  const hasPending = pendingCalls.length > 0
+  const hasConfirmed = confirmedCalls.length > 0
+  const hasSpecialAuth = specialAuthCalls.length > 0
+
+  const pendingCount = new Set(pendingCalls.map(c => c.studentId)).size
+  const specialCount = new Set(specialAuthCalls.map(c => c.studentId)).size
 
   // Is the current student's call specifically active or special?
-  const currentActive = call?.status === 'waiting' || call?.status === 'called'
-  const isSpecialAuth = call?.status === 'special_auth' || call?.guardianId === 'special'
-  
+  const call = myCalls.find(c => String(c.studentId) === String(aluno?.id))
   const isBlocked = call?.status === 'blocked'
 
-  // The button should be green ONLY if:
-  // 1. There are calls made by this guardian
-  // 2. AND NONE of them are pending (all confirmed)
-  // OR the local cache says it is confirmed (fallback)
-  const isConfirmed = (myCalls.length > 0 && !hasPending) || localConfirmed
+  // The button should be green ONLY if there is a confirmed call and NO pending calls AND NO active special authorizations
+  const isConfirmed = (hasConfirmed && !hasPending && !hasSpecialAuth) || localConfirmed
 
-  // Determine if we should show the active state
-  // We show it if there is any pending call for this guardian
+  // We show active state if there is any pending call
   const isActiveState = hasPending
 
-  // Label plurals
-  const pendingCount = myCalls.filter(c => c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth').length
+  // We show special auth state if there are special auths and NO pending and NO confirmed
+  const isSpecialAuth = hasSpecialAuth && !hasPending && !isConfirmed
+
   const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
 
   const handleCall = () => {
@@ -400,8 +408,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
         <button 
-          onClick={() => myCalls.forEach(c => {
-             if (c.status !== 'confirmed') cancelCall(c.id)
+          onClick={() => specialAuthCalls.forEach(c => {
+             cancelCall(c.id)
           })}
           title="Cancelar autorização"
           style={{
@@ -440,14 +448,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
           }} className="sab-pulse-dot" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 12 }}>
             <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>
-              {pendingCount > 1 ? 'Autorizações Ativas' : 'Autorização Ativa'}
+              {specialCount > 1 ? 'Autorizações Ativas' : 'Autorização Ativa'}
             </span>
             <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
-              {myCalls.length > 0 ? (myCalls[0].guardianName ? myCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
+              {specialAuthCalls.length > 0 ? (specialAuthCalls[0].guardianName ? specialAuthCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
             </span>
           </div>
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0 }}>
-            {formatTime(myCalls.length > 0 ? myCalls[0].calledAt : undefined)}
+            {formatTime(specialAuthCalls.length > 0 ? specialAuthCalls[0].calledAt : undefined)}
           </span>
         </div>
         <style dangerouslySetInnerHTML={{__html: `
@@ -466,8 +474,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
         <button 
-          onClick={() => myCalls.forEach(c => {
-             if (c.status !== 'confirmed') cancelCall(c.id)
+          onClick={() => pendingCalls.forEach(c => {
+             cancelCall(c.id)
           })}
           title="Cancelar chamada"
           style={{
