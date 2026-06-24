@@ -212,7 +212,7 @@ export default function UsuariosPage() {
   const [perfilModal, setPerfilModal] = useState<'add' | 'edit' | null>(null)
   const [editingPerfilId, setEditingPerfilId] = useState<string | null>(null)
   const [deletePerfilId, setDeletePerfilId] = useState<string | null>(null)
-  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false })
+  const [perfilForm, setPerfilForm] = useState<Omit<Perfil, 'id'>>({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false })
   const [expandedModulos, setExpandedModulos] = useState<string[]>([])
 
   /* ── User actions ── */
@@ -277,8 +277,8 @@ export default function UsuariosPage() {
   }
 
   /* ── Perfil actions ── */
-  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false }); setPerfilModal('add') }
-  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: p.permissoes || [], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false, bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false, bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
+  const openAddPerfil = () => { setPerfilForm({ nome: '', cor: '#3b82f6', descricao: '', permissoes: [], bloqueadoGestaoEscolar: false, bloqueadoAgendaDigital: false, bloqueadoGestaoPessoas: false, bloqueadoSimulados: false }); setPerfilModal('add') }
+  const openEditPerfil = (p: any) => { setPerfilForm({ nome: p.nome, cor: p.cor, descricao: p.descricao, permissoes: p.permissoes || [], bloqueadoGestaoEscolar: p.bloqueadoGestaoEscolar || false, bloqueadoAgendaDigital: p.bloqueadoAgendaDigital || false, bloqueadoGestaoPessoas: p.bloqueadoGestaoPessoas || false, bloqueadoSimulados: p.bloqueadoSimulados || false }); setEditingPerfilId(p.id); setPerfilModal('edit') }
   const savePerfil = () => {
     if (!perfilForm.nome.trim()) return
     if (perfilModal === 'add') {
@@ -691,6 +691,24 @@ export default function UsuariosPage() {
                 <ModernSwitch
                   checked={!perfilForm.bloqueadoGestaoPessoas}
                   onChange={() => setPerfilForm(p => ({ ...p, bloqueadoGestaoPessoas: !p.bloqueadoGestaoPessoas }))}
+                  color="#10b981"
+                />
+              </div>
+
+              {/* SIMULADOS */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'rgba(255,255,255,0.03)', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, boxShadow: '0 8px 16px rgba(16,185,129,0.3)' }}>
+                    📝
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Simulados</div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à geração e gestão de provas e simulados.</div>
+                  </div>
+                </div>
+                <ModernSwitch
+                  checked={!perfilForm.bloqueadoSimulados}
+                  onChange={() => setPerfilForm(p => ({ ...p, bloqueadoSimulados: !p.bloqueadoSimulados }))}
                   color="#10b981"
                 />
               </div>

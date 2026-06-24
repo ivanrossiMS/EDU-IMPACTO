@@ -211,6 +211,7 @@ export interface Perfil {
   bloqueadoGestaoEscolar?: boolean
   bloqueadoAgendaDigital?: boolean
   bloqueadoGestaoPessoas?: boolean
+  bloqueadoSimulados?: boolean
 }
 
 // ─── AGENDA ESCOLAR ───────────────────────────────────────────────

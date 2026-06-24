@@ -813,7 +813,7 @@ export default function LoginPage() {
              }
              
              const perfilObj = perfisList?.find(x => x.nome === p);
-             const hasSimuladosAccess = perfilObj?.permissoes?.includes('simulados') || perfilObj?.permissoes?.includes('principal');
+             const hasSimuladosAccess = !perfilObj?.bloqueadoSimulados;
              
              if (!hasSimuladosAccess) {
                setShowBlockModal(true);
