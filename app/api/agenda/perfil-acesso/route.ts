@@ -112,17 +112,37 @@ export async function GET(request: Request) {
          });
        }
 
-       if (responsavel_id) {
-         // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
-         const { data: meusLinks } = await supabase
-           .from('aluno_responsavel')
-           .select('alunos(id, nome, turma)')
-           .eq('responsavel_id', responsavel_id)
-         
-         if (meusLinks && meusLinks.length > 0) {
-           meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
-         }
-       }
+        if (responsavel_id) {
+          // 3. Buscar todos os alunos vinculados a esse responsável (para o Switcher)
+          const { data: meusLinks } = await supabase
+            .from('aluno_responsavel')
+            .select('alunos(*)')
+            .eq('responsavel_id', responsavel_id)
+          
+          if (meusLinks && meusLinks.length > 0) {
+            meusAlunos = meusLinks.map((l: any) => l.alunos).filter(Boolean)
+
+            // Populate turma_nome for meusAlunos
+            const turmaIds = [...new Set(meusAlunos.map(a => a.turma).filter(Boolean))]
+            if (turmaIds.length > 0) {
+              const { data: turmasData } = await supabase
+                .from('turmas')
+                .select('id, codigo, nome')
+                .in('id', turmaIds)
+              
+              if (turmasData) {
+                meusAlunos.forEach(a => {
+                  const tData = turmasData.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma))
+                  if (tData && tData.nome) {
+                    a.turma_nome = tData.nome
+                  } else {
+                    a.turma_nome = a.turma
+                  }
+                })
+              }
+            }
+          }
+        }
     }
 
     const result = {

@@ -18,7 +18,7 @@ import { createPortal } from 'react-dom'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
-  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send
+  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send, Check
 } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
@@ -216,13 +216,41 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return { isProibido: proibido, isDiaRestrito: diaRestrito, diasPermitidos: dias };
   }, [aluno?.dados, currentUser]);
 
-  const isActive = call && (call.status === 'waiting' || call.status === 'called')
+  const gId = currentUser.id || 'usr-fam'
+  
+  // Find all active/recent calls for this guardian
+  const myCalls = React.useMemo(() => {
+    return activeCalls.filter(c => 
+      String(c.guardianId) === String(gId) && 
+      (c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth' || c.status === 'confirmed')
+    )
+  }, [activeCalls, gId])
+
+  // Is there any pending call?
+  const hasPending = myCalls.some(c => c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth')
+
+  // Is the current student's call specifically active or special?
+  const currentActive = call?.status === 'waiting' || call?.status === 'called'
   const isSpecialAuth = call?.status === 'special_auth' || call?.guardianId === 'special'
+  
   const isBlocked = call?.status === 'blocked'
-  const isConfirmed = call?.status === 'confirmed' || localConfirmed
+
+  // The button should be green ONLY if:
+  // 1. There are calls made by this guardian
+  // 2. AND NONE of them are pending (all confirmed)
+  // OR the local cache says it is confirmed (fallback)
+  const isConfirmed = (myCalls.length > 0 && !hasPending) || localConfirmed
+
+  // Determine if we should show the active state
+  // We show it if there is any pending call for this guardian
+  const isActiveState = hasPending
+
+  // Label plurals
+  const pendingCount = myCalls.filter(c => c.status === 'waiting' || c.status === 'called').length
+  const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
 
   const handleCall = () => {
-    if (isActive || isConfirmed || isProibido || isDiaRestrito || isSpecialAuth) return
+    if (isActiveState || isConfirmed || isProibido || isDiaRestrito || isSpecialAuth) return
     if (onOpenModal) {
       onOpenModal()
     } else {
@@ -251,7 +279,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     fontFamily: 'Outfit, Inter, sans-serif',
   }
 
-  if (!isActive && !isSpecialAuth && !isConfirmed && !isBlocked) {
+  if (!isActiveState && !isSpecialAuth && !isConfirmed && !isBlocked) {
     if (isProibido) {
       return (
         <div style={{
@@ -372,7 +400,9 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
         <button 
-          onClick={() => cancelCall(call.id)}
+          onClick={() => myCalls.forEach(c => {
+             if (c.status !== 'confirmed') cancelCall(c.id)
+          })}
           title="Cancelar autorização"
           style={{
             width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
@@ -409,13 +439,13 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
             flexShrink: 0
           }} className="sab-pulse-dot" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 12 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Auth. Ativa</span>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>{pendingCount > 1 ? 'Auths. Ativas' : 'Auth. Ativa'}</span>
             <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
-              {call?.guardianName ? call.guardianName.split('—')[0].trim() : 'Aguardando portaria'}
+              {myCalls.length > 0 ? (myCalls[0].guardianName ? myCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
             </span>
           </div>
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0 }}>
-            {formatTime(call?.calledAt)}
+            {formatTime(myCalls.length > 0 ? myCalls[0].calledAt : undefined)}
           </span>
         </div>
         <style dangerouslySetInnerHTML={{__html: `
@@ -430,11 +460,13 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   }
 
 
-  if (isActive) {
+  if (isActiveState) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', height: 'auto', minHeight: 56 }}>
         <button 
-          onClick={() => cancelCall(call.id)}
+          onClick={() => myCalls.forEach(c => {
+             if (c.status !== 'confirmed') cancelCall(c.id)
+          })}
           title="Cancelar chamada"
           style={{
             width: 56, height: 56, borderRadius: 24, cursor: 'pointer',
@@ -465,9 +497,9 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
         }}>
           <Loader2 size={24} className="spin-anim" style={{ flexShrink: 0 }} />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Chamando Aluno</span>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>{callLabel}</span>
             <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
-              por {call?.guardianName?.split(' ')[0]} às {formatTime(call?.calledAt)}
+              por {myCalls.length > 0 ? myCalls[0].guardianName?.split(' ')[0] : 'Responsável'} às {formatTime(myCalls.length > 0 ? myCalls[0].calledAt : undefined)}
             </span>
           </div>
         </div>
@@ -513,6 +545,7 @@ export default function ADInnerLayout({
   const [switcherOpen, setSwitcherOpen] = useState(false)
   // ── Autorização Especial ──────────────────────────────────────────────────
   const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
+  const [selectedAlunos, setSelectedAlunos] = useState<string[]>([])
   const [specialAuthText, setSpecialAuthText] = useState('')
   const [specialAuthSending, setSpecialAuthSending] = useState(false)
   const [specialAuthSent, setSpecialAuthSent] = useState(false)
@@ -666,44 +699,71 @@ export default function ADInnerLayout({
 
   // ── Handler de Autorização Especial e Chamada Normal ────────────────────
   const handleNormalCallConfirm = useCallback(() => {
-    if (!aluno) return
+    if (selectedAlunos.length === 0) return
     const gName = currentUser?.nome || 'Responsável'
     const gId = currentUser?.id || 'usr-fam'
-    callStudent(aluno.id, aluno.nome, cleanTurma, gId, gName, 'manual', undefined, aluno.foto)
+    
+    selectedAlunos.forEach(id => {
+      const a = profileData?.meusAlunos?.find((x: any) => x.id === id) || (aluno?.id === id ? aluno : null);
+      if (a) {
+        const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
+        let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
+        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
+           aTurma = aTurma.split('-')[0].trim()
+        }
+        callStudent(a.id, a.nome, aTurma, gId, gName, 'manual', undefined, a.foto || a.imagem1)
+      }
+    });
+
     setIsSpecialAuthModalOpen(false)
-  }, [aluno, cleanTurma, currentUser, callStudent])
+  }, [selectedAlunos, profileData?.meusAlunos, aluno, turmas, currentUser, callStudent])
+
   const handleSpecialAuthConfirm = useCallback(async () => {
-    if (!specialAuthText.trim() || !aluno) return
+    if (!specialAuthText.trim() || selectedAlunos.length === 0) return
     setSpecialAuthSending(true)
     try {
-      // 1. Broadcast via Supabase Realtime (updates Gestão de Chamadas instantly)
-      const newCall = addSpecialAuth(
-        aluno.id,
-        aluno.nome,
-        cleanTurma,
-        specialAuthText.trim(),
-        currentUser?.nome || 'Responsável',
-        aluno.foto || aluno.imagem1 || null,
-      )
+      const gName = currentUser?.nome || 'Responsável'
+      const gId = currentUser?.id || 'usr-fam'
 
-      // 2. Persist to DB so the record survives page reloads
-      await fetch('/api/saida/calls', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: newCall.id,
-          studentId: newCall.studentId,
-          studentName: newCall.studentName,
-          studentClass: newCall.studentClass,
-          studentPhoto: newCall.studentPhoto,
-          guardianId: newCall.guardianId,
-          guardianName: newCall.guardianName,
-          operatorId: newCall.operatorId,
-          calledAt: newCall.calledAt,
-          status: 'special_auth',
-          source: 'agenda_digital',
-        })
-      }).catch(err => console.warn('[SpecialAuth] DB persist failed (call still broadcast):', err))
+      await Promise.all(selectedAlunos.map(async id => {
+        const a = profileData?.meusAlunos?.find((x: any) => x.id === id) || (aluno?.id === id ? aluno : null);
+        if (!a) return;
+        
+        const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
+        let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
+        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
+           aTurma = aTurma.split('-')[0].trim()
+        }
+
+        // 1. Broadcast via Supabase Realtime
+        const newCall = addSpecialAuth(
+          a.id,
+          a.nome,
+          aTurma,
+          specialAuthText.trim(),
+          gName,
+          a.foto || a.imagem1 || null,
+        )
+
+        // 2. Persist to DB so the record survives page reloads
+        await fetch('/api/saida/calls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newCall.id,
+            studentId: newCall.studentId,
+            studentName: newCall.studentName,
+            studentClass: newCall.studentClass,
+            studentPhoto: newCall.studentPhoto,
+            guardianId: newCall.guardianId,
+            guardianName: newCall.guardianName,
+            operatorId: newCall.operatorId,
+            calledAt: newCall.calledAt,
+            status: 'special_auth',
+            source: 'agenda_digital',
+          })
+        }).catch(err => console.warn('[SpecialAuth] DB persist failed (call still broadcast):', err))
+      }));
 
       setSpecialAuthSent(true)
       setTimeout(() => {
@@ -716,7 +776,7 @@ export default function ADInnerLayout({
     } finally {
       setSpecialAuthSending(false)
     }
-  }, [specialAuthText, aluno, cleanTurma, currentUser, addSpecialAuth])
+  }, [specialAuthText, selectedAlunos, profileData?.meusAlunos, aluno, turmas, currentUser, addSpecialAuth])
 
   return (
     <>
@@ -847,47 +907,77 @@ export default function ADInnerLayout({
         </button>
       </div>
 
-      {/* Student Card */}
-      <div style={{
-        background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
-        borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
-        gap: 14, marginBottom: 24, position: 'relative', zIndex: 1,
-      }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
-          background: 'linear-gradient(135deg, #a855f7, #ec4899)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, fontWeight: 900, color: '#fff',
-          boxShadow: '0 4px 16px rgba(168,85,247,0.25)',
-        }}>
-          {aluno?.foto
-            ? <img src={aluno.foto} alt={aluno?.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : getInitials(aluno?.nome || '')
+      {/* Student Cards List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, position: 'relative', zIndex: 1, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+        {(profileData?.meusAlunos?.length > 0 ? profileData.meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
+          const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
+          let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
+          if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
+             aTurma = aTurma.split('-')[0].trim()
           }
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {abbreviateName(aluno?.nome || '')}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
-            <span style={{
-              fontSize: 11, fontWeight: 800, color: '#4f46e5',
-              background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
-            }}>{cleanTurma}</span>
-          </div>
-        </div>
-        {/* Verified badge */}
-        <div style={{ marginLeft: 'auto', flexShrink: 0 }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="#6366f1"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-        </div>
+          const isSelected = selectedAlunos.includes(a.id)
+
+          return (
+            <div 
+              key={a.id}
+              onClick={() => {
+                if (isSelected) {
+                  setSelectedAlunos(prev => prev.filter(id => id !== a.id))
+                } else {
+                  setSelectedAlunos(prev => [...prev, a.id])
+                }
+              }}
+              style={{
+                background: isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
+                borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
+                gap: 14, cursor: 'pointer', transition: 'all 0.2s',
+              }}
+            >
+              <div style={{
+                width: 52, height: 52, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
+                background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, fontWeight: 900, color: '#fff',
+                boxShadow: isSelected ? '0 4px 16px rgba(168,85,247,0.25)' : 'none',
+              }}>
+                {a.foto || a.imagem1
+                  ? <img src={a.foto || a.imagem1} alt={a.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : getInitials(a.nome || '')
+                }
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {abbreviateName(a.nome || '')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 800, color: '#4f46e5',
+                    background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
+                  }}>{aTurma}</span>
+                </div>
+              </div>
+              {/* Checkbox / Selected Indicator */}
+              <div style={{ 
+                width: 24, height: 24, borderRadius: 8, flexShrink: 0,
+                border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
+                background: isSelected ? '#6366f1' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s'
+              }}>
+                {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Primary Action: Normal Call */}
       <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
         <button
           onClick={handleNormalCallConfirm}
-          disabled={specialAuthSending || specialAuthSent}
+          disabled={specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
           style={{
             width: '100%', height: 56, borderRadius: 16, border: 'none',
             background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
@@ -945,7 +1035,7 @@ export default function ADInnerLayout({
       <div style={{ display: 'flex', gap: 10, position: 'relative', zIndex: 1 }}>
         <button
           onClick={handleSpecialAuthConfirm}
-          disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent}
+          disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
           style={{
             width: '100%', height: 46, borderRadius: 14, border: 'none',
             background: specialAuthSent
@@ -2188,6 +2278,11 @@ export default function ADInnerLayout({
                       vinculo={profileData?.vinculo} 
                       onOpenModal={() => { 
                         setIsSpecialAuthModalOpen(true); 
+                        if (profileData?.meusAlunos && profileData.meusAlunos.length > 0) {
+                          setSelectedAlunos(profileData.meusAlunos.map((a: any) => a.id));
+                        } else if (aluno?.id) {
+                          setSelectedAlunos([aluno.id]);
+                        }
                       }} 
                     />
                   </div>
