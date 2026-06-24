@@ -125,6 +125,9 @@ export async function middleware(request: NextRequest) {
       '/api/saida/guardians',
       '/api/saida/rfid',
       '/api/saida/student_guardians',
+      '/api/responsaveis',
+      '/api/user-photo',
+      '/api/user-photo/extra',
       '/favicon.ico'
     ]
 

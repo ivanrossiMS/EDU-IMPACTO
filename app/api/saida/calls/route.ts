@@ -26,9 +26,15 @@ export async function GET(request: Request) {
       query = query.gte('created_at', fromDate + 'T00:00:00')
     } else {
       // Filter for today's calls only if no from date provided
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      query = query.gte('created_at', today.toISOString())
+      // Usa o timezone de Brasília para garantir que "hoje" seja calculado corretamente mesmo no servidor (que roda em UTC)
+      const formatter = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'America/Sao_Paulo', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      const todayStr = formatter.format(new Date())
+      query = query.gte('created_at', `${todayStr}T00:00:00-03:00`)
     }
     
     if (toDate) {

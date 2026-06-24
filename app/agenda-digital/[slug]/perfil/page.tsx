@@ -1,28 +1,94 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   UserCog, Phone, Mail, ShieldAlert, GraduationCap, MapPin, 
   Edit3, HeartPulse, ShieldCheck, Contact, FileText, Camera, 
-  Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays
+  Download, PlusCircle, AlertTriangle, Fingerprint, CalendarDays, Loader2
 } from 'lucide-react'
 import { getInitials, formatDate } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
+import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { useApp } from '@/lib/context'
 
 export default function ADPerfilPage() {
+  const { currentUser, setCurrentUser } = useApp()
   const { aluno: basicAluno } = useSelectedStudent()
   const slug = basicAluno?.id
   
-  const { data: responseData, isLoading, error } = useApiQuery<any>(
+  const { data: responseData, isLoading, error, refetch } = useApiQuery<any>(
     ['aluno', slug], 
     slug ? `/api/alunos/${slug}` : '',
     undefined,
     { enabled: !!slug }
   )
   const aluno = responseData?.data || null
+
+  const [uploadingAvatarId, setUploadingAvatarId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedRespId, setSelectedRespId] = useState<string | null>(null)
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedRespId) return
+
+    setUploadingAvatarId(selectedRespId)
+    try {
+      const uploadRes = await uploadFileToSupabase({
+        bucket: 'comunicados-midia',
+        folder: 'avatars',
+        file,
+        usageType: 'fixed'
+      })
+
+      if (!uploadRes.ok || !uploadRes.url) {
+        throw new Error(uploadRes.error || 'Erro ao enviar a imagem')
+      }
+
+      const targetResp = responsaveisList.find((r: any) => r.id === selectedRespId)
+      
+      const apiRes = await fetch('/api/responsaveis/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          responsavelId: selectedRespId, 
+          email: targetResp?.email,
+          avatarUrl: uploadRes.url 
+        })
+      })
+
+      if (!apiRes.ok) {
+        const errData = await apiRes.json().catch(() => ({}))
+        console.error('[Avatar Sync Error]', errData)
+        throw new Error(errData.error || errData.full || 'Falha ao vincular avatar ao perfil')
+      }
+
+      refetch() 
+      
+      const cachedUser = localStorage.getItem('edu-current-user')
+      if (cachedUser) {
+         try {
+           const parsedUser = JSON.parse(cachedUser)
+           if (targetResp?.email && parsedUser.email?.toLowerCase() === targetResp.email.toLowerCase()) {
+             parsedUser.foto = uploadRes.url
+             localStorage.setItem('edu-current-user', JSON.stringify(parsedUser))
+             setCurrentUser(parsedUser)
+             window.dispatchEvent(new Event('storage'))
+           }
+         } catch(e) {}
+      }
+
+    } catch (err: any) {
+      alert('Erro ao atualizar avatar: ' + err.message)
+    } finally {
+      setUploadingAvatarId(null)
+      setSelectedRespId(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'saude'>('geral')
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
@@ -233,9 +299,6 @@ export default function ADPerfilPage() {
                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>Pessoas responsáveis e autorizadas a retirar o aluno.</div>
                     </div>
                   </div>
-                  <button style={{ background: '#f8fafc', color: '#334155', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: 16, fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <PlusCircle size={16} /> Adicionar Autorizado
-                  </button>
                 </div>
 
                 {/* Responsaveis Grid */}
@@ -244,12 +307,48 @@ export default function ADPerfilPage() {
                     const isFin = resp.respFinanceiro || resp.financeiro || resp.tipo === 'Financeiro' || resp.tipo === 'Ambos'
                     const isPed = resp.respPedagogico || resp.pedagogico || resp.tipo === 'Pedagógico' || resp.tipo === 'Ambos'
                     
+                    // Se for o mesmo usuário logado, damos preferência à foto que já está na memória principal (sidebar)
+                    const isSameUser = (resp.email && currentUser?.email && resp.email.toLowerCase() === currentUser.email.toLowerCase()) || 
+                                       (resp.nome && currentUser?.nome && resp.nome.toLowerCase() === currentUser.nome.toLowerCase());
+                    const displayFoto = isSameUser ? (currentUser?.foto || resp.foto || resp.dados?.foto) : (resp.foto || resp.dados?.foto);
+                    
                     return (
                       <div key={i} style={{ padding: 20, borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))', display: 'flex', flexDirection: 'column', gap: 16, transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#c7d2fe'} onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <div style={{ width: 44, height: 44, borderRadius: 14, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#475569', fontSize: 16 }}>
-                              {getInitials(resp.nome)}
+                            <div 
+                              onClick={() => {
+                                if (resp.id) {
+                                  setSelectedRespId(resp.id)
+                                  fileInputRef.current?.click()
+                                }
+                              }}
+                              style={{ 
+                                width: 44, height: 44, borderRadius: 14, 
+                                background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                fontWeight: 800, color: '#475569', fontSize: 16,
+                                position: 'relative', overflow: 'hidden', cursor: resp.id ? 'pointer' : 'default'
+                              }}
+                            >
+                              {uploadingAvatarId === resp.id ? (
+                                <Loader2 size={20} className="animate-spin" color="#475569" />
+                              ) : displayFoto ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={displayFoto} alt={resp.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                getInitials(resp.nome)
+                              )}
+                              
+                              {/* Overlay de hover para edição */}
+                              {resp.id && !uploadingAvatarId && (
+                                <div className="avatar-edit-overlay" style={{
+                                  position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                                  background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  opacity: 0, transition: 'opacity 0.2s'
+                                }}>
+                                  <Camera size={18} color="white" />
+                                </div>
+                              )}
                             </div>
                             <div>
                               <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-main))', textTransform: 'capitalize' }}>{resp.nome}</div>
@@ -359,6 +458,21 @@ export default function ADPerfilPage() {
         </AnimatePresence>
       </motion.div>
 
+      {/* Hidden File Input for Avatar Upload */}
+      <input 
+        type="file" 
+        accept="image/jpeg, image/png, image/webp" 
+        ref={fileInputRef} 
+        style={{ display: 'none' }} 
+        onChange={handleAvatarChange} 
+      />
+
+      <style dangerouslySetInnerHTML={{__html: `
+        /* Adicionando hover ao overlay de edição do avatar */
+        .avatar-edit-overlay:hover {
+          opacity: 1 !important;
+        }
+      `}} />
     </div>
   )
 }

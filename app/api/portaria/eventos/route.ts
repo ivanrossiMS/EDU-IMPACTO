@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
     // Normalizar datas para evitar erros de sintaxe no banco (ex: T00:00:00)
     let dataInicioVal = data_inicio
     let dataFimVal = data_fim
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const todayStr = formatter.format(new Date())
 
     if (dataInicioVal && !dataInicioVal.match(/^\d{4}-\d{2}-\d{2}/)) {
       dataInicioVal = todayStr + (dataInicioVal.startsWith('T') ? dataInicioVal : 'T' + dataInicioVal)

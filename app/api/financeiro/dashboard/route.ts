@@ -79,8 +79,13 @@ export async function GET(request: Request) {
       }
     }
 
-    const hojeStart = new Date()
-    hojeStart.setHours(0, 0, 0, 0)
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric', month: 'numeric', day: 'numeric'
+    })
+    const spDateStr = formatter.format(new Date()) // M/D/YYYY
+    const [mmSP, ddSP, yyyySP] = spDateStr.split('/')
+    const hojeStart = new Date(`${yyyySP}-${mmSP.padStart(2, '0')}-${ddSP.padStart(2, '0')}T00:00:00-03:00`)
 
     // 2. Process Alunos (Active status, Risco, Inadimplencia, and Parcelas Paid)
     for (const a of alunosVal) {
