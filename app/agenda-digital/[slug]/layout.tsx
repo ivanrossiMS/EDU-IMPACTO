@@ -81,8 +81,20 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
 
     const storageKey = `edu-confirmed-exit-${aluno.id}`
 
+    // 1. Read the cache first
+    let cachedId: string | null = null
+    let isToday = false
+    try {
+      const stored = localStorage.getItem(storageKey)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        cachedId = parsed.callId
+        isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
+      }
+    } catch(e) {}
+
     if (call?.status === 'confirmed') {
-      // It is confirmed from the DB or realtime. Save to localStorage.
+      // Always trust the live confirmation
       setLocalConfirmed(true)
       try {
         localStorage.setItem(storageKey, JSON.stringify({
@@ -93,30 +105,28 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
       } catch (e) {}
     } else if (call && (call.status === 'waiting' || call.status === 'cancelled')) {
       // It was explicitly reverted or cancelled.
-      setLocalConfirmed(false)
-      try {
-        localStorage.removeItem(storageKey)
-      } catch(e) {}
+      // BUT ONLY wipe if this is the SAME call that we have cached!
+      if (cachedId && cachedId !== call.id && isToday) {
+        // The DB is returning an OLD call, but we have a FRESHER cache for a NEW call!
+        // DO NOT WIPE! KEEP IT CONFIRMED!
+        setLocalConfirmed(true)
+      } else {
+        setLocalConfirmed(false)
+        try {
+          localStorage.removeItem(storageKey)
+        } catch(e) {}
+      }
     } else {
-      // For 'called', 'special_auth', 'blocked', or !call (e.g. operator cleared)
-      // Check if we have a valid cache that hasn't been reverted
-      try {
-        const stored = localStorage.getItem(storageKey)
-        if (stored) {
-          const parsed = JSON.parse(stored)
-          const isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
-          
-          if (isToday) {
-            setLocalConfirmed(true)
-          } else {
-            // Old cache from yesterday
-            setLocalConfirmed(false)
-            localStorage.removeItem(storageKey)
-          }
-        } else {
-          setLocalConfirmed(false)
-        }
-      } catch (e) {}
+      // For 'called', 'special_auth', 'blocked', or !call
+      if (isToday) {
+        // ALWAYS trust the cache if it's from today!
+        setLocalConfirmed(true)
+      } else {
+        setLocalConfirmed(false)
+        try {
+          localStorage.removeItem(storageKey)
+        } catch(e) {}
+      }
     }
   }, [call?.status, call?.id, call?.confirmedAt, call?.guardianName, aluno?.id])
 
