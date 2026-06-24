@@ -11,27 +11,39 @@ export default function DisciplinasPage() {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ nome: '', cor: '#3b82f6' })
+  const [formData, setFormData] = useState({ nome: '', cor: '#3b82f6', id_professor: '', quantidade_questoes: 10 })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [professores, setProfessores] = useState<any[]>([])
 
   const refresh = async () => {
     setLoading(true)
-    const { data: disc } = await supabase.from('simulados_disciplinas').select('*').order('nome')
+    const { data: disc } = await supabase.from('simulados_disciplinas').select('*, system_users(nome)').order('nome')
     setData(disc || [])
     setLoading(false)
   }
 
-  useEffect(() => { refresh() }, [])
+  const loadProfessores = async () => {
+    try {
+      const res = await fetch('/api/configuracoes/usuarios?type=colaboradores')
+      if (res.ok) {
+        const json = await res.json()
+        const data = json.data || json
+        setProfessores(data.filter((u: any) => u.perfil === 'Professor' && u.status === 'ativo'))
+      }
+    } catch(e) {}
+  }
+
+  useEffect(() => { refresh(); loadProfessores() }, [])
   
 
   const handleOpen = (item?: any) => {
     if (item) {
       setEditingId(item.id)
-      setFormData({ nome: item.nome, cor: item.cor || '#3b82f6' })
+      setFormData({ nome: item.nome, cor: item.cor || '#3b82f6', id_professor: item.id_professor || '', quantidade_questoes: item.quantidade_questoes || 10 })
     } else {
       setEditingId(null)
-      setFormData({ nome: '', cor: '#3b82f6' })
+      setFormData({ nome: '', cor: '#3b82f6', id_professor: '', quantidade_questoes: 10 })
     }
     setIsModalOpen(true)
   }
@@ -40,10 +52,11 @@ export default function DisciplinasPage() {
     if (!formData.nome) return alert('O nome é obrigatório')
     setIsSaving(true)
     try {
+      const payload = { ...formData, id_professor: formData.id_professor || null }
       if (editingId) {
-        await supabase.from('simulados_disciplinas').update({ ...formData }).eq('id', editingId)
+        await supabase.from('simulados_disciplinas').update(payload).eq('id', editingId)
       } else {
-        await supabase.from('simulados_disciplinas').insert([{ ...formData }])
+        await supabase.from('simulados_disciplinas').insert([payload])
       }
       await refresh()
       setIsModalOpen(false)
@@ -104,7 +117,12 @@ export default function DisciplinasPage() {
               <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ width: 16, height: 16, borderRadius: '50%', background: item.cor || '#3b82f6', boxShadow: `0 0 10px ${item.cor || '#3b82f6'}` }} />
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{item.nome}</div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{item.nome}</div>
+                    <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
+                      Prof: {item.system_users?.nome || 'Não vinculado'} • {item.quantidade_questoes || 0} questões
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => handleOpen(item)} style={{ background: 'rgba(100, 116, 139, 0.1)', border: 'none', width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-primary))' }}>
@@ -133,10 +151,23 @@ export default function DisciplinasPage() {
                 <input value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15 }} />
               </div>
               <div>
-                <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>Cor Identificadora</label>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <input type="color" value={formData.cor} onChange={e => setFormData({...formData, cor: e.target.value})} style={{ width: 48, height: 48, padding: 0, border: 'none', borderRadius: 12, cursor: 'pointer', background: 'transparent' }} />
-                  <div style={{ color: 'hsl(var(--text-primary))', fontSize: 14 }}>{formData.cor}</div>
+                <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>Professor(a) Vinculado(a)</label>
+                <select value={formData.id_professor} onChange={e => setFormData({...formData, id_professor: e.target.value})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none' }}>
+                  <option value="">Nenhum professor vinculado</option>
+                  {professores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>Qtd. Questões Padrão</label>
+                  <input type="number" min="1" max="100" value={formData.quantidade_questoes} onChange={e => setFormData({...formData, quantidade_questoes: parseInt(e.target.value) || 0})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>Cor Identificadora</label>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <input type="color" value={formData.cor} onChange={e => setFormData({...formData, cor: e.target.value})} style={{ width: 48, height: 48, padding: 0, border: 'none', borderRadius: 12, cursor: 'pointer', background: 'transparent' }} />
+                    <div style={{ color: 'hsl(var(--text-primary))', fontSize: 14 }}>{formData.cor}</div>
+                  </div>
                 </div>
               </div>
             </div>

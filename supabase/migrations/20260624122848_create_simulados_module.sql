@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.simulados_disciplinas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     nome TEXT NOT NULL,
     cor TEXT,
+    id_professor UUID REFERENCES public.system_users(id),
+    quantidade_questoes INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
