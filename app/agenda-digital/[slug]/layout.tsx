@@ -75,42 +75,56 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled' && c.status !== 'blocked')
 
-  // Persist confirmed state locally so it doesn't disappear if operator clears the active calls
+  // Unified effect for local confirmed state
   useEffect(() => {
+    if (!aluno?.id) return
+
+    const storageKey = `edu-confirmed-exit-${aluno.id}`
+
     if (call?.status === 'confirmed') {
+      // It is confirmed from the DB or realtime. Save to localStorage.
       setLocalConfirmed(true)
-      // No timeout here anymore: we want the confirmed state to stay visible!
-      // Optional: store in localStorage to survive hard refresh if the operator cleared the list
       try {
-        localStorage.setItem(`edu-confirmed-exit-${aluno.id}`, JSON.stringify({
+        localStorage.setItem(storageKey, JSON.stringify({
+          callId: call.id,
           time: call.confirmedAt || new Date().toISOString(),
           by: call.guardianName || ''
         }))
       } catch (e) {}
-    } else if (call && (call.status as string) !== 'confirmed') {
+    } else if (call && (call.status === 'waiting' || call.status === 'cancelled')) {
+      // It was explicitly reverted or cancelled.
       setLocalConfirmed(false)
       try {
-        localStorage.removeItem(`edu-confirmed-exit-${aluno.id}`)
+        localStorage.removeItem(storageKey)
       } catch(e) {}
-    }
-  }, [call?.status, call?.confirmedAt, call?.guardianName, aluno?.id])
-
-  // Restore confirmed state on mount if activeCalls doesn't have it (e.g. operator cleared)
-  useEffect(() => {
-    if (!call && !localConfirmed && aluno?.id) {
+    } else {
+      // For 'called', 'special_auth', 'blocked', or !call (e.g. operator cleared)
+      // Check if we have a valid cache that hasn't been reverted
       try {
-        const stored = localStorage.getItem(`edu-confirmed-exit-${aluno.id}`)
+        const stored = localStorage.getItem(storageKey)
         if (stored) {
           const parsed = JSON.parse(stored)
-          // Only restore if it's from today
           const isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
+          
           if (isToday) {
-            setLocalConfirmed(true)
+            // If we have a call object, verify it's the SAME call.
+            // If it's a different callId, it's a new call, ignore cache.
+            if (call && parsed.callId && call.id !== parsed.callId) {
+              setLocalConfirmed(false)
+            } else {
+              setLocalConfirmed(true)
+            }
+          } else {
+            // Old cache from yesterday
+            setLocalConfirmed(false)
+            localStorage.removeItem(storageKey)
           }
+        } else {
+          setLocalConfirmed(false)
         }
       } catch (e) {}
     }
-  }, [call, localConfirmed, aluno?.id])
+  }, [call?.status, call?.id, call?.confirmedAt, call?.guardianName, aluno?.id])
 
   const { isProibido, isDiaRestrito, diasPermitidos } = React.useMemo(() => {
     let proibido = false;
