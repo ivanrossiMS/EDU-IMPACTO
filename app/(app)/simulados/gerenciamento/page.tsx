@@ -16,6 +16,7 @@ export default function GerenciamentoSimuladosPage() {
     setLoading(true)
     const { data } = await supabase.from('simulados').select(`
       *,
+      simulados_bimestres ( nome ),
       simulados_requisicoes ( quantidade_questoes ),
       simulados_questoes ( id )
     `).order('created_at', { ascending: false })
@@ -111,6 +112,7 @@ export default function GerenciamentoSimuladosPage() {
             <thead>
               <tr style={{ background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                 <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', borderTopLeftRadius: 20 }}>Título</th>
+                <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bimestre</th>
                 <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Séries</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Criação</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Progresso (Questões)</th>
@@ -121,13 +123,13 @@ export default function GerenciamentoSimuladosPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
+                  <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
                     Carregando simulados...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
+                  <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
                     Nenhum simulado encontrado.
                   </td>
                 </tr>
@@ -136,6 +138,9 @@ export default function GerenciamentoSimuladosPage() {
                   <td style={{ padding: '20px 24px', borderBottomLeftRadius: index === filtered.length - 1 ? 20 : 0 }}>
                     <div style={{ fontWeight: 700, color: 'hsl(var(--text-primary))', fontSize: 15, marginBottom: 4 }}>{s.titulo}</div>
                     <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 13 }}>Aplicação: {s.dataAplicacao?.split('-').reverse().join('/') || '-'}</div>
+                  </td>
+                  <td style={{ padding: '20px 24px' }}>
+                    <div style={{ color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600 }}>{s.simulados_bimestres?.nome || '-'}</div>
                   </td>
                   <td style={{ padding: '20px 24px' }}>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
