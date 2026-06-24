@@ -598,11 +598,12 @@ export default function ADInnerLayout({
 
   return (
     <>
-    <AnimatePresence>
-{/* Student Switcher Overlay */}
-    {switcherOpen && typeof document !== 'undefined' && createPortal(
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
-        width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
+    {/* Student Switcher Overlay */}
+    {typeof document !== 'undefined' && createPortal(
+      <AnimatePresence>
+        {switcherOpen && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
+            width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
         <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
@@ -635,13 +636,17 @@ export default function ADInnerLayout({
           </div>
         </motion.div>
       
-</motion.div>, document.body
-)}
+        </motion.div>
+        )}
+      </AnimatePresence>, document.body
+    )}
 
 {/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
-{isSpecialAuthModalOpen && typeof document !== 'undefined' && createPortal(
-  <motion.div
-    initial={{ opacity: 0 }}
+{typeof document !== 'undefined' && createPortal(
+  <AnimatePresence>
+    {isSpecialAuthModalOpen && (
+      <motion.div
+        initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
     style={{
@@ -849,9 +854,10 @@ export default function ADInnerLayout({
         .spin-anim { animation: spin-anim 0.9s linear infinite; }
       `}} />
     </motion.div>
-  </motion.div>, document.body
+    </motion.div>
+    )}
+  </AnimatePresence>, document.body
 )}
-</AnimatePresence>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
