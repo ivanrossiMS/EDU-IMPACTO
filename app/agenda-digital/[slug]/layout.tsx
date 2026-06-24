@@ -75,13 +75,37 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => aluno && c.studentId === aluno.id && c.status !== 'cancelled' && c.status !== 'blocked')
 
+  // Persist confirmed state locally so it doesn't disappear if operator clears the active calls
   useEffect(() => {
     if (call?.status === 'confirmed') {
       setLocalConfirmed(true)
-      const timer = setTimeout(() => setLocalConfirmed(false), 8000)
-      return () => clearTimeout(timer)
+      // No timeout here anymore: we want the confirmed state to stay visible!
+      // Optional: store in localStorage to survive hard refresh if the operator cleared the list
+      try {
+        localStorage.setItem(`edu-confirmed-exit-${aluno.id}`, JSON.stringify({
+          time: call.confirmedAt || new Date().toISOString(),
+          by: call.guardianName || ''
+        }))
+      } catch (e) {}
     }
-  }, [call?.status])
+  }, [call?.status, call?.confirmedAt, call?.guardianName, aluno?.id])
+
+  // Restore confirmed state on mount if activeCalls doesn't have it (e.g. operator cleared)
+  useEffect(() => {
+    if (!call && !localConfirmed && aluno?.id) {
+      try {
+        const stored = localStorage.getItem(`edu-confirmed-exit-${aluno.id}`)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          // Only restore if it's from today
+          const isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
+          if (isToday) {
+            setLocalConfirmed(true)
+          }
+        }
+      } catch (e) {}
+    }
+  }, [call, localConfirmed, aluno?.id])
 
   const { isProibido, isDiaRestrito, diasPermitidos } = React.useMemo(() => {
     let proibido = false;
@@ -287,6 +311,18 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     } catch { return '' }
   }
 
+  // Obter dados do cache local caso a chamada já tenha sido limpa pelo operador
+  const getConfirmedData = () => {
+    if (call?.status === 'confirmed') {
+      return { by: call.guardianName, time: call.confirmedAt }
+    }
+    try {
+      const stored = localStorage.getItem(`edu-confirmed-exit-${aluno.id}`)
+      if (stored) return JSON.parse(stored)
+    } catch(e) {}
+    return { by: '', time: new Date().toISOString() }
+  }
+
   if (isSpecialAuth) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
@@ -324,14 +360,15 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
             background: '#fff',
             boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
             flexShrink: 0,
+            marginTop: 4
           }} className="sab-pulse-dot" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
             <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Auth. Ativa</span>
-            <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 2 }}>
               {call?.guardianName ? call.guardianName.split('—')[0].trim() : 'Aguardando portaria'}
             </span>
           </div>
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontWeight: 600, flexShrink: 0 }}>
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: 600, flexShrink: 0 }}>
             {formatTime(call?.calledAt)}
           </span>
         </div>
@@ -377,10 +414,10 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
           cursor: 'default',
           padding: '0 12px',
         }}>
-          <Loader2 size={18} className="spin-anim" style={{ flexShrink: 0 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <Loader2 size={18} className="spin-anim" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
             <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13 }}>Chamando Aluno</span>
-            <span style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
+            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 2 }}>
               por {call?.guardianName} às {formatTime(call?.calledAt)}
             </span>
           </div>
@@ -408,6 +445,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     )
   }
 
+  const confData = getConfirmedData()
+
   return (
     <div style={{
       ...baseBtnStyle,
@@ -415,13 +454,16 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
       color: 'white',
       boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
       animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-      padding: '0 16px',
+      padding: '12px 16px',
+      height: 'auto',
+      minHeight: 56,
+      alignItems: 'center'
     }}>
-      <CheckCircle2 size={20} style={{ flexShrink: 0 }} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, overflow: 'hidden' }}>
-        <span className="ad-call-btn-label" style={{ lineHeight: 1.2 }}>Saída Confirmada!</span>
-        <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left' }}>
-          Retirado {call?.guardianName ? `por ${call.guardianName} ` : ''}às {call?.confirmedAt ? formatTime(call.confirmedAt) : formatTime(new Date().toISOString())}
+      <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
+        <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
+          Retirado {confData.by ? `por ${confData.by} ` : ''}às {formatTime(confData.time)}
         </span>
       </div>
       <style dangerouslySetInnerHTML={{__html: `
