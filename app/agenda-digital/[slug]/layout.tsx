@@ -246,7 +246,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   const isActiveState = hasPending
 
   // Label plurals
-  const pendingCount = myCalls.filter(c => c.status === 'waiting' || c.status === 'called').length
+  const pendingCount = myCalls.filter(c => c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth').length
   const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
 
   const handleCall = () => {
@@ -439,7 +439,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
             flexShrink: 0
           }} className="sab-pulse-dot" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 12 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>{pendingCount > 1 ? 'Auths. Ativas' : 'Auth. Ativa'}</span>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>{callLabel}</span>
             <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
               {myCalls.length > 0 ? (myCalls[0].guardianName ? myCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
             </span>
@@ -990,7 +990,7 @@ export default function ADInnerLayout({
           onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
         >
           <Megaphone size={18} strokeWidth={2.5} />
-          <span>Eu vim buscar (Chamar Aluno)</span>
+          <span>{selectedAlunos.length > 1 ? 'Eu vim buscar (Chamar Alunos)' : 'Eu vim buscar (Chamar Aluno)'}</span>
         </button>
       </div>
 
