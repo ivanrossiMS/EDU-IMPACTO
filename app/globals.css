@@ -1321,3 +1321,118 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   transform: translateZ(0) !important;
   backface-visibility: hidden !important;
 }
+
+/* ==========================================================================
+   NOVO SISTEMA VISUAL GLOBAL (Premium SaaS - Apple / Linear / Stripe / Arc)
+   Aplicado em todas as páginas da Agenda Digital
+   ========================================================================== */
+
+/* Force global light variables to avoid conflicts with dark mode */
+body {
+  --bg-base: 220 20% 96%;
+  --bg-surface: 0 0% 100%;
+  --bg-elevated: 220 18% 94%;
+  --bg-overlay: 220 16% 90%;
+  --bg-hover: 220 14% 86%;
+
+  --text-primary: 220 25% 10%;
+  --text-secondary: 220 15% 30%;
+  --text-muted: 220 10% 50%;
+  --text-disabled: 220 8% 70%;
+
+  --border-subtle: 220 12% 88%;
+  --border-default: 220 12% 80%;
+  --border-strong: 220 12% 65%;
+
+  color: hsl(var(--text-primary)) !important;
+  background-color: #FCFCFE !important; /* Soft base */
+  background-image: none !important; /* Remove any old gradients on body */
+}
+
+/* Base Premium Mesh & Grid */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -9999;
+  pointer-events: none;
+  
+  /* Extremely soft base color */
+  background-color: #FCFCFE;
+  
+  background-image: 
+    /* Dotted Grid (Arc Browser style) */
+    radial-gradient(rgba(99, 102, 241, 0.035) 1px, transparent 1px),
+    radial-gradient(rgba(139, 92, 246, 0.025) 1px, transparent 1px),
+    
+    /* Mesh Gradient Orbs (Stripe / Linear style) */
+    radial-gradient(circle at 10% 0%, rgba(243, 247, 255, 1) 0%, transparent 45%),
+    radial-gradient(circle at 90% 10%, rgba(246, 242, 255, 1) 0%, transparent 40%),
+    radial-gradient(circle at 0% 100%, rgba(238, 244, 255, 1) 0%, transparent 45%),
+    radial-gradient(circle at 100% 100%, rgba(248, 250, 255, 1) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.9) 0%, transparent 60%);
+    
+  background-size: 
+    24px 24px, 
+    32px 32px,
+    100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  background-position: 
+    0 0, 
+    16px 16px, 
+    0 0, 0 0, 0 0, 0 0, 0 0;
+    
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Decorative Geometric Elements (Framer / Modern Minimalist) */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -9998;
+  pointer-events: none;
+  
+  background-image: 
+    /* Curved lines (Arcs) */
+    radial-gradient(ellipse at 10% 50%, transparent 60%, rgba(99, 102, 241, 0.02) 60.5%, rgba(99, 102, 241, 0.02) 61%, transparent 61.5%),
+    radial-gradient(ellipse at 90% 50%, transparent 65%, rgba(139, 92, 246, 0.02) 65.5%, rgba(139, 92, 246, 0.02) 66%, transparent 66.5%),
+    
+    /* Hollow circles */
+    radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.03) 20.5%, rgba(59, 130, 246, 0.03) 21%, transparent 21.5%),
+    radial-gradient(circle at 25% 85%, transparent 15%, rgba(139, 92, 246, 0.025) 15.5%, rgba(139, 92, 246, 0.025) 16%, transparent 16.5%),
+    
+    /* Glass / Light reflections */
+    linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.5) 30%, transparent 40%),
+    linear-gradient(115deg, transparent 60%, rgba(255, 255, 255, 0.4) 70%, transparent 80%);
+    
+  background-size: 100% 100%;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Mobile Adjustments (Responsive & Performance) */
+@media (max-width: 768px) {
+  body::before {
+    background-image: 
+      radial-gradient(rgba(99, 102, 241, 0.025) 1px, transparent 1px),
+      radial-gradient(circle at 20% 10%, rgba(243, 247, 255, 1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(246, 242, 255, 1) 0%, transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.9) 0%, transparent 60%);
+    background-size: 
+      24px 24px, 
+      100% 100%, 100% 100%, 100% 100%;
+  }
+  
+  body::after {
+    background-image: 
+      radial-gradient(circle at 80% 20%, transparent 20%, rgba(59, 130, 246, 0.02) 20.5%, rgba(59, 130, 246, 0.02) 21%, transparent 21.5%),
+      linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.4) 40%, transparent 50%);
+  }
+}
