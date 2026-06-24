@@ -87,6 +87,11 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
           by: call.guardianName || ''
         }))
       } catch (e) {}
+    } else if (call && (call.status as string) !== 'confirmed') {
+      setLocalConfirmed(false)
+      try {
+        localStorage.removeItem(`edu-confirmed-exit-${aluno.id}`)
+      } catch(e) {}
     }
   }, [call?.status, call?.confirmedAt, call?.guardianName, aluno?.id])
 
@@ -383,6 +388,35 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     )
   }
 
+  const confData = getConfirmedData()
+
+  if (isConfirmed) {
+    return (
+      <div style={{
+        ...baseBtnStyle,
+        background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+        color: 'white',
+        boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
+        animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        padding: '12px 16px',
+        height: 'auto',
+        minHeight: 56,
+        alignItems: 'center'
+      }}>
+        <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
+          <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
+            Retirado {confData.by ? `por ${confData.by} ` : ''}às {formatTime(confData.time)}
+          </span>
+        </div>
+        <style dangerouslySetInnerHTML={{__html: `
+          @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        `}} />
+      </div>
+    )
+  }
+
   if (isActive) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
@@ -445,31 +479,13 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
     )
   }
 
-  const confData = getConfirmedData()
-
   return (
-    <div style={{
-      ...baseBtnStyle,
-      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-      color: 'white',
-      boxShadow: '0 12px 28px rgba(16,185,129,0.25)',
-      animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-      padding: '12px 16px',
-      height: 'auto',
-      minHeight: 56,
-      alignItems: 'center'
-    }}>
-      <CheckCircle2 size={24} style={{ flexShrink: 0 }} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
-        <span style={{ fontSize: 12, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 4, fontWeight: 500 }}>
-          Retirado {confData.by ? `por ${confData.by} ` : ''}às {formatTime(confData.time)}
-        </span>
-      </div>
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-      `}} />
-    </div>
+    <button className="btn-modern btn-chamar" onClick={handleCall} style={baseBtnStyle}>
+      <Megaphone size={18} />
+      <span className="ad-call-btn-label">
+        {isProibido ? 'Acesso Proibido' : isDiaRestrito ? 'Fora do Dia' : 'Chamar Aluno'}
+      </span>
+    </button>
   )
 }
 
