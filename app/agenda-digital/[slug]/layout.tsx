@@ -47,7 +47,7 @@ function PortalWrapper({ children }: { children: React.ReactNode }) {
   return createPortal(children, document.body)
 }
 
-function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void }) {
+function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAlunos = [] }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void, meusAlunos?: any[] }) {
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => aluno && String(c.studentId) === String(aluno.id))
@@ -217,8 +217,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal }: { aluno
   }, [aluno?.dados, currentUser]);
 
   const meusAlunosIds = React.useMemo(() => {
-    return (profileData?.meusAlunos || []).map((a: any) => String(a.id))
-  }, [profileData])
+    return meusAlunos.map((a: any) => String(a.id))
+  }, [meusAlunos])
 
   // Find all active/recent calls for this guardian
   const myCalls = React.useMemo(() => {
@@ -2294,6 +2294,7 @@ export default function ADInnerLayout({
                           setSelectedAlunos([aluno.id]);
                         }
                       }} 
+                      meusAlunos={profileData?.meusAlunos || []}
                     />
                   </div>
                 ) : (
