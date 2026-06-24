@@ -18,16 +18,6 @@ CREATE TABLE IF NOT EXISTS public.simulados_disciplinas (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Tabela: simulados_professores
-CREATE TABLE IF NOT EXISTS public.simulados_professores (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nome TEXT NOT NULL,
-    email TEXT,
-    status TEXT DEFAULT 'ativo',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
 -- Tabela: simulados
 CREATE TABLE IF NOT EXISTS public.simulados (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -47,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.simulados_requisicoes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_simulado UUID REFERENCES public.simulados(id) ON DELETE CASCADE,
     id_disciplina UUID REFERENCES public.simulados_disciplinas(id) ON DELETE CASCADE,
-    id_professor UUID REFERENCES public.simulados_professores(id),
+    id_professor UUID REFERENCES public.system_users(id),
     quantidade_questoes INTEGER NOT NULL DEFAULT 10,
     status TEXT DEFAULT 'pendente',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -59,7 +49,7 @@ CREATE TABLE IF NOT EXISTS public.simulados_questoes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     id_simulado UUID REFERENCES public.simulados(id) ON DELETE CASCADE,
     id_disciplina UUID REFERENCES public.simulados_disciplinas(id),
-    id_professor UUID REFERENCES public.simulados_professores(id),
+    id_professor UUID REFERENCES public.system_users(id),
     enunciado TEXT NOT NULL,
     nivel_dificuldade TEXT DEFAULT 'media',
     tipo_questao TEXT DEFAULT 'multipla_escolha',
@@ -103,7 +93,6 @@ CREATE TABLE IF NOT EXISTS public.simulados_logs (
 -- Enable RLS
 ALTER TABLE public.simulados_bimestres ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulados_disciplinas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.simulados_professores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulados ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulados_requisicoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.simulados_questoes ENABLE ROW LEVEL SECURITY;
@@ -114,7 +103,6 @@ ALTER TABLE public.simulados_logs ENABLE ROW LEVEL SECURITY;
 -- Allow unrestricted access for simplicity during dev since policies might be complex
 CREATE POLICY "Enable all for simulados_bimestres" ON public.simulados_bimestres FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all for simulados_disciplinas" ON public.simulados_disciplinas FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable all for simulados_professores" ON public.simulados_professores FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all for simulados" ON public.simulados FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all for simulados_requisicoes" ON public.simulados_requisicoes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Enable all for simulados_questoes" ON public.simulados_questoes FOR ALL USING (true) WITH CHECK (true);

@@ -20,7 +20,7 @@ export default function BancoQuestoesPage() {
     try {
       const { data, error } = await supabase
         .from('simulados_questoes')
-        .select('*, simulados_disciplinas (nome, cor), simulados_professores (nome)')
+        .select('*, simulados_disciplinas (nome, cor), system_users (nome)')
         .order('created_at', { ascending: false })
 
       if (error) throw error
