@@ -14,7 +14,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams } from 'next/navigation'
 import React, { use, useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
@@ -598,12 +597,11 @@ export default function ADInnerLayout({
 
   return (
     <>
-    {/* Student Switcher Overlay */}
-    {typeof document !== 'undefined' && createPortal(
-      <AnimatePresence>
-        {switcherOpen && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
-            width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
+    <AnimatePresence>
+{/* Student Switcher Overlay */}
+    {switcherOpen && (
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0,
+        width: '100vw', height: '100vh', background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
         <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
             <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
@@ -636,17 +634,13 @@ export default function ADInnerLayout({
           </div>
         </motion.div>
       
-        </motion.div>
-        )}
-      </AnimatePresence>, document.body
-    )}
+</motion.div>
+)}
 
 {/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
-{typeof document !== 'undefined' && createPortal(
-  <AnimatePresence>
-    {isSpecialAuthModalOpen && (
-      <motion.div
-        initial={{ opacity: 0 }}
+{isSpecialAuthModalOpen && (
+  <motion.div
+    initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
     style={{
@@ -665,12 +659,12 @@ export default function ADInnerLayout({
       transition={{ type: 'spring', stiffness: 340, damping: 28 }}
       className="ad-modal-container"
       style={{
-        background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)',
+        background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
         borderRadius: 28,
         padding: '28px 28px 24px',
         width: '100%',
         maxWidth: 440,
-        boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)',
+        boxShadow: '0 32px 80px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -679,12 +673,12 @@ export default function ADInnerLayout({
       {/* Decorative gradient blob */}
       <div style={{
         position: 'absolute', top: -60, right: -60, width: 200, height: 200,
-        background: 'radial-gradient(circle, rgba(99,102,241,0.25) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)',
         borderRadius: '50%', pointerEvents: 'none',
       }} />
       <div style={{
         position: 'absolute', bottom: -40, left: -40, width: 160, height: 160,
-        background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)',
         borderRadius: '50%', pointerEvents: 'none',
       }} />
 
@@ -696,16 +690,16 @@ export default function ADInnerLayout({
               width: 38, height: 38, borderRadius: 12,
               background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(99,102,241,0.4)',
+              boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
               flexShrink: 0,
             }}>
               <Megaphone size={18} color="#fff" strokeWidth={2.5} />
             </div>
             <div>
-              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
                 Opções de Retirada
               </h3>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.3 }}>
+              <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.3 }}>
                 Como deseja retirar o(a) aluno(a)?
               </p>
             </div>
@@ -714,9 +708,9 @@ export default function ADInnerLayout({
         <button
           onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
           style={{
-            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)',
             borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.7)',
+            justifyContent: 'center', cursor: 'pointer', color: '#64748b',
             flexShrink: 0,
           }}
         >
@@ -726,7 +720,7 @@ export default function ADInnerLayout({
 
       {/* Student Card */}
       <div style={{
-        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+        background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.04)',
         borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
         gap: 14, marginBottom: 24, position: 'relative', zIndex: 1,
       }}>
@@ -735,7 +729,7 @@ export default function ADInnerLayout({
           background: 'linear-gradient(135deg, #a855f7, #ec4899)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 18, fontWeight: 900, color: '#fff',
-          boxShadow: '0 4px 16px rgba(168,85,247,0.35)',
+          boxShadow: '0 4px 16px rgba(168,85,247,0.25)',
         }}>
           {aluno?.foto
             ? <img src={aluno.foto} alt={aluno?.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -743,15 +737,14 @@ export default function ADInnerLayout({
           }
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {abbreviateName(aluno?.nome || '')}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>Turma:</span>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
             <span style={{
-              fontSize: 11, fontWeight: 800, color: '#a78bfa',
-              background: 'rgba(167,139,250,0.12)', padding: '2px 8px', borderRadius: 100,
-              border: '1px solid rgba(167,139,250,0.2)',
+              fontSize: 11, fontWeight: 800, color: '#4f46e5',
+              background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
             }}>{cleanTurma}</span>
           </div>
         </div>
@@ -772,7 +765,7 @@ export default function ADInnerLayout({
             color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
             fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
-            boxShadow: '0 8px 24px rgba(16,185,129,0.3)',
+            boxShadow: '0 8px 24px rgba(16,185,129,0.25)',
           }}
           onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
           onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
@@ -784,18 +777,18 @@ export default function ADInnerLayout({
 
       {/* Divider */}
       <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ou Outra Pessoa</span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.1)' }} />
+        <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
+        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ou Outra Pessoa</span>
+        <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
       </div>
 
       {/* Text Field */}
       <div style={{ position: 'relative', zIndex: 1, marginBottom: 20 }}>
         <label style={{
-          display: 'block', fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.6)',
+          display: 'block', fontSize: 11, fontWeight: 800, color: '#64748b',
           textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
         }}>
-          Quem irá buscar + Observação <span style={{ color: '#f87171' }}>*</span>
+          Quem irá buscar + Observação <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <textarea
           ref={specialAuthTextRef}
@@ -806,8 +799,8 @@ export default function ADInnerLayout({
           disabled={specialAuthSending || specialAuthSent}
           style={{
             width: '100%', padding: '12px 14px', borderRadius: 14,
-            border: `1.5px solid ${specialAuthText.trim() ? 'rgba(245,158,11,0.5)' : 'rgba(255,255,255,0.12)'}`,
-            background: 'rgba(255,255,255,0.05)', fontSize: 13, color: '#fff',
+            border: `1.5px solid ${specialAuthText.trim() ? 'rgba(245,158,11,0.5)' : 'rgba(0,0,0,0.08)'}`,
+            background: 'rgba(0,0,0,0.02)', fontSize: 13, color: '#0f172a',
             outline: 'none', resize: 'none', fontFamily: 'Outfit, sans-serif',
             lineHeight: 1.5, boxSizing: 'border-box', transition: 'border-color 0.2s',
           }}
@@ -829,9 +822,9 @@ export default function ADInnerLayout({
             background: specialAuthSent
               ? 'linear-gradient(135deg, #10b981, #059669)'
               : !specialAuthText.trim() || specialAuthSending
-                ? 'rgba(255,255,255,0.08)'
+                ? 'rgba(0,0,0,0.04)'
                 : 'linear-gradient(135deg, #f59e0b, #d97706)',
-            color: !specialAuthText.trim() && !specialAuthSent ? 'rgba(255,255,255,0.35)' : '#fff',
+            color: !specialAuthText.trim() && !specialAuthSent ? '#94a3b8' : '#fff',
             fontSize: 13, fontWeight: 800, cursor: specialAuthText.trim() && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
@@ -854,10 +847,9 @@ export default function ADInnerLayout({
         .spin-anim { animation: spin-anim 0.9s linear infinite; }
       `}} />
     </motion.div>
-    </motion.div>
-    )}
-  </AnimatePresence>, document.body
+  </motion.div>
 )}
+</AnimatePresence>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
