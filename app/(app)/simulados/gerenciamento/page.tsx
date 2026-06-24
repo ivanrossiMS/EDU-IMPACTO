@@ -57,6 +57,20 @@ export default function GerenciamentoSimuladosPage() {
     }
   }
 
+  const handleApprove = async (id: string) => {
+    if (!confirm('Deseja realmente aprovar e publicar este simulado? Ele ficará visível aos alunos e professores.')) return
+    
+    try {
+      const { error } = await supabase.from('simulados').update({ status: 'publicado' }).eq('id', id)
+      if (error) throw error
+      
+      loadData()
+    } catch (e) {
+      console.error(e)
+      alert('Erro ao aprovar simulado.')
+    }
+  }
+
   const filtered = simulados.filter(s => s.titulo.toLowerCase().includes(searchTerm.toLowerCase()))
 
   return (
@@ -98,6 +112,7 @@ export default function GerenciamentoSimuladosPage() {
               <tr style={{ background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                 <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Título</th>
                 <th style={{ padding: '16px 24px', textAlign: 'left', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Séries</th>
+                <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Data Criação</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Progresso (Questões)</th>
                 <th style={{ padding: '16px 24px', textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</th>
                 <th style={{ padding: '16px 24px', textAlign: 'right', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ações</th>
@@ -106,13 +121,13 @@ export default function GerenciamentoSimuladosPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
+                  <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
                     Carregando simulados...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
+                  <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15 }}>
                     Nenhum simulado encontrado.
                   </td>
                 </tr>
@@ -128,6 +143,9 @@ export default function GerenciamentoSimuladosPage() {
                         <span key={serie} style={{ padding: '4px 8px', borderRadius: 6, background: 'rgba(100, 116, 139, 0.1)', color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600 }}>{serie}</span>
                       ))}
                     </div>
+                  </td>
+                  <td style={{ padding: '20px 24px', textAlign: 'center' }}>
+                    <div style={{ color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600 }}>{s.created_at ? new Date(s.created_at).toLocaleDateString('pt-BR') : '-'}</div>
                   </td>
                   <td style={{ padding: '20px 24px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -160,6 +178,29 @@ export default function GerenciamentoSimuladosPage() {
                         
                         {menuOpen === s.id && (
                           <div style={{ position: 'absolute', right: 0, top: 40, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, padding: 8, zIndex: 50, minWidth: 150, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+                            <Link 
+                              href={`/simulados/gerenciamento/editar/${s.id}`}
+                              style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '10px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, cursor: 'pointer', textDecoration: 'none' }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(100, 116, 139, 0.1)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Edit2 size={16} /> Editar
+                            </Link>
+
+                            {s.status !== 'publicado' && (
+                              <button 
+                                onClick={() => {
+                                  setMenuOpen(null)
+                                  handleApprove(s.id)
+                                }}
+                                style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', padding: '10px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Aprovar
+                              </button>
+                            )}
+
                             <button 
                               onClick={() => {
                                 setMenuOpen(null)
