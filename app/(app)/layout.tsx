@@ -220,15 +220,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Agenda Digital manages its own navigation — suppress global ERP sidebar/topbar there
   const isAgendaDigital = pathname?.startsWith('/agenda-digital')
+  const isSimulados = pathname?.startsWith('/simulados')
+  const hideGlobalSidebar = isAgendaDigital || isSimulados
 
   return (
     <DataProvider>
       <DialogProvider>
         <WebVitalsReporter />
         <div className="app-wrapper">
-          {!isAgendaDigital && <Sidebar />}
-          <div className={`main-content ${!isAgendaDigital && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${isAgendaDigital ? 'agenda-digital-no-sidebar' : ''}`}>
-            {isMobile && !isAgendaDigital && (
+          {!hideGlobalSidebar && <Sidebar />}
+          <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`}>
+            {isMobile && !hideGlobalSidebar && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',

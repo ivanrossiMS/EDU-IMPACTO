@@ -794,6 +794,43 @@ export default function LoginPage() {
             <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>RH, SST e NR-01</div>
           </div>
         </button>
+
+        <button type="button" 
+          onClick={async () => {
+             const p = pendingAuth?.perfil;
+             
+             let perfisList = DEFAULT_PERFIS;
+             try {
+               const res = await fetch('/api/configuracoes/perfis');
+               if (res.ok) {
+                 const data = await res.json();
+                 if (Array.isArray(data) && data.length > 0) {
+                   perfisList = data;
+                 }
+               }
+             } catch (e) {
+               console.error('Erro ao verificar permissao de simulados:', e);
+             }
+             
+             const perfilObj = perfisList?.find(x => x.nome === p);
+             const hasSimuladosAccess = perfilObj?.permissoes?.includes('simulados') || perfilObj?.permissoes?.includes('principal');
+             
+             if (!hasSimuladosAccess) {
+               setShowBlockModal(true);
+               return;
+             }
+             
+             window.location.href = '/simulados';
+          }}
+          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+          onMouseEnter={e=>{e.currentTarget.style.background='rgba(244,63,94,0.08)'; e.currentTarget.style.borderColor='rgba(244,63,94,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(244,63,94,0.1)'}}
+          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #f43f5e, #be123c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(244,63,94,0.4)' }}>📝</div>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>SIMULADOS</div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
+          </div>
+        </button>
       </div>
     </div>
   )

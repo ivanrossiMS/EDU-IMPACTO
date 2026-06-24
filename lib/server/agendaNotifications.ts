@@ -79,11 +79,20 @@ export async function sendAgendaPushNotification({
       return { success: true, skipped: true, reason: 'invalid_target_ids' }
     }
 
-    const supabase = await createProtectedClient()
+    // Usar Service Role para garantir leitura/gravação na tabela de log (ignora RLS que estava bloqueando)
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseService = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
+      }
+    )
 
     // ── Verificação de duplicidade ──────────────────────────────────────────
     // Evita disparar o mesmo push duas vezes para o mesmo itemId+type
-    const { data: existingLog } = await supabase
+    const { data: existingLog } = await supabaseService
       .from('agenda_push_logs')
       .select('id, status')
       .eq('item_id', itemId)
@@ -123,7 +132,7 @@ export async function sendAgendaPushNotification({
     const logStatus = pushResponse.success ? 'sent' : 'failed'
     const errorMsg = pushResponse.success ? null : (pushResponse.error || 'Unknown error')
 
-    const { error: logError } = await supabase.from('agenda_push_logs').insert({
+    const { error: logError } = await supabaseService.from('agenda_push_logs').insert({
       user_id: senderUserId || null,
       type,
       item_id: itemId,

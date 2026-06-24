@@ -79,8 +79,25 @@ export async function POST(request: Request) {
       
       // Buscar status anterior para evitar disparos duplicados de notificação
       const ids = rows.map((r: any) => r.id)
-      const { data: existingRows } = await supabase.from('saida_calls').select('id, dados').in('id', ids)
-      const existingStatusMap = new Map((existingRows || []).map(r => [r.id, r.dados?.status]))
+      
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabaseService = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
+      )
+      
+      const { data: existingRows } = await supabaseService.from('saida_calls').select('id, dados').in('id', ids)
+      
+      const existingStatusMap = new Map((existingRows || []).map(r => {
+        let status = null
+        if (typeof r.dados === 'string') {
+          try { status = JSON.parse(r.dados).status } catch(e){}
+        } else if (r.dados) {
+          status = (r.dados as any).status
+        }
+        return [r.id, status]
+      }))
 
       const { error } = await supabase.from('saida_calls').upsert(rows)
       if (error) throw new Error(error.message)
@@ -120,8 +137,22 @@ export async function POST(request: Request) {
     const row = buildRow(body)
 
     // Buscar status anterior
-    const { data: existingRow } = await supabase.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
-    const wasConfirmed = existingRow?.dados?.status === 'confirmed'
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseService = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
+    )
+    const { data: existingRow } = await supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
+    
+    let wasConfirmed = false
+    if (existingRow?.dados) {
+      if (typeof existingRow.dados === 'string') {
+        try { wasConfirmed = JSON.parse(existingRow.dados).status === 'confirmed' } catch(e){}
+      } else {
+        wasConfirmed = (existingRow.dados as any).status === 'confirmed'
+      }
+    }
 
     const { data, error } = await supabase.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)

@@ -317,10 +317,10 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     guardianId: string, guardianName: string,
     source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null
   ): PickupCall | null => {
-    // Prevent duplicate active call
+    // Prevent duplicate active call for the same student, unless it was cancelled
     const existing = activeCalls.find(c =>
       c.studentId === studentId &&
-      (c.status === 'called' || c.status === 'waiting') &&
+      c.status !== 'cancelled' &&
       c.guardianId !== 'special' &&
       c.guardianId !== 'special-auth'
     )
