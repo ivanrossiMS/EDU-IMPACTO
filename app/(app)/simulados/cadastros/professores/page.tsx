@@ -11,7 +11,7 @@ export default function ProfessoresPage() {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ nome: '', status: 'ativo' })
+  const [formData, setFormData] = useState({ nome: '', email: '' })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -28,10 +28,10 @@ export default function ProfessoresPage() {
   const handleOpen = (item?: any) => {
     if (item) {
       setEditingId(item.id)
-      setFormData({ nome: item.nome, status: item.status })
+      setFormData({ nome: item.nome, email: item.email || '' })
     } else {
       setEditingId(null)
-      setFormData({ nome: '', status: 'ativo' })
+      setFormData({ nome: '', email: '' })
     }
     setIsModalOpen(true)
   }
@@ -109,7 +109,7 @@ export default function ProfessoresPage() {
                   <div>
                     <div style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{item.nome}</div>
                     <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
-                      Status: <span style={{ color: item.status === 'ativo' ? '#10b981' : '#ef4444' }}>{item.status.toUpperCase()}</span>
+                      {item.email || 'Sem e-mail cadastrado'}
                     </div>
                   </div>
                 </div>
@@ -140,11 +140,8 @@ export default function ProfessoresPage() {
                 <input value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15 }} />
               </div>
               <div>
-                <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>Status</label>
-                <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15 }}>
-                  <option value="ativo">Ativo</option>
-                  <option value="inativo">Inativo</option>
-                </select>
+                <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 8 }}>E-mail</label>
+                <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} style={{ width: '100%', padding: 14, borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15 }} placeholder="E-mail opcional" />
               </div>
             </div>
 
