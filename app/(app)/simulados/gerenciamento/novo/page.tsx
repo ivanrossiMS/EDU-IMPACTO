@@ -112,7 +112,7 @@ export default function NovoSimuladoPage() {
       router.push('/simulados/gerenciamento')
     } catch (err) {
       console.error(err)
-      alert('Erro ao criar simulado: ' + (err.message || JSON.stringify(err)))
+      alert('Erro ao criar simulado: ' + ((err as any).message || JSON.stringify(err)))
     } finally {
       setLoading(false)
     }
