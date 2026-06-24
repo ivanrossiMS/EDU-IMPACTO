@@ -15,7 +15,7 @@ import { ADSidebar } from './components/Sidebar'
 import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
-import { TechSkyBackground } from '@/components/ui/TechSkyBackground'
+
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
@@ -148,7 +148,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <TechSkyBackground />
+
       <div className="agenda-digital-wrapper" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'transparent' }}>
         <style dangerouslySetInnerHTML={{__html: `
           /* Esconde a interface do ERP */
