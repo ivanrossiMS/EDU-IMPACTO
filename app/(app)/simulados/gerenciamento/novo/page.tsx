@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 export default function NovoSimuladoPage() {
   const router = useRouter()
@@ -15,16 +16,37 @@ export default function NovoSimuladoPage() {
   const [series, setSeries] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Real data
+  const [bimestres, setBimestres] = useState<any[]>([])
+  const [disciplinas, setDisciplinas] = useState<any[]>([])
+  const [professores, setProfessores] = useState<any[]>([])
+
   // Requisicoes (disciplina, professor, qtdQuestoes)
   const [requisicoes, setRequisicoes] = useState([
     { id: Date.now().toString(), disciplinaId: '', professorId: '', qtdQuestoes: 10 }
   ])
 
-  // Mock data (replace with Supabase fetch in prod)
-  const bimestres = [{ id: '1', nome: '1º Bimestre' }, { id: '2', nome: '2º Bimestre' }]
-  const disciplinas = [{ id: '1', nome: 'Matemática' }, { id: '2', nome: 'Língua Portuguesa' }]
-  const professores = [{ id: '1', nome: 'Prof. João' }, { id: '2', nome: 'Prof. Maria' }]
   const seriesOptions = ['6º Ano', '7º Ano', '8º Ano', '9º Ano', '1ª Série', '2ª Série', '3ª Série']
+
+  useEffect(() => {
+    async function loadData() {
+      const { data: bims } = await supabase.from('simulados_bimestres').select('*').eq('status', 'ativo').order('nome')
+      setBimestres(bims || [])
+
+      const { data: discs } = await supabase.from('simulados_disciplinas').select('*').order('nome')
+      setDisciplinas(discs || [])
+
+      try {
+        const res = await fetch('/api/configuracoes/usuarios?type=colaboradores')
+        if (res.ok) {
+          const json = await res.json()
+          const data = json.data || json
+          setProfessores(data.filter((u: any) => u.perfil === 'Professor' && u.status === 'ativo'))
+        }
+      } catch(e) {}
+    }
+    loadData()
+  }, [])
 
   const handleAddRequisicao = () => {
     setRequisicoes(prev => [...prev, { id: Date.now().toString(), disciplinaId: '', professorId: '', qtdQuestoes: 10 }])
@@ -35,7 +57,21 @@ export default function NovoSimuladoPage() {
   }
 
   const handleRequisicaoChange = (id: string, field: string, value: string | number) => {
-    setRequisicoes(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r))
+    setRequisicoes(prev => prev.map(r => {
+      if (r.id === id) {
+        const updated = { ...r, [field]: value }
+        // Se mudou a disciplina, auto-preencher professor e qtdQuestoes
+        if (field === 'disciplinaId') {
+          const disc = disciplinas.find(d => d.id === value)
+          if (disc) {
+            if (disc.id_professor) updated.professorId = disc.id_professor
+            if (disc.quantidade_questoes) updated.qtdQuestoes = disc.quantidade_questoes
+          }
+        }
+        return updated
+      }
+      return r
+    }))
   }
 
   const toggleSerie = (serie: string) => {
@@ -50,11 +86,30 @@ export default function NovoSimuladoPage() {
 
     setLoading(true)
     try {
-      // Simulação do salvamento no Supabase
-      console.log('Salvando Simulado:', { titulo, descricao, dataAplicacao, bimestreId, series, requisicoes })
-      await new Promise(r => setTimeout(r, 1000))
+      const { data: simData, error: simError } = await supabase.from('simulados').insert([{
+        titulo,
+        descricao,
+        data_aplicacao: dataAplicacao,
+        id_bimestre: bimestreId || null,
+        series,
+        status: 'rascunho'
+      }]).select().single()
+
+      if (simError) throw simError
+
+      if (requisicoes.length > 0) {
+        const reqs = requisicoes.map(r => ({
+          id_simulado: simData.id,
+          id_disciplina: r.disciplinaId,
+          id_professor: r.professorId,
+          quantidade_questoes: r.qtdQuestoes,
+          status: 'pendente'
+        }))
+        const { error: reqError } = await supabase.from('simulados_requisicoes').insert(reqs)
+        if (reqError) throw reqError
+      }
       
-      alert('Simulado criado com sucesso! Requisições enviadas aos professores.')
+      alert('Simulado criado com sucesso! Requisições prontas.')
       router.push('/simulados/gerenciamento')
     } catch (err) {
       console.error(err)
