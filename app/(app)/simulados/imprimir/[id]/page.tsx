@@ -88,11 +88,19 @@ export default function SimuladoImprimirPage() {
         
       .page-content {
         position: absolute;
-        top: 38mm;
         left: 18mm;
         right: 18mm;
-        bottom: 25mm;
         overflow: hidden;
+      }
+
+      .page-content.first-page {
+        top: 58mm; /* logo abaixo de ALUNO(A), com espaço leve */
+        bottom: 18mm;
+      }
+
+      .page-content.internal-page {
+        top: 18mm; /* página 2 em diante começa mais acima */
+        bottom: 18mm;
       }
 
       @media print {

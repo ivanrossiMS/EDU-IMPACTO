@@ -16,7 +16,8 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   const [pages, setPages] = useState<{ leftCol: Questao[], rightCol: Questao[] }[]>([])
   const [isPaginating, setIsPaginating] = useState(true)
   const measuringRef = useRef<HTMLDivElement>(null)
-  const heightRef = useRef<HTMLDivElement>(null)
+  const heightFirstRef = useRef<HTMLDivElement>(null)
+  const heightInternalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!questoes || questoes.length === 0) {
@@ -36,14 +37,13 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       if (!isMounted) return
 
       const measureContainer = measuringRef.current
-      const safeArea = heightRef.current
-      if (!measureContainer || !safeArea) {
+      if (!measureContainer) {
         setIsPaginating(false)
         return
       }
 
-      // Height of .page-content (usually 234mm)
-      const MAX_HEIGHT = safeArea.getBoundingClientRect().height
+      const MAX_HEIGHT_FIRST = heightFirstRef.current?.getBoundingClientRect().height || 850
+      const MAX_HEIGHT_INTERNAL = heightInternalRef.current?.getBoundingClientRect().height || 950
       
       const newPages: { leftCol: Questao[], rightCol: Questao[] }[] = []
       let currentLeft: Questao[] = []
@@ -62,8 +62,11 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
         // Add 16px gap to height
         const qHeight = qEl.getBoundingClientRect().height + 16
 
+        // Determine current max height based on if this is the first page or not
+        const CURRENT_MAX_HEIGHT = newPages.length === 0 ? MAX_HEIGHT_FIRST : MAX_HEIGHT_INTERNAL
+
         // Handle HUGE question (taller than column)
-        if (qHeight >= MAX_HEIGHT) {
+        if (qHeight >= CURRENT_MAX_HEIGHT) {
           if (leftHeight > 0 || rightHeight > 0) {
             newPages.push({ leftCol: currentLeft, rightCol: currentRight })
             currentLeft = []
@@ -78,10 +81,10 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           continue
         }
 
-        if (leftHeight + qHeight <= MAX_HEIGHT) {
+        if (leftHeight + qHeight <= CURRENT_MAX_HEIGHT) {
           currentLeft.push(q)
           leftHeight += qHeight
-        } else if (rightHeight + qHeight <= MAX_HEIGHT) {
+        } else if (rightHeight + qHeight <= CURRENT_MAX_HEIGHT) {
           currentRight.push(q)
           rightHeight += qHeight
         } else {
@@ -174,14 +177,18 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           <Loader2 className="animate-spin" size={40} color="#3b82f6" style={{ marginBottom: 16 }} />
           <p style={{ color: '#64748b', fontWeight: 600 }}>Calculando quebras de página em colunas ({questoes.length} questões)...</p>
           
-          {/* Reference div to get exact safe height in pixels */}
+          {/* Reference divs to get exact safe height in pixels */}
           <div 
             className="print-page"
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
             <div 
-              ref={heightRef}
-              className="page-content"
+              ref={heightFirstRef}
+              className="page-content first-page"
+            />
+            <div 
+              ref={heightInternalRef}
+              className="page-content internal-page"
             />
           </div>
 
@@ -190,7 +197,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
             <div className="print-page">
-              <div className="page-content">
+              <div className="page-content internal-page">
                 <div style={{ display: 'flex', width: '100%', gap: '12mm' }}>
                   <div ref={measuringRef} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     {questoes.map((q, i) => renderQuestao(q, i))}
@@ -244,7 +251,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
             </div>
           )}
 
-          <div className="page-content" style={{ zIndex: 10 }}>
+          <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
             {/* Columns Container */}
             <div style={{ display: 'flex', width: '100%', height: '100%', gap: '12mm' }}>
               
