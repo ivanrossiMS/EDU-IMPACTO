@@ -50,6 +50,11 @@ export function PaginationEngine({
         }
       });
 
+      const avail1El = shadow.querySelector('[data-measure-avail-1]');
+      const availNEl = shadow.querySelector('[data-measure-avail-n]');
+      const avail1Px = avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 18) * 3.7795;
+      const availNPx = availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 18) * 3.7795;
+
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);
       let colIndex = 0;
@@ -57,8 +62,7 @@ export function PaginationEngine({
       let pageIndex = 0;
 
       function getAvailableHeight() {
-        const header = pageIndex === 0 ? HEADER_1 : HEADER_OTHER;
-        return PAGE_H - header - BOTTOM;
+        return pageIndex === 0 ? avail1Px : availNPx;
       }
 
       function advanceCol() {
@@ -140,12 +144,20 @@ export function PaginationEngine({
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
       
       <div 
-        ref={shadowRef}
+        ref={shadowRef} 
         style={{ 
-          position: 'absolute', top: -9999, left: -9999, visibility: 'hidden', 
-          width: shadowColWidth, fontSize: `${fontSize}px`, lineHeight: 1.6, textAlign: 'justify' 
+          position: 'absolute', 
+          visibility: 'hidden', 
+          top: 0, left: 0, 
+          width: shadowColWidth,
+          fontSize: `${fontSize}px`, 
+          lineHeight: 1.6, 
+          zIndex: -1000 
         }}
       >
+        <div data-measure-avail-1 style={{ height: 'calc(297mm - 75mm - 18mm)' }} />
+        <div data-measure-avail-n style={{ height: 'calc(297mm - 18mm - 18mm)' }} />
+
         {questoes.map((q, idx) => {
           const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
           return (

@@ -25,13 +25,13 @@ export function PageContent({
         }
       `}</style>
       {pIndex === 0 && config?.modelo_pdf_url && (
-        <div className="print-cover-image" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }}>
-          <img src={config.modelo_pdf_url} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+        <div className="print-cover-image" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
+          <img src={config.modelo_pdf_url} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
-        <div className="print-repeating-bg" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }}>
-          <img src={config.modelo_pdf_outras_paginas_url} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+        <div className="print-repeating-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
+          <img src={config.modelo_pdf_outras_paginas_url} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
 
@@ -47,8 +47,8 @@ export function PageContent({
 
       <div style={{ 
         position: 'absolute', 
-        top: pIndex === 0 ? '68mm' : '20mm', 
-        left: '15mm', right: '15mm', bottom: '25mm', 
+        top: pIndex === 0 ? '75mm' : '18mm', 
+        left: '16mm', right: '16mm', bottom: '18mm', 
         zIndex: 2,
         display: 'flex',
         gap: '12mm'

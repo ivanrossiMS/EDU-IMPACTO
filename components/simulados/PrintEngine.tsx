@@ -201,22 +201,15 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   const renderPage = (page: { leftCol: Questao[], rightCol: Questao[] }, pIndex: number) => (
     <div key={pIndex} className="print-page">
       
-      {/* Repeating BG */}
-      {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
-        <img 
-          src={config.modelo_pdf_outras_paginas_url} 
-          alt="Fundo" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-        />
-      )}
-
-      {/* Cover BG */}
       {pIndex === 0 && config?.modelo_pdf_url && (
-        <img 
-          src={config.modelo_pdf_url} 
-          alt="Capa" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-        />
+        <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, margin: 0, padding: 0 }}>
+          <img src={config.modelo_pdf_url} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+        </div>
+      )}
+      {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
+        <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, margin: 0, padding: 0 }}>
+          <img src={config.modelo_pdf_outras_paginas_url} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+        </div>
       )}
 
       {/* Title on cover */}
