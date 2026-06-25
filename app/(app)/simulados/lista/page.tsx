@@ -15,6 +15,7 @@ export default function SimuladosListaPage() {
   const [collapsedTurmas, setCollapsedTurmas] = useState<Record<string, boolean>>({})
   const [professoresMap, setProfessoresMap] = useState<Record<string, string>>({})
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
+  const [shakeId, setShakeId] = useState<string | null>(null)
   const router = useRouter()
   const { currentUserPerfil, currentUser, hydrated } = useApp()
   const isProfessor = currentUserPerfil === 'Professor'
@@ -396,15 +397,26 @@ export default function SimuladosListaPage() {
                                                   q.id_professor === req.id_professor && q.id_disciplina === req.id_disciplina
                                                 ).length || 0
 
+                                                const reqKey = `${s.id}-${req.id_professor}-${req.id_disciplina}`
+                                                const isBlocked = isProfessor && currentUser && currentUser.id !== req.id_professor
+
                                                 return (
-                                                  <div 
+                                                  <motion.div 
                                                     key={idx} 
-                                                    onClick={() => router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.02)' }}
-                                                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}
+                                                    animate={shakeId === reqKey ? { x: [-5, 5, -5, 5, 0], transition: { duration: 0.3 } } : {}}
+                                                    onClick={() => {
+                                                      if (isBlocked) {
+                                                        setShakeId(reqKey)
+                                                        setTimeout(() => setShakeId(null), 300)
+                                                        return
+                                                      }
+                                                      router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
+                                                    }}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 8, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
+                                                    onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.02)' } }}
+                                                    onMouseLeave={e => { if (!isBlocked) { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' } }}
                                                   >
-                                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: isBlocked ? 0.5 : 1 }}>
                                                       <User size={16} />
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
@@ -414,7 +426,7 @@ export default function SimuladosListaPage() {
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: currentQty >= requestedQty ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: currentQty >= requestedQty ? '#10b981' : '#f59e0b', padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                                                       {currentQty}/{requestedQty} quest.
                                                     </div>
-                                                  </div>
+                                                  </motion.div>
                                                 )
                                               })}
                                             </div>
