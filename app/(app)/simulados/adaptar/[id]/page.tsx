@@ -60,53 +60,36 @@ export default function AdaptarSimuladoPage() {
     const style = document.createElement('style')
     style.innerHTML = `
       @media print {
-        html, body {
-          width: 210mm !important;
-          height: auto !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow: visible !important;
-          background: white !important;
+        body > *:not(#print-root) {
+          display: none !important;
         }
 
-        body * {
-          visibility: hidden !important;
-        }
-
-        .print-wrapper, .print-wrapper * {
-          visibility: visible !important;
-        }
-
-        .print-wrapper {
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
+        #print-root {
+          display: block !important;
+          position: static !important;
           width: 210mm !important;
           margin: 0 !important;
           padding: 0 !important;
-          transform: none !important;
-          zoom: 1 !important;
         }
 
-        .print-area {
+        .print-page {
           width: 210mm !important;
           height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
-          transform: none !important;
-          box-shadow: none !important;
           page-break-after: always !important;
           break-after: page !important;
           overflow: hidden !important;
+          background-size: 210mm 297mm !important;
+          background-repeat: no-repeat !important;
+          background-position: center !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        .no-print { display: none !important; }
-        
-        @page { 
-          size: A4 portrait; 
-          margin: 0; 
+        @page {
+          size: A4 portrait;
+          margin: 0;
         }
       }
     `
@@ -152,6 +135,14 @@ export default function AdaptarSimuladoPage() {
       }
       return q
     }))
+  }
+
+  const handlePrint = async () => {
+    // Se quiser salvar antes
+    // await salvarConfiguracoes()
+    setTimeout(() => {
+      window.print()
+    }, 300)
   }
 
   const handleSaveAndPrint = async () => {
