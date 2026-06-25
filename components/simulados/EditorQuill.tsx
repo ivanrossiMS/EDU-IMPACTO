@@ -2,16 +2,15 @@
 
 import React, { useMemo, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import 'react-quill/dist/quill.snow.css'
+import 'react-quill-new/dist/quill.snow.css'
 import 'katex/dist/katex.min.css'
 import katex from 'katex'
 
-// Necessário colocar o katex no window para que o Quill consiga usá-lo no módulo formula
 if (typeof window !== 'undefined') {
-  ;(window as any).katex = katex
+  (window as any).katex = katex
 }
 
-const ReactQuill = dynamic(() => import('react-quill'), { 
+const ReactQuill = dynamic(() => import('react-quill-new'), { 
   ssr: false, 
   loading: () => <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Carregando editor...</div> 
 })
@@ -25,7 +24,6 @@ interface EditorQuillProps {
 
 export function EditorQuill({ value, onChange, placeholder, compact }: EditorQuillProps) {
   const modules = useMemo(() => ({
-    formula: true,
     toolbar: compact 
       ? [
           ['bold', 'italic', 'formula']
