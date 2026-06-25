@@ -37,7 +37,7 @@ export default function SimuladosConfiguracoesPage() {
     e: React.ChangeEvent<HTMLInputElement>, 
     setUrl: (url: string) => void, 
     setUploadState: (state: boolean) => void,
-    inputRef: React.RefObject<HTMLInputElement>
+    inputRef: any
   ) => {
     const file = e.target.files?.[0]
     if (!file) return
