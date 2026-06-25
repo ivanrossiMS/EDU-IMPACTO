@@ -51,10 +51,27 @@ export function PageContent({
         left: '16mm', right: '16mm', bottom: '18mm', 
         zIndex: 2,
         display: 'flex',
-        gap: '12mm'
+        gap: 0
       }}>
         {page.map((col: any[], cIndex: number) => (
-          <div key={`col-${cIndex}`} style={{ flex: 1, fontSize: `${fontSize}px`, lineHeight: 1.6, color: '#000', textAlign: 'justify' }}>
+          <React.Fragment key={`col-${cIndex}`}>
+            {cIndex > 0 && (
+              <div style={{
+                width: '1px',
+                background: 'linear-gradient(to bottom, rgba(59,130,246,0) 0%, rgba(59,130,246,0.3) 15%, rgba(59,130,246,0.3) 85%, rgba(59,130,246,0) 100%)',
+                alignSelf: 'stretch',
+                margin: '0'
+              }} />
+            )}
+            <div style={{ 
+              flex: 1, 
+              fontSize: `${fontSize}px`, 
+              lineHeight: 1.6, 
+              color: '#000', 
+              textAlign: 'justify',
+              paddingLeft: cIndex > 0 ? '6mm' : 0,
+              paddingRight: cIndex < page.length - 1 ? '6mm' : 0
+            }}>
             {col.map((block: any, bIndex: number) => {
               
               if (block.type === 'part_disciplina') {
@@ -66,7 +83,7 @@ export function PageContent({
                       marginBottom: 16,
                       padding: '8px 16px',
                       borderLeft: '4px solid #3b82f6',
-                      background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)',
+                      background: 'linear-gradient(90deg, #e0f2fe 0%, #f8fafc 100%)',
                       borderRadius: '0 8px 8px 0',
                       fontWeight: 800,
                       fontSize: '11pt',
@@ -258,7 +275,8 @@ export function PageContent({
 
               return null;
             })}
-          </div>
+            </div>
+          </React.Fragment>
         ))}
       </div>
     </>

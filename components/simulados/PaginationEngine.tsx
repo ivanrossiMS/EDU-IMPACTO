@@ -169,7 +169,7 @@ export function PaginationEngine({
                   style={{
                     padding: '8px 16px',
                     borderLeft: '4px solid #3b82f6',
-                    background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)',
+                    background: 'linear-gradient(90deg, #e0f2fe 0%, #f8fafc 100%)',
                     borderRadius: '0 8px 8px 0',
                     fontWeight: 800,
                     fontSize: '11pt',
