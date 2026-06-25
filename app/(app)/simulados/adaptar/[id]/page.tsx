@@ -323,6 +323,7 @@ export default function AdaptarSimuladoPage() {
           onEditEnunciado={handleEditEnunciado}
           onEditAlternativa={handleEditAlternativa}
           onRemoveAlternativa={handleRemoveAlternativa}
+          onToggleQuestion={handleToggleQuestion}
         />
         <IgnoredQuestionsList
           questoes={questoes.filter(q => !selectedIds.has(q.id))}

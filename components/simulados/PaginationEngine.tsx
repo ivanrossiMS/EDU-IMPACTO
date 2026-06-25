@@ -10,6 +10,7 @@ interface PaginationEngineProps {
   onEditEnunciado: (qId: string, newText: string) => void;
   onEditAlternativa: (qId: string, altId: string, newText: string) => void;
   onRemoveAlternativa: (qId: string, altId: string) => void;
+  onToggleQuestion: (qId: string) => void;
 }
 
 const MM_TO_PX = 3.7795;
@@ -22,7 +23,7 @@ const ALT_SPACING = 12;
 
 export function PaginationEngine({
   questoes, columns, fontSize, config, simulado,
-  onEditEnunciado, onEditAlternativa, onRemoveAlternativa
+  onEditEnunciado, onEditAlternativa, onRemoveAlternativa, onToggleQuestion
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -230,7 +231,19 @@ export function PaginationEngine({
                   if (block.type === 'full') {
                     const q = block.q;
                     return (
-                      <div key={`b-${bIndex}`} className="questao-container" style={{ marginBottom: 24, breakInside: 'avoid' }}>
+                      <div key={`b-${bIndex}`} className="questao-container" style={{ position: 'relative', marginBottom: 24, breakInside: 'avoid' }}>
+                        {/* Controles Overlay (No Print) */}
+                        <div className="no-print" style={{ position: 'absolute', right: -10, top: -10, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'white', padding: '6px 10px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: 12 }}>
+                            <input 
+                              type="checkbox" 
+                              checked={true}
+                              onChange={() => onToggleQuestion(q.id)}
+                              style={{ width: 16, height: 16, accentColor: '#3b82f6' }}
+                            />
+                            Incluir
+                          </label>
+                        </div>
                         <div style={{ display: 'flex', gap: 10 }}>
                           <div style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -296,7 +309,19 @@ export function PaginationEngine({
                   if (block.type === 'part_enunciado') {
                     const q = block.q;
                     return (
-                      <div key={`b-${bIndex}`} style={{ marginBottom: 12, display: 'flex', gap: 10 }}>
+                      <div key={`b-${bIndex}`} style={{ position: 'relative', marginBottom: 12, display: 'flex', gap: 10 }}>
+                        {/* Controles Overlay (No Print) */}
+                        <div className="no-print" style={{ position: 'absolute', right: -10, top: -10, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'white', padding: '6px 10px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: 12 }}>
+                            <input 
+                              type="checkbox" 
+                              checked={true}
+                              onChange={() => onToggleQuestion(q.id)}
+                              style={{ width: 16, height: 16, accentColor: '#3b82f6' }}
+                            />
+                            Incluir
+                          </label>
+                        </div>
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
