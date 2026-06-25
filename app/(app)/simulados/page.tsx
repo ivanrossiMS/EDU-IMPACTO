@@ -147,7 +147,7 @@ export default function SimuladosDashboard() {
             {recentes.map((s, idx) => (
               <div 
                 key={s.id}
-                onClick={() => router.push(`/simulados/lista/${s.id}`)}
+                onClick={() => router.push(`/simulados/lista`)}
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
