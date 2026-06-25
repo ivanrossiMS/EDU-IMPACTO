@@ -192,23 +192,22 @@ export default function AdaptarSimuladoPage() {
           quantidade_questoes: r.quantidade_questoes,
           assunto_orientacao: r.assunto_orientacao
         }))
-        await supabase.from('simulados_requisicoes').insert(newReqs)
+        const { error: rErr } = await supabase.from('simulados_requisicoes').insert(newReqs)
+        if (rErr) throw rErr
       }
 
       // 3. Clone selected Questoes and Alternativas
       const selectedList = questoes.filter(q => selectedIds.has(q.id))
       
       for (const q of selectedList) {
+        const { id, created_at, updated_at, simulados_disciplinas, simulados_alternativas, ...restQ } = q
         const { data: newQ, error: qErr } = await supabase.from('simulados_questoes').insert({
+          ...restQ,
           id_simulado: newSimulado.id,
-          id_disciplina: q.id_disciplina,
-          id_professor: q.id_professor,
-          enunciado: q.enunciado,
-          imagens: q.imagens,
-          ordem: q.ordem
+          eh_adaptada: true
         }).select().single()
 
-        if (qErr) continue
+        if (qErr) throw qErr
 
         if (q.simulados_alternativas && q.simulados_alternativas.length > 0) {
           const newAlts = q.simulados_alternativas.map((a: any) => ({
@@ -217,7 +216,8 @@ export default function AdaptarSimuladoPage() {
             texto: a.texto,
             eh_correta: a.eh_correta
           }))
-          await supabase.from('simulados_alternativas').insert(newAlts)
+          const { error: aErr } = await supabase.from('simulados_alternativas').insert(newAlts)
+          if (aErr) throw aErr
         }
       }
 
