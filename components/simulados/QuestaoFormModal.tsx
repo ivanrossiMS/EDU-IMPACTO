@@ -217,7 +217,14 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       if (defaultProfessorId && !questao?.id) {
         questaoData.id_professor = defaultProfessorId;
         // Garantir que o ID exista na tabela espelho (ignorar se já existir)
-        await supabase.from('simulados_professores').upsert({ id: defaultProfessorId }).select()
+        const { data: profData } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single();
+        const { error: upsertErr } = await supabase.from('simulados_professores').upsert({ 
+          id: defaultProfessorId,
+          nome: profData?.nome || 'Professor'
+        }).select()
+        if (upsertErr) {
+          console.error('Erro ao registrar professor no espelho:', upsertErr)
+        }
       }
 
       let qId = questao?.id
