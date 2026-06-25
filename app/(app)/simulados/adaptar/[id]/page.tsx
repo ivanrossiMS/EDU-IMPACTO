@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info } from 'lucide-react'
+import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info, X } from 'lucide-react'
 
 export default function AdaptarSimuladoPage() {
   const { id } = useParams()
@@ -93,6 +93,23 @@ export default function AdaptarSimuladoPage() {
         return {
           ...q,
           simulados_alternativas: q.simulados_alternativas.map((a: any) => a.id === altId ? { ...a, texto: newText } : a)
+        }
+      }
+      return q
+    }))
+  }
+
+  const handleRemoveAlternativa = (qId: string, altId: string) => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId) {
+        const remaining = q.simulados_alternativas.filter((a: any) => a.id !== altId)
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+        return {
+          ...q,
+          simulados_alternativas: remaining.map((a: any, idx: number) => ({
+            ...a,
+            letra: letters[idx] || a.letra
+          }))
         }
       }
       return q
@@ -430,6 +447,20 @@ export default function AdaptarSimuladoPage() {
                                 onFocus={e => { if(isSelected) e.currentTarget.style.border = '1px dashed #94a3b8'; e.currentTarget.style.background = 'rgba(241,245,249,0.8)' }}
                                 onBlurCapture={e => { e.currentTarget.style.border = '1px dashed transparent'; e.currentTarget.style.background = 'transparent' }}
                               />
+                              {isSelected && q.simulados_alternativas.length > 2 && (
+                                <button
+                                  className="no-print"
+                                  onClick={() => handleRemoveAlternativa(q.id, alt.id)}
+                                  style={{
+                                    background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginTop: 2, transition: 'background 0.2s'
+                                  }}
+                                  title="Remover alternativa"
+                                  onMouseOver={e => e.currentTarget.style.background = '#fecaca'}
+                                  onMouseOut={e => e.currentTarget.style.background = '#fee2e2'}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
                             </div>
                           ))}
                         </div>
