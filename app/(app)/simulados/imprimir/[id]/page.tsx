@@ -94,7 +94,7 @@ export default function SimuladoImprimirPage() {
       }
 
       .page-content.first-page {
-        top: 58mm; /* logo abaixo de ALUNO(A), com espaço leve */
+        top: 75mm; /* mais espaço abaixo de ALUNO(A) */
         bottom: 18mm;
       }
 
