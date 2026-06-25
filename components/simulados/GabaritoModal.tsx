@@ -194,7 +194,7 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                       <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 8 }}>
                         {disciplina}
                       </h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px 24px' }}>
+                      <div style={{ columnCount: 2, columnGap: 24 }}>
                         {questoesDisciplina.map((q) => {
                           const num = questoes.findIndex(item => item.id === q.id) + 1
                           const alternativaCorreta = q.simulados_alternativas?.find((a: any) => a.eh_correta)
@@ -212,7 +212,10 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                                 border: '1px solid #e2e8f0',
                                 borderRadius: 12,
                                 padding: '12px 16px',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                marginBottom: 12,
+                                breakInside: 'avoid',
+                                pageBreakInside: 'avoid'
                               }}
                             >
                               <span style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>
