@@ -10,10 +10,9 @@ interface PrintEngineProps {
   questoes: Questao[]
   config: any
   onComplete?: () => void
-  headerActions?: React.ReactNode
 }
 
-export function PrintEngine({ simulado, questoes, config, onComplete, headerActions }: PrintEngineProps) {
+export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEngineProps) {
   const [pages, setPages] = useState<{ leftCol: Questao[], rightCol: Questao[] }[]>([])
   const [isPaginating, setIsPaginating] = useState(true)
   const measuringRef = useRef<HTMLDivElement>(null)
@@ -172,48 +171,38 @@ export function PrintEngine({ simulado, questoes, config, onComplete, headerActi
   }
 
   const renderPage = (page: { leftCol: Questao[], rightCol: Questao[] }, pIndex: number) => (
-    <div key={pIndex} className="print-page">
+    <div key={pIndex} className="a4-page">
       
-      {/* Repeating BG */}
-      {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
-        <img 
-          src={config.modelo_pdf_outras_paginas_url} 
-          alt="Fundo" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-        />
-      )}
+      {/* Background Image */}
+      <img 
+        className="a4-bg"
+        src={pIndex === 0 ? (config?.modelo_pdf_url || '') : (config?.modelo_pdf_outras_paginas_url || '')}
+        alt=""
+        style={{ display: (pIndex === 0 && config?.modelo_pdf_url) || (pIndex > 0 && config?.modelo_pdf_outras_paginas_url) ? 'block' : 'none' }}
+      />
 
-      {/* Cover BG */}
-      {pIndex === 0 && config?.modelo_pdf_url && (
-        <img 
-          src={config.modelo_pdf_url} 
-          alt="Capa" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-        />
-      )}
+      <div className={pIndex === 0 ? "a4-content first-page" : "a4-content internal-page"}>
+        {/* Title on cover */}
+        {pIndex === 0 && (
+          <div style={{
+            position: 'absolute',
+            top: '-42mm', // adjusts relative to padding 62mm
+            right: '7mm', // adjusts relative to right 18mm (total 25mm)
+            width: '75mm',
+            height: '24mm',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            fontWeight: 900,
+            fontSize: '13pt', 
+            color: '#1e293b',
+            zIndex: 10
+          }}>
+            {simulado?.titulo}
+          </div>
+        )}
 
-      {/* Title on cover */}
-      {pIndex === 0 && (
-        <div style={{
-          position: 'absolute',
-          top: '20mm',
-          right: '25mm',
-          width: '75mm',
-          height: '24mm',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          fontWeight: 900,
-          fontSize: '13pt', 
-          color: '#1e293b',
-          zIndex: 10
-        }}>
-          {simulado?.titulo}
-        </div>
-      )}
-
-      <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
         {/* Columns Container */}
         <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
           
@@ -249,9 +238,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete, headerActi
   )
 
   return (
-    <main className="print-page-route w-full">
-      {headerActions}
-
+    <>
       {isPaginating && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
           <Loader2 className="animate-spin" size={40} color="#3b82f6" style={{ marginBottom: 16 }} />
@@ -259,16 +246,16 @@ export function PrintEngine({ simulado, questoes, config, onComplete, headerActi
           
           {/* Reference divs to get exact safe height in pixels */}
           <div 
-            className="print-page"
+            className="a4-page"
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
             <div 
               ref={heightFirstRef}
-              className="page-content first-page"
+              className="a4-content first-page"
             />
             <div 
               ref={heightInternalRef}
-              className="page-content internal-page"
+              className="a4-content internal-page"
             />
           </div>
 
@@ -276,8 +263,8 @@ export function PrintEngine({ simulado, questoes, config, onComplete, headerActi
           <div 
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
-            <div className="print-page">
-              <div className="page-content internal-page">
+            <div className="a4-page">
+              <div className="a4-content internal-page">
                 <div style={{ display: 'flex', width: '100%', gap: '6mm' }}>
                   <div ref={measuringRef} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     {questoes.map((q, i) => renderQuestao(q, i))}
@@ -291,15 +278,14 @@ export function PrintEngine({ simulado, questoes, config, onComplete, headerActi
 
       {!isPaginating && (
         <>
-          <section className="screen-preview no-print">
+          <div className="screen-preview">
             {pages.map(renderPage)}
-          </section>
-          
-          <section className="print-only">
+          </div>
+          <div className="print-only">
             {pages.map(renderPage)}
-          </section>
+          </div>
         </>
       )}
-    </main>
+    </>
   )
 }
