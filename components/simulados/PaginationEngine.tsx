@@ -70,16 +70,17 @@ export function PaginationEngine({
         currentY = 0;
       }
 
-      function pushBlock(block: any, h: number) {
-        if (currentY + h > getAvailableHeight() && currentY > 0) {
+      function pushBlock(block: any, h: number, marginToApply: number = 0) {
+        if (currentY + marginToApply + h > getAvailableHeight() && currentY > 0) {
           advanceCol();
+          marginToApply = 0; // First in col has no top margin
         }
-        currentCols[colIndex].push(block);
-        currentY += h;
+        currentCols[colIndex].push({ ...block, renderMarginTop: marginToApply });
+        currentY += marginToApply + h;
       }
 
       questoes.forEach((q, idx) => {
-        if (currentY > 0) currentY += BLOCK_SPACING;
+        let questionMargin = currentY > 0 ? BLOCK_SPACING : 0;
 
         const enunH = heights[`${q.id}-enunciado`] || 0;
         let totalH = enunH;
@@ -96,15 +97,15 @@ export function PaginationEngine({
           return h;
         });
 
-        if (currentY + totalH <= getAvailableHeight()) {
-          pushBlock({ type: 'full', q, qIndex: idx }, totalH);
+        if (currentY + questionMargin + totalH <= getAvailableHeight()) {
+          pushBlock({ type: 'full', q, qIndex: idx }, totalH, questionMargin);
         } else {
-          pushBlock({ type: 'part_enunciado', q, qIndex: idx }, enunH);
+          pushBlock({ type: 'part_enunciado', q, qIndex: idx }, enunH, questionMargin);
           (q.imagens || []).forEach((img: string, i: number) => {
-             pushBlock({ type: 'part_img', q, imgUrl: img, imgIndex: i }, imgsH[i] + ALT_SPACING);
+             pushBlock({ type: 'part_img', q, imgUrl: img, imgIndex: i }, imgsH[i], ALT_SPACING);
           });
           (q.simulados_alternativas || []).forEach((a: any, i: number) => {
-             pushBlock({ type: 'part_alt', q, alt: a }, altsH[i] + ALT_SPACING);
+             pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
           });
         }
       });
@@ -231,7 +232,7 @@ export function PaginationEngine({
                   if (block.type === 'full') {
                     const q = block.q;
                     return (
-                      <div key={`b-${bIndex}`} className="questao-container" style={{ position: 'relative', marginBottom: 24, breakInside: 'avoid' }}>
+                      <div key={`b-${bIndex}`} className="questao-container" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
                         {/* Controles Overlay (No Print) */}
                         <div className="no-print" style={{ position: 'absolute', right: -10, top: -10, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'white', padding: '6px 10px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: 12 }}>
@@ -309,7 +310,7 @@ export function PaginationEngine({
                   if (block.type === 'part_enunciado') {
                     const q = block.q;
                     return (
-                      <div key={`b-${bIndex}`} style={{ position: 'relative', marginBottom: 12, display: 'flex', gap: 10 }}>
+                      <div key={`b-${bIndex}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
                         {/* Controles Overlay (No Print) */}
                         <div className="no-print" style={{ position: 'absolute', right: -10, top: -10, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'white', padding: '6px 10px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: 12 }}>
@@ -347,7 +348,7 @@ export function PaginationEngine({
 
                   if (block.type === 'part_img') {
                     return (
-                      <div key={`b-${bIndex}`} style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                      <div key={`b-${bIndex}`} style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                         <div style={{ width: '28px', minWidth: '28px' }}></div>
                         <div style={{ flex: 1 }}>
                            <img src={block.imgUrl} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
@@ -360,7 +361,7 @@ export function PaginationEngine({
                     const q = block.q;
                     const a = block.alt;
                     return (
-                      <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                      <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                         <div style={{ width: '28px', minWidth: '28px' }}></div>
                         <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative' }}>
                           <div style={{
