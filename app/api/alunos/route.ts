@@ -22,9 +22,8 @@ export async function GET(request: Request) {
     const page = parseInt(pageParam || '1')
     const lightweight = url.searchParams.get('lightweight') === 'true'
     const requestedLimit = parseInt(limitParam || (all ? '10000' : '25'))
-    // LIMITAMOS MAX 100 itens por vez na rota pesada para impedir travamentos.
-    // (Para buscar todos os alunos para dropdowns, o app deve usar /api/alunos/lightweight)
-    const limit = lightweight ? Math.min(requestedLimit, 10000) : Math.min(requestedLimit, 100)
+    // Aumentamos o limite para permitir 'Todos', já que o usuário possui a opção no frontend
+    const limit = lightweight ? Math.min(requestedLimit, 10000) : Math.min(requestedLimit, 10000)
     const search = url.searchParams.get('search') || ''
     const status = (url.searchParams.get('status') || 'todos').toLowerCase()
     const turma = url.searchParams.get('turma') || ''
@@ -119,7 +118,14 @@ export async function GET(request: Request) {
       dbSortField = 'created_at'
     }
 
-    let queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' })
+    let queryExec;
+    if (dbSortField === 'dados->autorizadoSairSozinho') {
+      const isAsc = sortOrder === 'asc';
+      // Para booleans com null, queremos agrupar null e false juntos
+      queryExec = query.order(dbSortField, { ascending: isAsc, nullsFirst: isAsc });
+    } else {
+      queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' });
+    }
     // Sempre aplicar range limit
     queryExec = queryExec.range(from, from + limit - 1)
 
