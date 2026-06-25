@@ -15,8 +15,7 @@ export async function GET(request: Request) {
     const fromDate = url.searchParams.get('from')
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
-    
-    let query = supabase.from('saida_calls').select('*').order('created_at', { ascending: false }).limit(200)
+    let query = supabase.from('saida_calls').select('*').order('created_at', { ascending: false }).limit(1500)
     
     if (studentId) {
       query = query.eq('dados->>studentId', studentId)
@@ -111,8 +110,27 @@ export async function POST(request: Request) {
           try {
             const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
             const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-            const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.dados.studentId).single()
+            const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', row.dados.studentId).single()
             if (aluno) {
+              // Create frequencia record
+              const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+              const freqId = `FREQ-${row.dados.studentId}-${today}`
+              const anoLetivo = new Date().getFullYear().toString()
+              
+              await supabase.from('frequencias').upsert({
+                id: freqId,
+                aluno_id: row.dados.studentId,
+                turma_id: aluno.turma || '',
+                data: today,
+                presente: true,
+                dados: {
+                  saidaHorario: row.dados.confirmedAt || new Date().toISOString(),
+                  saidaResponsavel: row.dados.guardianName || '',
+                  anoLetivo,
+                  diarioId: `DIARIO-${aluno.turma || ''}-${anoLetivo}`
+                }
+              })
+              
               const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.dados.studentId] })
               if (targetIds.length > 0) {
                 await sendAgendaPushNotification({
@@ -163,8 +181,27 @@ export async function POST(request: Request) {
       try {
         const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
         const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.dados.studentId).single()
+        const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', data.dados.studentId).single()
         if (aluno) {
+          // Create frequencia record
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+          const freqId = `FREQ-${data.dados.studentId}-${today}`
+          const anoLetivo = new Date().getFullYear().toString()
+          
+          await supabase.from('frequencias').upsert({
+            id: freqId,
+            aluno_id: data.dados.studentId,
+            turma_id: aluno.turma || '',
+            data: today,
+            presente: true,
+            dados: {
+              saidaHorario: data.dados.confirmedAt || new Date().toISOString(),
+              saidaResponsavel: data.dados.guardianName || '',
+              anoLetivo,
+              diarioId: `DIARIO-${aluno.turma || ''}-${anoLetivo}`
+            }
+          })
+
           const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.dados.studentId] })
           if (targetIds.length > 0) {
             sendAgendaPushNotification({

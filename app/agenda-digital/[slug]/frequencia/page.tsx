@@ -222,12 +222,12 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   const selectedSaidaCalls = useMemo(() => {
     if (!selectedDate) return []
     return saidaCalls.filter(c => {
-      if (c.status !== 'confirmed') return false
+      if (c.status?.toLowerCase() !== 'confirmed') return false
       // Usa confirmedAt se existir, se não usa calledAt
       const dateStr = c.confirmedAt || c.calledAt
       if (!dateStr) return false
       try {
-        return isSameDay(parseISO(dateStr), selectedDate)
+        return isSameDay(new Date(dateStr), selectedDate)
       } catch (e) {
         return false
       }
@@ -317,22 +317,34 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             const isCurrMonth = isSameMonth(day, monthStart)
             const dateStr = format(day, 'yyyy-MM-dd')
             const dayRecords = historicoReal.filter(h => h.data === dateStr)
-            
+            const daySaidas = saidaCalls.filter(c => {
+              if (c.status?.toLowerCase() !== 'confirmed') return false
+              const d = c.confirmedAt || c.calledAt
+              if (!d) return false
+              try { return isSameDay(new Date(d), day) } catch (e) { return false }
+            })
+
             const hasPresenca = dayRecords.some(r => r.status === 'P')
             const hasJustificada = dayRecords.some(r => r.status === 'J')
             const hasFalta = dayRecords.some(r => r.status === 'F' || r.status === 'A')
+            const hasSaida = daySaidas.length > 0
             
             let bgLight = '#fff'
             let bgDot = 'transparent'
             let textColor = isCurrMonth ? '#0f172a' : '#cbd5e1'
             let border = '1px solid #f8fafc'
 
-            if (isCurrMonth && dayRecords.length > 0) {
+            if (isCurrMonth && (dayRecords.length > 0 || hasSaida)) {
               if (hasPresenca || hasJustificada || hasFalta) {
                 bgLight = '#f0fdf4'
                 bgDot = '#16a34a'
                 textColor = '#166534'
                 border = '1px solid #dcfce7'
+              } else if (hasSaida) {
+                bgLight = '#fdf4ff'
+                bgDot = '#c026d3'
+                textColor = '#86198f'
+                border = '1px solid #fce7f3'
               }
             }
 
@@ -374,7 +386,11 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         <div style={{ display: 'flex', gap: 32, marginTop: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 20, height: 20, borderRadius: 6, background: '#f0fdf4', border: '1px solid #dcfce7' }} />
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Dias com registros</span>
+            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Entradas/Faltas</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 20, height: 20, borderRadius: 6, background: '#fdf4ff', border: '1px solid #fce7f3' }} />
+            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Saídas</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #e0e7ff', background: '#fff' }} />

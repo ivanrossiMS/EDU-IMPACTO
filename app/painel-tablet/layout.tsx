@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { DataProvider } from '@/lib/dataContext'
 
 export const metadata: Metadata = {
   title: 'Painel Tablet · Portaria · IMPACTO EDU',
@@ -7,11 +6,11 @@ export const metadata: Metadata = {
 }
 
 // Standalone tablet layout — no sidebar, no topbar
-// DataProvider is required so the page can read alunos/saude.autorizados
+// DataProvider foi removido para otimizar desempenho já que o painel usa fetches isolados
 export default function PainelTabletLayout({ children }: { children: React.ReactNode }) {
   return (
-    <DataProvider>
+    <>
       {children}
-    </DataProvider>
+    </>
   )
 }

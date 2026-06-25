@@ -391,6 +391,10 @@ export function useSupabaseArray<T>(
                 console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
                 return [];
               }
+              if (r.status === 401 || r.status === 403) {
+                console.warn(`[useSupabaseArray] Access Denied for /${endpoint} (HTTP ${r.status}). Returning [].`);
+                return [];
+              }
               let errText = '';
               try { errText = await r.text(); } catch(e) {}
               console.error(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);

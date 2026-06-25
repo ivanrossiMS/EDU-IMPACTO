@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     // (Para buscar todos os alunos para dropdowns, o app deve usar /api/alunos/lightweight)
     const limit = lightweight ? Math.min(requestedLimit, 10000) : Math.min(requestedLimit, 100)
     const search = url.searchParams.get('search') || ''
-    const status = url.searchParams.get('status') || 'todos'
+    const status = (url.searchParams.get('status') || 'todos').toLowerCase()
     const turma = url.searchParams.get('turma') || ''
     const sortField = url.searchParams.get('sortField') || 'nome'
     const sortOrder = url.searchParams.get('sortOrder') || 'asc'

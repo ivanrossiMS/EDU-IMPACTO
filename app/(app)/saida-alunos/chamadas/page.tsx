@@ -45,8 +45,9 @@ function statusMeta(call: PickupCall) {
   return { color: '#94a3b8', label: 'CANCELADO' }
 }
 
-function elapsedSec(since: string, nowTime: number = Date.now()) {
-  return Math.max(0, Math.floor((nowTime - new Date(since).getTime()) / 1000))
+function elapsedSec(since: string, nowTime?: number) {
+  const current = nowTime !== undefined ? nowTime : Date.now()
+  return Math.max(0, Math.floor((current - new Date(since).getTime()) / 1000))
 }
 
 function fmtTime(iso: string) {
@@ -54,16 +55,22 @@ function fmtTime(iso: string) {
 }
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
-const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, nowTime }: {
+const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
   call:      PickupCall
   onConfirm: (id: string) => void
   onCancel:  (id: string) => void
   onRecall:  (id: string) => void
   onRevert:  (id: string) => void
-  nowTime:   number
 }) {
   const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
+  const [nowTime, setNowTime] = useState(Date.now())
+  
+  useEffect(() => {
+    const iv = setInterval(() => setNowTime(Date.now()), 10000)
+    return () => clearInterval(iv)
+  }, [])
+  
   const secs = elapsedSec(call.calledAt, nowTime)
 
   const isActive   = call.status === 'waiting' || call.status === 'called'
@@ -275,9 +282,10 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
     </div>
   )
 }, (prev, next) => {
-  return prev.call.status === next.call.status &&
-         prev.call.id === next.call.id &&
-         prev.nowTime === next.nowTime
+  return prev.call.id === next.call.id &&
+         prev.call.status === next.call.status &&
+         prev.call.calledAt === next.call.calledAt &&
+         prev.call.blockType === next.call.blockType
 })
 
 // ── Student search row with inline guardian buttons ───────────────────────────
@@ -293,6 +301,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
   const autorizaSaida: boolean = student.autorizadoSairSozinho === true || saude.autorizaSaida === true   // can leave alone
 
   const [showProibidoAlert, setShowProibidoAlert] = useState<{ name: string, message: string } | null>(null)
+  const [isCalling, setIsCalling] = useState(false)
 
   // Day-of-week check
   const DIAS_LABEL = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom']
@@ -355,6 +364,12 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     )
   }, [activeCalls, student.id])
 
+  const alreadyConfirmed = useMemo(() => {
+    return activeCalls.some(c =>
+      c.studentId === student.id && c.status === 'confirmed'
+    )
+  }, [activeCalls, student.id])
+
   const initials = useMemo(() => student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase(), [student.nome])
 
   return (
@@ -385,11 +400,17 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
             <GraduationCap size={11} color="#06b6d4"/>
             <span style={{ color: '#06b6d4', fontWeight: 700 }}>{student.turmaNome || student.turma}</span>
             {student.turno && <span style={{ color: 'hsl(var(--text-muted))' }}>· {student.turno}</span>}
-            {alreadyCalled && (
+            {alreadyCalled && !alreadyConfirmed && (
               <span style={{
                 marginLeft: 4, padding: '1px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800,
                 background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)',
               }}>⚠ Já em chamada</span>
+            )}
+            {alreadyConfirmed && (
+              <span style={{
+                marginLeft: 4, padding: '1px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800,
+                background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)',
+              }}>✅ Saída Confirmada</span>
             )}
           </div>
         </div>
@@ -427,7 +448,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
               const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
               const todayK = remap2[new Date().getDay()]
               const diaRestrito = dias.length > 0 && !dias.includes(todayK)
-              const blocked = alreadyCalled
+              const blocked = alreadyCalled || alreadyConfirmed || isCalling
               return (
                 <button
                   key={g.id}
@@ -443,29 +464,31 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                       return
                     }
                     if (!blocked) {
+                      setIsCalling(true)
                       onCall(student.id, student.nome, student.turmaNome || student.turma, g.id, g.name, student.foto || student.imagem1)
+                      setTimeout(() => setIsCalling(false), 2000)
                     }
                   }}
-                  disabled={blocked}
-                  title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : undefined}
+                  disabled={blocked || diaRestrito}
+                  title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : alreadyConfirmed ? '✅ Aluno já retirado' : undefined}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '6px 12px', borderRadius: 100,
                     background: isProibido
                       ? 'rgba(239,68,68,0.15)'
-                      : alreadyCalled || diaRestrito
+                      : blocked || diaRestrito
                         ? 'hsl(var(--bg-overlay))'
                         : 'linear-gradient(135deg, #06b6d415, #6366f112)',
                     border: isProibido
                       ? '1px solid rgba(239,68,68,0.5)'
-                      : alreadyCalled
+                      : blocked
                         ? '1px solid hsl(var(--border-subtle))'
                         : '1px solid rgba(6,182,212,0.35)',
-                    color: isProibido ? '#ef4444' : alreadyCalled || diaRestrito ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))',
+                    color: isProibido ? '#ef4444' : blocked || diaRestrito ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))',
                     fontWeight: 700, fontSize: 12,
                     cursor: blocked || diaRestrito ? 'not-allowed' : 'pointer',
                     transition: 'all 0.15s',
-                    opacity: isProibido ? 1 : alreadyCalled ? 0.5 : 1,
+                    opacity: isProibido ? 1 : blocked ? 0.5 : 1,
                   }}
                   onMouseEnter={e => {
                     if (blocked || diaRestrito || isProibido) return
@@ -1094,12 +1117,6 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 function ChamadasContent() {
-  // -- Global Tick for Performant Timers --
-  const [globalNow, setGlobalNow] = useState(Date.now())
-  useEffect(() => {
-    const iv = setInterval(() => setGlobalNow(Date.now()), 10000)
-    return () => clearInterval(iv)
-  }, [])
 
   const { activeCalls = [], confirmPickup, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
   const [turmas] = useSupabaseArray<any>('turmas');
@@ -1107,7 +1124,7 @@ function ChamadasContent() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
-  const [filter,        setFilter]        = useState<FilterType>('all')
+  const [filter,        setFilter]        = useState<FilterType>('waiting')
   const [callSearch,    setCallSearch]    = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
@@ -1228,6 +1245,15 @@ function ChamadasContent() {
     { key: 'cancelled' as FilterType, label: 'Cancelados',  color: '#94a3b8', count: mounted ? cancelled.length  : 0 },
     { key: 'blocked'   as FilterType, label: 'Bloqueados',  color: '#ef4444', count: mounted ? blocked.length    : 0 },
   ]
+
+  if (isLoadingCalls) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
+        <div style={{ width: 40, height: 40, border: '3px solid rgba(59,130,246,0.1)', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, fontWeight: 500 }}>Carregando chamadas...</p>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -1453,7 +1479,6 @@ function ChamadasContent() {
               <CallCard
                 key={rawCall.id}
                 call={rawCall}
-                nowTime={globalNow}
                 onConfirm={confirmPickup}
                 onCancel={cancelCall}
                 onRecall={handleRecall}

@@ -366,12 +366,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
+    const currentNow = now()
     setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'confirmed', confirmedAt: now() } : c
+      c.id === callId ? { ...c, status: 'confirmed', confirmedAt: currentNow } : c
     ))
     const call = activeCalls.find(c => c.id === callId)
-    emit('CONFIRM_PICKUP', { callId, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: now() })
+    emit('CONFIRM_PICKUP', { callId, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: currentNow })
     addLog('CONFIRM', `Saída confirmada: ${call?.studentName ?? callId}`)
   }, [activeCalls, emit, addLog, sendBroadcast])
 
@@ -390,11 +391,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
     const call = activeCalls.find(c => c.id === callId)
     if (!call) return
+    const currentNow = now()
     setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'waiting', calledAt: now() } : c
+      c.id === callId ? { ...c, status: 'waiting', calledAt: currentNow } : c
     ))
-    emit('RECALL_STUDENT', { callId, _remote: false })
-    sendBroadcast('RECALL_STUDENT', { callId, calledAt: now() })
+    emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
+    sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
     const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
       ? call.studentClass.split(config.voiceTruncateChar)[0].trim() 
       : call.studentClass

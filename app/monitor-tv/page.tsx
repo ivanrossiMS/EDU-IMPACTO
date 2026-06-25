@@ -304,6 +304,11 @@ function MonitorContent() {
     setAudioUnlocked(true)
     if (config?.voiceEnabled && voice.isSupported) {
       voice.speak('', { volume: 0 })
+      // Populate spokenRef with current calls so they don't play immediately
+      displayCalls.forEach(c => {
+         const ts = c.calledAt ? new Date(c.calledAt).getTime() : Date.now()
+         spokenRef.current.add(c.id + '_' + Math.floor(ts / 1000))
+      })
     }
   }
 
@@ -345,7 +350,8 @@ function MonitorContent() {
   useEffect(() => {
     if (!audioUnlocked || !config?.voiceEnabled || !voice.isSupported) return
     displayCalls.forEach(call => {
-      const speechKey = call.id + '_' + (call.calledAt || Date.now())
+      const ts = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
+      const speechKey = call.id + '_' + Math.floor(ts / 1000)
       if (!spokenRef.current.has(speechKey)) {
         spokenRef.current.add(speechKey)
         setTimeout(() => {
@@ -383,14 +389,6 @@ function MonitorContent() {
           const next = prev.find(c => c.id === d.id) ? prev : [d, ...prev]
           return [...next].sort(byTimeDesc).slice(0, 25)
         })
-        const speechKey = d.id + '_' + (d.calledAt || Date.now())
-        if (audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported && !spokenRef.current.has(speechKey)) {
-          spokenRef.current.add(speechKey)
-          const turmaObj = (currentTurmas || []).find((t: any) => String(t.id) === String(d.studentClass) || t.codigo === d.studentClass || t.nome === d.studentClass)
-          const tName = turmaObj?.nome || d.studentClass
-          const cName = currentConfig?.voiceTruncateTurma && currentConfig?.voiceTruncateChar ? tName.split(currentConfig.voiceTruncateChar)[0].trim() : tName
-          setTimeout(() => voice.speak(`${d.studentName}, turma ${cName}`), 600)
-        }
       }
       if (payload.event === 'CONFIRM_PICKUP' && d.callId) {
         setTimeout(() => {
@@ -409,21 +407,10 @@ function MonitorContent() {
       if (payload.event === 'RECALL_STUDENT' && d.callId) {
         setDisplayCalls(prev => {
           const updated = prev.map(c =>
-            c.id === d.callId ? { ...c, status: 'waiting' as const, calledAt: new Date().toISOString() } : c
+            c.id === d.callId ? { ...c, status: 'waiting' as const, calledAt: d.calledAt || new Date().toISOString() } : c
           )
           return [...updated].sort(byTimeDesc).slice(0, 25)
         })
-        
-        // Speak immediately
-        const theCall = displayCallsRef.current.find(c => c.id === d.callId)
-        const speechKey = d.callId + '_' + (d.calledAt || Date.now())
-        if (theCall && audioUnlockedRef.current && currentConfig?.voiceEnabled && voice.isSupported && !spokenRef.current.has(speechKey)) {
-          spokenRef.current.add(speechKey)
-          const turmaObj = (currentTurmas || []).find((t: any) => String(t.id) === String(theCall.studentClass) || t.codigo === theCall.studentClass || t.nome === theCall.studentClass)
-          const tName = turmaObj?.nome || theCall.studentClass
-          const cName = currentConfig?.voiceTruncateTurma && currentConfig?.voiceTruncateChar ? tName.split(currentConfig.voiceTruncateChar)[0].trim() : tName
-          setTimeout(() => voice.speak(`${theCall.studentName}, turma ${cName}`), 600)
-        }
       }
     })
     return () => { unsub() }
@@ -937,7 +924,7 @@ function MonitorContent() {
           object-fit: contain;
           z-index: 1;
           transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
-          filter: brightness(1.15) contrast(1.15) saturate(1.20);
+          filter: brightness(1.15) contrast(1.05) saturate(1.05);
         }
 
         .tv-card-photo-bg-initials {

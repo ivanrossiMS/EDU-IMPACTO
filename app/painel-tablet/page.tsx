@@ -120,16 +120,19 @@ function StudentCard({
   const alreadyCalled = activeCalls.some(c =>
     c.studentId === aluno.id && (c.status === 'waiting' || c.status === 'called')
   )
+  const alreadyConfirmed = activeCalls.some(c =>
+    c.studentId === aluno.id && c.status === 'confirmed'
+  )
   const [recalling, setRecalling] = useState(false)
-  // Card is blocked only for real restrictions, NOT for alreadyCalled (recall is possible)
-  const blocked = isProibido || !diaOk
+  // Card is blocked only for real restrictions, or if already withdrawn
+  const blocked = isProibido || !diaOk || alreadyConfirmed
 
   const initials = (aluno.nome || '?').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
   const foto     = aluno.foto
 
   // Color palette by state
-  const accent = isProibido ? '#ef4444' : alreadyCalled ? '#f59e0b' : '#06b6d4'
-  const accentDim = isProibido ? 'rgba(239,68,68,0.15)' : alreadyCalled ? 'rgba(245,158,11,0.12)' : 'rgba(6,182,212,0.12)'
+  const accent = isProibido ? '#ef4444' : alreadyConfirmed ? '#10b981' : alreadyCalled ? '#f59e0b' : '#06b6d4'
+  const accentDim = isProibido ? 'rgba(239,68,68,0.15)' : alreadyConfirmed ? 'rgba(16,185,129,0.12)' : alreadyCalled ? 'rgba(245,158,11,0.12)' : 'rgba(6,182,212,0.12)'
 
   const handleRecall = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -163,7 +166,7 @@ function StudentCard({
         animationDelay: `${index * 90}ms`,
         borderRadius: 24,
         overflow: 'hidden',
-        border: `2px solid ${isProibido ? 'rgba(239,68,68,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
+        border: `2px solid ${isProibido ? 'rgba(239,68,68,0.5)' : alreadyConfirmed ? 'rgba(16,185,129,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
         background: isProibido ? 'rgba(239,68,68,0.04)' : '#0f1c2e',
         boxShadow: blocked ? 'none' : `0 8px 48px ${accent}20, 0 2px 12px rgba(0,0,0,0.4)`,
         cursor: blocked ? 'not-allowed' : 'pointer',
@@ -219,18 +222,22 @@ function StudentCard({
           backdropFilter: 'blur(8px)',
           background: isProibido
             ? 'rgba(239,68,68,0.9)'
-            : alreadyCalled
-              ? 'rgba(245,158,11,0.9)'
-              : 'rgba(6,182,212,0.9)',
+            : alreadyConfirmed
+              ? 'rgba(16,185,129,0.9)'
+              : alreadyCalled
+                ? 'rgba(245,158,11,0.9)'
+                : 'rgba(6,182,212,0.9)',
           color: '#fff',
           display: 'flex', alignItems: 'center', gap: 5,
           boxShadow: `0 2px 12px ${accent}50`,
         }}>
           {isProibido
             ? <><ShieldOff size={10}/> BLOQUEADO</>
-            : alreadyCalled
-              ? <><Clock size={10}/> EM CHAMADA</>
-              : <><CheckCircle2 size={10}/> AUTORIZADO</>}
+            : alreadyConfirmed
+              ? <><CheckCircle2 size={10}/> JÁ RETIRADO</>
+              : alreadyCalled
+                ? <><Clock size={10}/> EM CHAMADA</>
+                : <><CheckCircle2 size={10}/> AUTORIZADO</>}
         </div>
 
         {/* Turma chip top-left */}
@@ -332,12 +339,14 @@ function StudentCard({
         }}>
           {isProibido
             ? <ShieldOff size={22} color="#ef444480"/>
-            : (
-              <>
-                <Megaphone size={20} color={blocked ? "rgba(255,255,255,0.4)" : "#fff"}/>
-                <span style={{ color: blocked ? 'rgba(255,255,255,0.4)' : '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>CHAMAR ALUNO</span>
-              </>
-            )
+            : alreadyConfirmed
+              ? <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 800 }}>JÁ RETIRADO</span>
+              : (
+                <>
+                  <Megaphone size={20} color={blocked ? "rgba(255,255,255,0.4)" : "#fff"}/>
+                  <span style={{ color: blocked ? 'rgba(255,255,255,0.4)' : '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>CHAMAR ALUNO</span>
+                </>
+              )
           }
         </div>
         )}
@@ -436,7 +445,7 @@ function PainelTabletContent() {
 
     const delayDebounce = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=Ativo&limit=16`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25`)
         if (res.ok) {
           const payload = await res.json()
           setManualStudents(payload.data || [])
@@ -1004,6 +1013,9 @@ function PainelTabletContent() {
                   const alreadyCalled = activeCalls.some(c =>
                     c.studentId === a.id && (c.status === 'waiting' || c.status === 'called')
                   )
+                  const alreadyConfirmed = activeCalls.some(c =>
+                    c.studentId === a.id && c.status === 'confirmed'
+                  )
                   const initials = (a.nome || '').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
 
                   // Build autorizados list with fallback to responsaveis
@@ -1022,7 +1034,7 @@ function PainelTabletContent() {
                   return (
                     <div key={a.id} style={{
                       background: '#0f1c2e',
-                      border: alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
+                      border: alreadyConfirmed ? '1px solid rgba(16,185,129,0.4)' : alreadyCalled ? '1px solid rgba(245,158,11,0.4)' : '1px solid rgba(255,255,255,0.07)',
                       borderRadius: 16, overflow: 'hidden',
                     }}>
                       {/* Student row */}
@@ -1049,6 +1061,7 @@ function PainelTabletContent() {
                             {a.turno && <span>· {a.turno}</span>}
                             {autorizaSaida && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Saída independente</span>}
                             {alreadyCalled && <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Em chamada</span>}
+                            {alreadyConfirmed && <span style={{ color: '#10b981', fontWeight: 700 }}>✅ Já Retirado</span>}
                           </div>
                         </div>
                       </div>
@@ -1059,7 +1072,7 @@ function PainelTabletContent() {
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
                           {respList.map((g, i) => {
                             const diaOk = isDiaPermitido(g.diasSemana)
-                            const disabled = alreadyCalled || g.proibido || !diaOk
+                            const disabled = alreadyCalled || alreadyConfirmed || g.proibido || !diaOk
                             return (
                               <button key={i}
                                 onClick={() => {

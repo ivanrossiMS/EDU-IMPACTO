@@ -7,13 +7,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+import { use } from "react";
+
 export default function EditarSimuladoPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }> | { id: string };
 }) {
   const router = useRouter();
-  const { id } = params;
+  // Unwrap params using React.use() if it's a promise, or just use it if it's an object
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { id } = resolvedParams as { id: string };
   const [titulo, setTitulo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [dataAplicacao, setDataAplicacao] = useState("");

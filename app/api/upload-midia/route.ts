@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { requireAuth } from '@/lib/server/authGuard'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -12,7 +12,11 @@ export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient()
+  // Use service role key to bypass storage RLS (since we already authenticated the user)
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
   
   try {
     // Ler o Content-Type para validar que é multipart

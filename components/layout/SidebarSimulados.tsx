@@ -5,9 +5,10 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, CheckSquare, Library, Shield, ChevronLeft, ChevronRight, Menu, PenTool
+  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, CheckSquare, Library, Shield, ChevronLeft, ChevronRight, Menu, PenTool, LogOut, User
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { useApp } from '@/lib/context'
 
 interface NavItem {
   label: string
@@ -22,8 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Bimestres', href: '/simulados/cadastros/bimestres', icon: <Layers size={18} /> },
   { label: 'Disciplinas', href: '/simulados/cadastros/disciplinas', icon: <BookOpen size={18} /> },
   { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
-  { label: 'Permissões', href: '/simulados/permissoes', icon: <Shield size={18} /> },
-  { label: 'Logs & Auditoria', href: '/simulados/logs', icon: <CheckSquare size={18} /> },
+  { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
   { label: 'Voltar ao ERP', href: '/dashboard', icon: <ChevronLeft size={18} /> },
 ]
 
@@ -31,6 +31,16 @@ export function SidebarSimulados() {
   const pathname = usePathname()
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
+  const { currentUserPerfil, setCurrentUserPerfil, currentUser, setCurrentUser } = useApp()
+
+  const isProfessor = currentUserPerfil === 'Professor'
+
+  const activeNavItems = NAV_ITEMS.filter(item => {
+    if (isProfessor) {
+      return ['Dashboard', 'Simulados'].includes(item.label)
+    }
+    return true
+  })
 
   // Force close on mobile default
   useEffect(() => {
@@ -73,7 +83,7 @@ export function SidebarSimulados() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 6 }} className="no-scrollbar">
-        {NAV_ITEMS.map((item, idx) => {
+        {activeNavItems.map((item, idx) => {
           const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/dashboard' && pathname?.startsWith(item.href))
           const isBack = item.href === '/dashboard'
 
@@ -112,6 +122,81 @@ export function SidebarSimulados() {
             </Link>
           )
         })}
+
+        {/* User Profile Frame */}
+        <div style={{
+          marginTop: 'auto',
+          marginBottom: '16px',
+          padding: collapsed ? '12px 0' : '12px',
+          background: 'rgba(255,255,255,0.03)',
+          borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          gap: 12
+        }}>
+          <div style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(59,130,246,0.3)'
+          }}>
+            <User size={18} />
+          </div>
+          {!collapsed && (
+            <div style={{ overflow: 'hidden' }}>
+              <div style={{ color: 'white', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {currentUser?.nome || 'Usuário'}
+              </div>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 500, marginTop: 2 }}>
+                {currentUserPerfil || 'Admin'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Botão Sair - Ultra Moderno */}
+        <button
+          onClick={() => {
+            setCurrentUserPerfil(null);
+            setCurrentUser(null);
+            window.location.href = '/login';
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: 14,
+            padding: collapsed ? '12px 0' : '12px 16px',
+            borderRadius: 12,
+            background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(185,28,28,0.1))',
+            color: '#ef4444',
+            border: '1px solid rgba(239,68,68,0.2)',
+            cursor: 'pointer',
+            transition: 'all 0.3s',
+            boxShadow: '0 4px 12px rgba(239,68,68,0.1)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(185,28,28,0.2))'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(239,68,68,0.2)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(185,28,28,0.1))'
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(239,68,68,0.1)'
+          }}
+        >
+          <LogOut size={18} />
+          {!collapsed && <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.02em' }}>Sair da Conta</span>}
+        </button>
       </div>
 
       <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center' }}>
