@@ -155,32 +155,32 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
         </div>
 
         {/* Área de Impressão */}
-        <div id="gabarito-print-area" style={{ flex: 1, overflowY: 'auto', padding: '32px 40px', background: '#ffffff', color: '#0f172a' }}>
+        <div id="gabarito-print-area" style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', background: '#ffffff', color: '#0f172a' }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>Gerando gabarito...</div>
           ) : (
             <>
               {/* Header do Documento */}
-              <div style={{ textAlign: 'center', marginBottom: 40 }}>
-                <h1 style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', margin: '0 0 16px' }}>{simulado?.titulo || 'Simulado'}</h1>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 14 }}>
-                    <Calendar size={16} /> <span>Aplicação: {simulado?.data_aplicacao ? new Date(simulado.data_aplicacao).toLocaleDateString('pt-BR') : 'Data não definida'}</span>
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: '0 0 12px', textTransform: 'uppercase' }}>Gabarito: {simulado?.titulo || 'Simulado'}</h1>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 13 }}>
+                    <Calendar size={14} /> <span>Aplicação: {simulado?.data_aplicacao ? new Date(simulado.data_aplicacao).toLocaleDateString('pt-BR') : 'Data não definida'}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 14 }}>
-                    <Layers size={16} /> <span>{simulado?.simulados_bimestres?.nome || 'Sem Bimestre'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 13 }}>
+                    <Layers size={14} /> <span>{simulado?.simulados_bimestres?.nome || 'Sem Bimestre'}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 14 }}>
-                    <Users size={16} /> <span>Turmas: {simulado?.turmas?.join(', ') || 'Geral'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontSize: 13 }}>
+                    <Users size={14} /> <span>Turmas: {simulado?.turmas?.join(', ') || 'Geral'}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700 }}>
-                    <FileText size={16} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
                   </div>
                 </div>
               </div>
 
               {/* Grid Moderno de Respostas Agrupadas por Disciplina */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {(() => {
                   const grouped: Record<string, typeof questoes> = {}
                   questoes.forEach(q => {
@@ -190,11 +190,11 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                   })
 
                   return Object.entries(grouped).map(([disciplina, questoesDisciplina]) => (
-                    <div key={disciplina} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 24, breakInside: 'avoid' }}>
-                      <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 8 }}>
+                    <div key={disciplina} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, breakInside: 'avoid' }}>
+                      <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 6 }}>
                         {disciplina}
                       </h3>
-                      <div style={{ columnCount: 2, columnGap: 24 }}>
+                      <div style={{ columnCount: 2, columnGap: 16 }}>
                         {questoesDisciplina.map((q) => {
                           const num = questoes.findIndex(item => item.id === q.id) + 1
                           const alternativaCorreta = q.simulados_alternativas?.find((a: any) => a.eh_correta)
@@ -210,29 +210,29 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                                 justifyContent: 'space-between',
                                 background: '#ffffff',
                                 border: '1px solid #e2e8f0',
-                                borderRadius: 12,
-                                padding: '12px 16px',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                                marginBottom: 12,
+                                borderRadius: 8,
+                                padding: '8px 12px',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                marginBottom: 8,
                                 breakInside: 'avoid',
                                 pageBreakInside: 'avoid'
                               }}
                             >
-                              <span style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
                                 Questão {num.toString().padStart(2, '0')}
                               </span>
                               <div 
                                 className="gabarito-bubble"
                                 style={{ 
-                                  width: 32, 
-                                  height: 32, 
+                                  width: 28, 
+                                  height: 28, 
                                   borderRadius: '50%', 
                                   background: letraCorreta !== '?' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', 
                                   color: letraCorreta !== '?' ? '#10b981' : '#ef4444', 
                                   display: 'flex', 
                                   alignItems: 'center', 
                                   justifyContent: 'center', 
-                                  fontSize: 16, 
+                                  fontSize: 14, 
                                   fontWeight: 800,
                                   border: letraCorreta !== '?' ? '2px solid rgba(16,185,129,0.2)' : '2px dashed rgba(239,68,68,0.3)'
                                 }}
