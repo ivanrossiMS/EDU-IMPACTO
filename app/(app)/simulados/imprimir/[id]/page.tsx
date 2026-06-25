@@ -76,6 +76,35 @@ export default function SimuladoImprimirPage() {
         gap: 16px;
       }
 
+      .print-page {
+        width: 210mm;
+        height: 297mm;
+        background: white;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,.12);
+        box-sizing: border-box;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+        
+      .page-content {
+        position: absolute;
+        left: 16mm;
+        right: 16mm;
+        overflow: hidden;
+      }
+
+      .page-content.first-page {
+        top: 42mm; 
+        bottom: 18mm;
+      }
+
+      .page-content.internal-page {
+        top: 16mm; 
+        bottom: 18mm;
+      }
+
       .print-only {
         display: none !important;
       }
@@ -87,64 +116,8 @@ export default function SimuladoImprimirPage() {
         gap: 24px;
       }
 
-      .a4-page {
-        position: relative;
-        width: 210mm;
-        height: 297mm;
-        background: white;
-        overflow: hidden;
-        box-shadow: 0 10px 30px rgba(0,0,0,.12);
-        box-sizing: border-box;
-      }
-
-      .a4-bg {
-        position: absolute;
-        inset: 0;
-        width: 210mm;
-        height: 297mm;
-        object-fit: fill;
-        z-index: 0;
-        display: block;
-      }
-
-      .a4-content {
-        position: relative;
-        z-index: 2;
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box;
-      }
-
-      .first-page {
-        padding: 62mm 18mm 22mm 18mm;
-      }
-
-      .internal-page {
-        padding: 22mm 18mm 22mm 18mm;
-      }
-
       @media print {
-        @page {
-          size: 210mm 297mm;
-          margin: 0;
-        }
-
-        html,
-        body {
-          margin: 0 !important;
-          padding: 0 !important;
-          width: 210mm !important;
-          min-height: 297mm !important;
-          background: white !important;
-          overflow: visible !important;
-        }
-
         .no-print,
-        .floating-button,
-        .chat-widget,
-        .whatsapp-button,
-        .avatar-floating,
-        .screen-only,
         .screen-preview,
         .print-actions {
           display: none !important;
@@ -152,53 +125,39 @@ export default function SimuladoImprimirPage() {
 
         .print-only {
           display: block !important;
-          width: 210mm !important;
-          height: auto !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow: visible !important;
         }
 
-        .a4-page {
-          position: relative !important;
+        .print-only .print-page {
+          display: block !important;
           width: 210mm !important;
           height: 297mm !important;
-          min-width: 210mm !important;
           min-height: 297mm !important;
-          max-width: 210mm !important;
           max-height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
-          box-sizing: border-box !important;
           page-break-after: always !important;
           break-after: page !important;
-          background: white !important;
           box-shadow: none !important;
-        }
-
-        .a4-page:last-child {
-          page-break-after: auto !important;
-          break-after: auto !important;
-        }
-
-        .a4-bg {
-          position: absolute !important;
-          inset: 0 !important;
-          width: 210mm !important;
-          height: 297mm !important;
-          min-width: 210mm !important;
-          min-height: 297mm !important;
-          object-fit: fill !important;
-          z-index: 0 !important;
-          display: block !important;
+          transform: none !important;
+          zoom: 1 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        .a4-content {
-          position: relative !important;
-          z-index: 2 !important;
+        .print-only .print-page:last-child {
+          page-break-after: auto !important;
+          break-after: auto !important;
+        }
+
+        html,
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          overflow: visible !important;
+          height: auto !important;
+          min-height: auto !important;
         }
 
         .print-preview-wrapper {
@@ -209,6 +168,11 @@ export default function SimuladoImprimirPage() {
           padding: 0 !important;
           margin: 0 !important;
           overflow: visible !important;
+        }
+
+        @page {
+          size: A4 portrait;
+          margin: 0;
         }
       }
     `
