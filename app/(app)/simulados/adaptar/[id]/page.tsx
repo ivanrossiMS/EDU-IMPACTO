@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
-import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info, X } from 'lucide-react'
+import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info, X, Columns, LayoutList } from 'lucide-react'
 
 export default function AdaptarSimuladoPage() {
   const { id } = useParams()
@@ -15,6 +15,7 @@ export default function AdaptarSimuladoPage() {
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [fontSize, setFontSize] = useState<number>(14) // base font size in px
+  const [columns, setColumns] = useState<number>(2) // Layout de colunas
   const [config, setConfig] = useState<any>(null)
 
   useEffect(() => {
@@ -241,6 +242,40 @@ export default function AdaptarSimuladoPage() {
 
           <div style={{ marginBottom: 32 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
+              <LayoutList size={16} color="#3b82f6" /> Layout da Prova
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                onClick={() => setColumns(1)}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: columns === 1 ? '#3b82f6' : '#f8fafc',
+                  color: columns === 1 ? 'white' : '#475569',
+                  border: `1px solid ${columns === 1 ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                <LayoutList size={16} /> 1 Coluna
+              </button>
+              <button
+                onClick={() => setColumns(2)}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: columns === 2 ? '#3b82f6' : '#f8fafc',
+                  color: columns === 2 ? 'white' : '#475569',
+                  border: `1px solid ${columns === 2 ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                <Columns size={16} /> 2 Colunas
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
               <CheckSquare size={16} color="#10b981" /> Resumo de Seleção
             </label>
             <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
@@ -344,9 +379,9 @@ export default function AdaptarSimuladoPage() {
               fontSize: `${fontSize}px`, 
               lineHeight: 1.6, 
               color: '#000',
-              columnCount: 2,
+              columnCount: columns,
               columnGap: '12mm',
-              columnRule: '1px solid #94a3b8',
+              columnRule: columns === 2 ? '1px solid #94a3b8' : 'none',
               textAlign: 'justify'
             }}>
               {(() => {
