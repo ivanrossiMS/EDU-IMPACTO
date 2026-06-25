@@ -126,7 +126,7 @@ export function PageContent({
                         ))}
                         {q.simulados_alternativas?.map((a: any) => (
                           <div key={a.id} className="alt-hover-group" style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'flex-start', position: 'relative' }}>
-                            <div className={a.correta ? 'correct-bubble-preview' : ''} style={{
+                            <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
                               border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
@@ -221,7 +221,7 @@ export function PageContent({
                   <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
                     <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative' }}>
-                      <div className={a.correta ? 'correct-bubble-preview' : ''} style={{
+                      <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
                         border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
