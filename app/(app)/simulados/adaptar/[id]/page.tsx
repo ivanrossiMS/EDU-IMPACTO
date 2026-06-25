@@ -67,6 +67,8 @@ export default function AdaptarSimuladoPage() {
           width: 100%;
           background: white !important;
           color: black !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
         .no-print { display: none !important; }
         .print-page-break { break-after: page; }
@@ -319,12 +321,15 @@ export default function AdaptarSimuladoPage() {
           
           {/* Imagem de Fundo (Demais Páginas - Se repete em todas) */}
           {config?.modelo_pdf_outras_paginas_url && (
-            <div className="print-repeating-bg" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-              <img 
-                src={config.modelo_pdf_outras_paginas_url} 
-                alt="Fundo Outras Páginas" 
-                style={{ position: 'absolute', top: 0, left: 0, width: '210mm', height: '297mm', objectFit: 'fill' }} 
-              />
+            <div className="print-repeating-bg" style={{ 
+              position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none',
+              backgroundImage: `url('${config.modelo_pdf_outras_paginas_url}')`,
+              backgroundSize: '100% 297mm',
+              backgroundRepeat: 'repeat-y',
+              backgroundPosition: 'top center',
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact'
+            }}>
             </div>
           )}
 
