@@ -73,6 +73,10 @@ export default function AdaptarSimuladoPage() {
   useEffect(() => {
     const style = document.createElement('style')
     style.innerHTML = `
+      #print-root {
+        display: none !important;
+      }
+
       @media print {
         body > *:not(#print-root) {
           display: none !important;
