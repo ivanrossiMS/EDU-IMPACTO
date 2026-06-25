@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info, X, Columns, LayoutList } from 'lucide-react'
+import { PaginationEngine } from '@/components/simulados/PaginationEngine'
+import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 
 export default function AdaptarSimuladoPage() {
   const { id } = useParams()
@@ -58,21 +60,16 @@ export default function AdaptarSimuladoPage() {
     const style = document.createElement('style')
     style.innerHTML = `
       @media print {
-        body * { visibility: hidden; }
-        .print-area, .print-area * { visibility: visible; }
+        body, html { height: auto !important; overflow: visible !important; }
+        .no-print { display: none !important; }
         .print-area {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          background: white !important;
-          color: black !important;
+          box-shadow: none !important;
+          margin: 0 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        .no-print { display: none !important; }
-        .print-page-break { break-after: page; }
-        .questao-container { break-inside: avoid; margin-bottom: 24px; }
+        .print-page-break { break-after: page; page-break-after: always; }
+        @page { margin: 0; size: A4; }
       }
     `
     document.head.appendChild(style)
@@ -317,201 +314,20 @@ export default function AdaptarSimuladoPage() {
 
       {/* Área Central (Canvas / Papel) */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <div className="print-area" style={{ width: '210mm', minHeight: '297mm', background: 'white', position: 'relative', boxShadow: '0 10px 40px rgba(0,0,0,0.08)', boxSizing: 'border-box' }}>
-          
-          {/* Imagem de Fundo (Demais Páginas - Se repete em todas) */}
-          {config?.modelo_pdf_outras_paginas_url && (
-            <div className="print-repeating-bg" style={{ 
-              position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none',
-              backgroundImage: `url('${config.modelo_pdf_outras_paginas_url}')`,
-              backgroundSize: '100% 297mm',
-              backgroundRepeat: 'repeat-y',
-              backgroundPosition: 'top center',
-              WebkitPrintColorAdjust: 'exact',
-              printColorAdjust: 'exact'
-            }}>
-            </div>
-          )}
-
-          {/* Imagem de Fundo (Capa A4 Completo - APENAS NA PRIMEIRA PÁGINA) */}
-          {config?.modelo_pdf_url && (
-            <div className="print-cover-image" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '297mm', zIndex: 1, pointerEvents: 'none', overflow: 'hidden' }}>
-              <img 
-                src={config.modelo_pdf_url} 
-                alt="Capa" 
-                style={{ position: 'absolute', top: 0, left: 0, width: '210mm', height: '297mm', objectFit: 'fill', backgroundColor: 'white' }} 
-              />
-            </div>
-          )}
-
-          {/* Header da Impressão Absoluto */}
-          {config?.modelo_pdf_url && (
-            <div className="simulado-title" style={{
-              position: 'absolute',
-              top: '20mm',
-              right: '25mm',
-              width: '75mm',
-              height: '24mm',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              fontWeight: 900,
-              fontSize: '13pt', 
-              color: '#1e293b',
-              zIndex: 3
-            }}>
-              {simulado.titulo}
-            </div>
-          )}
-
-          <div style={{ position: 'relative', zIndex: 2, padding: '0 15mm' }}>
-            
-            {/* Espaçador ou Fallback */}
-            {config?.modelo_pdf_url ? (
-              <div style={{ height: '68mm' }}></div>
-            ) : (
-              <div style={{ borderBottom: '2px solid #000', paddingBottom: '10px', marginBottom: '20px', paddingTop: '15mm', display: 'flex', alignItems: 'center', gap: 20 }}>
-                <div style={{ flex: 1 }}>
-                  <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>{simulado.titulo}</h1>
-                  <p style={{ margin: '4px 0 0', fontSize: 14, color: '#333' }}>ALUNO(A): __________________________________________________  TURMA: _________</p>
-                </div>
-              </div>
-            )}
-
-            {/* Lista de Questões Adaptáveis em Duas Colunas */}
-            <div style={{ 
-              fontSize: `${fontSize}px`, 
-              lineHeight: 1.6, 
-              color: '#000',
-              columnCount: columns,
-              columnGap: '12mm',
-              columnRule: columns === 2 ? '1px solid #94a3b8' : 'none',
-              textAlign: 'justify'
-            }}>
-              {(() => {
-                let displayCounter = 1;
-                return questoes.map((q, idx) => {
-                  const isSelected = selectedIds.has(q.id)
-                  const currentNumber = isSelected ? displayCounter++ : '-';
-                  
-                  return (
-                    <div 
-                      key={q.id} 
-                      className={`questao-container ${!isSelected ? 'no-print' : ''}`}
-                      style={{ 
-                        position: 'relative',
-                        padding: '16px 8px', 
-                        marginBottom: 24,
-                        borderRadius: 12,
-                        border: isSelected ? '1px solid transparent' : '1px dashed #cbd5e1',
-                        background: isSelected ? 'transparent' : 'rgba(248,250,252,0.8)',
-                        opacity: isSelected ? 1 : 0.4,
-                        transition: 'all 0.2s',
-                        breakInside: 'auto'
-                      }}
-                    >
-                      {/* Controles Overlay (No Print) */}
-                      <div className="no-print" style={{ position: 'absolute', right: -10, top: -10, display: 'flex', alignItems: 'center', gap: 12, zIndex: 10 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'white', padding: '6px 10px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: 12 }}>
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            onChange={() => handleToggleQuestion(q.id)}
-                            style={{ width: 16, height: 16, accentColor: '#3b82f6' }}
-                          />
-                          {isSelected ? 'Incluir' : 'Ignorar'}
-                        </label>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 10 }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
-                          fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
-                        }}>
-                          {currentNumber}
-                        </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div 
-                          contentEditable={isSelected}
-                          suppressContentEditableWarning
-                          onBlur={(e) => handleEditEnunciado(q.id, e.currentTarget.innerHTML)}
-                          dangerouslySetInnerHTML={{ __html: q.enunciado }}
-                          style={{ 
-                            outline: 'none', 
-                            minHeight: '1.5em',
-                            border: isSelected ? '1px dashed transparent' : 'none',
-                            borderRadius: 4,
-                            padding: '0 4px',
-                            cursor: isSelected ? 'text' : 'default',
-                            wordBreak: 'break-word',
-                            marginBottom: 12
-                          }}
-                          onFocus={e => { if(isSelected) e.currentTarget.style.border = '1px dashed #94a3b8'; e.currentTarget.style.background = 'rgba(241,245,249,0.8)' }}
-                          onBlurCapture={e => { e.currentTarget.style.border = '1px dashed transparent'; e.currentTarget.style.background = 'transparent' }}
-                        />
-                        
-                        {q.imagens && q.imagens.length > 0 && (
-                          <div style={{ marginTop: 16, marginBottom: 16, textAlign: 'center', breakInside: 'avoid' }}>
-                            {q.imagens.map((img: string, i: number) => (
-                              <img key={i} src={img} alt="Imagem da questão" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', margin: '0 auto' }} />
-                            ))}
-                          </div>
-                        )}
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, breakInside: 'avoid' }}>
-                          {q.simulados_alternativas?.map((alt: any) => (
-                            <div key={alt.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                              <div style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: '24px', height: '24px', minWidth: '24px', border: '2px solid #cbd5e1',
-                                color: '#334155', fontWeight: 'bold', borderRadius: '50%', fontSize: '10pt', marginTop: '2px'
-                              }}>
-                                {alt.letra}
-                              </div>
-                              <div 
-                                contentEditable={isSelected}
-                                suppressContentEditableWarning
-                                onBlur={(e) => handleEditAlternativa(q.id, alt.id, e.currentTarget.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: alt.texto }}
-                                style={{ 
-                                  outline: 'none', 
-                                  flex: 1,
-                                  border: isSelected ? '1px dashed transparent' : 'none',
-                                  borderRadius: 4,
-                                  padding: '0 4px',
-                                  cursor: isSelected ? 'text' : 'default',
-                                  wordBreak: 'break-word'
-                                }}
-                                onFocus={e => { if(isSelected) e.currentTarget.style.border = '1px dashed #94a3b8'; e.currentTarget.style.background = 'rgba(241,245,249,0.8)' }}
-                                onBlurCapture={e => { e.currentTarget.style.border = '1px dashed transparent'; e.currentTarget.style.background = 'transparent' }}
-                              />
-                              {isSelected && q.simulados_alternativas.length > 2 && (
-                                <button
-                                  className="no-print"
-                                  onClick={() => handleRemoveAlternativa(q.id, alt.id)}
-                                  style={{
-                                    background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginTop: 2, transition: 'background 0.2s'
-                                  }}
-                                  title="Remover alternativa"
-                                  onMouseOver={e => e.currentTarget.style.background = '#fecaca'}
-                                  onMouseOut={e => e.currentTarget.style.background = '#fee2e2'}
-                                >
-                                  <X size={14} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })})()}
-            </div>
-          </div>
-        </div>
+        <PaginationEngine 
+          questoes={questoes.filter(q => selectedIds.has(q.id))}
+          columns={columns}
+          fontSize={fontSize}
+          config={config}
+          simulado={simulado}
+          onEditEnunciado={handleEditEnunciado}
+          onEditAlternativa={handleEditAlternativa}
+          onRemoveAlternativa={handleRemoveAlternativa}
+        />
+        <IgnoredQuestionsList
+          questoes={questoes.filter(q => !selectedIds.has(q.id))}
+          onToggle={handleToggleQuestion}
+        />
       </div>
 
     </div>
