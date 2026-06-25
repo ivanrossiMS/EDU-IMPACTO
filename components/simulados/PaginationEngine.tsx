@@ -84,6 +84,14 @@ export function PaginationEngine({
       questoes.forEach((q, idx) => {
         let questionMargin = currentY > 0 ? BLOCK_SPACING : 0;
 
+        const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
+        if (isNewDisciplina && q.simulados_disciplinas?.nome) {
+          const discId = `disc-${q.id_disciplina || 'unknown'}-${idx}`;
+          const discH = heights[discId] || 0;
+          pushBlock({ type: 'part_disciplina', q, discName: q.simulados_disciplinas.nome }, discH, questionMargin);
+          questionMargin = BLOCK_SPACING; // Ensure margin between disc header and question
+        }
+
         const enunH = heights[`${q.id}-enunciado`] || 0;
         let totalH = enunH;
         
@@ -138,9 +146,34 @@ export function PaginationEngine({
           width: shadowColWidth, fontSize: `${fontSize}px`, lineHeight: 1.6, textAlign: 'justify' 
         }}
       >
-        {questoes.map((q, idx) => (
-          <div key={`shadow-${q.id}`}>
-            <div data-measure data-id={`${q.id}-enunciado`} style={{ display: 'flex', gap: 10 }}>
+        {questoes.map((q, idx) => {
+          const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
+          return (
+            <div key={`shadow-${q.id}`}>
+              {isNewDisciplina && q.simulados_disciplinas?.nome && (
+                <div 
+                  data-measure 
+                  data-id={`disc-${q.id_disciplina || 'unknown'}-${idx}`}
+                  style={{
+                    padding: '8px 16px',
+                    borderLeft: '4px solid #3b82f6',
+                    background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)',
+                    borderRadius: '0 8px 8px 0',
+                    fontWeight: 800,
+                    fontSize: '11pt',
+                    color: '#1e293b',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
+                >
+                  {q.simulados_disciplinas.nome}
+                </div>
+              )}
+              <div data-measure data-id={`${q.id}-enunciado`} style={{ display: 'flex', gap: 10 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
@@ -178,7 +211,7 @@ export function PaginationEngine({
               </div>
             ))}
           </div>
-        ))}
+        )})}
       </div>
 
       {isPaginating && (

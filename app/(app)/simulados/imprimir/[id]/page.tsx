@@ -26,6 +26,7 @@ export default function SimuladoImprimirPage() {
         *,
         simulados_questoes (
           *,
+          simulados_disciplinas(nome),
           simulados_alternativas (*)
         )
       `).eq('id', id).single()
@@ -84,24 +85,22 @@ export default function SimuladoImprimirPage() {
         overflow: hidden;
         box-shadow: 0 10px 30px rgba(0,0,0,.12);
         box-sizing: border-box;
-        margin: 0 !important;
-        padding: 0 !important;
       }
         
       .page-content {
         position: absolute;
-        left: 16mm;
-        right: 16mm;
+        left: 18mm;
+        right: 18mm;
         overflow: hidden;
       }
 
       .page-content.first-page {
-        top: 42mm; 
+        top: 75mm; /* mais espaço abaixo de ALUNO(A) */
         bottom: 18mm;
       }
 
       .page-content.internal-page {
-        top: 16mm; 
+        top: 18mm; /* página 2 em diante começa mais acima */
         bottom: 18mm;
       }
 

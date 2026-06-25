@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, BookOpen } from 'lucide-react';
 
 export function PageContent({ 
   page, 
@@ -48,6 +48,35 @@ export function PageContent({
           <div key={`col-${cIndex}`} style={{ flex: 1, fontSize: `${fontSize}px`, lineHeight: 1.6, color: '#000', textAlign: 'justify' }}>
             {col.map((block: any, bIndex: number) => {
               
+              if (block.type === 'part_disciplina') {
+                return (
+                  <div 
+                    key={`b-${bIndex}`}
+                    style={{
+                      marginTop: block.renderMarginTop || 0,
+                      marginBottom: 16,
+                      padding: '8px 16px',
+                      borderLeft: '4px solid #3b82f6',
+                      background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)',
+                      borderRadius: '0 8px 8px 0',
+                      fontWeight: 800,
+                      fontSize: '11pt',
+                      color: '#1e293b',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      breakInside: 'avoid'
+                    }}
+                  >
+                    <BookOpen size={16} color="#3b82f6" style={{ marginTop: '-1px' }} />
+                    {block.discName}
+                  </div>
+                );
+              }
+
               if (block.type === 'full') {
                 const q = block.q;
                 return (

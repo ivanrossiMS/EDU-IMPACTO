@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, BookOpen } from 'lucide-react'
 
 type Questao = any
 
@@ -42,8 +42,8 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
         return
       }
 
-      const MAX_HEIGHT_FIRST = heightFirstRef.current?.clientHeight || 850
-      const MAX_HEIGHT_INTERNAL = heightInternalRef.current?.clientHeight || 950
+      const MAX_HEIGHT_FIRST = heightFirstRef.current?.getBoundingClientRect().height || 850
+      const MAX_HEIGHT_INTERNAL = heightInternalRef.current?.getBoundingClientRect().height || 950
       
       const newPages: { leftCol: Questao[], rightCol: Questao[] }[] = []
       let currentLeft: Questao[] = []
@@ -112,8 +112,36 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   }, [questoes, onComplete])
 
   const renderQuestao = (q: Questao, globalIndex: number) => {
+    const isNewDisciplina = globalIndex === 0 || q.id_disciplina !== questoes[globalIndex - 1].id_disciplina;
+
     return (
       <div key={q.id} className="print-question" style={{ marginBottom: 16, breakInside: 'auto' }}>
+        {isNewDisciplina && q.simulados_disciplinas?.nome && (
+          <div 
+            style={{
+              marginBottom: 16,
+              padding: '8px 16px',
+              borderLeft: '4px solid #3b82f6',
+              background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)',
+              borderRadius: '0 8px 8px 0',
+              fontWeight: 800,
+              fontSize: '11pt',
+              color: '#1e293b',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+              breakInside: 'avoid'
+            }}
+          >
+            <BookOpen size={16} color="#3b82f6" style={{ marginTop: '-1px' }} />
+            {q.simulados_disciplinas.nome}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{
             display: 'flex',
