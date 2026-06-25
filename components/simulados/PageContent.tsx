@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, BookOpen } from 'lucide-react';
+import { HtmlContent } from '../HtmlContent';
 
 export function PageContent({ 
   page, 
@@ -128,14 +129,13 @@ export function PageContent({
                         {block.qIndex + 1}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div 
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={(e) => {
-                            onEditEnunciado(q.id, e.currentTarget.innerHTML);
+                        <HtmlContent 
+                          editable={true}
+                          html={q.enunciado}
+                          onBlurHtml={(newHtml) => {
+                            onEditEnunciado(q.id, newHtml);
                             forceRepaginate();
                           }}
-                          dangerouslySetInnerHTML={{ __html: q.enunciado }}
                           style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', marginBottom: 12, wordBreak: 'break-word', cursor: 'text' }}
                         />
                         {q.imagens?.map((img: string, i: number) => (
@@ -151,14 +151,13 @@ export function PageContent({
                               {a.letra}
                             </div>
                             <div style={{ flex: 1 }}>
-                              <div 
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) => {
-                                  onEditAlternativa(q.id, a.id, e.currentTarget.innerHTML);
+                              <HtmlContent 
+                                editable={true}
+                                html={a.texto}
+                                onBlurHtml={(newHtml) => {
+                                  onEditAlternativa(q.id, a.id, newHtml);
                                   forceRepaginate();
                                 }}
-                                dangerouslySetInnerHTML={{ __html: a.texto }}
                                 style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
                               />
                             </div>
@@ -205,14 +204,13 @@ export function PageContent({
                       {block.qIndex + 1}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div 
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => {
-                          onEditEnunciado(q.id, e.currentTarget.innerHTML);
+                      <HtmlContent 
+                        editable={true}
+                        html={q.enunciado}
+                        onBlurHtml={(newHtml) => {
+                          onEditEnunciado(q.id, newHtml);
                           forceRepaginate();
                         }}
-                        dangerouslySetInnerHTML={{ __html: q.enunciado }}
                         style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
                       />
                     </div>
@@ -246,14 +244,13 @@ export function PageContent({
                         {a.letra}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div 
-                          contentEditable
-                          suppressContentEditableWarning
-                          onBlur={(e) => {
-                            onEditAlternativa(q.id, a.id, e.currentTarget.innerHTML);
+                        <HtmlContent 
+                          editable={true}
+                          html={a.texto}
+                          onBlurHtml={(newHtml) => {
+                            onEditAlternativa(q.id, a.id, newHtml);
                             forceRepaginate();
                           }}
-                          dangerouslySetInnerHTML={{ __html: a.texto }}
                           style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
                         />
                       </div>

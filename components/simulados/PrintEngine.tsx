@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Loader2, BookOpen } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { HtmlContent } from '../HtmlContent'
 
 type Questao = any
 
@@ -162,9 +164,9 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
             {globalIndex + 1}
           </div>
           <div style={{ flex: 1 }}>
-            <div 
-              dangerouslySetInnerHTML={{ __html: q.enunciado || '' }} 
-              style={{ marginBottom: 12, wordBreak: 'break-word', fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }}
+            <HtmlContent
+              html={q.enunciado || ''}
+              style={{ wordBreak: 'break-word', marginBottom: 12, fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }}
             />
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -186,9 +188,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
                   }}>
                     {alt.letra}
                   </div>
-                  <div style={{ fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }}>
-                    {alt.texto}
-                  </div>
+                  <HtmlContent html={alt.texto} style={{ fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }} />
                 </div>
               ))}
             </div>

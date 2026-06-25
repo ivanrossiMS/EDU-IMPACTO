@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
+import { HtmlContent } from '../HtmlContent';
 import { Loader2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { PageContent } from './PageContent';
@@ -194,7 +196,7 @@ export function PaginationEngine({
                 {idx + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div dangerouslySetInnerHTML={{ __html: q.enunciado }} style={{ wordBreak: 'break-word', marginBottom: 12 }} />
+                <HtmlContent html={q.enunciado} style={{ wordBreak: 'break-word', marginBottom: 12 }} />
               </div>
             </div>
 
@@ -218,7 +220,7 @@ export function PaginationEngine({
                   {a.letra}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div dangerouslySetInnerHTML={{ __html: a.texto }} style={{ wordBreak: 'break-word' }} />
+                  <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
                 </div>
               </div>
             ))}

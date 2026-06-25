@@ -3,62 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-
-function RichTextEditor({ value, onChange, placeholder }: { value: string, onChange: (val: string) => void, placeholder?: string }) {
-  const editorRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      if (document.activeElement !== editorRef.current) {
-        editorRef.current.innerHTML = value || '<div style="text-align: justify;"><br></div>'
-      }
-    }
-  }, [value])
-
-  const handleInput = () => {
-    if (editorRef.current) {
-      onChange(editorRef.current.innerHTML)
-    }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault()
-    const text = e.clipboardData.getData('text/plain')
-    document.execCommand('insertText', false, text)
-  }
-
-  const format = (command: string, value?: string) => {
-    document.execCommand(command, false, value)
-    if (editorRef.current) {
-      editorRef.current.focus()
-      onChange(editorRef.current.innerHTML)
-    }
-  }
-
-  return (
-    <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden', background: 'hsl(var(--bg-app))' }}>
-      <div style={{ display: 'flex', gap: 4, padding: '8px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))' }}>
-        <button type="button" onClick={() => format('bold')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Negrito"><Bold size={16} /></button>
-        <button type="button" onClick={() => format('italic')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Itálico"><Italic size={16} /></button>
-        <button type="button" onClick={() => format('underline')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Sublinhado"><Underline size={16} /></button>
-        <div style={{ width: 1, background: 'hsl(var(--border-subtle))', margin: '4px 8px' }} />
-        <button type="button" onClick={() => format('justifyLeft')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Alinhar à Esquerda"><AlignLeft size={16} /></button>
-        <button type="button" onClick={() => format('justifyCenter')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Centralizar"><AlignCenter size={16} /></button>
-        <button type="button" onClick={() => format('justifyRight')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Alinhar à Direita"><AlignRight size={16} /></button>
-        <button type="button" onClick={() => format('justifyFull')} style={{ padding: 6, background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-primary))', borderRadius: 4 }} title="Justificar"><AlignJustify size={16} /></button>
-      </div>
-      <div
-        ref={editorRef}
-        contentEditable
-        onInput={handleInput}
-        onBlur={handleInput}
-        onPaste={handlePaste}
-        style={{ padding: '16px', minHeight: '120px', outline: 'none', color: 'hsl(var(--text-primary))', fontFamily: 'Arial, Helvetica, sans-serif', fontSize: 12, textAlign: 'justify' }}
-        data-placeholder={placeholder}
-      />
-    </div>
-  )
-}
+import { EditorQuill } from './EditorQuill'
+import { HtmlContent } from '../HtmlContent'
 
 export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defaultDisciplinaId, onClose, onSave }: { simuladoId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, onClose: () => void, onSave: () => void }) {
   const [loading, setLoading] = useState(false)
@@ -317,7 +263,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
 
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 8 }}>Enunciado da Questão</label>
-                <RichTextEditor 
+                <EditorQuill 
                   value={enunciado} 
                   onChange={setEnunciado} 
                   placeholder="Escreva a pergunta aqui..."
@@ -396,13 +342,14 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
                       >
                         {alt.letra}
                       </div>
-                      <input 
-                        type="text" 
-                        value={alt.texto} 
-                        onChange={e => updateAlternativa(i, 'texto', e.target.value)} 
-                        placeholder={`Texto da alternativa ${alt.letra}`}
-                        style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: `1px solid ${alt.correta ? '#10b981' : 'hsl(var(--border-subtle))'}`, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))' }}
-                      />
+                      <div style={{ flex: 1, minWidth: 0, borderRadius: 12, border: `1px solid ${alt.correta ? '#10b981' : 'transparent'}` }}>
+                        <EditorQuill 
+                          value={alt.texto} 
+                          onChange={(val) => updateAlternativa(i, 'texto', val)} 
+                          placeholder={`Texto da alternativa ${alt.letra}`}
+                          compact={true}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -423,20 +370,20 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
                   </span>
                 </div>
                 
-                <div 
+                <HtmlContent 
+                  html={getEnunciadoComImagens() || '<span style="color:#94a3b8;font-style:italic">Enunciado vazio</span>'}
                   style={{ color: 'hsl(var(--text-primary))', fontSize: 12, lineHeight: 1.6, marginBottom: 20, fontFamily: 'Arial, Helvetica, sans-serif', textAlign: 'justify', wordBreak: 'break-word' }}
-                  dangerouslySetInnerHTML={{ __html: getEnunciadoComImagens() || '<span style="color:#94a3b8;font-style:italic">Enunciado vazio</span>' }}
                 />
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {alternativas.filter(a => a.texto.trim() !== '').length > 0 ? (
-                    alternativas.filter(a => a.texto.trim() !== '').map((alt) => (
+                  {alternativas.filter(a => a.texto.replace(/<[^>]+>/g, '').trim() !== '').length > 0 ? (
+                    alternativas.filter(a => a.texto.replace(/<[^>]+>/g, '').trim() !== '').map((alt) => (
                       <div key={alt.letra} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 12, background: alt.correta ? 'rgba(16,185,129,0.1)' : 'hsl(var(--bg-app))', border: `1px solid ${alt.correta ? '#10b981' : 'hsl(var(--border-subtle))'}` }}>
                         <div style={{ width: 24, height: 24, borderRadius: '50%', background: alt.correta ? '#10b981' : 'rgba(100,116,139,0.2)', color: alt.correta ? 'white' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>
                           {alt.letra}
                         </div>
                         <div style={{ color: alt.correta ? '#10b981' : 'hsl(var(--text-primary))', fontSize: 14, fontWeight: alt.correta ? 600 : 400 }}>
-                          {alt.texto}
+                          <HtmlContent html={alt.texto} />
                         </div>
                       </div>
                     ))

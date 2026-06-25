@@ -1,5 +1,6 @@
 import React from 'react';
-import { EyeOff } from 'lucide-react';
+import { EyeOff, Plus } from 'lucide-react';
+import { HtmlContent } from '../HtmlContent';
 
 export function IgnoredQuestionsList({ questoes, onToggle }: { questoes: any[], onToggle: (id: string) => void }) {
   if (!questoes || questoes.length === 0) return null;
@@ -15,7 +16,7 @@ export function IgnoredQuestionsList({ questoes, onToggle }: { questoes: any[], 
         {questoes.map(q => (
           <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 16, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
             <div style={{ flex: 1, color: '#64748b', fontSize: 14 }}>
-              <div dangerouslySetInnerHTML={{ __html: q.enunciado }} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} />
+              <HtmlContent html={q.enunciado} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} />
             </div>
             <button
               onClick={() => onToggle(q.id)}
