@@ -272,25 +272,70 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
         const bstr = evt.target?.result
         const wb = XLSX.read(bstr, { type: 'binary' })
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }) as any[][]
-        const res = await fetch('/api/importacao/alunos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rows: hasHeaders ? data.slice(1) : data,
-            mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, step, inativarAusentes,
-            headers: hasHeaders ? data[0] : null,
+        
+        const rowsToProcess = hasHeaders ? data.slice(1) : data;
+        const chunkSize = 25; // Chunk pequeno para evitar timeout (504) no serverless
+        let totalInseridos = 0;
+        let totalAtualizados = 0;
+        let totalErros = 0;
+        let allErroDetails: any[] = [];
+        let accumulatedIds: string[] = [];
+        
+        for (let i = 0; i < rowsToProcess.length; i += chunkSize) {
+          const chunk = rowsToProcess.slice(i, i + chunkSize);
+          const isLastChunk = i + chunkSize >= rowsToProcess.length;
+          
+          const res = await fetch('/api/importacao/alunos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              rows: chunk,
+              mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, step, 
+              inativarAusentes: isLastChunk ? inativarAusentes : false,
+              accumulatedIds: accumulatedIds,
+              headers: hasHeaders ? data[0] : null,
+            })
           })
-        })
-        const result = await res.json()
-        if (res.ok) {
-          setImportedSummary(result)
-          if (result.erroDetails && result.erroDetails.length > 0) {
-            setErrors(result.erroDetails)
+          
+          let result;
+          try {
+            result = await res.json()
+          } catch (e) {
+            allErroDetails.push({ linha: i, msg: 'O servidor demorou muito para responder (Timeout). Tente importar um arquivo menor.' })
+            break;
           }
-          onSuccess()
-        } else {
-          setErrors([{ linha: 0, msg: result.error || 'Erro desconhecido' }])
+
+          if (res.ok) {
+            totalInseridos += result.inseridos || 0;
+            totalAtualizados += result.atualizados || 0;
+            totalErros += result.erros || 0;
+            if (result.erroDetails && result.erroDetails.length > 0) {
+              // Ajustar as linhas do erro para refletir a posição real
+              const adjustedErrors = result.erroDetails.map((err: any) => ({
+                ...err,
+                linha: err.linha > 0 ? err.linha + i : 0
+              }));
+              allErroDetails = [...allErroDetails, ...adjustedErrors];
+            }
+            if (result.processedIds) {
+               accumulatedIds = result.processedIds;
+            }
+          } else {
+            allErroDetails.push({ linha: i, msg: result.error || 'Erro desconhecido' })
+          }
         }
+        
+        setImportedSummary({
+          ok: true,
+          total: rowsToProcess.length,
+          inseridos: totalInseridos,
+          atualizados: totalAtualizados,
+          erros: totalErros
+        })
+        if (allErroDetails.length > 0) {
+          setErrors(allErroDetails)
+        }
+        onSuccess()
         setLoading(false)
       }
       reader.readAsBinaryString(file)

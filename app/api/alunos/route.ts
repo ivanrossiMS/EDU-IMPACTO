@@ -112,7 +112,7 @@ export async function GET(request: Request) {
     } else if (sortField === 'status') {
       dbSortField = 'status'
     } else if (sortField === 'sairSozinho' || sortField === 'autorizadoSairSozinho') {
-      dbSortField = 'autorizadoSairSozinho'
+      dbSortField = 'dados->autorizadoSairSozinho'
     } else if (sortField === 'foto') {
       dbSortField = 'foto'
     } else if (sortField === 'created_at' || sortField === 'data_cadastro' || sortField === 'dataCadastro') {
@@ -126,6 +126,10 @@ export async function GET(request: Request) {
     const { data: students, error: studentsError, count } = await queryExec
 
     if (studentsError) {
+      // PGRST103: Requested range not satisfiable (ocorre quando pede uma página maior que o total de resultados)
+      if (studentsError.code === 'PGRST103') {
+        return NextResponse.json({ data: [], total: count || 0, page, limit })
+      }
       console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Students): ${studentsError.message}\n`)
       return NextResponse.json({ error: studentsError.message }, { status: 400 })
     }

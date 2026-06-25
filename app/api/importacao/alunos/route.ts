@@ -25,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
-    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step, inativarAusentes } = body as { 
+    const { rows, mapping, config, tipoResponsavelConfig, tipoTurmaConfig, hasHeaders, headers, step, inativarAusentes, accumulatedIds } = body as { 
       rows: any[][]; 
       mapping: Record<string, string>; 
       config: string;
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       headers: any[] | null;
       step?: number;
       inativarAusentes?: boolean;
+      accumulatedIds?: string[];
     }
 
     const stringHeaders = headers ? headers.map(h => String(h ?? '').trim()) : null
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     let atualizados = 0
     let erros = 0
     const erroDetails: { linha: number; msg: string }[] = []
-    const processedAlunoIds: string[] = []
+    const processedAlunoIds: string[] = [...(accumulatedIds || [])]
     
     // Carregar todas as turmas em memória para vinculação flexível (Insensível a acentos/caixa)
     const { data: allTurmas } = await supabase.from('turmas').select('id, nome, dados')
@@ -542,6 +543,7 @@ export async function POST(request: Request) {
       atualizados,
       erros,
       erroDetails: erroDetails,
+      processedIds: processedAlunoIds
     })
 
   } catch (e: any) {

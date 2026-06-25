@@ -12,8 +12,9 @@ Uso: python3 Sincronizar_Catraca.py
 """
 
 import json
-import ssl
 import sys
+import os
+import ssl
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, date
@@ -76,7 +77,8 @@ def detectar_base_url(cat):
                           timeout=5)
             if r.get("session"):
                 return url, r["session"]
-        except Exception:
+        except Exception as e:
+            print(f"     [DEBUG] Falha ao tentar {url}: {e}")
             pass
     return None, None
 
@@ -183,6 +185,14 @@ def main():
     print(f"   {hoje_str}")
     print("  ══════════════════════════════════════════════════")
 
+    cache_file = f"sincronizados_{date.today().strftime('%Y_%m_%d')}.txt"
+    ja_sincronizados = set()
+    if os.path.exists(cache_file):
+        with open(cache_file, "r") as f:
+            for line in f:
+                if line.strip():
+                    ja_sincronizados.add(line.strip())
+
     total_enviados = 0
     total_erros    = 0
 
@@ -210,24 +220,42 @@ def main():
         logs_hoje = get_access_logs_hoje(base_url, session)
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
-        print(f"     📋 {len(logs_hoje)} eventos hoje / {len(reconhecidos)} com aluno identificado")
+        # Filtra para enviar apenas 1 registro por aluno (o primeiro do dia)
+        unicos = {}
+        for l in reconhecidos:
+            uid = str(l.get("user_id", ""))
+            # Se não tá no dicionário, adiciona. Se tiver, substitui apenas se o tempo for MENOR (mais cedo)
+            if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
+                unicos[uid] = l
+        
+        reconhecidos_unicos = list(unicos.values())
+        
+        novos_para_enviar = []
+        for log in reconhecidos_unicos:
+            if str(log.get("user_id", "")) not in ja_sincronizados:
+                novos_para_enviar.append(log)
+        
+        print(f"     📋 {len(logs_hoje)} eventos hoje / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} novos para envio")
 
-        if not reconhecidos:
-            print(f"     ℹ️  Nenhum aluno identificado hoje ainda.")
+        if not novos_para_enviar:
+            print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente.")
             continue
 
         # Envia cada reconhecimento para o webhook
         ok = 0
         falhas = 0
-        for log in reconhecidos:
-            uid  = log.get("user_id", "?")
+        for log in novos_para_enviar:
+            uid  = str(log.get("user_id", "?"))
             hora = formatar_hora(log.get("time", 0))
             try:
                 result = enviar_para_webhook(log, cat["ip"])
                 status = result.get("evento", result.get("status", "?"))
-                if status in ("sucesso", "ok"):
+                if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia"):
                     print(f"     ✅ Aluno {uid:<6} às {hora}  [{status}]")
                     ok += 1
+                    with open(cache_file, "a") as f:
+                        f.write(uid + "\n")
+                    ja_sincronizados.add(uid)
                 else:
                     print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{status}]")
                     ok += 1
