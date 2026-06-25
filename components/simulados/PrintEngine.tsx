@@ -198,7 +198,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           >
             <div className="print-page">
               <div className="page-content internal-page">
-                <div style={{ display: 'flex', width: '100%', gap: '12mm' }}>
+                <div style={{ display: 'flex', width: '100%', gap: '6mm' }}>
                   <div ref={measuringRef} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     {questoes.map((q, i) => renderQuestao(q, i))}
                   </div>
@@ -253,7 +253,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
 
           <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
             {/* Columns Container */}
-            <div style={{ display: 'flex', width: '100%', height: '100%', gap: '12mm' }}>
+            <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
               
               {/* Left Column */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -262,6 +262,16 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
                   return renderQuestao(q, globalIndex)
                 })}
               </div>
+
+              {/* Ultra Modern Divider */}
+              {page.rightCol.length > 0 && (
+                <div style={{
+                  width: '1px',
+                  borderLeft: '1px dashed #cbd5e1',
+                  height: '100%',
+                  opacity: 0.7
+                }} />
+              )}
 
               {/* Right Column (Only render if it has items) */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
