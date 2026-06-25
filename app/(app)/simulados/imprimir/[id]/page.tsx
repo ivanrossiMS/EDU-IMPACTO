@@ -103,6 +103,10 @@ export default function SimuladoImprimirPage() {
         bottom: 18mm;
       }
 
+      .print-only {
+        display: none;
+      }
+
       @media print {
         html, body {
           margin: 0 !important;
@@ -111,9 +115,14 @@ export default function SimuladoImprimirPage() {
           width: 210mm !important;
         }
 
+        .screen-preview,
         .print-actions,
         .no-print {
           display: none !important;
+        }
+
+        .print-only {
+          display: block !important;
         }
 
         .print-preview-wrapper {
@@ -126,12 +135,16 @@ export default function SimuladoImprimirPage() {
         .print-page {
           width: 210mm !important;
           height: 297mm !important;
+          min-height: 297mm !important;
+          max-height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
           box-shadow: none !important;
           page-break-after: always !important;
           break-after: page !important;
           overflow: hidden !important;
+          transform: none !important;
+          zoom: 1 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }

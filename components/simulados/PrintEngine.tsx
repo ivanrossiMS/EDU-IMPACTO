@@ -170,6 +170,83 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
     )
   }
 
+  const renderPage = (page: { leftCol: Questao[], rightCol: Questao[] }, pIndex: number) => (
+    <div key={pIndex} className="print-page">
+      
+      {/* Repeating BG */}
+      {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
+        <img 
+          src={config.modelo_pdf_outras_paginas_url} 
+          alt="Fundo" 
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
+        />
+      )}
+
+      {/* Cover BG */}
+      {pIndex === 0 && config?.modelo_pdf_url && (
+        <img 
+          src={config.modelo_pdf_url} 
+          alt="Capa" 
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
+        />
+      )}
+
+      {/* Title on cover */}
+      {pIndex === 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '20mm',
+          right: '25mm',
+          width: '75mm',
+          height: '24mm',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          fontWeight: 900,
+          fontSize: '13pt', 
+          color: '#1e293b',
+          zIndex: 10
+        }}>
+          {simulado?.titulo}
+        </div>
+      )}
+
+      <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
+        {/* Columns Container */}
+        <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
+          
+          {/* Left Column */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            {page.leftCol.map(q => {
+              const globalIndex = questoes.findIndex(x => x.id === q.id)
+              return renderQuestao(q, globalIndex)
+            })}
+          </div>
+
+          {/* Ultra Modern Divider */}
+          {page.rightCol.length > 0 && (
+            <div style={{
+              width: '1px',
+              borderLeft: '1px dashed #cbd5e1',
+              height: '100%',
+              opacity: 0.7
+            }} />
+          )}
+
+          {/* Right Column (Only render if it has items) */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            {page.rightCol.map(q => {
+              const globalIndex = questoes.findIndex(x => x.id === q.id)
+              return renderQuestao(q, globalIndex)
+            })}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <>
       {isPaginating && (
@@ -209,82 +286,16 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
         </div>
       )}
 
-      {!isPaginating && pages.map((page, pIndex) => (
-        <div key={pIndex} className="print-page">
-          
-          {/* Repeating BG */}
-          {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
-            <img 
-              src={config.modelo_pdf_outras_paginas_url} 
-              alt="Fundo" 
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-            />
-          )}
-
-          {/* Cover BG */}
-          {pIndex === 0 && config?.modelo_pdf_url && (
-            <img 
-              src={config.modelo_pdf_url} 
-              alt="Capa" 
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
-            />
-          )}
-
-          {/* Title on cover */}
-          {pIndex === 0 && (
-            <div style={{
-              position: 'absolute',
-              top: '20mm',
-              right: '25mm',
-              width: '75mm',
-              height: '24mm',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              fontWeight: 900,
-              fontSize: '13pt', 
-              color: '#1e293b',
-              zIndex: 10
-            }}>
-              {simulado?.titulo}
-            </div>
-          )}
-
-          <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
-            {/* Columns Container */}
-            <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
-              
-              {/* Left Column */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                {page.leftCol.map(q => {
-                  const globalIndex = questoes.findIndex(x => x.id === q.id)
-                  return renderQuestao(q, globalIndex)
-                })}
-              </div>
-
-              {/* Ultra Modern Divider */}
-              {page.rightCol.length > 0 && (
-                <div style={{
-                  width: '1px',
-                  borderLeft: '1px dashed #cbd5e1',
-                  height: '100%',
-                  opacity: 0.7
-                }} />
-              )}
-
-              {/* Right Column (Only render if it has items) */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                {page.rightCol.map(q => {
-                  const globalIndex = questoes.findIndex(x => x.id === q.id)
-                  return renderQuestao(q, globalIndex)
-                })}
-              </div>
-
-            </div>
+      {!isPaginating && (
+        <>
+          <div className="screen-preview" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+            {pages.map(renderPage)}
           </div>
-        </div>
-      ))}
+          <div className="print-only">
+            {pages.map(renderPage)}
+          </div>
+        </>
+      )}
     </>
   )
 }
