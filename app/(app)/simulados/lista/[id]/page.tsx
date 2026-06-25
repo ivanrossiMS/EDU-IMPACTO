@@ -26,6 +26,8 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
   const isProfessor = currentUserPerfil === 'Professor'
   const [professorDisciplinas, setProfessorDisciplinas] = useState<string[]>([])
 
+  const [requisicoesLimits, setRequisicoesLimits] = useState<any[]>([])
+
   const loadData = async () => {
     if (!id) return
     setLoading(true)
@@ -33,15 +35,16 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
     const { data: sim } = await supabase.from('simulados').select('*, simulados_bimestres(nome)').eq('id', id).single()
     if (sim) setSimulado(sim)
 
-    // 2. Get simulado requisicoes to know the discipline order
+    // 2. Get simulado requisicoes to know the discipline order and limits
     const { data: reqs } = await supabase
       .from('simulados_requisicoes')
-      .select('id_disciplina, id_professor, created_at')
+      .select('id_disciplina, id_professor, created_at, quantidade_questoes, simulados_disciplinas(nome)')
       .eq('id_simulado', id)
       .order('created_at', { ascending: true })
     
     const disciplineOrder: string[] = []
     if (reqs) {
+      setRequisicoesLimits(reqs)
       reqs.forEach(r => {
         if (!disciplineOrder.includes(r.id_disciplina)) {
           disciplineOrder.push(r.id_disciplina)
@@ -59,35 +62,58 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
       .from('simulados_questoes')
       .select('*, simulados_disciplinas(nome), simulados_alternativas(*)')
       .eq('id_simulado', id)
+      .order('ordem', { ascending: true })
 
     if (q) {
-      let filtered = q;
-      if (professorFiltro && disciplinaFiltro) {
-        filtered = q.filter(quest => quest.id_professor == professorFiltro && quest.id_disciplina == disciplinaFiltro);
-      }
-      
-      // Sort by discipline original order, then chronological
-      filtered.sort((a, b) => {
+      // Sort array according to discipline order
+      const sortedQ = q.sort((a, b) => {
         const indexA = disciplineOrder.indexOf(a.id_disciplina)
         const indexB = disciplineOrder.indexOf(b.id_disciplina)
-        
-        if (indexA !== indexB) {
-          const aRank = indexA !== -1 ? indexA : 9999
-          const bRank = indexB !== -1 ? indexB : 9999
-          return aRank - bRank
-        }
-        
-        const orderA = a.ordem || 0
-        const orderB = b.ordem || 0
-        if (orderA !== orderB) return orderA - orderB
-        
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        if (indexA === -1) return 1
+        if (indexB === -1) return -1
+        return indexA - indexB
       })
       
-      setQuestoes(filtered)
+      // If filtered by professor/disciplina, apply filter
+      let finalQ = sortedQ
+      if (professorFiltro && disciplinaFiltro) {
+        finalQ = finalQ.filter(questao => 
+          questao.id_professor === professorFiltro && 
+          questao.id_disciplina === disciplinaFiltro
+        )
+      } else if (isProfessor) {
+        // If professor is looking at all questions (no filter in URL),
+        // we show all questions of the simulado but only allow editing of their own
+      }
+      
+      setQuestoes(finalQ)
     }
 
     setLoading(false)
+  }
+
+  const canAddQuestion = () => {
+    if (professorFiltro && disciplinaFiltro) {
+      const req = requisicoesLimits.find(r => r.id_professor === professorFiltro && r.id_disciplina === disciplinaFiltro)
+      if (req) {
+        const limit = req.quantidade_questoes || 0
+        const current = questoes.filter(q => q.id_professor === professorFiltro && q.id_disciplina === disciplinaFiltro).length
+        return current < limit
+      }
+    } else if (isProfessor && currentUser) {
+      let canAdd = false
+      for (const d of professorDisciplinas) {
+        const req = requisicoesLimits.find(r => r.id_professor === currentUser.id && r.id_disciplina === d)
+        const limit = req?.quantidade_questoes || 0
+        const current = questoes.filter(q => q.id_professor === currentUser.id && q.id_disciplina === d).length
+        if (current < limit) {
+          canAdd = true
+          break
+        }
+      }
+      return canAdd
+    }
+    return true
   }
 
   useEffect(() => {
@@ -111,30 +137,92 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>Carregando questões...</div>
   if (!simulado) return <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>Simulado não encontrado.</div>
 
+  // Calcula progresso da disciplina ativa
+  let activeDiscNome = '';
+  let activeCurrent = 0;
+  let activeLimit = 0;
+  
+  if (professorFiltro && disciplinaFiltro) {
+    const activeReq = requisicoesLimits.find(r => r.id_professor === professorFiltro && r.id_disciplina === disciplinaFiltro);
+    if (activeReq) {
+      activeCurrent = questoes.filter(q => q.id_professor === professorFiltro && q.id_disciplina === disciplinaFiltro).length;
+      activeLimit = activeReq.quantidade_questoes;
+      activeDiscNome = activeReq.simulados_disciplinas?.nome || 'Disciplina';
+    }
+  } else if (isProfessor && currentUser && professorDisciplinas.length === 1) {
+    const activeReq = requisicoesLimits.find(r => r.id_professor === currentUser.id && r.id_disciplina === professorDisciplinas[0]);
+    if (activeReq) {
+      activeCurrent = questoes.filter(q => q.id_professor === currentUser.id && q.id_disciplina === professorDisciplinas[0]).length;
+      activeLimit = activeReq.quantidade_questoes;
+      activeDiscNome = activeReq.simulados_disciplinas?.nome || 'Disciplina';
+    }
+  }
+  
+  const showProgress = activeLimit > 0;
+  const progressPercent = showProgress ? Math.min(100, Math.round((activeCurrent / activeLimit) * 100)) : 0;
+
   return (
     <div style={{ padding: '40px 32px', maxWidth: 1000, margin: '0 auto' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-          <div>
+          <div style={{ flex: 1 }}>
             <Link href="/simulados/lista" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', textDecoration: 'none', fontWeight: 600, marginBottom: 12 }}>
               <ArrowLeft size={16} /> Voltar para Lista
             </Link>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>{simulado.titulo}</h1>
-            <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>
-              {simulado.simulados_bimestres?.nome} • {simulado.data_aplicacao ? new Date(simulado.data_aplicacao).toLocaleDateString('pt-BR') : 'Data não definida'}
-              {professorFiltro && disciplinaFiltro && (
-                <span style={{ marginLeft: 8, padding: '2px 8px', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 4, fontWeight: 600 }}>Filtrado por Professor</span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 32 }}>
+              <div>
+                <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>{simulado.titulo}</h1>
+                <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>
+                  {simulado.simulados_bimestres?.nome} • {simulado.data_aplicacao ? new Date(simulado.data_aplicacao).toLocaleDateString('pt-BR') : 'Data não definida'}
+                  {professorFiltro && disciplinaFiltro && (
+                    <span style={{ marginLeft: 8, padding: '2px 8px', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 4, fontWeight: 600 }}>Filtrado por Professor</span>
+                  )}
+                </p>
+              </div>
+              
+              {showProgress && (
+                <div style={{ 
+                  background: 'hsl(var(--bg-surface))', 
+                  border: '1px solid hsl(var(--border-subtle))', 
+                  borderRadius: 16, 
+                  padding: '16px 20px',
+                  minWidth: 280,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--text-secondary))' }}>
+                      {activeDiscNome}
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: progressPercent === 100 ? '#10b981' : '#3b82f6' }}>
+                      {activeCurrent} / {activeLimit} <span style={{ fontSize: 12, opacity: 0.7 }}>({progressPercent}%)</span>
+                    </div>
+                  </div>
+                  <div style={{ width: '100%', height: 8, background: 'hsl(var(--border-subtle))', borderRadius: 8, overflow: 'hidden' }}>
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${progressPercent}%` }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      style={{ 
+                        height: '100%', 
+                        background: progressPercent === 100 ? '#10b981' : 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+                        borderRadius: 8
+                      }} 
+                    />
+                  </div>
+                </div>
               )}
-            </p>
+            </div>
           </div>
-          {(!isProfessor || professorDisciplinas.length > 0) && (
-            <button 
-              onClick={() => { setEditingQuestao(null); setModalOpen(true); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#3b82f6', color: 'white', padding: '12px 20px', borderRadius: 12, border: 'none', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
-            >
-              <Plus size={18} /> Nova Questão
-            </button>
-          )}
+          <div style={{ marginLeft: 24, alignSelf: 'flex-start' }}>
+            {(!isProfessor || professorDisciplinas.length > 0) && canAddQuestion() && (
+              <button 
+                onClick={() => { setEditingQuestao(null); setModalOpen(true); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#3b82f6', color: 'white', padding: '12px 20px', borderRadius: 12, border: 'none', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}
+              >
+                <Plus size={18} /> Nova Questão
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Questões List */}
