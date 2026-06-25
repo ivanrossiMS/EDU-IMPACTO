@@ -60,29 +60,54 @@ export default function AdaptarSimuladoPage() {
     const style = document.createElement('style')
     style.innerHTML = `
       @media print {
+        html, body {
+          width: 210mm !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+          background: white !important;
+        }
+
         body * {
           visibility: hidden !important;
         }
+
         .print-wrapper, .print-wrapper * {
           visibility: visible !important;
         }
+
         .print-wrapper {
           position: absolute !important;
           left: 0 !important;
           top: 0 !important;
-          width: 100% !important;
+          width: 210mm !important;
           margin: 0 !important;
           padding: 0 !important;
+          transform: none !important;
+          zoom: 1 !important;
         }
+
         .print-area {
-          box-shadow: none !important;
+          width: 210mm !important;
+          height: 297mm !important;
           margin: 0 !important;
+          padding: 0 !important;
+          transform: none !important;
+          box-shadow: none !important;
+          page-break-after: always !important;
+          break-after: page !important;
+          overflow: hidden !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        .print-page-break { page-break-after: always !important; }
+
         .no-print { display: none !important; }
-        @page { margin: 0; size: A4; }
+        
+        @page { 
+          size: A4 portrait; 
+          margin: 0; 
+        }
       }
     `
     document.head.appendChild(style)
