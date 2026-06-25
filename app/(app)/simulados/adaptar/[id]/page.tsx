@@ -60,15 +60,28 @@ export default function AdaptarSimuladoPage() {
     const style = document.createElement('style')
     style.innerHTML = `
       @media print {
-        body, html { height: auto !important; overflow: visible !important; }
-        .no-print { display: none !important; }
+        body * {
+          visibility: hidden !important;
+        }
+        .print-wrapper, .print-wrapper * {
+          visibility: visible !important;
+        }
+        .print-wrapper {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
         .print-area {
           box-shadow: none !important;
           margin: 0 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        .print-page-break { break-after: page; page-break-after: always; }
+        .print-page-break { page-break-after: always !important; }
+        .no-print { display: none !important; }
         @page { margin: 0; size: A4; }
       }
     `
@@ -314,17 +327,19 @@ export default function AdaptarSimuladoPage() {
 
       {/* Área Central (Canvas / Papel) */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <PaginationEngine 
-          questoes={questoes.filter(q => selectedIds.has(q.id))}
-          columns={columns}
-          fontSize={fontSize}
-          config={config}
-          simulado={simulado}
-          onEditEnunciado={handleEditEnunciado}
-          onEditAlternativa={handleEditAlternativa}
-          onRemoveAlternativa={handleRemoveAlternativa}
-          onToggleQuestion={handleToggleQuestion}
-        />
+        <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <PaginationEngine 
+            questoes={questoes.filter(q => selectedIds.has(q.id))}
+            columns={columns}
+            fontSize={fontSize}
+            config={config}
+            simulado={simulado}
+            onEditEnunciado={handleEditEnunciado}
+            onEditAlternativa={handleEditAlternativa}
+            onRemoveAlternativa={handleRemoveAlternativa}
+            onToggleQuestion={handleToggleQuestion}
+          />
+        </div>
         <IgnoredQuestionsList
           questoes={questoes.filter(q => !selectedIds.has(q.id))}
           onToggle={handleToggleQuestion}
