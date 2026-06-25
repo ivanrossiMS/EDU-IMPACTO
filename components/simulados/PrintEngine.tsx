@@ -171,12 +171,12 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   }
 
   const renderPage = (page: { leftCol: Questao[], rightCol: Questao[] }, pIndex: number) => (
-    <div key={pIndex} className="a4-page">
+    <div key={pIndex} className="print-page">
       
       {/* Repeating BG */}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
         <img 
-          className="page-background"
+          className="a4-bg"
           src={config.modelo_pdf_outras_paginas_url} 
           alt="Fundo" 
         />
@@ -185,7 +185,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       {/* Cover BG */}
       {pIndex === 0 && config?.modelo_pdf_url && (
         <img 
-          className="page-background"
+          className="a4-bg"
           src={config.modelo_pdf_url} 
           alt="Capa" 
         />
@@ -212,7 +212,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
         </div>
       )}
 
-      <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
+      <div className={`page-content a4-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`}>
         {/* Columns Container */}
         <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
           
@@ -256,7 +256,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           
           {/* Reference divs to get exact safe height in pixels */}
           <div 
-            className="a4-page"
+            className="print-page"
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
             <div 
@@ -273,7 +273,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           <div 
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
-            <div className="a4-page">
+            <div className="print-page">
               <div className="page-content internal-page">
                 <div style={{ display: 'flex', width: '100%', gap: '6mm' }}>
                   <div ref={measuringRef} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
