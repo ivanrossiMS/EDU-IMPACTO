@@ -288,7 +288,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
 
       {!isPaginating && (
         <>
-          <div className="screen-preview" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+          <div className="screen-preview">
             {pages.map(renderPage)}
           </div>
           <div className="print-only">

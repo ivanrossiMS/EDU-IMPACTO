@@ -104,20 +104,20 @@ export default function SimuladoImprimirPage() {
       }
 
       .print-only {
-        display: none;
+        display: none !important;
+      }
+
+      .screen-preview {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
       }
 
       @media print {
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-          background: white !important;
-          width: 210mm !important;
-        }
-
+        .no-print,
         .screen-preview,
-        .print-actions,
-        .no-print {
+        .print-actions {
           display: none !important;
         }
 
@@ -125,33 +125,47 @@ export default function SimuladoImprimirPage() {
           display: block !important;
         }
 
-        .print-preview-wrapper {
+        .print-only .print-page {
           display: block !important;
-          background: white !important;
-          padding: 0 !important;
-          margin: 0 !important;
-        }
-
-        .print-page {
           width: 210mm !important;
           height: 297mm !important;
           min-height: 297mm !important;
           max-height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
-          box-shadow: none !important;
+          overflow: hidden !important;
           page-break-after: always !important;
           break-after: page !important;
-          overflow: hidden !important;
+          box-shadow: none !important;
           transform: none !important;
           zoom: 1 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        .print-page:last-child {
+        .print-only .print-page:last-child {
           page-break-after: auto !important;
           break-after: auto !important;
+        }
+
+        html,
+        body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+          overflow: visible !important;
+          height: auto !important;
+          min-height: auto !important;
+        }
+
+        .print-preview-wrapper {
+          display: block !important;
+          height: auto !important;
+          min-height: auto !important;
+          background: white !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: visible !important;
         }
 
         @page {
