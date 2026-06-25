@@ -15,6 +15,15 @@ export function PageContent({
 }: any) {
   return (
     <>
+      <style>{`
+        @media screen {
+          .correct-bubble-preview {
+            background-color: #22c55e !important;
+            color: #ffffff !important;
+            border-color: #22c55e !important;
+          }
+        }
+      `}</style>
       {pIndex === 0 && config?.modelo_pdf_url && (
         <div className="print-cover-image" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }}>
           <img src={config.modelo_pdf_url} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
@@ -117,7 +126,7 @@ export function PageContent({
                         ))}
                         {q.simulados_alternativas?.map((a: any) => (
                           <div key={a.id} className="alt-hover-group" style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'flex-start', position: 'relative' }}>
-                            <div style={{
+                            <div className={a.correta ? 'correct-bubble-preview' : ''} style={{
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
                               border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
@@ -212,7 +221,7 @@ export function PageContent({
                   <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
                     <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative' }}>
-                      <div style={{
+                      <div className={a.correta ? 'correct-bubble-preview' : ''} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
                         border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
