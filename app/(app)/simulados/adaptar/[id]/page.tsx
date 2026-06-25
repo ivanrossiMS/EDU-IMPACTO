@@ -42,7 +42,21 @@ export default function AdaptarSimuladoPage() {
       `).eq('id_simulado', id)
 
       if (qData) {
-        qData.sort((a: any, b: any) => a.ordem - b.ordem)
+        const discOrder: Record<string, number> = {}
+        if (reqs) {
+          reqs.forEach((r: any, index: number) => {
+            if (discOrder[r.id_disciplina] === undefined) {
+              discOrder[r.id_disciplina] = index
+            }
+          })
+        }
+
+        qData.sort((a: any, b: any) => {
+          const orderA = discOrder[a.id_disciplina] ?? 999
+          const orderB = discOrder[b.id_disciplina] ?? 999
+          if (orderA !== orderB) return orderA - orderB
+          return a.ordem - b.ordem
+        })
         qData.forEach((q: any) => {
           q.simulados_alternativas?.sort((a: any, b: any) => a.letra.localeCompare(b.letra))
         })

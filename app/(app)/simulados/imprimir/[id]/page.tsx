@@ -31,9 +31,26 @@ export default function SimuladoImprimirPage() {
         )
       `).eq('id', id).single()
 
+      // Load requisicoes to get the correct discipline order
+      const { data: reqs } = await supabase.from('simulados_requisicoes').select('*').eq('id_simulado', id).order('created_at', { ascending: true })
+      
+      const discOrder: Record<string, number> = {}
+      if (reqs) {
+        reqs.forEach((r: any, index: number) => {
+          if (discOrder[r.id_disciplina] === undefined) {
+            discOrder[r.id_disciplina] = index
+          }
+        })
+      }
+
       if (simData) {
-        // Sort questions
-        simData.simulados_questoes?.sort((a: any, b: any) => a.ordem - b.ordem)
+        // Sort questions by discipline order from card, then by original sequence
+        simData.simulados_questoes?.sort((a: any, b: any) => {
+          const orderA = discOrder[a.id_disciplina] ?? 999
+          const orderB = discOrder[b.id_disciplina] ?? 999
+          if (orderA !== orderB) return orderA - orderB
+          return a.ordem - b.ordem
+        })
         
         // Sort alternatives
         simData.simulados_questoes?.forEach((q: any) => {
