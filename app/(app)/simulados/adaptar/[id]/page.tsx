@@ -185,13 +185,13 @@ export default function AdaptarSimuladoPage() {
 
       // 2. Clone Requisições
       if (requisicoes.length > 0) {
-        const newReqs = requisicoes.map(r => ({
-          id_simulado: newSimulado.id,
-          id_disciplina: r.id_disciplina,
-          id_professor: r.id_professor,
-          quantidade_questoes: r.quantidade_questoes,
-          assunto_orientacao: r.assunto_orientacao
-        }))
+        const newReqs = requisicoes.map(r => {
+          const { id, created_at, updated_at, simulados_disciplinas, ...restR } = r
+          return {
+            ...restR,
+            id_simulado: newSimulado.id
+          }
+        })
         const { error: rErr } = await supabase.from('simulados_requisicoes').insert(newReqs)
         if (rErr) throw rErr
       }
