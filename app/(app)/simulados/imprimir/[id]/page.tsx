@@ -53,15 +53,14 @@ export default function SimuladoImprimirPage() {
   useEffect(() => {
     const style = document.createElement('style')
     style.innerHTML = `
-      .print-preview-wrapper {
+      .print-page-route {
+        width: 100%;
         min-height: 100vh;
         background: #e8eef5;
         padding: 32px 0;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 24px;
-        font-family: Arial, Helvetica, sans-serif;
       }
 
       .print-actions {
@@ -74,6 +73,7 @@ export default function SimuladoImprimirPage() {
         box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         display: flex;
         gap: 16px;
+        margin-bottom: 24px;
       }
 
       .print-page {
@@ -114,20 +114,6 @@ export default function SimuladoImprimirPage() {
         gap: 24px;
       }
 
-      .a4-bg {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: fill;
-        z-index: 0;
-      }
-
-      .a4-content {
-        position: relative;
-        z-index: 2;
-      }
-
       @media print {
         .no-print,
         .screen-preview,
@@ -140,7 +126,6 @@ export default function SimuladoImprimirPage() {
         }
 
         .print-only .print-page {
-          position: relative !important;
           display: block !important;
           width: 210mm !important;
           height: 297mm !important;
@@ -158,21 +143,6 @@ export default function SimuladoImprimirPage() {
           print-color-adjust: exact !important;
         }
 
-        .a4-bg {
-          position: absolute !important;
-          inset: 0 !important;
-          width: 210mm !important;
-          height: 297mm !important;
-          object-fit: fill !important;
-          z-index: 0 !important;
-          display: block !important;
-        }
-
-        .a4-content {
-          position: relative !important;
-          z-index: 2 !important;
-        }
-
         .print-only .print-page:last-child {
           page-break-after: auto !important;
           break-after: auto !important;
@@ -188,7 +158,7 @@ export default function SimuladoImprimirPage() {
           min-height: auto !important;
         }
 
-        .print-preview-wrapper {
+        .print-page-route {
           display: block !important;
           height: auto !important;
           min-height: auto !important;
@@ -199,7 +169,7 @@ export default function SimuladoImprimirPage() {
         }
 
         @page {
-          size: A4;
+          size: A4 portrait;
           margin: 0;
         }
       }
@@ -227,25 +197,23 @@ export default function SimuladoImprimirPage() {
   if (!simulado) return null
 
   return (
-    <div className="print-preview-wrapper">
-      
-      {/* Barra de Ações */}
-      <div className="print-actions">
-        <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
-          <ChevronLeft size={18} /> Voltar
-        </button>
-        <div style={{ width: 1, background: '#e2e8f0' }} />
-        <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#3b82f6', color: 'white', border: 'none', padding: '8px 20px', borderRadius: 100, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
-          <Printer size={18} /> Imprimir Simulado
-        </button>
-      </div>
-
+    <>
       <PrintEngine 
         simulado={simulado} 
         questoes={simulado.simulados_questoes || []} 
         config={config} 
+        headerActions={
+          <div className="print-actions no-print">
+            <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+              <ChevronLeft size={18} /> Voltar
+            </button>
+            <div style={{ width: 1, background: '#e2e8f0' }} />
+            <button onClick={handlePrint} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#3b82f6', color: 'white', border: 'none', padding: '8px 20px', borderRadius: 100, fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+              <Printer size={18} /> Imprimir Simulado
+            </button>
+          </div>
+        }
       />
-      
-    </div>
+    </>
   )
 }

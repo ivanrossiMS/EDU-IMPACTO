@@ -10,9 +10,10 @@ interface PrintEngineProps {
   questoes: Questao[]
   config: any
   onComplete?: () => void
+  headerActions?: React.ReactNode
 }
 
-export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEngineProps) {
+export function PrintEngine({ simulado, questoes, config, onComplete, headerActions }: PrintEngineProps) {
   const [pages, setPages] = useState<{ leftCol: Questao[], rightCol: Questao[] }[]>([])
   const [isPaginating, setIsPaginating] = useState(true)
   const measuringRef = useRef<HTMLDivElement>(null)
@@ -176,18 +177,18 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       {/* Repeating BG */}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
         <img 
-          className="a4-bg"
           src={config.modelo_pdf_outras_paginas_url} 
           alt="Fundo" 
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
         />
       )}
 
       {/* Cover BG */}
       {pIndex === 0 && config?.modelo_pdf_url && (
         <img 
-          className="a4-bg"
           src={config.modelo_pdf_url} 
           alt="Capa" 
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
         />
       )}
 
@@ -212,7 +213,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
         </div>
       )}
 
-      <div className={`page-content a4-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`}>
+      <div className={`page-content ${pIndex === 0 ? 'first-page' : 'internal-page'}`} style={{ zIndex: 10 }}>
         {/* Columns Container */}
         <div style={{ display: 'flex', width: '100%', height: '100%', gap: '6mm' }}>
           
@@ -248,7 +249,9 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   )
 
   return (
-    <>
+    <main className="print-page-route w-full">
+      {headerActions}
+
       {isPaginating && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
           <Loader2 className="animate-spin" size={40} color="#3b82f6" style={{ marginBottom: 16 }} />
@@ -288,14 +291,15 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
 
       {!isPaginating && (
         <>
-          <div className="screen-preview">
+          <section className="screen-preview no-print">
             {pages.map(renderPage)}
-          </div>
-          <div className="print-only">
+          </section>
+          
+          <section className="print-only">
             {pages.map(renderPage)}
-          </div>
+          </section>
         </>
       )}
-    </>
+    </main>
   )
 }
