@@ -116,16 +116,17 @@ export default function SimuladoImprimirPage() {
 
       @media print {
         @page {
-          size: 210mm 297mm;
+          size: A4 portrait;
           margin: 0;
         }
 
         html,
         body {
-          width: 210mm !important;
-          height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
+          width: auto !important;
+          height: auto !important;
+          overflow: visible !important;
           background: white !important;
         }
 
@@ -137,43 +138,50 @@ export default function SimuladoImprimirPage() {
 
         .print-only {
           display: block !important;
+          position: static !important;
           width: 210mm !important;
+          height: auto !important;
+          overflow: visible !important;
           margin: 0 !important;
           padding: 0 !important;
         }
 
-        .print-only .print-page {
+        .print-only .a4-page {
           display: block !important;
+          position: relative !important;
           width: 210mm !important;
           height: 297mm !important;
-          min-width: 210mm !important;
           min-height: 297mm !important;
-          max-width: 210mm !important;
           max-height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
-          box-sizing: border-box !important;
           overflow: hidden !important;
-          page-break-after: always !important;
           break-after: page !important;
+          page-break-after: always !important;
+          box-shadow: none !important;
           transform: none !important;
-          scale: 1 !important;
-          zoom: 1 !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
         }
 
-        .print-only .print-page:last-child {
-          page-break-after: auto !important;
+        .print-only .a4-page:last-child {
           break-after: auto !important;
+          page-break-after: auto !important;
         }
 
-        .print-page-bg {
+        .print-only .page-background,
+        .print-only .background-image {
           position: absolute !important;
           inset: 0 !important;
           width: 210mm !important;
           height: 297mm !important;
-          object-fit: fill !important;
+          min-width: 210mm !important;
+          min-height: 297mm !important;
+          object-fit: cover !important;
+          z-index: 0 !important;
+        }
+
+        .print-only .page-content {
+          position: relative !important;
+          z-index: 2 !important;
         }
       }
     `

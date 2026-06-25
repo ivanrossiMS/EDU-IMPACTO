@@ -171,25 +171,23 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
   }
 
   const renderPage = (page: { leftCol: Questao[], rightCol: Questao[] }, pIndex: number) => (
-    <div key={pIndex} className="print-page">
+    <div key={pIndex} className="a4-page">
       
       {/* Repeating BG */}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
         <img 
-          className="print-page-bg"
+          className="page-background"
           src={config.modelo_pdf_outras_paginas_url} 
           alt="Fundo" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
         />
       )}
 
       {/* Cover BG */}
       {pIndex === 0 && config?.modelo_pdf_url && (
         <img 
-          className="print-page-bg"
+          className="page-background"
           src={config.modelo_pdf_url} 
           alt="Capa" 
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
         />
       )}
 
@@ -258,7 +256,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           
           {/* Reference divs to get exact safe height in pixels */}
           <div 
-            className="print-page"
+            className="a4-page"
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
             <div 
@@ -275,7 +273,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
           <div 
             style={{ position: 'absolute', top: -9999, left: -9999, visibility: 'hidden' }}
           >
-            <div className="print-page">
+            <div className="a4-page">
               <div className="page-content internal-page">
                 <div style={{ display: 'flex', width: '100%', gap: '6mm' }}>
                   <div ref={measuringRef} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
