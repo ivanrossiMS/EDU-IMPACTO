@@ -16,8 +16,8 @@ export default function AdaptarSimuladoPage() {
   const [questoes, setQuestoes] = useState<any[]>([])
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [fontSize, setFontSize] = useState<number>(12) // base font size in px
-  const [columns, setColumns] = useState<number>(2) // Layout de colunas
+  const [fontSize, setFontSize] = useState<number>(16) // base font size in px
+  const [columns, setColumns] = useState<number>(1) // Layout de colunas
   const [config, setConfig] = useState<any>(null)
 
   useEffect(() => {
