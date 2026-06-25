@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
         .from('system_users')
         .select('id, nome, email')
         .eq('email', loginInput)
-        .maybeSingle()
-        .then(r => r.data || null)
+        .limit(1)
+        .then(r => r.data?.[0] || null)
         
       console.log('[login trace] Awaiting Promise.all for email format')
       const [alunoByEmail, respByEmail, sysUserByEmail] = await Promise.all([alunoPromise, respPromise, sysUserPromise])
@@ -226,11 +226,13 @@ export async function POST(request: NextRequest) {
     // 1. Check system_users
     let hasDualRole = false
     if (userType === 'system_user') {
-      const { data: dbSystemUser } = await supabaseAdmin
+      const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
         .eq('email', resolvedEmail)
-        .maybeSingle()
+        .limit(1)
+
+      const dbSystemUser = dbSystemUserRows?.[0]
 
       if (dbSystemUser) {
         dbRecordExists = true

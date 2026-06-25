@@ -226,7 +226,7 @@ export async function POST(request: Request) {
       if (authErr) throw authErr
       if (authData?.user?.id) {
         await supabaseAdmin.from('system_users')
-          .update({ auth_id: authData.user.id, id: authData.user.id })
+          .update({ auth_id: authData.user.id })
           .eq('id', userIdLegacy)
       }
     }
