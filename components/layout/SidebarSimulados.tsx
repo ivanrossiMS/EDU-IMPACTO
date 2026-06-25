@@ -165,7 +165,7 @@ export function SidebarSimulados() {
         {/* Botão Sair - Ultra Moderno */}
         <button
           onClick={() => {
-            setCurrentUserPerfil(null);
+            setCurrentUserPerfil('');
             setCurrentUser(null);
             window.location.href = '/login';
           }}
