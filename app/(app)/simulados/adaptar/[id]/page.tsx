@@ -29,7 +29,7 @@ export default function AdaptarSimuladoPage() {
 
       const { data: simData } = await supabase.from('simulados').select('*').eq('id', id).single()
       if (simData) {
-        setSimulado({ ...simData, titulo: `${simData.titulo} (Adaptado)` })
+        setSimulado({ ...simData })
       }
 
       const { data: reqs } = await supabase.from('simulados_requisicoes').select('*').eq('id_simulado', id).order('created_at', { ascending: true })
@@ -168,57 +168,24 @@ export default function AdaptarSimuladoPage() {
   }
 
   const handleSaveAndPrint = async () => {
-    if (!confirm('Deseja salvar esta adaptação no banco e imprimir?')) return
+    if (!confirm('Deseja salvar esta edição no banco e imprimir?')) return
     setSaving(true)
 
     try {
-      // 1. Clone Simulado
-      const { data: newSimulado, error: simErr } = await supabase.from('simulados').insert({
-        titulo: simulado.titulo,
-        data_aplicacao: simulado.data_aplicacao,
-        id_bimestre: simulado.id_bimestre,
-        status: 'rascunho',
-        turmas: simulado.turmas
-      }).select().single()
+      const selectedList = questoes.filter(q => selectedIds.has(q.id))
+      const unselectedIds = questoes.filter(q => !selectedIds.has(q.id)).map(q => q.id)
 
-      if (simErr) throw simErr
-
-      // 2. Clone Requisições
-      if (requisicoes.length > 0) {
-        const newReqs = requisicoes.map(r => ({
-          id_simulado: newSimulado.id,
-          id_disciplina: r.id_disciplina,
-          id_professor: r.id_professor,
-          quantidade_questoes: r.quantidade_questoes,
-          assunto_orientacao: r.assunto_orientacao
-        }))
-        await supabase.from('simulados_requisicoes').insert(newReqs)
+      // 1. Delete unselected questions from this simulado
+      if (unselectedIds.length > 0) {
+        const { error: delErr } = await supabase.from('simulados_questoes').delete().in('id', unselectedIds)
+        if (delErr) throw delErr
       }
 
-      // 3. Clone selected Questoes and Alternativas
-      const selectedList = questoes.filter(q => selectedIds.has(q.id))
-      
+      // 2. Update order of selected questions (PaginationEngine does not update state 'ordem',
+      // but if we dragged things around in the future, it would be saved here.
+      // Since drag and drop is not fully updating 'ordem' in state currently, this is a safe no-op or future-proof)
       for (const q of selectedList) {
-        const { data: newQ, error: qErr } = await supabase.from('simulados_questoes').insert({
-          id_simulado: newSimulado.id,
-          id_disciplina: q.id_disciplina,
-          id_professor: q.id_professor,
-          enunciado: q.enunciado,
-          imagens: q.imagens,
-          ordem: q.ordem
-        }).select().single()
-
-        if (qErr) continue
-
-        if (q.simulados_alternativas && q.simulados_alternativas.length > 0) {
-          const newAlts = q.simulados_alternativas.map((a: any) => ({
-            id_questao: newQ.id,
-            letra: a.letra,
-            texto: a.texto,
-            eh_correta: a.eh_correta
-          }))
-          await supabase.from('simulados_alternativas').insert(newAlts)
-        }
+        await supabase.from('simulados_questoes').update({ ordem: q.ordem }).eq('id', q.id)
       }
 
       // Automatically trigger print after slight delay
@@ -229,7 +196,7 @@ export default function AdaptarSimuladoPage() {
       }, 500)
 
     } catch (e: any) {
-      alert('Erro ao salvar adaptação: ' + e.message)
+      alert('Erro ao salvar edição: ' + e.message)
       setSaving(false)
     }
   }
@@ -238,7 +205,7 @@ export default function AdaptarSimuladoPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f8fafc' }}>
         <Loader2 className="animate-spin" size={40} color="#3b82f6" style={{ marginBottom: 16 }} />
-        <p style={{ color: '#64748b', fontWeight: 600 }}>Carregando estúdio de adaptação...</p>
+        <p style={{ color: '#64748b', fontWeight: 600 }}>Carregando estúdio de edição...</p>
       </div>
     )
   }
@@ -256,7 +223,7 @@ export default function AdaptarSimuladoPage() {
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Settings size={20} />
             </div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Adaptação</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Edição</h1>
           </div>
           <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5, margin: 0 }}>Molde a prova visualmente para alunos com necessidades específicas. Remova questões indesejadas e altere o tamanho da fonte global.</p>
         </div>
@@ -344,7 +311,7 @@ export default function AdaptarSimuladoPage() {
             <div style={{ display: 'flex', gap: 12 }}>
               <Info size={20} color="#f59e0b" style={{ flexShrink: 0 }} />
               <p style={{ color: '#b45309', fontSize: 13, lineHeight: 1.5, margin: 0, fontWeight: 500 }}>
-                Dica: Clique no texto das questões e alternativas na área central para editá-los diretamente. Suas edições serão salvas em uma cópia independente.
+                Dica: Clique no texto das questões e alternativas na área central para editá-los diretamente. Suas edições serão salvas diretamente neste simulado.
               </p>
             </div>
           </div>
