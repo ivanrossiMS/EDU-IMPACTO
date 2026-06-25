@@ -91,6 +91,10 @@ export default function AdaptarSimuladoPage() {
           size: A4 portrait;
           margin: 0;
         }
+
+        .no-print {
+          display: none !important;
+        }
       }
     `
     document.head.appendChild(style)
