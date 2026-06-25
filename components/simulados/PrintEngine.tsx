@@ -176,6 +176,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       {/* Repeating BG */}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
         <img 
+          className="print-page-bg"
           src={config.modelo_pdf_outras_paginas_url} 
           alt="Fundo" 
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 
@@ -185,6 +186,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       {/* Cover BG */}
       {pIndex === 0 && config?.modelo_pdf_url && (
         <img 
+          className="print-page-bg"
           src={config.modelo_pdf_url} 
           alt="Capa" 
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', zIndex: 0 }} 

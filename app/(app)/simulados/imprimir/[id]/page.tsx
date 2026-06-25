@@ -115,6 +115,20 @@ export default function SimuladoImprimirPage() {
       }
 
       @media print {
+        @page {
+          size: 210mm 297mm;
+          margin: 0;
+        }
+
+        html,
+        body {
+          width: 210mm !important;
+          height: 297mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: white !important;
+        }
+
         .no-print,
         .screen-preview,
         .print-actions {
@@ -123,21 +137,27 @@ export default function SimuladoImprimirPage() {
 
         .print-only {
           display: block !important;
+          width: 210mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
         }
 
         .print-only .print-page {
           display: block !important;
           width: 210mm !important;
           height: 297mm !important;
+          min-width: 210mm !important;
           min-height: 297mm !important;
+          max-width: 210mm !important;
           max-height: 297mm !important;
           margin: 0 !important;
           padding: 0 !important;
+          box-sizing: border-box !important;
           overflow: hidden !important;
           page-break-after: always !important;
           break-after: page !important;
-          box-shadow: none !important;
           transform: none !important;
+          scale: 1 !important;
           zoom: 1 !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
@@ -148,29 +168,12 @@ export default function SimuladoImprimirPage() {
           break-after: auto !important;
         }
 
-        html,
-        body {
-          margin: 0 !important;
-          padding: 0 !important;
-          background: white !important;
-          overflow: visible !important;
-          height: auto !important;
-          min-height: auto !important;
-        }
-
-        .print-preview-wrapper {
-          display: block !important;
-          height: auto !important;
-          min-height: auto !important;
-          background: white !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          overflow: visible !important;
-        }
-
-        @page {
-          size: A4 portrait;
-          margin: 0;
+        .print-page-bg {
+          position: absolute !important;
+          inset: 0 !important;
+          width: 210mm !important;
+          height: 297mm !important;
+          object-fit: fill !important;
         }
       }
     `
