@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
                 } else {
                   const expires = new Date();
                   expires.setFullYear(expires.getFullYear() + 1);
-                  sessionOptions.maxAge = options.maxAge || 31536000;
+                  sessionOptions.maxAge = options.maxAge || 315360000;
                   sessionOptions.expires = expires;
                 }
                 cookieStore.set({ 
@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
 
     try {
       if (keepConnected) {
-        (await cookies()).set('edu_keep_connected', '1', { maxAge: 31536000, path: '/' })
+        (await cookies()).set('edu_keep_connected', '1', { maxAge: 315360000, path: '/' })
       } else {
         (await cookies()).delete('edu_keep_connected')
       }

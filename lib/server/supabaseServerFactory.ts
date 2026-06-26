@@ -42,7 +42,7 @@ export async function createProtectedClient() {
               } else {
                 const expires = new Date();
                 expires.setFullYear(expires.getFullYear() + 1);
-                sessionOptions.maxAge = 31536000;
+                sessionOptions.maxAge = 315360000;
                 sessionOptions.expires = expires;
               }
               cookieStore.set(name, value, sessionOptions)

@@ -19,7 +19,7 @@ export async function GET() {
             cookiesToSet.forEach(({ name, value, options }) => {
               const expires = new Date();
               expires.setFullYear(expires.getFullYear() + 1);
-              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 31536000, expires })
+              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 315360000, expires })
             }) 
           } catch {}
         },
