@@ -65,10 +65,13 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({ request })
+          const isNative = request.cookies.get('is_native_app')?.value === '1';
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
-            delete sessionOptions.maxAge;
-            delete sessionOptions.expires;
+            if (!isNative) {
+              delete sessionOptions.maxAge;
+              delete sessionOptions.expires;
+            }
             response.cookies.set(name, value, sessionOptions)
           })
         },

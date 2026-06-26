@@ -12,7 +12,7 @@ const isValidEmail = (email: string) =>
 
 export async function POST(request: NextRequest) {
   try {
-    const { email: rawLogin, password } = await request.json()
+    const { email: rawLogin, password, isNative } = await request.json()
     
     if (!rawLogin || !password) {
       return NextResponse.json({ error: 'E-mail/matrícula e senha são obrigatórios' }, { status: 400 })
@@ -155,14 +155,20 @@ export async function POST(request: NextRequest) {
             })
             cookiesToSet.forEach(({ name, value, options }) => {
               try { 
-                const expires = new Date();
-                expires.setFullYear(expires.getFullYear() + 1);
+                const sessionOptions = { ...options };
+                if (!isNative) {
+                  delete sessionOptions.maxAge;
+                  delete sessionOptions.expires;
+                } else {
+                  const expires = new Date();
+                  expires.setFullYear(expires.getFullYear() + 1);
+                  sessionOptions.maxAge = options.maxAge || 31536000;
+                  sessionOptions.expires = expires;
+                }
                 cookieStore.set({ 
                   name, 
                   value, 
-                  ...options, 
-                  maxAge: options.maxAge || 31536000,
-                  expires 
+                  ...sessionOptions 
                 }) 
               } catch(e) {}
             })
@@ -324,6 +330,14 @@ export async function POST(request: NextRequest) {
       hasDualRole,
       user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }
+
+    try {
+      if (isNative) {
+        cookies().set('is_native_app', '1', { maxAge: 31536000, path: '/' })
+      } else {
+        cookies().delete('is_native_app')
+      }
+    } catch(e) {}
 
     const body = JSON.stringify({ user: enrichedUser, session: session })
     return new NextResponse(body, {

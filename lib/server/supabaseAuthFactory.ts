@@ -25,10 +25,13 @@ export async function createProtectedClient() {
                   try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
                }
             })
+            const isNative = cookieStore.get('is_native_app')?.value === '1';
             cookiesToSet.forEach(({ name, value, options }) => {
               const sessionOptions = { ...options };
-              delete sessionOptions.maxAge;
-              delete sessionOptions.expires;
+              if (!isNative) {
+                delete sessionOptions.maxAge;
+                delete sessionOptions.expires;
+              }
               cookieStore.set(name, value, sessionOptions)
             })
           } catch {
