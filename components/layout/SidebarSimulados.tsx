@@ -25,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
   { label: 'Voltar ao ERP', href: '/dashboard', icon: <ChevronLeft size={18} /> },
+  { label: 'Voltar p/ Seleção', href: '/login?step=choose_system', icon: <ChevronLeft size={18} /> },
 ]
 
 export function SidebarSimulados() {
@@ -37,9 +38,9 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Simulados', 'Voltar ao ERP'].includes(item.label)
+      return ['Dashboard', 'Simulados', 'Voltar p/ Seleção'].includes(item.label)
     }
-    return true
+    return item.label !== 'Voltar p/ Seleção'
   })
 
   // Force close on mobile default
@@ -88,7 +89,7 @@ export function SidebarSimulados() {
                 {item.icon}
               </div>
               <span style={{ fontSize: 10, color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s' }}>
-                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'ERP' : item.label}
+                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'ERP' : item.label === 'Voltar p/ Seleção' ? 'Seleção' : item.label}
               </span>
             </Link>
           )
