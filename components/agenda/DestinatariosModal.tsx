@@ -371,7 +371,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
 
     allGroupItems.forEach(item => {
-      if (item.type === 'turma' || item.type === 'grupo') {
+      if (item.type === 'turma') {
         if (item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
            result.push({ id: item.id, name: item.title, type: item.type })
            item.leafIds.forEach((id: string) => coveredLeaves.add(id))
