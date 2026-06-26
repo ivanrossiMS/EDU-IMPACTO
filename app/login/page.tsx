@@ -194,7 +194,11 @@ export default function LoginPage() {
         body: JSON.stringify({ 
           email, 
           password,
-          isNative: typeof window !== 'undefined' && !!(window as any).Capacitor?.isNative
+          isNative: typeof window !== 'undefined' && (
+            !!(window as any).Capacitor?.isNative || 
+            /Capacitor/i.test(navigator.userAgent) ||
+            window.matchMedia('(display-mode: standalone)').matches
+          )
         })
       })
 

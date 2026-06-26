@@ -65,7 +65,9 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({ request })
-          const isNative = request.cookies.get('is_native_app')?.value === '1';
+          const userAgent = request.headers.get('user-agent') || '';
+          const isNative = request.cookies.get('is_native_app')?.value === '1' || /Capacitor/i.test(userAgent);
+          
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
             if (!isNative) {
