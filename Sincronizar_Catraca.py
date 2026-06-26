@@ -174,7 +174,7 @@ def enviar_para_webhook(log_entry, device_ip):
 
 
 def formatar_hora(ts):
-    return datetime.utcfromtimestamp(ts).strftime("%H:%M:%S") if ts else "?"
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%H:%M:%S") if ts else "?"
 
 
 def main():
@@ -241,6 +241,13 @@ def main():
             print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente.")
             continue
 
+        # Abre o arquivo de cache uma vez para evitar PermissionError do Windows (Antivírus/Defender)
+        cache_f = None
+        try:
+            cache_f = open(cache_file, "a")
+        except Exception as e:
+            print(f"     ⚠️  Aviso: Não foi possível abrir o arquivo de cache '{cache_file}' ({e}). O script continuará sem salvar cache em disco.")
+
         # Envia cada reconhecimento para o webhook
         ok = 0
         falhas = 0
@@ -253,15 +260,25 @@ def main():
                 if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia"):
                     print(f"     ✅ Aluno {uid:<6} às {hora}  [{status}]")
                     ok += 1
-                    with open(cache_file, "a") as f:
-                        f.write(uid + "\n")
+                    if cache_f:
+                        try:
+                            cache_f.write(uid + "\n")
+                            cache_f.flush()
+                        except Exception as write_err:
+                            pass # Ignora erro de escrita se o arquivo for bloqueado durante a execução
                     ja_sincronizados.add(uid)
                 else:
                     print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{status}]")
                     ok += 1
             except Exception as e:
-                print(f"     ❌ Aluno {uid} às {hora}: {e}")
+                print(f"     ❌ Aluno {uid:<6} às {hora}: {e}")
                 falhas += 1
+
+        if cache_f:
+            try:
+                cache_f.close()
+            except:
+                pass
 
         total_enviados += ok
         total_erros    += falhas
