@@ -12,7 +12,7 @@ const isValidEmail = (email: string) =>
 
 export async function POST(request: NextRequest) {
   try {
-    const { email: rawLogin, password, isNative } = await request.json()
+    const { email: rawLogin, password, keepConnected } = await request.json()
     
     if (!rawLogin || !password) {
       return NextResponse.json({ error: 'E-mail/matrícula e senha são obrigatórios' }, { status: 400 })
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
             cookiesToSet.forEach(({ name, value, options }) => {
               try { 
                 const sessionOptions = { ...options };
-                if (!isNative) {
+                if (!keepConnected) {
                   delete sessionOptions.maxAge;
                   delete sessionOptions.expires;
                 } else {
@@ -332,10 +332,10 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      if (isNative) {
-        (await cookies()).set('is_native_app', '1', { maxAge: 31536000, path: '/' })
+      if (keepConnected) {
+        (await cookies()).set('edu_keep_connected', '1', { maxAge: 31536000, path: '/' })
       } else {
-        (await cookies()).delete('is_native_app')
+        (await cookies()).delete('edu_keep_connected')
       }
     } catch(e) {}
 

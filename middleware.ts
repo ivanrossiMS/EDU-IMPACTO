@@ -65,12 +65,11 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({ request })
-          const userAgent = request.headers.get('user-agent') || '';
-          const isNative = request.cookies.get('is_native_app')?.value === '1' || /Capacitor/i.test(userAgent);
+          const keepConnected = request.cookies.get('edu_keep_connected')?.value === '1';
           
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
-            if (!isNative) {
+            if (!keepConnected) {
               delete sessionOptions.maxAge;
               delete sessionOptions.expires;
             }

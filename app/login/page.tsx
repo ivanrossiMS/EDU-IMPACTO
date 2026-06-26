@@ -53,6 +53,7 @@ export default function LoginPage() {
   // ── login form
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
+  const [keepConnected, setKeepConnected] = useState(true)
   const [showPw, setShowPw]     = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginError, setLoginError]     = useState('')
@@ -194,11 +195,7 @@ export default function LoginPage() {
         body: JSON.stringify({ 
           email, 
           password,
-          isNative: typeof window !== 'undefined' && (
-            !!(window as any).Capacitor?.isNative || 
-            /Capacitor/i.test(navigator.userAgent) ||
-            window.matchMedia('(display-mode: standalone)').matches
-          )
+          keepConnected: keepConnected
         })
       })
 
@@ -449,8 +446,8 @@ export default function LoginPage() {
           <ErrorBox msg={loginError} />
           
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <input type="checkbox" id="remember" defaultChecked style={{ width:20, height:20, accentColor:'#2563eb', cursor:'pointer', borderRadius: 4 }} />
-            <label htmlFor="remember" style={{ fontSize:14, color:'rgba(255,255,255,0.5)', cursor:'pointer' }}>Manter conectado por 30 dias</label>
+            <input type="checkbox" id="remember" checked={keepConnected} onChange={(e) => setKeepConnected(e.target.checked)} style={{ width:20, height:20, accentColor:'#2563eb', cursor:'pointer', borderRadius: 4 }} />
+            <label htmlFor="remember" style={{ fontSize:14, color:'rgba(255,255,255,0.5)', cursor:'pointer' }}>Manter conectado</label>
           </div>
 
           <button type="submit" disabled={loginLoading} style={{...btnBase(loginLoading), padding: '16px', background: loginLoading ? 'rgba(255,255,255,0.05)' : 'linear-gradient(90deg, #2563eb 0%, #a855f7 100%)', borderRadius: 16, boxShadow: loginLoading ? 'none' : '0 8px 32px rgba(139,92,246,0.4)'}}

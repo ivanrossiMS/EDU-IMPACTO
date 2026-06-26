@@ -1,5 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
-import { cookies, headers } from 'next/headers'
+import { cookies } from 'next/headers'
 
 /**
  * Cria um client do Supabase que lê os cookies do Next.js
@@ -8,11 +8,6 @@ import { cookies, headers } from 'next/headers'
  */
 export async function createProtectedClient() {
   const cookieStore = await cookies()
-  let userAgent = '';
-  try {
-    const headersList = await headers();
-    userAgent = headersList.get('user-agent') || '';
-  } catch (e) {}
   
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,11 +26,11 @@ export async function createProtectedClient() {
                }
             })
             // Rely on the resolved userAgent from outside, or the cookie
-            const isNative = cookieStore.get('is_native_app')?.value === '1' || /Capacitor/i.test(userAgent);
+            const keepConnected = cookieStore.get('edu_keep_connected')?.value === '1';
             
             cookiesToSet.forEach(({ name, value, options }) => {
               const sessionOptions = { ...options };
-              if (!isNative) {
+              if (!keepConnected) {
                 delete sessionOptions.maxAge;
                 delete sessionOptions.expires;
               }
