@@ -25,17 +25,27 @@ const getInitials = (nome: string) => {
 // ── Sparkline Component
 function Sparkline({ color, path }: { color: string, path: string }) {
   const fillPath = `${path} L 100 40 L 0 40 Z`
+  
+  // Extrai as coordenadas finais do path (ex: "M ... S 80 25, 100 10")
+  const pathParts = path.split(/[\s,]+/)
+  const endX = pathParts[pathParts.length - 2]
+  const endY = pathParts[pathParts.length - 1]
+
   return (
     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40px' }}>
-      <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none">
+      <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
         <defs>
           <linearGradient id={`grad-${color.replace('#','')}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.2" />
             <stop offset="100%" stopColor={color} stopOpacity="0.0" />
           </linearGradient>
+          <filter id={`shadow-${color.replace('#','')}`}>
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor={color} floodOpacity="0.3"/>
+          </filter>
         </defs>
         <path d={fillPath} fill={`url(#grad-${color.replace('#','')})`} />
-        <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={endX} cy={endY} r="3" fill={color} stroke="#fff" strokeWidth="1.5" filter={`url(#shadow-${color.replace('#','')})`} />
       </svg>
     </div>
   )
@@ -298,36 +308,38 @@ export default function DashboardPage() {
             key={kpi.label} 
             style={{ 
               background: '#fff',
-              padding: '28px 24px 44px', 
+              padding: '24px', 
               borderRadius: '24px',
               position: 'relative',
               overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.02)',
+              border: '1px solid #f8fafc',
               display: 'flex', flexDirection: 'column',
-              transition: 'transform 0.3s ease, boxShadow 0.3s ease'
+              minHeight: '160px'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+              <div>
+                <span style={{ fontSize: '13px', fontWeight: 800, color: kpi.color, display: 'block', marginBottom: '8px' }}>
+                  {kpi.label}
+                </span>
+                <div style={{ fontSize: '38px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
+                  {kpi.value}
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '10px' }}>
+                  {kpi.sub}
+                </div>
+              </div>
               <div style={{ 
-                width: 36, height: 36, 
-                background: kpi.bgIcon, borderRadius: '10px', 
+                width: 48, height: 48, 
+                background: `linear-gradient(135deg, ${kpi.bgIcon}, #ffffff)`,
+                borderRadius: '16px', 
                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                color: kpi.color 
+                color: kpi.color,
+                boxShadow: `0 8px 16px ${kpi.color}15, inset 0 2px 4px rgba(255,255,255,0.8)`
               }}>
                 {kpi.icon}
               </div>
-              <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>
-                {kpi.label}
-              </span>
-            </div>
-
-            <div style={{ fontSize: '42px', fontWeight: 900, color: '#111827', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
-              {kpi.value}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, position: 'relative', zIndex: 1 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: kpi.color }} />
-              <span style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>{kpi.sub}</span>
             </div>
 
             <Sparkline color={kpi.color} path={kpi.path} />
@@ -384,78 +396,175 @@ export default function DashboardPage() {
             {ordersSummary.recentOrders.length === 0 ? (
               <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
             ) : (
-              ordersSummary.recentOrders.slice(0, 3).map((o) => (
-                <div key={o.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: '#f8fafc', borderRadius: '16px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
-                      {!o.feito && !o.entregue && (
-                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', background: '#fef2f2', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fecaca', whiteSpace: 'nowrap' }}>NOVO</span>
-                      )}
-                      {o.feito && !o.entregue && (
-                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', background: '#fffbeb', padding: '2px 6px', borderRadius: '4px', border: '1px solid #fde68a', whiteSpace: 'nowrap' }}>PEDIDO FEITO</span>
-                      )}
-                      {o.entregue && (
-                        <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', background: '#ecfdf5', padding: '2px 6px', borderRadius: '4px', border: '1px solid #a7f3d0', whiteSpace: 'nowrap' }}>ENTREGUE</span>
-                      )}
+              ordersSummary.recentOrders.slice(0, 3).map((o) => {
+                const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
+                const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
+                const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? '#fffbeb' : '#eff6ff');
+
+                return (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '16px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
+                      <IconComponent size={20} strokeWidth={2} />
                     </div>
-                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
+                    <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid #f1f5f9', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
+                      </div>
+                      <div style={{ marginLeft: 12, flexShrink: 0 }}>
+                        {!o.feito && !o.entregue && (
+                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>Novo</span>
+                        )}
+                        {o.feito && !o.entregue && (
+                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase' }}>Pedido Feito</span>
+                        )}
+                        {o.entregue && (
+                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', textTransform: 'uppercase' }}>Entregue</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
 
         {/* ── Coluna 2: Tarefas ──────────────────────────── */}
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', border: '1px solid #f8fafc' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#ecfdf5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ClipboardCheck size={16} color="#10b981" />
+              <div style={{ width: 32, height: 32, background: '#ecfdf5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ClipboardCheck size={16} color="#10b981" strokeWidth={2.5} />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#111827' }}>Tarefas</span>
+              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Tarefas</span>
             </div>
-            <Link href="/tarefas" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+            <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f5f3ff', padding: '6px 12px', borderRadius: '20px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed' }}>Todas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: '#fff', background: '#8b5cf6', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Pendentes</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Concluídas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+            </div>
           </div>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '40px 0' }}>
-            <CheckCircle size={48} color="#cbd5e1" strokeWidth={1.5} style={{ marginBottom: 24 }} />
-            <div style={{ fontSize: '16px', fontWeight: 800, color: '#334155', marginBottom: 8 }}>Nenhuma tarefa pendente</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 24, transform: 'rotate(-5deg)' }}>
+              {/* Illustration 3D Clipboard */}
+              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="clip-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#e0e7ff" />
+                    <stop offset="100%" stopColor="#c7d2fe" />
+                  </linearGradient>
+                  <linearGradient id="paper-grad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="100%" stopColor="#f8fafc" />
+                  </linearGradient>
+                  <filter id="shadow-clip" x="0" y="0" width="120" height="120" filterUnits="userSpaceOnUse">
+                    <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#6366f1" floodOpacity="0.2"/>
+                  </filter>
+                </defs>
+                <rect x="15" y="25" width="70" height="75" rx="12" fill="url(#clip-grad)" filter="url(#shadow-clip)" />
+                <rect x="25" y="35" width="50" height="60" rx="6" fill="url(#paper-grad)" />
+                <rect x="35" y="15" width="30" height="20" rx="8" fill="#818cf8" />
+                <rect x="40" y="20" width="20" height="10" rx="4" fill="#ffffff" />
+                {/* Checks */}
+                <path d="M 35 50 L 40 55 L 50 45" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 35 65 L 40 70 L 50 60" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 35 80 L 40 85 L 50 75" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhuma tarefa pendente</div>
             <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
           </div>
         </div>
 
         {/* ── Coluna 3: Agenda ──────────────────────────── */}
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden', border: '1px solid #f8fafc' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#f5f3ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CalendarIcon size={16} color="#8b5cf6" />
+              <div style={{ width: 32, height: 32, background: '#f5f3ff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CalendarIcon size={16} color="#8b5cf6" strokeWidth={2.5} />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#111827' }}>Agenda</span>
+              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Agenda</span>
             </div>
-            <Link href="/calendario" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Abrir</Link>
+            <Link href="/calendario" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Abrir agenda</Link>
           </div>
 
-          <div style={{ fontSize: '11px', fontWeight: 800, color: '#6366f1', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hoje</div>
-          
-          {eventosHoje.length === 0 ? (
-            <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 600 }}>Sem eventos programados</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {eventosHoje.slice(0, 4).map(e => (
-                <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: '#f8fafc', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}` }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{e.titulo}</span>
-                  {e.horaInicio && <span style={{ fontSize: '11px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>{e.horaInicio}</span>}
-                </div>
-              ))}
+          {/* Week View */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Hoje</span>
+              <div style={{ width: 32, height: 32, background: '#8b5cf6', color: '#fff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)' }}>{hoje.getDate()}</div>
             </div>
-          )}
-
-          {/* Decorative Calendar Icon */}
-          <div style={{ position: 'absolute', bottom: -20, right: -20, opacity: 0.05, transform: 'rotate(-10deg)', pointerEvents: 'none' }}>
-            <CalendarDays size={180} />
+            {[1, 2, 3, 4, 5].map((offset) => {
+              const d = new Date(hoje);
+              d.setDate(hoje.getDate() + offset);
+              const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
+              return (
+                <div key={offset} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>{dayName}</span>
+                  <div style={{ width: 32, height: 32, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>{d.getDate().toString().padStart(2, '0')}</div>
+                </div>
+              )
+            })}
+          </div>
+          
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '20px 0' }}>
+            {eventosHoje.length === 0 ? (
+              <>
+                <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 24, transform: 'rotate(5deg)' }}>
+                  {/* Illustration 3D Calendar */}
+                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <linearGradient id="cal-grad" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#e0e7ff" />
+                        <stop offset="100%" stopColor="#c7d2fe" />
+                      </linearGradient>
+                      <linearGradient id="cal-top" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#818cf8" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                      </linearGradient>
+                      <filter id="shadow-cal" x="0" y="0" width="120" height="120" filterUnits="userSpaceOnUse">
+                        <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#8b5cf6" floodOpacity="0.2"/>
+                      </filter>
+                    </defs>
+                    <rect x="20" y="30" width="60" height="60" rx="12" fill="url(#cal-grad)" filter="url(#shadow-cal)" />
+                    <rect x="20" y="30" width="60" height="20" rx="12" fill="url(#cal-top)" />
+                    {/* Binders */}
+                    <rect x="30" y="20" width="8" height="20" rx="4" fill="#ffffff" />
+                    <rect x="62" y="20" width="8" height="20" rx="4" fill="#ffffff" />
+                    {/* Grid */}
+                    <rect x="30" y="60" width="10" height="10" rx="3" fill="#ffffff" />
+                    <rect x="45" y="60" width="10" height="10" rx="3" fill="#ffffff" />
+                    <rect x="60" y="60" width="10" height="10" rx="3" fill="#ffffff" />
+                    <rect x="30" y="75" width="10" height="10" rx="3" fill="#ffffff" />
+                    <rect x="45" y="75" width="10" height="10" rx="3" fill="#818cf8" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Sem eventos programados</div>
+                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Aproveite o dia! ☀️</div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start' }}>
+                {eventosHoje.slice(0, 4).map(e => (
+                  <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: '#f8fafc', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{e.titulo}</span>
+                    {e.horaInicio && <span style={{ fontSize: '11px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>{e.horaInicio}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -464,56 +573,64 @@ export default function DashboardPage() {
           
           {/* Aniversariantes */}
           <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #fdf2f8' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-              <div style={{ color: '#ec4899' }}>
-                <Cake size={24} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, background: '#fdf2f8', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
+                  <Cake size={16} strokeWidth={2.5} />
+                </div>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>
+                  Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
+                </span>
               </div>
-              <span style={{ fontWeight: 900, fontSize: '16px', fontFamily: 'Outfit, sans-serif', color: '#111827' }}>
-                Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
-              </span>
+              <button 
+                onClick={() => setModalAnivOpen(true)} 
+                style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 800, textDecoration: 'none', background: 'transparent', border: 'none', cursor: 'pointer' }}
+              >
+                Ver todos
+              </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {aniversariantes.length === 0 ? (
                 <div style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
               ) : (
                 aniversariantes.slice(0, 3).map((aniv: any) => (
-                  <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', borderRadius: '16px', border: '1px solid #fce7f3' }}>
+                  <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #fdf2f8' }}>
                     <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
                       {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 900, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
                       <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
                     </div>
-                    <div style={{ fontSize: '12px', fontWeight: 900, color: '#ec4899', flexShrink: 0 }}>Dia {aniv.dia}</div>
+                    <div style={{ fontSize: '11px', fontWeight: 900, color: '#ec4899', flexShrink: 0, textTransform: 'uppercase' }}>Dia {aniv.dia}</div>
                   </div>
                 ))
               )}
             </div>
             
-            {aniversariantes.length > 3 && (
-              <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <button 
-                  onClick={() => setModalAnivOpen(true)} 
-                  style={{ fontSize: '12px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: '#fdf2f8', padding: '8px 24px', borderRadius: '20px', border: 'none', cursor: 'pointer' }}
-                >
-                  Ver todos
-                </button>
-              </div>
-            )}
+            <div style={{ textAlign: 'center', marginTop: 20 }}>
+              <button 
+                onClick={() => setModalAnivOpen(true)} 
+                style={{ width: '100%', fontSize: '13px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: '#fdf2f8', padding: '12px 24px', borderRadius: '16px', border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                onMouseOver={(e) => e.currentTarget.style.background = '#fce7f3'}
+                onMouseOut={(e) => e.currentTarget.style.background = '#fdf2f8'}
+              >
+                Ver todos os aniversariantes
+              </button>
+            </div>
           </div>
 
           {/* Ocorrências Recentes */}
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #f8fafc' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ color: '#f59e0b' }}>
-                  <AlertTriangle size={24} />
+                <div style={{ width: 32, height: 32, background: '#fffbeb', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+                  <AlertTriangle size={16} strokeWidth={2.5} />
                 </div>
-                <span style={{ fontWeight: 900, fontSize: '16px', fontFamily: 'Outfit, sans-serif', color: '#111827' }}>Ocorrências Recentes</span>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Ocorrências Recentes</span>
               </div>
-              <Link href="/academico/ocorrencias" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+              <Link href="/academico/ocorrencias" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -523,16 +640,36 @@ export default function DashboardPage() {
                 ocorrencias.slice(0, 3).map((oc: any) => {
                   const isGrave = oc.gravidade === 'grave';
                   const isMedia = oc.gravidade === 'media';
-                  const color = isGrave ? '#ef4444' : isMedia ? '#f59e0b' : '#64748b';
-                  const bg = isGrave ? '#fef2f2' : isMedia ? '#fffbeb' : '#f8fafc';
+                  const color = isGrave ? '#ef4444' : isMedia ? '#f59e0b' : '#3b82f6';
+                  const bg = isGrave ? '#fef2f2' : isMedia ? '#fffbeb' : '#eff6ff';
+                  
+                  // Extract date
+                  let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || '';
+                  let fmtDate = '';
+                  if (dataStr) {
+                    const d = new Date(dataStr);
+                    if (!isNaN(d.getTime())) {
+                      fmtDate = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth()+1).toString().padStart(2, '0')} - ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                    }
+                  }
+
                   return (
                     <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 900, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.tipo || oc.titulo || 'Ocorrência'}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>👤 {oc.alunoNome || 'Aluno'}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.tipo || oc.titulo || 'Ocorrência'}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Users size={12} /> {oc.alunoNome || 'Aluno'}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '10px', fontWeight: 900, color: color, textTransform: 'uppercase', background: '#fff', padding: '4px 8px', borderRadius: '8px', border: `1px solid ${color}30` }}>
-                        {oc.gravidade || 'Leve'}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                        <div style={{ fontSize: '10px', fontWeight: 900, color: color, textTransform: 'uppercase' }}>
+                          {oc.gravidade || 'Leve'}
+                        </div>
+                        {fmtDate && (
+                          <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8' }}>
+                            {fmtDate}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -546,56 +683,77 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div style={{ background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', borderRadius: '24px', padding: '32px 40px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 10px 30px rgba(99, 102, 241, 0.2)', flexWrap: 'wrap', gap: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div style={{ width: 64, height: 64, background: 'rgba(255,255,255,0.2)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(10px)', flexShrink: 0 }}>
-            <Users size={32} color="#fff" />
+      <div style={{ background: '#fff', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #f8fafc', flexWrap: 'wrap', gap: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 32, flex: 1 }}>
+          
+          {/* Circular Progress */}
+          <div style={{ position: 'relative', width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" strokeWidth="8" />
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeDasharray="282.74" strokeDashoffset={282.74 - (282.74 * (statsUsuarios.totalGeral > 0 ? statsUsuarios.total / statsUsuarios.totalGeral : 0))} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
+            </svg>
+            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: '20px', fontWeight: 900, color: '#4c1d95', fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.totalGeral > 0 ? Math.round((statsUsuarios.total / statsUsuarios.totalGeral) * 100) : 0}<span style={{ fontSize: '12px' }}>%</span></span>
+            </div>
           </div>
+
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Engajamento do Sistema</div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>Engajamento do Sistema</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div style={{ fontSize: '36px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>{statsUsuarios.total}</div>
-              <div style={{ fontSize: '16px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
+              <div style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: '#6d28d9' }}>{statsUsuarios.total}</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#64748b', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
             </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginTop: 8, fontWeight: 500 }}>Já realizaram o primeiro acesso à plataforma</div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.totalGeral > 0 ? (statsUsuarios.total / statsUsuarios.totalGeral) * 100 : 0}%`, height: '100%', background: '#34d399', borderRadius: 2 }} />
-            </div>
+            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
           </div>
+
+          {/* Wavy Line decoration */}
+          <div style={{ flex: 1, height: 60, marginLeft: 20, position: 'relative' }}>
+            <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+              <defs>
+                <linearGradient id="wave-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.2" />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 30 C 40 10, 60 50, 100 30 C 140 10, 160 50, 200 30 L 200 60 L 0 60 Z" fill="url(#wave-grad)" />
+              <path d="M 0 30 C 40 10, 60 50, 100 30 C 140 10, 160 50, 200 30" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+
         </div>
         
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {/* Card Colaboradores */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} /> Colaboradores</div>
+          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.colab}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#8b5cf6' }} />
             </div>
           </div>
           {/* Card Alunos */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} /> Alunos</div>
+          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.alunos}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
+              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#3b82f6' }} />
             </div>
           </div>
           {/* Card Responsáveis */}
-          <div style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '16px', padding: '16px 20px', minWidth: 160 }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} /> Responsáveis</div>
+          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.resps}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
+              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#a7f3d0' }} />
+            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+              <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
             </div>
           </div>
         </div>

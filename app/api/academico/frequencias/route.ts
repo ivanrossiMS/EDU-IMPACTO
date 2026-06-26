@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,28 +39,38 @@ export async function POST(request: Request) {
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-      for (const row of rows) {
-        // Enviar notificação para o aluno correspondente
-        const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
-        if (targetIds.length > 0) {
-          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
-          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-          
-          const isPresent = row.presente !== false;
-          const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada';
-          const pushMsg = isPresent 
-            ? `A presença de ${nomeAluno} foi confirmada na escola.` 
-            : `Foi registrada uma falta para ${nomeAluno}.`;
+      // Lote otimizado para não dar timeout no Vercel/Netlify
+      const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
+      
+      const pushPromises = rows.map(async (row) => {
+        const studentInfo = targetData.students.find(s => String(s.aluno_id) === String(row.aluno_id))
+        if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
 
+        const nomeAluno = studentInfo.aluno_nome || 'o aluno'
+        const isPresent = row.presente !== false
+        const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada'
+        const pushMsg = isPresent 
+          ? `A presença de ${nomeAluno} foi confirmada na escola.` 
+          : `Foi registrada uma falta para ${nomeAluno}.`
+
+        try {
           await sendAgendaPushNotification({
             type: 'frequencia',
             itemId: String(row.id),
             title: pushTitle,
             message: pushMsg,
-            targetUserIds: targetIds,
+            targetUserIds: studentInfo.responsaveis_ids,
             targetUrl: `/agenda-digital/frequencia`
-          }).catch(err => console.error('Frequencia Push Error:', err))
+          })
+        } catch (err) {
+          console.error('Frequencia Push Error:', err)
         }
+      })
+
+      // Executa os envios em paralelo e não bloqueia 100% caso demore muito, enviando em chunks
+      const chunkSize = 50
+      for (let i = 0; i < pushPromises.length; i += chunkSize) {
+        await Promise.all(pushPromises.slice(i, i + chunkSize))
       }
 
       return NextResponse.json({ ok: true, count: rows.length })
