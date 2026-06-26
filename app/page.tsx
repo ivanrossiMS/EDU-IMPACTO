@@ -29,9 +29,5 @@ export default async function Root() {
     redirect('/agenda-digital/selecionar-aluno')
   }
 
-  if (perfil === 'Professor') {
-    redirect('/professor')
-  }
-
-  redirect('/dashboard')
+  redirect('/login?step=choose_system')
 }
