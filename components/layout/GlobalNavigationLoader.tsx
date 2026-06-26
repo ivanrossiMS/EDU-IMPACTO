@@ -36,7 +36,7 @@ export function GlobalNavigationLoader() {
         const linkUrl = new URL(anchor.href)
         const newUrl = linkUrl.pathname + linkUrl.search
         
-        if (currentUrl === newUrl && linkUrl.hash) return
+        if (currentUrl === newUrl) return;
 
         // Ativa o loading
         setIsNavigating(true)
