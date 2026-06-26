@@ -156,30 +156,7 @@ export default function LoginPage() {
           const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || ({} as any)
           setProfileData(pData)
           
-          // Auto-redirect se só houver 1 módulo liberado
-          const hasERP = !pData.bloqueadoGestaoEscolar
-          const hasAgenda = !pData.bloqueadoAgendaDigital
-          const hasGestaoPessoas = !pData.bloqueadoGestaoPessoas
-          const hasSimulados = !pData.bloqueadoSimulados
-          
-          const arr = [
-            hasERP ? 'erp' : null,
-            hasAgenda ? 'agenda' : null,
-            hasGestaoPessoas ? 'pessoas' : null,
-            hasSimulados ? 'simulados' : null
-          ].filter(Boolean)
-          
-          if (arr.length === 1) {
-             if (arr[0] === 'erp') window.location.href = pendingAuth.perfil === 'Professor' ? '/professor' : '/dashboard';
-             else if (arr[0] === 'agenda') {
-                if (pendingAuth.perfil === 'Diretor Geral' || pendingAuth.cargo === 'Administrador Master') window.location.href = '/agenda-digital/selecionar-perfil-admin';
-                else window.location.href = '/agenda-digital/selecionar-aluno';
-             }
-             else if (arr[0] === 'pessoas') window.location.href = '/gestao-pessoas';
-             else if (arr[0] === 'simulados') window.location.href = '/simulados';
-          } else {
-             setIsProfileLoading(false)
-          }
+          setIsProfileLoading(false)
         })
         .catch(err => {
           console.error('Erro ao buscar perfis:', err)
