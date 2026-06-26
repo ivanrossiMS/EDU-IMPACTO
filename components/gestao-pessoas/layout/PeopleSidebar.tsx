@@ -9,6 +9,7 @@ import {
   MessageSquareWarning, Settings,
   LogOut, Home, Stethoscope
 } from 'lucide-react'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
@@ -25,6 +26,7 @@ export function PeopleSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { currentUser } = useApp()
+  const isMobile = useIsMobile()
 
   const handleLogout = async () => {
     try {
@@ -33,6 +35,114 @@ export function PeopleSidebar() {
     } catch (e) {
       console.error('Logout error:', e)
     }
+  }
+
+  if (isMobile) {
+    return (
+      <div 
+        className="no-scrollbar"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 70,
+          background: 'linear-gradient(180deg, #0f172a 0%, #060b14 100%)',
+          borderTop: '1px solid #1e293b',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: '0 12px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+          gap: 16,
+          zIndex: 100,
+          overflowX: 'auto',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.5)'
+        }}
+      >
+        {MENUS.map(m => {
+          const isActive = pathname === m.href || (m.href !== '/gestao-pessoas' && pathname?.startsWith(m.href))
+          return (
+            <button
+              key={m.href}
+              onClick={() => router.push(m.href)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                gap: 4, 
+                flexShrink: 0, 
+                minWidth: 60,
+                cursor: 'pointer'
+              }}
+            >
+              <div style={{
+                color: isActive ? '#38bdf8' : '#94a3b8',
+                padding: '6px 14px',
+                borderRadius: 16,
+                background: isActive ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s',
+                boxShadow: isActive ? 'inset 0 0 0 1px rgba(56, 189, 248, 0.3)' : 'none'
+              }}>
+                <m.icon size={18} />
+              </div>
+              <span style={{ fontSize: 10, color: isActive ? '#38bdf8' : '#94a3b8', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
+                {m.label === 'Visão Geral' ? 'Início' : m.label}
+              </span>
+            </button>
+          )
+        })}
+
+        <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
+
+        <button
+          onClick={() => router.push('/dashboard')}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: '#94a3b8',
+            minWidth: 60,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ padding: '6px 14px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <Settings size={18} />
+          </div>
+          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>ERP</span>
+        </button>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: '#f87171',
+            minWidth: 60,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ padding: '6px 14px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <LogOut size={18} />
+          </div>
+          <span style={{ fontSize: 10, color: '#f87171', fontWeight: 600 }}>Sair</span>
+        </button>
+      </div>
+    )
   }
 
   return (

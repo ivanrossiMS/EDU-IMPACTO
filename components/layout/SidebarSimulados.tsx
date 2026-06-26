@@ -37,7 +37,7 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Simulados'].includes(item.label)
+      return ['Dashboard', 'Simulados', 'Voltar ao ERP'].includes(item.label)
     }
     return true
   })
@@ -46,6 +46,83 @@ export function SidebarSimulados() {
   useEffect(() => {
     if (isMobile) setCollapsed(true)
   }, [isMobile])
+
+  if (isMobile) {
+    return (
+      <div 
+        className="no-scrollbar"
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 70,
+          background: 'linear-gradient(180deg, #0f172a 0%, #060b14 100%)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          padding: '0 12px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+          gap: 16,
+          zIndex: 100,
+          overflowX: 'auto',
+          boxShadow: '0 -4px 20px rgba(0,0,0,0.5)'
+        }}
+      >
+        {activeNavItems.map((item, idx) => {
+          const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/dashboard' && pathname?.startsWith(item.href))
+          return (
+            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 60 }}>
+              <div style={{
+                color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)',
+                padding: '6px 14px',
+                borderRadius: 16,
+                background: isActive ? 'rgba(244,63,94,0.15)' : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s',
+                boxShadow: isActive ? 'inset 0 0 0 1px rgba(244,63,94,0.3)' : 'none'
+              }}>
+                {item.icon}
+              </div>
+              <span style={{ fontSize: 10, color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s' }}>
+                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'ERP' : item.label}
+              </span>
+            </Link>
+          )
+        })}
+
+        <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
+
+        <button
+          onClick={() => {
+            setCurrentUserPerfil('');
+            setCurrentUser(null);
+            window.location.href = '/login';
+          }}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: '#ef4444',
+            minWidth: 60,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ padding: '6px 14px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <LogOut size={18} />
+          </div>
+          <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>Sair</span>
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div 

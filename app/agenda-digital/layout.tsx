@@ -98,12 +98,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
       return
     }
 
-    // Rotas que não precisam de verificação para colaboradores/admins
-    if (!pathname?.includes('/agenda-digital/colaborador') && !pathname?.includes('/agenda-digital/admin')) {
-      setAccessState('allowed')
-      return
-    }
-
     // Enquanto perfis ainda está carregando do Supabase, manter em 'checking'
     if (perfisLoading) return
 
@@ -113,7 +107,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     // Se o perfil ainda não foi encontrado na lista, pode ser timing — aguardar
     if (!userPerfilObj) return
 
-    // Agora temos dados reais: verificar permissão
+    // Agora temos dados reais: verificar permissão GLOBAL da Agenda
     const hasAccess = !userPerfilObj.bloqueadoAgendaDigital
     setAccessState(hasAccess ? 'allowed' : 'denied')
 

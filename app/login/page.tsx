@@ -47,6 +47,8 @@ export default function LoginPage() {
   const [step, setStep] = useState<Step>('login')
   const [pendingAuth, setPendingAuth] = useState<any>(null)
   const [hasDualRole, setHasDualRole] = useState(false)
+  const [profileData, setProfileData] = useState<any>(null)
+  const [isProfileLoading, setIsProfileLoading] = useState(false)
 
   // ── login form
   const [email, setEmail]       = useState('')
@@ -139,6 +141,53 @@ export default function LoginPage() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (step === 'choose_system' && pendingAuth?.perfil) {
+      setIsProfileLoading(true)
+      fetch('/api/configuracoes/perfis')
+        .then(res => res.json())
+        .then(data => {
+          let perfisList = DEFAULT_PERFIS
+          if (Array.isArray(data) && data.length > 0) {
+             perfisList = data
+          }
+          // Caso não ache, garante um objeto vazio para pelo menos exibir os acessos padrão (liberados)
+          const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || {}
+          setProfileData(pData)
+          
+          // Auto-redirect se só houver 1 módulo liberado
+          const hasERP = !pData.bloqueadoGestaoEscolar
+          const hasAgenda = !pData.bloqueadoAgendaDigital
+          const hasGestaoPessoas = !pData.bloqueadoGestaoPessoas
+          const hasSimulados = !pData.bloqueadoSimulados
+          
+          const arr = [
+            hasERP ? 'erp' : null,
+            hasAgenda ? 'agenda' : null,
+            hasGestaoPessoas ? 'pessoas' : null,
+            hasSimulados ? 'simulados' : null
+          ].filter(Boolean)
+          
+          if (arr.length === 1) {
+             if (arr[0] === 'erp') window.location.href = pendingAuth.perfil === 'Professor' ? '/professor' : '/dashboard';
+             else if (arr[0] === 'agenda') {
+                if (pendingAuth.perfil === 'Diretor Geral' || pendingAuth.cargo === 'Administrador Master') window.location.href = '/agenda-digital/selecionar-perfil-admin';
+                else window.location.href = '/agenda-digital/selecionar-aluno';
+             }
+             else if (arr[0] === 'pessoas') window.location.href = '/gestao-pessoas';
+             else if (arr[0] === 'simulados') window.location.href = '/simulados';
+          } else {
+             setIsProfileLoading(false)
+          }
+        })
+        .catch(err => {
+          console.error('Erro ao buscar perfis:', err)
+          setProfileData({})
+          setIsProfileLoading(false)
+        })
+    }
+  }, [step, pendingAuth])
 
 
 
@@ -724,113 +773,85 @@ export default function LoginPage() {
       </div>
 
       <div style={{ display:'flex', gap:20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button type="button" 
-          onClick={async () => {
-             const p = pendingAuth?.perfil;
-             
-             // Buscar perfis do backend via API, pois o localStorage não armazena mais esses dados
-             let perfisList = DEFAULT_PERFIS;
-             try {
-               const res = await fetch('/api/configuracoes/perfis');
-               if (res.ok) {
-                 const data = await res.json();
-                 if (Array.isArray(data) && data.length > 0) {
-                   perfisList = data;
-                 }
-               }
-             } catch (e) {
-               console.error('Erro ao verificar bloqueio de perfil:', e);
-             }
-             
-             const perfilObj = perfisList?.find(x => x.nome === p);
-             if (perfilObj?.bloqueadoGestaoEscolar) {
-               setShowBlockModal(true);
-               return;
-             }
-             
-             if (p === 'Professor') window.location.href = '/professor';
-             else window.location.href = '/dashboard';
-          }}
-          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #3b82f6, #2563eb)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(59,130,246,0.4)' }}>🏢</div>
-          <div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão Escolar</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Sistema ERP Principal</div>
+        {isProfileLoading ? (
+          <div style={{ padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <Spinner />
+            <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>Carregando permissões...</span>
           </div>
-        </button>
+        ) : (
+          <>
+            {profileData && !profileData.bloqueadoGestaoEscolar && (
+              <button type="button" 
+                onClick={() => {
+                  const p = pendingAuth?.perfil;
+                  if (p === 'Professor') window.location.href = '/professor';
+                  else window.location.href = '/dashboard';
+                }}
+                style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+                <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #3b82f6, #2563eb)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(59,130,246,0.4)' }}>🏢</div>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão Escolar</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Sistema ERP Principal</div>
+                </div>
+              </button>
+            )}
 
-        <button type="button" 
-          onClick={() => {
-             // Go directly to the unified selector page — it shows both family & collaborator cards
-             const p = pendingAuth?.perfil;
-             if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                 window.location.href = '/agenda-digital/selecionar-perfil-admin';
-             } else {
-                 window.location.href = '/agenda-digital/selecionar-aluno';
-             }
-          }}
-          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #8b5cf6, #6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(139,92,246,0.4)' }}>📱</div>
-          <div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Agenda Digital</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Comunicação Diária</div>
-          </div>
-        </button>
+            {profileData && !profileData.bloqueadoAgendaDigital && (
+              <button type="button" 
+                onClick={() => {
+                  const p = pendingAuth?.perfil;
+                  if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
+                      window.location.href = '/agenda-digital/selecionar-perfil-admin';
+                  } else {
+                      window.location.href = '/agenda-digital/selecionar-aluno';
+                  }
+                }}
+                style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+                <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #8b5cf6, #6d28d9)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(139,92,246,0.4)' }}>📱</div>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Agenda Digital</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Comunicação Diária</div>
+                </div>
+              </button>
+            )}
 
-        <button type="button" 
-          onClick={() => {
-             window.location.href = '/gestao-pessoas';
-          }}
-          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👥</div>
-          <div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão de Pessoas</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>RH, SST e NR-01</div>
-          </div>
-        </button>
+            {profileData && !profileData.bloqueadoGestaoPessoas && (
+              <button type="button" 
+                onClick={() => {
+                  window.location.href = '/gestao-pessoas';
+                }}
+                style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+                <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #10b981, #059669)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(16,185,129,0.4)' }}>👥</div>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Gestão de Pessoas</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>RH, SST e NR-01</div>
+                </div>
+              </button>
+            )}
 
-        <button type="button" 
-          onClick={async () => {
-             const p = pendingAuth?.perfil;
-             
-             let perfisList = DEFAULT_PERFIS;
-             try {
-               const res = await fetch('/api/configuracoes/perfis');
-               if (res.ok) {
-                 const data = await res.json();
-                 if (Array.isArray(data) && data.length > 0) {
-                   perfisList = data;
-                 }
-               }
-             } catch (e) {
-               console.error('Erro ao verificar permissao de simulados:', e);
-             }
-             
-             const perfilObj = perfisList?.find(x => x.nome === p);
-             const hasSimuladosAccess = !perfilObj?.bloqueadoSimulados;
-             
-             if (!hasSimuladosAccess) {
-               setShowBlockModal(true);
-               return;
-             }
-             
-             window.location.href = '/simulados';
-          }}
-          style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
-          onMouseEnter={e=>{e.currentTarget.style.background='rgba(244,63,94,0.08)'; e.currentTarget.style.borderColor='rgba(244,63,94,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(244,63,94,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
-          <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #f43f5e, #be123c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(244,63,94,0.4)' }}>📝</div>
-          <div>
-            <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>SIMULADOS</div>
-            <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
-          </div>
-        </button>
+            {profileData && !profileData.bloqueadoSimulados && (
+              <button type="button" 
+                onClick={() => {
+                  window.location.href = '/simulados';
+                }}
+                style={{ flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
+                onMouseEnter={e=>{e.currentTarget.style.background='rgba(244,63,94,0.08)'; e.currentTarget.style.borderColor='rgba(244,63,94,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(244,63,94,0.1)'}}
+                onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
+                <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #f43f5e, #be123c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(244,63,94,0.4)' }}>📝</div>
+                <div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>SIMULADOS</div>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
+                </div>
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

@@ -88,7 +88,7 @@ export default function AreaProfessorPage() {
               <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Prazo: <strong style={{ color: 'hsl(var(--text-secondary))' }}>{req.prazo}</strong></div>
                 
-                {req.status !== 'concluido' && (
+                {req.status !== 'concluido' && req.enviadas < req.solicitadas && (
                   <Link href="/simulados/banco/nova" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
                     <Edit3 size={14} /> Adicionar Questão
                   </Link>

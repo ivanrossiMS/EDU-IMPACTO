@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import 'katex/dist/katex.min.css'
 import { AppProvider } from '@/lib/context'
 import { ReactQueryProvider } from '@/components/ReactQueryProvider'
 import { GlobalAccessGuard } from '@/components/layout/GlobalAccessGuard'
@@ -22,6 +23,8 @@ export const viewport = {
 
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'
 
+import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   
   return (
@@ -41,11 +44,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Suspense>
         <ReactQueryProvider>
           <AppProvider>
-            <GlobalAccessGuard>
-              {children}
-            </GlobalAccessGuard>
+            <KeyboardProvider>
+              <GlobalAccessGuard>
+                {children}
+              </GlobalAccessGuard>
+            </KeyboardProvider>
           </AppProvider>
         </ReactQueryProvider>
+        <div id="global-overlay-root"></div>
       </body>
     </html>
   )

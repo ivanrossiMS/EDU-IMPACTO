@@ -352,7 +352,7 @@ export function Sidebar() {
   const isMobile = useIsMobile()
   const effectiveCollapsed = isMobile ? false : collapsed
   
-  const { cfgCalendarioLetivo = [] } = useData()
+  const { cfgCalendarioLetivo = [], perfis } = useData()
   const anoVigente = cfgCalendarioLetivo?.find((c: any) => c.isVigente)?.ano || '2026'
   const [openGroup, setOpenGroup] = useState<string | null>('ACADÊMICO')
   const [showTopMenu, setShowTopMenu] = useState(false)
@@ -468,25 +468,49 @@ export function Sidebar() {
           <div style={{ padding: '0 24px 16px' }}>
             <div style={{ padding: '8px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 10 }}>
                <div style={{ width: 28, height: 28, borderRadius: 6, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CalendarDays size={15} color="#ef4444" />
+                  <CalendarDays size={14} color="#ef4444" />
                </div>
-               <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.02em' }}>Ano Letivo</span>
-               <span style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 900, color: '#3b82f6', letterSpacing: '0.02em' }}>{anoVigente}</span>
+               <div>
+                 <div style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vigente</div>
+                 <div style={{ fontSize: 14, fontWeight: 700, color: 'white' }}>{anoVigente}</div>
+               </div>
             </div>
           </div>
         )}
 
         {/* Navigation */}
         <div style={{ flex: 1, padding: '0 16px', overflowY: 'auto' }} className="no-scrollbar">
-          {ALL_NAV_GROUPS.map((group, i) => (
-            <NavGroupComp 
-              key={group.title + i} 
-              group={group} 
-              collapsed={effectiveCollapsed} 
-              open={openGroup === group.title} 
-              onToggle={() => setOpenGroup(openGroup === group.title ? null : group.title)} 
-            />
-          ))}
+          {(() => {
+            const userPerfilObj = (perfis || []).find((p: any) => p.nome === currentUserPerfil)
+            const isAgendaBlocked = !!userPerfilObj?.bloqueadoAgendaDigital
+            const isGestaoPessoasBlocked = !!userPerfilObj?.bloqueadoGestaoPessoas
+
+            const filteredGroups = ALL_NAV_GROUPS.map(group => {
+              if (group.title === 'PRINCIPAL') {
+                return {
+                  ...group,
+                  items: group.items.filter(item => {
+                    if (item.label === 'AGENDA DIGITAL' && isAgendaBlocked) return false
+                    return true
+                  })
+                }
+              }
+              return group
+            }).filter(group => {
+              if (group.title === 'RH' && isGestaoPessoasBlocked) return false
+              return true
+            })
+
+            return filteredGroups.map((group, i) => (
+              <NavGroupComp 
+                key={group.title + i} 
+                group={group} 
+                collapsed={effectiveCollapsed} 
+                open={openGroup === group.title} 
+                onToggle={() => setOpenGroup(openGroup === group.title ? null : group.title)} 
+              />
+            ))
+          })()}
         </div>
 
         {/* Profile Footer */}

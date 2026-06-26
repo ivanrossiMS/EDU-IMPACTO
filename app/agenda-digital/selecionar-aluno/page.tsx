@@ -790,54 +790,9 @@ function SelecionarAlunoContent() {
 
       {/* Main content Area */}
       <main className="portal-sections-grid">
-        {/* SECTION 1: ESTUDANTES / FAMÍLIA */}
-        <section className="animate-reveal delay-1">
-          <div className="portal-section-header">
-            <h2 className="portal-section-title">
-              <Users size={16} strokeWidth={2.5} style={{ color: 'hsl(var(--primary))' }} />
-              Acesso Familiar
-            </h2>
-            {meusAlunos.length > 0 && (
-              <span className="portal-section-badge">
-                {meusAlunos.length} Aluno{meusAlunos.length !== 1 && 's'}
-              </span>
-            )}
-          </div>
-
-          <div className="cards-column">
-            {isStillLoading ? (
-              <div style={{ padding: 48, textAlign: 'center' }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.15)', borderTopColor: '#6366f1', animation: 'orbRotate 1s linear infinite', margin: '0 auto 16px' }} />
-                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, fontWeight: 500, margin: 0 }}>Procurando alunos vinculados...</p>
-              </div>
-            ) : meusAlunos.length === 0 ? (
-              <div className="empty-results-card">
-                <div className="empty-icon-circle">
-                  <AlertTriangle size={32} />
-                </div>
-                <h3 style={{ fontSize: 18, fontWeight: 800, margin: '8px 0 4px', color: 'hsl(var(--text-main))' }}>Nenhum aluno encontrado</h3>
-                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, maxWidth: 360, margin: '0 auto', lineHeight: 1.5 }}>
-                  Certifique-se de que sua conta de e-mail ou CPF esteja corretamente associada ao cadastro de seus filhos na secretaria da escola.
-                </p>
-              </div>
-            ) : (
-              meusAlunos.map((student) => (
-                <StudentCard 
-                  key={student.id} 
-                  student={student} 
-                  loadingCardId={loadingCardId} 
-                  redirectTarget={redirectTarget} 
-                  getForwardParams={getForwardParams} 
-                  setLoadingCardId={setLoadingCardId} 
-                />
-              ))
-            )}
-          </div>
-        </section>
-
-        {/* SECTION 2: COLABORADOR / STAFF (Somente visível se o usuário for colaborador) */}
+        {/* SECTION 1: COLABORADOR / STAFF (Somente visível se o usuário for colaborador) */}
         {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
-          <section className="animate-reveal delay-2">
+          <section className="animate-reveal delay-1">
             <div className="portal-section-header">
               <h2 className="portal-section-title">
                 <Briefcase size={16} strokeWidth={2.5} style={{ color: 'hsl(var(--primary))' }} />
@@ -884,6 +839,51 @@ function SelecionarAlunoContent() {
             </div>
           </section>
         )}
+
+        {/* SECTION 2: ESTUDANTES / FAMÍLIA */}
+        <section className="animate-reveal delay-2">
+          <div className="portal-section-header">
+            <h2 className="portal-section-title">
+              <Users size={16} strokeWidth={2.5} style={{ color: 'hsl(var(--primary))' }} />
+              Acesso Familiar
+            </h2>
+            {meusAlunos.length > 0 && (
+              <span className="portal-section-badge">
+                {meusAlunos.length} Aluno{meusAlunos.length !== 1 && 's'}
+              </span>
+            )}
+          </div>
+
+          <div className="cards-column">
+            {isStillLoading ? (
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(99,102,241,0.15)', borderTopColor: '#6366f1', animation: 'orbRotate 1s linear infinite', margin: '0 auto 16px' }} />
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, fontWeight: 500, margin: 0 }}>Procurando alunos vinculados...</p>
+              </div>
+            ) : meusAlunos.length === 0 ? (
+              <div className="empty-results-card">
+                <div className="empty-icon-circle">
+                  <AlertTriangle size={32} />
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: '8px 0 4px', color: 'hsl(var(--text-main))' }}>Nenhum aluno encontrado</h3>
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, maxWidth: 360, margin: '0 auto', lineHeight: 1.5 }}>
+                  Certifique-se de que sua conta de e-mail ou CPF esteja corretamente associada ao cadastro de seus filhos na secretaria da escola.
+                </p>
+              </div>
+            ) : (
+              meusAlunos.map((student) => (
+                <StudentCard 
+                  key={student.id} 
+                  student={student} 
+                  loadingCardId={loadingCardId} 
+                  redirectTarget={redirectTarget} 
+                  getForwardParams={getForwardParams} 
+                  setLoadingCardId={setLoadingCardId} 
+                />
+              ))
+            )}
+          </div>
+        </section>
       </main>
 
       {/* Footer Area with Logout */}

@@ -348,6 +348,32 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     )
     .sort((a, b) => b.length - a.length)[0]
 
+  // ── Step 2.5: Check for Gestão Escolar Block (Applies to all ERP routes) ──
+  // Exceptions: /simulados is a separate module. /meu-perfil is global.
+  const isSimuladosRoute = pathname.startsWith('/simulados')
+  const isMeuPerfilRoute = pathname.startsWith('/meu-perfil')
+  
+  if (userPerfilObj?.bloqueadoGestaoEscolar && !isSimuladosRoute && !isMeuPerfilRoute) {
+    if (!showDenied) {
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          background: 'linear-gradient(160deg, #08101e 0%, #090d1f 50%, #0a0e1c 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: '50%',
+            border: '2px solid rgba(255,255,255,0.08)',
+            borderTopColor: 'rgba(59,130,246,0.7)',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+        </div>
+      )
+    }
+    return <AccessDeniedPage pathname={pathname} />
+  }
+
   // ── Step 3: If route is protected and not in permissions → deny ───────────
   if (matchedRoute && !userPerms.includes(matchedRoute)) {
     if (!showDenied) {

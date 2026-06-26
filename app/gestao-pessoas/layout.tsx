@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { DataProvider, useData } from '@/lib/dataContext'
 import { PeopleSidebar } from '@/components/gestao-pessoas/layout/PeopleSidebar'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 export default function GestaoPessoasLayout({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()
@@ -27,6 +28,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
+  const isMobile = useIsMobile()
   const [mounted, setMounted] = React.useState(false)
 
   const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
@@ -96,7 +98,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
       <PeopleSidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {/* Aqui poderia entrar um PeopleTopBar no futuro */}
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: isMobile ? 80 : 0 }}>
           {children}
         </main>
       </div>
