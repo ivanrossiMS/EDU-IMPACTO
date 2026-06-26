@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
+export const dynamic = 'force-dynamic'
+
 export default async function Root() {
   const supabase = await createProtectedClient()
   const { data: { user } } = await supabase.auth.getUser()
