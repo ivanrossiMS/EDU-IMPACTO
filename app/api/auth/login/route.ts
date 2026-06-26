@@ -333,9 +333,9 @@ export async function POST(request: NextRequest) {
 
     try {
       if (isNative) {
-        cookies().set('is_native_app', '1', { maxAge: 31536000, path: '/' })
+        (await cookies()).set('is_native_app', '1', { maxAge: 31536000, path: '/' })
       } else {
-        cookies().delete('is_native_app')
+        (await cookies()).delete('is_native_app')
       }
     } catch(e) {}
 
