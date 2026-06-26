@@ -121,23 +121,38 @@ export default function LoginPage() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const stepParam = params.get('step') as Step
+      const nextParam = params.get('next')
       
-      if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
-        const storedUser = localStorage.getItem('edu-current-user')
-        if (storedUser) {
-          try {
-            const user = JSON.parse(storedUser)
-            const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
-            
-            setPendingAuth({
-              cargo: user.cargo,
-              perfil: user.perfil
-            })
-            setHasDualRole(isAlsoFamily)
+      const storedUser = localStorage.getItem('edu-current-user')
+      if (storedUser) {
+        // Se fomos redirecionados para o login pelo middleware (nextParam existe),
+        // significa que os cookies do Supabase expiraram ou são inválidos.
+        // Devemos ignorar o localStorage, limpá-lo, e forçar um novo login.
+        if (nextParam) {
+          localStorage.removeItem('edu-current-user')
+          localStorage.removeItem('edu-current-perfil')
+          setStep('login')
+          return
+        }
+
+        try {
+          const user = JSON.parse(storedUser)
+          const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
+          
+          setPendingAuth({
+            cargo: user.cargo,
+            perfil: user.perfil
+          })
+          setHasDualRole(isAlsoFamily)
+          
+          if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
             setStep(stepParam)
-          } catch (e) {
-            console.error("Error restoring user for step:", e)
+          } else {
+            // Default to choose_system if logged in but no step in URL
+            setStep('choose_system')
           }
+        } catch (e) {
+          console.error("Error restoring user for step:", e)
         }
       }
     }
