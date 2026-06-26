@@ -96,17 +96,6 @@ const nextConfig: NextConfig = {
     return headersConfig;
   },
 
-  // ── Redirects ───────────────────────────────────────────────────
-  async redirects() {
-    return [
-      // Redirect root to dashboard cleanly
-      {
-        source: '/',
-        destination: '/dashboard',
-        permanent: false,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
