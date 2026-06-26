@@ -85,18 +85,10 @@ export async function GET(request: Request) {
       return NextResponse.json([])
     }
 
-    const alunosAtivos = alunos.filter(a => {
-      const s = a.status?.toLowerCase()
-      return s === 'matriculado' || s === 'ativo' || s === 'em_cadastro' || s === 'pendente' || !s
-    })
-
-    if (alunosAtivos.length === 0) {
-      return NextResponse.json([])
-    }
-
-    const ativosIds = alunosAtivos.map(a => a.id)
-    const ativosMatriculas = alunosAtivos.map(a => a.matricula).filter(Boolean)
-    const ativosNomes = alunosAtivos.map(a => a.nome).filter(Boolean)
+    const alunosAtivos = alunos // Mantém todos os alunos
+    const ativosIds = alunos.map(a => a.id)
+    const ativosMatriculas = alunos.map(a => a.matricula).filter(Boolean)
+    const ativosNomes = alunos.map(a => a.nome).filter(Boolean)
 
     // ─── Step 4: Fetch pending titulos (parallel, non-blocking) ──────────────
     let pendingTitulos: any[] = []

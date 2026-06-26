@@ -65,12 +65,9 @@ export default function ADMomentosPage() {
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [visibleCount, setVisibleCount] = useState(5)
 
-  const turmaOptions = React.useMemo(() => {
+  const userGroups = React.useMemo(() => {
     if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
-    
-    const userGroups = (chatGroups || []).filter((g: any) => {
+    return (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
@@ -78,7 +75,13 @@ export default function ADMomentosPage() {
       if (!Array.isArray(colabs)) colabs = [];
       return colabs.some((id: any) => String(id) === String(currentUser.id));
     });
+  }, [chatGroups, currentUser]);
 
+  const turmaOptions = React.useMemo(() => {
+    if (!currentUser?.id) return [];
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || String(currentUser?.cargo || '').toLowerCase().includes('admin');
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
+    
     const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
     const hasGlobalWithoutYear = globalGroups.some((g: any) => {
       const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
@@ -97,7 +100,7 @@ export default function ADMomentosPage() {
        return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
-  }, [turmas, chatGroups, currentUser])
+  }, [turmas, userGroups, currentUser])
 
   const anosLetivos = React.useMemo(() => {
     const anos = new Set<string>();
@@ -981,6 +984,8 @@ export default function ADMomentosPage() {
         onClose={() => setShowDestModal(false)}
         initialSelected={newPost.targetClasses}
         onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
+        allowedTurmasIds={turmaOptions.map(t => String(t.id))}
+        allowedGruposIds={currentUser?.perfil === 'administrador' || String(currentUser?.cargo || '').toLowerCase().includes('admin') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
       />
 
     </div>

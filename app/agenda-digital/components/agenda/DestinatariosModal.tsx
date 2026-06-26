@@ -12,6 +12,7 @@ interface DestinatariosModalProps {
   onAdd: (selected: {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]) => void
   initialSelected?: {id: string, name: string}[]
   allowedTurmasIds?: string[]
+  allowedGruposIds?: string[]
 }
 
 const DEST_MODAL_STYLES = `
@@ -56,7 +57,7 @@ const GlobalDestStyles = React.memo(function GlobalDestStyles() {
   return <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
 })
 
-export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds }: DestinatariosModalProps) {
+export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds, allowedGruposIds }: DestinatariosModalProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -99,13 +100,20 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }, [turmas, selectedAno, availableAnos])
 
   const filteredGrupos = useMemo(() => {
-    if (availableAnos.length === 0) return gruposManuais
+    if (availableAnos.length === 0) {
+      return gruposManuais.filter((g: any) => {
+        const isEquipe = g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1;
+        return (allowedGruposIds ? allowedGruposIds.includes(String(g.id)) : true) || isEquipe;
+      });
+    }
     if (selectedAno === '') return []
     return (gruposManuais || []).filter((g: any) => {
+      const isEquipe = g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1;
+      if (allowedGruposIds && !allowedGruposIds.includes(String(g.id)) && !isEquipe) return false
       const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
       return a ? a === selectedAno : true
     })
-  }, [gruposManuais, selectedAno, availableAnos])
+  }, [gruposManuais, selectedAno, availableAnos, allowedGruposIds ? JSON.stringify(allowedGruposIds) : null])
   
   const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
   const [hasHydrated, setHasHydrated] = useState(false)

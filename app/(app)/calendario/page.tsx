@@ -5,6 +5,7 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -34,12 +35,18 @@ function VisibilidadeSelector({
   turmasSel,
   usuarioSel,
   tipo,
+  anoTodos,
+  anosLetivos,
+  onChangeAnoTodos,
   onOpenModal,
   onChangeTipo
 }: {
   turmasSel: string[]
   usuarioSel: string
   tipo: 'todos' | 'turmas' | 'usuario'
+  anoTodos?: string
+  anosLetivos?: string[]
+  onChangeAnoTodos?: (ano: string) => void
   onOpenModal: (type: 'turmas' | 'usuario') => void
   onChangeTipo: (tipo: 'todos' | 'turmas' | 'usuario') => void
 }) {
@@ -70,8 +77,19 @@ function VisibilidadeSelector({
 
       {/* Conteúdo Dinâmico */}
       {tipo === 'todos' && (
-        <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', borderRadius: 12, border: '1.5px dashed rgba(16, 185, 129, 0.2)' }}>
-          <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>🌐 Evento visível para todos os usuários do sistema e aplicativo.</span>
+        <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', borderRadius: 12, border: '1.5px dashed rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>🌐 Evento visível para todos os usuários matriculados/ativos no ano letivo selecionado.</span>
+          {anosLetivos && anosLetivos.length > 0 && onChangeAnoTodos && (
+            <select 
+              className="form-select" 
+              style={{ width: '100%', maxWidth: 300, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: '1px solid rgba(16, 185, 129, 0.3)', background: '#fff', color: '#047857', cursor: 'pointer' }}
+              value={anoTodos || ''}
+              onChange={(e) => onChangeAnoTodos(e.target.value)}
+            >
+              <option value="">Selecione o Ano Letivo (Obrigatório)</option>
+              {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          )}
         </div>
       )}
 
@@ -126,8 +144,8 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 export default function CalendarioPage() {
   const { eventosAgenda = [], setEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
-  const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
-  const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
+  const usuariosAtivos = sysUsers || []
 
   const anosLetivos = useMemo(() => {
     const anos = new Set<string>();
@@ -161,8 +179,8 @@ export default function CalendarioPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
 
-  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
-    tipo: 'todos', turmasSel: [], usuario: 'Todos',
+  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
+    tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: ''
   })
 
   const [filtroTurma, setFiltroTurma] = useState('todas')
@@ -192,19 +210,38 @@ export default function CalendarioPage() {
   const getDateStr = (d: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
   const eventosFiltrados = useMemo(() => eventosAgenda.filter(e => {
-    const matchTurma = filtroTurma === 'todas' || (e.turmas ?? []).includes(filtroTurma) || (e.turmas ?? []).length === 0
+    const isTodosAno = (e.turmas ?? []).find(t => t.startsWith('TODOS:'));
+    let matchTurma = false;
+    
+    if (filtroTurma === 'todas' || (e.turmas ?? []).length === 0) {
+      matchTurma = true;
+    } else if (isTodosAno) {
+      const anoTarget = isTodosAno.split(':')[1];
+      const selectedTurmaObj = turmas.find(t => t.nome === filtroTurma);
+      if (selectedTurmaObj) {
+        const tAno = selectedTurmaObj.ano !== undefined ? String(selectedTurmaObj.ano) : String(selectedTurmaObj.ano_letivo || '');
+        if (tAno === anoTarget) matchTurma = true;
+      }
+    } else if ((e.turmas ?? []).includes(filtroTurma)) {
+      matchTurma = true;
+    }
+    
     const matchTipo = filtroTipo === 'todos' || e.tipo === filtroTipo
     const matchUsuario = filtroUsuario === 'todos' || (e as any).visibilidadeUsuario === filtroUsuario || (e as any).visibilidadeUsuario === undefined
     return matchTurma && matchTipo && matchUsuario
-  }), [eventosAgenda, filtroTurma, filtroTipo, filtroUsuario])
+  }), [eventosAgenda, filtroTurma, filtroTipo, filtroUsuario, turmas])
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
 
   const handleAdd = () => {
     if (!form.titulo.trim() || !form.data) return
+    if (visibilidade.tipo === 'todos' && !visibilidade.anoTodos) {
+      alert('Selecione um Ano Letivo para Toda a instituição.')
+      return
+    }
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
-      : visibilidade.tipo === 'todos' ? ['TODOS']
+      : visibilidade.tipo === 'todos' ? [`TODOS:${visibilidade.anoTodos}`]
       : []
     
     if (editingId) {
@@ -243,7 +280,7 @@ export default function CalendarioPage() {
       setEventosAgenda(prev => [...prev, ...novosEventos])
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(false)
   }
@@ -262,23 +299,29 @@ export default function CalendarioPage() {
     let t = 'todos';
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
+    let anoTodosStr = '';
 
-    if (ev.turmas && ev.turmas.length > 0 && ev.turmas[0] !== 'TODOS') {
-      t = 'turmas';
-      turmasSel = ev.turmas;
+    if (ev.turmas && ev.turmas.length > 0) {
+      if (ev.turmas[0].startsWith('TODOS:')) {
+        t = 'todos';
+        anoTodosStr = ev.turmas[0].split(':')[1] || '';
+      } else if (ev.turmas[0] !== 'TODOS') {
+        t = 'turmas';
+        turmasSel = ev.turmas;
+      }
     } else if ((ev as any).visibilidadeUsuario) {
       t = 'usuario';
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
-    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr })
+    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
     setEditingId(ev.id)
     setShowModal(true)
   }
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(true)
   }
@@ -456,7 +499,7 @@ export default function CalendarioPage() {
           <h1 className="page-title">Calendário Escolar</h1>
           <p className="page-subtitle">{eventosAgenda.length} evento(s) cadastrado(s) • {year}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}>
+        <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}>
           <Plus size={13} />Novo Evento
         </button>
       </div>
@@ -689,11 +732,12 @@ export default function CalendarioPage() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {showModal && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
-            <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: '100%', maxWidth: 580, padding: '32px', borderRadius: 32, boxShadow: '0 30px 60px rgba(0,0,0,0.2)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showModal && (
+            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', overflowY: 'auto' }}>
+              <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="card" style={{ width: '100%', maxWidth: 580, padding: '32px', borderRadius: 32, boxShadow: '0 30px 60px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto', margin: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <div style={{ fontWeight: 900, fontSize: 20, fontFamily: 'Outfit, sans-serif', color: '#1e293b' }}>{editingId ? '⚡ Editar Evento' : '✨ Novo Evento'}</div>
                 <button className="btn btn-ghost btn-icon" onClick={() => { setShowModal(false); setEditingId(null); }} style={{ background: '#f1f5f9', borderRadius: '50%' }}><X size={18} /></button>
               </div>
@@ -759,7 +803,10 @@ export default function CalendarioPage() {
                     tipo={visibilidade.tipo} 
                     turmasSel={visibilidade.turmasSel} 
                     usuarioSel={visibilidade.usuario} 
+                    anoTodos={visibilidade.anoTodos}
+                    anosLetivos={anosLetivos}
                     onChangeTipo={(t) => setVisibilidade(prev => ({ ...prev, tipo: t }))} 
+                    onChangeAnoTodos={(ano) => setVisibilidade(prev => ({ ...prev, anoTodos: ano }))}
                     onOpenModal={(type) => setShowSelectionModal({ open: true, type })} 
                   />
                 </div>
@@ -779,12 +826,15 @@ export default function CalendarioPage() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
 
-      <AnimatePresence>
-        {showSelectionModal.open && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(12px)' }}>
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showSelectionModal.open && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(12px)' }}>
+              <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
                 <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>{showSelectionModal.type === 'turmas' ? '🎯 Selecionar Grupos' : '👤 Selecionar Usuário'}</h3>
                 <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
@@ -835,8 +885,13 @@ export default function CalendarioPage() {
                       )
                     })
                   )
-                ) : (
-                  usuariosAtivos.filter(u => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map(u => {
+                ) : (() => {
+                  const term = searchTermSelection.toLowerCase();
+                  return usuariosAtivos.filter(u => 
+                    (u.nome || '').toLowerCase().includes(term) || 
+                    (u.cargo || '').toLowerCase().includes(term) || 
+                    (u.email || '').toLowerCase().includes(term)
+                  ).map(u => {
                     const isSelected = visibilidade.usuario === u.nome
                     return (
                       <motion.button 
@@ -851,13 +906,15 @@ export default function CalendarioPage() {
                       </motion.button>
                     )
                   })
-                )}
+                })()}
               </div>
               <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

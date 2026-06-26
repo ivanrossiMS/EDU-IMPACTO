@@ -136,9 +136,9 @@ export function VisualFormulaModal({
         </div>
         
         <div className="p-4 md:p-6 flex flex-col items-center justify-center bg-gray-50/50" style={{ backgroundColor: '#f8fafc' }}>
-          <math-field 
-            ref={mfRef} 
-            style={{ 
+          {React.createElement('math-field', {
+            ref: mfRef,
+            style: { 
               fontSize: '28px', 
               width: '100%', 
               padding: '16px', 
@@ -149,8 +149,8 @@ export function VisualFormulaModal({
               outline: 'none',
               color: '#0f172a',
               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
-            }}
-          ></math-field>
+            }
+          })}
           <p className="text-xs md:text-sm text-gray-500 mt-4 text-center" style={{ color: '#64748b' }}>
             Clique no campo acima e use o <strong>ícone azul de teclado</strong> no canto direito para montar a sua fórmula.
           </p>

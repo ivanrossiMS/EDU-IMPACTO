@@ -8,6 +8,7 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Plus, Users, Globe, Edit2, Trash2, X, Upload, Search, UserCheck, Check } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 
@@ -39,12 +40,18 @@ function VisibilidadeSelector({
   turmasSel,
   usuarioSel,
   tipo,
+  anoTodos,
+  anosLetivos,
+  onChangeAnoTodos,
   onOpenModal,
   onChangeTipo
 }: {
   turmasSel: string[]
   usuarioSel: string
   tipo: 'todos' | 'turmas' | 'usuario'
+  anoTodos?: string
+  anosLetivos?: string[]
+  onChangeAnoTodos?: (ano: string) => void
   onOpenModal: (type: 'turmas' | 'usuario') => void
   onChangeTipo: (tipo: 'todos' | 'turmas' | 'usuario') => void
 }) {
@@ -75,8 +82,19 @@ function VisibilidadeSelector({
 
       {/* Conteúdo Dinâmico */}
       {tipo === 'todos' && (
-        <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', borderRadius: 12, border: '1.5px dashed rgba(16, 185, 129, 0.2)' }}>
-          <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>🌐 Evento visível para todos os usuários do sistema e aplicativo.</span>
+        <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', borderRadius: 12, border: '1.5px dashed rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: '#10b981', fontWeight: 600 }}>🌐 Evento visível para todos os usuários matriculados/ativos no ano letivo selecionado.</span>
+          {anosLetivos && anosLetivos.length > 0 && onChangeAnoTodos && (
+            <select 
+              className="form-select" 
+              style={{ width: '100%', maxWidth: 300, padding: '8px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: '1px solid rgba(16, 185, 129, 0.3)', background: '#fff', color: '#047857', cursor: 'pointer' }}
+              value={anoTodos || ''}
+              onChange={(e) => onChangeAnoTodos(e.target.value)}
+            >
+              <option value="">Selecione o Ano Letivo (Obrigatório)</option>
+              {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          )}
         </div>
       )}
 
@@ -164,8 +182,8 @@ export default function ADCalendarioPage() {
   });
   
   const { currentUser } = useApp()
-  const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
-  const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
+  const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
+  const usuariosAtivos = sysUsers || []
   const turmasNomes = turmas.map((t: any) => t.nome)
 
   const { chatGroups = [] } = useAgendaDigital()
@@ -184,7 +202,7 @@ export default function ADCalendarioPage() {
 
   const turmaOptions = React.useMemo(() => {
     if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretora');
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor');
     
     let baseTurmas = [];
     if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') {
@@ -253,11 +271,12 @@ export default function ADCalendarioPage() {
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
   const [searchTermSelection, setSearchTermSelection] = useState('')
+  const [modalAnoLetivo, setModalAnoLetivo] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string }>(BLANK_EVENTO)
 
-  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string }>({
-    tipo: 'todos', turmasSel: [], usuario: 'Todos',
+  const [visibilidade, setVisibilidade] = useState<{ tipo: 'todos' | 'turmas' | 'usuario'; turmasSel: string[]; usuario: string; anoTodos: string }>({
+    tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: ''
   })
 
   const year = viewDate.getFullYear()
@@ -285,6 +304,13 @@ export default function ADCalendarioPage() {
       
       if (targets.length === 0 && !isParaMim) return false // No targets specified
       
+      const targetTodosAno = targets.find((t: string) => t.startsWith('TODOS:'))
+      if (targetTodosAno) {
+        const anoTarget = targetTodosAno.split(':')[1]
+        if (selectedAno !== 'todos' && selectedAno === anoTarget) return true
+        if (selectedAno === 'todos' && activeTurmas.some(at => (at.ano !== undefined ? String(at.ano) : (at.anoLetivo || at.ano_letivo || at.dados?.anoLetivo || '')) === anoTarget)) return true
+      }
+      
       if (targets.some((t: string) => t.toLowerCase() === 'todos' || t.toLowerCase() === 'toda a escola' || t.toLowerCase() === 'todas')) {
         return true
       }
@@ -305,8 +331,12 @@ export default function ADCalendarioPage() {
 
   const handleAdd = () => {
     if (!form.titulo.trim() || !form.data) return
+    if (visibilidade.tipo === 'todos' && !visibilidade.anoTodos) {
+      alert('Selecione um Ano Letivo para Toda a instituição.')
+      return
+    }
     const turmasList = visibilidade.tipo === 'turmas' ? visibilidade.turmasSel
-      : visibilidade.tipo === 'todos' ? ['TODOS']
+      : visibilidade.tipo === 'todos' ? [`TODOS:${visibilidade.anoTodos}`]
       : []
     
     if (editingId) {
@@ -345,7 +375,7 @@ export default function ADCalendarioPage() {
       setEventosAgenda((prev: any) => [...prev, ...novosEventos])
     }
     setForm({ ...BLANK_EVENTO, data: form.data })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(false)
   }
@@ -364,23 +394,29 @@ export default function ADCalendarioPage() {
     let t = 'todos';
     let turmasSel: string[] = [];
     let usuarioStr = 'Todos';
+    let anoTodosStr = '';
 
-    if (ev.turmas && ev.turmas.length > 0 && ev.turmas[0] !== 'TODOS') {
-      t = 'turmas';
-      turmasSel = ev.turmas;
+    if (ev.turmas && ev.turmas.length > 0) {
+      if (ev.turmas[0].startsWith('TODOS:')) {
+        t = 'todos';
+        anoTodosStr = ev.turmas[0].split(':')[1];
+      } else if (ev.turmas[0] !== 'TODOS' && ev.turmas[0] !== 'TODA A ESCOLA' && ev.turmas[0] !== 'TODAS') {
+        t = 'turmas';
+        turmasSel = ev.turmas;
+      }
     } else if ((ev as any).visibilidadeUsuario) {
       t = 'usuario';
       usuarioStr = (ev as any).visibilidadeUsuario;
     }
 
-    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr })
+    setVisibilidade({ tipo: t as any, turmasSel, usuario: usuarioStr, anoTodos: anoTodosStr })
     setEditingId(ev.id)
     setShowModal(true)
   }
 
   const openNewEventoForDay = (dateStr: string) => {
     setForm({ ...BLANK_EVENTO, data: dateStr })
-    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+    setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
     setEditingId(null)
     setShowModal(true)
   }
@@ -463,7 +499,7 @@ export default function ADCalendarioPage() {
             style={{ height: 40, padding: '0 16px', borderRadius: 12, fontWeight: 800, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.25)', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => {
               setForm({ ...BLANK_EVENTO, data: todayStr() })
-              setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' })
+              setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' })
               setEditingId(null)
               setShowModal(true)
             }}
@@ -738,15 +774,17 @@ export default function ADCalendarioPage() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {showModal && (
-          <motion.div initial={{opacity:0, y: '100%'}} animate={{opacity:1, y: 0}} exit={{opacity:0, y: '100%'}} transition={{ type: "spring", stiffness: 300, damping: 30 }} style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 1000, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-            <div style={{ position: 'sticky', top: 0, background: '#fff', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', zIndex: 10 }}>
-              <div style={{ fontWeight: 900, fontSize: 20, fontFamily: 'Outfit, sans-serif', color: '#1e293b' }}>{editingId ? '⚡ Editar Evento' : '✨ Novo Evento'}</div>
-              <button className="btn btn-ghost btn-icon" onClick={() => { setShowModal(false); setEditingId(null); }} style={{ background: '#f1f5f9', borderRadius: '50%' }}><X size={18} /></button>
-            </div>
-            
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, flex: 1, paddingBottom: 100 }}>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showModal && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, overflowY: 'auto', backdropFilter: 'none' }}>
+            <motion.div initial={{scale:0.95, y: 10}} animate={{scale:1, y: 0}} exit={{scale:0.95, y: 10}} style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 640, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.15)', maxHeight: '90vh' }}>
+              <div style={{ position: 'sticky', top: 0, background: '#fff', padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', zIndex: 10 }}>
+                <div style={{ fontWeight: 900, fontSize: 20, fontFamily: 'Outfit, sans-serif', color: '#1e293b' }}>{editingId ? '⚡ Editar Evento' : '✨ Novo Evento'}</div>
+                <button className="btn btn-ghost btn-icon" onClick={() => { setShowModal(false); setEditingId(null); }} style={{ background: '#f1f5f9', borderRadius: '50%', border: 'none', cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={18} /></button>
+              </div>
+              
+              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto' }}>
                 <div>
                   <label className="form-label" style={{ fontWeight: 700, fontSize: 12, color: '#64748b', marginBottom: 8, display: 'block' }}>Título do Evento</label>
                   <input className="form-input" style={{ borderRadius: 14, height: 48, fontSize: 14, fontWeight: 600 }} value={form.titulo} onChange={e => setForm(p => ({ ...p, titulo: e.target.value }))} placeholder="Ex: Reunião Pedagógica" />
@@ -807,6 +845,9 @@ export default function ADCalendarioPage() {
                     tipo={visibilidade.tipo} 
                     turmasSel={visibilidade.turmasSel} 
                     usuarioSel={visibilidade.usuario} 
+                    anoTodos={visibilidade.anoTodos}
+                    anosLetivos={anosLetivos}
+                    onChangeAnoTodos={(ano) => setVisibilidade(prev => ({ ...prev, anoTodos: ano }))}
                     onChangeTipo={(t) => setVisibilidade(prev => ({ ...prev, tipo: t }))} 
                     onOpenModal={(type) => setShowSelectionModal({ open: true, type })} 
                   />
@@ -817,19 +858,23 @@ export default function ADCalendarioPage() {
                 <motion.button 
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                   className="btn btn-primary" 
-                  style={{ flex: 1, height: 48, padding: '0 32px', borderRadius: 14, fontWeight: 800, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', boxShadow: '0 8px 20px rgba(99, 102, 241, 0.3)' }}
+                  style={{ height: 48, padding: '0 32px', borderRadius: 14, fontWeight: 800, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', boxShadow: '0 8px 20px rgba(99, 102, 241, 0.3)' }}
                   onClick={handleAdd}
                 >
                   Confirmar e Salvar
                 </motion.button>
               </div>
-            </div>
+              </div>
+            </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
-      <AnimatePresence>
-        {showSelectionModal.open && (
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showSelectionModal.open && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'none' }}>
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -837,14 +882,31 @@ export default function ADCalendarioPage() {
                 <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
               </div>
               
-              <div style={{ position: 'relative', marginBottom: 20 }}>
-                <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input autoFocus className="form-input" style={{ paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+                {showSelectionModal.type === 'turmas' && (
+                  <select 
+                    className="form-select" 
+                    style={{ height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0', minWidth: 160 }} 
+                    value={modalAnoLetivo} 
+                    onChange={(e) => setModalAnoLetivo(e.target.value)}
+                  >
+                    <option value="">Todos os Anos Letivos</option>
+                    {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                )}
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input autoFocus className="form-input" style={{ width: '100%', paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
+                </div>
               </div>
 
               <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
                 {showSelectionModal.type === 'turmas' ? (
-                  turmasNomes.filter((t: any) => t.toLowerCase().includes(searchTermSelection.toLowerCase())).map((t: any) => {
+                  turmas
+                    .filter((t: any) => modalAnoLetivo === '' || (t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) === modalAnoLetivo)
+                    .map((t: any) => t.nome)
+                    .filter((t: any) => t.toLowerCase().includes(searchTermSelection.toLowerCase()))
+                    .map((t: any) => {
                     const isSelected = visibilidade.turmasSel.includes(t)
                     return (
                       <motion.button 
@@ -861,7 +923,7 @@ export default function ADCalendarioPage() {
                     )
                   })
                 ) : (
-                  usuariosAtivos.filter((u: any) => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
+                  usuariosAtivos.filter((u: any) => (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
                     const isSelected = visibilidade.usuario === u.nome
                     return (
                       <motion.button 
@@ -870,8 +932,8 @@ export default function ADCalendarioPage() {
                         onClick={() => { setVisibilidade(prev => ({ ...prev, usuario: u.nome })); setShowSelectionModal({ ...showSelectionModal, open: false }) }} 
                         style={{ width: '100%', padding: '12px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
                       >
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#6366f1' }}>{u.nome.slice(0, 2).toUpperCase()}</div>
-                        <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: isSelected ? '#1e40af' : '#1e293b' }}>{u.nome}</div><div style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{u.cargo}</div></div>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#6366f1' }}>{(u.nome || 'U').slice(0, 2).toUpperCase()}</div>
+                        <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: isSelected ? '#1e40af' : '#1e293b' }}>{u.nome || 'Sem nome'}</div><div style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{u.cargo || 'Colaborador'}</div></div>
                         {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
                       </motion.button>
                     )
@@ -882,7 +944,9 @@ export default function ADCalendarioPage() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }

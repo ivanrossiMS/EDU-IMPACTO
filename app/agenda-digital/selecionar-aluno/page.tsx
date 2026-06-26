@@ -400,37 +400,34 @@ const SELECTOR_STYLES = `
           width: 36px;
           height: 36px;
           border-radius: 12px;
-          background: rgba(99, 102, 241, 0.08);
-          color: #6366f1;
-          border: 1px solid rgba(99, 102, 241, 0.15);
+          background: #eef2ff;
+          color: #4f46e5;
           display: flex;
           align-items: center;
           justify-content: center;
           position: relative;
-          transition: all 0.3s;
         }
-        .portal-modern-card:hover .unread-indicator-badge {
-          background: #6366f1;
-          color: white;
-          transform: scale(1.05);
+        .dark .unread-indicator-badge {
+          background: rgba(79, 70, 229, 0.2);
+          color: #818cf8;
         }
 
         .badge-count-bubble {
           position: absolute;
-          top: -5px;
-          right: -5px;
-          background: linear-gradient(135deg, #f43f5e, #e11d48);
+          top: -6px;
+          right: -6px;
+          background: #ef4444;
           color: white;
-          font-size: 10px;
-          font-weight: 900;
-          width: 18px;
+          font-size: 11px;
+          font-weight: 800;
+          min-width: 18px;
           height: 18px;
-          border-radius: 50%;
+          border-radius: 9px;
           display: flex;
           align-items: center;
           justify-content: center;
+          padding: 0 4px;
           border: 2px solid white;
-          box-shadow: 0 4px 10px rgba(225, 29, 72, 0.3);
         }
         .dark .badge-count-bubble {
           border-color: #1e293b;
@@ -440,18 +437,15 @@ const SELECTOR_STYLES = `
           width: 36px;
           height: 36px;
           border-radius: 12px;
-          background: rgba(239, 68, 68, 0.06);
-          color: #ef4444;
-          border: 1px solid rgba(239, 68, 68, 0.15);
+          background: #fffbeb;
+          color: #d97706;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.3s;
         }
-        .portal-modern-card:hover .pending-warning-badge {
-          background: #ef4444;
-          color: white;
-          transform: scale(1.05);
+        .dark .pending-warning-badge {
+          background: rgba(217, 119, 6, 0.2);
+          color: #fbbf24;
         }
 
         .chevron-circle-btn {
@@ -623,8 +617,11 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
   const nomeTurma = rawName.split('-')[0].trim()
   const anoLetivo = student.anoLetivo || new Date().getFullYear()
 
-  return (
-    <Link href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
+  const s = student.status?.toLowerCase();
+  const isInativo = s === 'inativo' || s === 'cancelado' || s === 'transferido' || student.dados?.ativo === 'Não' || student.dados?.ativo === false;
+
+  const content = (
+    <>
       <div className="card-avatar-container">
         {student.foto ? (
           <img src={student.foto} alt={student.nome} className="card-avatar-img" />
@@ -636,32 +633,60 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
       <div className="card-info">
         <h3 className="card-title">{formatShortName(student.nome)}</h3>
         <div className="card-subtitle">
-          <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
-          <span className="card-dot-separator" />
-          <span>{anoLetivo}</span>
+          {isInativo ? (
+            <span style={{ color: '#ef4444', fontWeight: 800 }}>Aluno Inativo</span>
+          ) : (
+            <>
+              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
+              <span className="card-dot-separator" />
+              <span>{anoLetivo}</span>
+            </>
+          )}
         </div>
       </div>
 
       <div className="card-actions-wrapper">
-        <div className="unread-indicator-badge">
-          <Bell size={18} />
-          <span className="badge-count-bubble">2</span>
-        </div>
-
-        {pendingAlerts > 0 && (
-          <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
-            <AlertTriangle size={18} />
+        {isInativo ? (
+          <div className="inactive-badge" title="Aluno Inativo">
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.5px' }}>INATIVO</span>
           </div>
-        )}
+        ) : (
+          <>
+            <div className="unread-indicator-badge">
+              <Bell size={18} />
+              <span className="badge-count-bubble">2</span>
+            </div>
 
-        <div className="chevron-circle-btn">
-          {loadingCardId === student.id ? (
-            <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
-          ) : (
-            <ChevronRight size={18} strokeWidth={2.5} />
-          )}
-        </div>
+            {pendingAlerts > 0 && (
+              <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
+                <AlertTriangle size={18} />
+              </div>
+            )}
+
+            <div className="chevron-circle-btn">
+              {loadingCardId === student.id ? (
+                <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
+              ) : (
+                <ChevronRight size={18} strokeWidth={2.5} />
+              )}
+            </div>
+          </>
+        )}
       </div>
+    </>
+  )
+
+  if (isInativo) {
+    return (
+      <div className="portal-modern-card disabled-card">
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <Link href={`/agenda-digital/${student.id}/${redirectTarget}${getForwardParams()}`} onClick={() => setLoadingCardId(student.id)} className="portal-modern-card">
+      {content}
     </Link>
   )
 })

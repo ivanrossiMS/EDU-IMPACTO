@@ -1514,6 +1514,13 @@ export default function AlunosPage() {
                 <option value="todos_com_inativos">Todos (Com inativos)</option>
                 <option value="ativo">Apenas Ativos</option>
                 <option value="inativo">Apenas Inativos</option>
+                <option value="matriculado_vazio">Matriculado ou Vazio</option>
+                <option value="pode_sair_sim">Pode Sair Sozinho (SIM)</option>
+                <option value="pode_sair_nao">Pode Sair Sozinho (NÃO)</option>
+                <option value="com_responsaveis">Com Responsáveis</option>
+                <option value="sem_responsaveis">Sem Responsáveis</option>
+                <option value="com_turma">Com Turma</option>
+                <option value="sem_turma">Sem Turma</option>
               </select>
               
               <button onClick={() => setIsFiltrosAvancadosModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>

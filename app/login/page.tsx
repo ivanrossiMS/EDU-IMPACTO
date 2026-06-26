@@ -153,7 +153,7 @@ export default function LoginPage() {
              perfisList = data
           }
           // Caso não ache, garante um objeto vazio para pelo menos exibir os acessos padrão (liberados)
-          const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || {}
+          const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || ({} as any)
           setProfileData(pData)
           
           // Auto-redirect se só houver 1 módulo liberado

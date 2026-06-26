@@ -66,6 +66,42 @@ export async function GET(request: Request) {
         query = query.or('status.neq.inativo,status.is.null')
       }
       // Se tiver busca, 'todos' significa buscar também nos inativos para que a busca encontre o aluno
+    } else if (status === 'matriculado_vazio') {
+      query = query.or('status.eq.MATRICULADO,status.eq.matriculado,status.is.null')
+    } else if (status === 'pode_sair_sim') {
+      query = query.filter('dados->autorizadoSairSozinho', 'eq', 'true')
+    } else if (status === 'pode_sair_nao') {
+      query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
+    } else if (status === 'com_responsaveis' || status === 'sem_responsaveis') {
+      // Como os responsáveis estão em uma tabela de relacionamento (aluno_responsavel) e também em campos de texto,
+      // buscamos os alunos que possuem vínculo ativo na tabela para cruzar com a query principal.
+      const { data: ar } = await supabase.from('aluno_responsavel').select('aluno_id');
+      const alunosComResponsaveisIds = ar ? [...new Set(ar.map((x: any) => x.aluno_id))] : [];
+      
+      if (status === 'com_responsaveis') {
+        // Alunos que têm vínculo na tabela OU possuem os campos de texto preenchidos
+        if (alunosComResponsaveisIds.length > 0) {
+          query = query.or(`id.in.(${alunosComResponsaveisIds.join(',')}),responsavel.neq."",responsavel_financeiro.neq."",responsavel_pedagogico.neq.""`)
+        } else {
+          query = query.or('responsavel.neq."",responsavel_financeiro.neq."",responsavel_pedagogico.neq.""')
+        }
+      } else if (status === 'sem_responsaveis') {
+        // Alunos que NÃO têm vínculo na tabela E possuem os campos de texto vazios
+        if (alunosComResponsaveisIds.length > 0) {
+          query = query.not('id', 'in', `(${alunosComResponsaveisIds.join(',')})`)
+                       .or('responsavel.is.null,responsavel.eq.""')
+                       .or('responsavel_financeiro.is.null,responsavel_financeiro.eq.""')
+                       .or('responsavel_pedagogico.is.null,responsavel_pedagogico.eq.""')
+        } else {
+          query = query.or('responsavel.is.null,responsavel.eq.""')
+                       .or('responsavel_financeiro.is.null,responsavel_financeiro.eq.""')
+                       .or('responsavel_pedagogico.is.null,responsavel_pedagogico.eq.""')
+        }
+      }
+    } else if (status === 'com_turma') {
+      query = query.not('turma', 'is', null).neq('turma', '')
+    } else if (status === 'sem_turma') {
+      query = query.or('turma.is.null,turma.eq.')
     }
     // se for todos_com_inativos, não aplica filtro de status
 

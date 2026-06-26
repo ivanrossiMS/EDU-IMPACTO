@@ -26,6 +26,7 @@ type GrupoDigital = {
   ano?: string;
   syncId?: string; // ID de sincronização com ERP
   isGlobalAccess?: boolean; // Visível a todos os usuários e com acesso a todas as turmas
+  isEquipeEscolar?: boolean; // Visível a todos colaboradores
 }
 
 type EquipeGrupo = {
@@ -88,9 +89,10 @@ export default function ADAdminTurmas() {
   const [showNovaEquipe, setShowNovaEquipe] = useState(false)
   const [novoNome, setNovoNome] = useState('')
   const [novoAno, setNovoAno] = useState('')
-  const [novaCor, setNovaCor] = useState(DEFAULT_COLORS[0])
   const [novoIsGlobal, setNovoIsGlobal] = useState(false)
+  const [novoIsEquipeEscolar, setNovoIsEquipeEscolar] = useState(false)
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [novaCor, setNovaCor] = useState(DEFAULT_COLORS[0])
   const [novoIcone, setNovoIcone] = useState('Users')
   const [novaDescricao, setNovaDescricao] = useState('')
   const [buscaAluno, setBuscaAluno] = useState('')
@@ -209,13 +211,16 @@ export default function ADAdminTurmas() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 12, height: 12, borderRadius: 6, background: activeGrupo.cor }} />
               <div>
-                <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', margin: 0 }}>{activeGrupo.nome}</h2>
+                <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {activeGrupo.nome}
+                  {activeGrupo.isEquipeEscolar && <span style={{ fontSize: 12, padding: '4px 10px', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderRadius: 20, textTransform: 'none', fontWeight: 700, letterSpacing: 'normal' }}>Equipe Escolar</span>}
+                </h2>
                 <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, margin: 0 }}>{alunosVinculados.length} alunos · {todosFuncionarios.length} colaboradores</p>
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button onClick={() => { setEditingGroupId(activeGrupo.id); setNovoNome(activeGrupo.nome); setNovoAno(activeGrupo.ano || ''); setNovaCor(activeGrupo.cor); setNovoIsGlobal(!!activeGrupo.isGlobalAccess); setShowNovoGrupo(true); }} className="btn btn-secondary" style={{ border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => { setEditingGroupId(activeGrupo.id); setNovoNome(activeGrupo.nome); setNovoAno(activeGrupo.ano || ''); setNovaCor(activeGrupo.cor); setNovoIsGlobal(!!activeGrupo.isGlobalAccess); setNovoIsEquipeEscolar(!!activeGrupo.isEquipeEscolar); setShowNovoGrupo(true); }} className="btn btn-secondary" style={{ border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Pencil size={16} /> Editar Grupo
             </button>
             <button onClick={() => excluirGrupo(activeGrupo.id)} className="btn btn-secondary" style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -376,7 +381,7 @@ export default function ADAdminTurmas() {
                   <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>Editar Grupo Digital</h3>
                   <button onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setEditingGroupId(null); }} style={{ width: 32, height: 32, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
                 </div>
-                <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal } : g)) } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal, isEquipeEscolar: novoIsEquipeEscolar } : g)) } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setNovoIsEquipeEscolar(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                   <input className="form-input" placeholder="Nome do Grupo" autoFocus value={novoNome} onChange={e => setNovoNome(e.target.value)} required />
                   
                   <div>
@@ -416,8 +421,21 @@ export default function ADAdminTurmas() {
                       <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos usuários e tem acesso a todas turmas (menos comunicados, só se for destinatário).</span>
                     </div>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(234,179,8,0.05)', borderRadius: 14, border: '1px solid rgba(234,179,8,0.1)' }}>
+                    <input 
+                      type="checkbox" 
+                      id="isEquipeEscolarEdit" 
+                      checked={novoIsEquipeEscolar} 
+                      onChange={e => setNovoIsEquipeEscolar(e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <label htmlFor="isEquipeEscolarEdit" style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', cursor: 'pointer' }}>Equipe Escolar</label>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos os colaboradores para envio de comunicados/momentos.</span>
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                    <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
+                    <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setNovoIsEquipeEscolar(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
                     <button type="submit" className="btn btn-primary" style={{ background: novaCor, border: 'none' }}>Salvar Alterações</button>
                   </div>
                 </form>
@@ -448,7 +466,7 @@ export default function ADAdminTurmas() {
           <button onClick={handleAutoSync} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, fontWeight: 700 }}>
             <DownloadCloud size={16} /> Sincronizar ERP
           </button>
-          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => { setEditingGroupId(null); setNovoNome(''); setNovoAno(''); setNovaCor(DEFAULT_COLORS[0]); setNovoIsGlobal(false); setShowNovoGrupo(true) }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', border: 'none', fontWeight: 800 }}>
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => { setEditingGroupId(null); setNovoNome(''); setNovoAno(''); setNovaCor(DEFAULT_COLORS[0]); setNovoIsGlobal(false); setNovoIsEquipeEscolar(false); setShowNovoGrupo(true) }} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', border: 'none', fontWeight: 800 }}>
             <Plus size={16} /> Novo Grupo
           </motion.button>
         </div>
@@ -462,7 +480,7 @@ export default function ADAdminTurmas() {
           const turmaId = g.syncId ? g.syncId.replace('sync-', '') : (g.id.startsWith('sync-') ? g.id.replace('sync-', '') : null)
           const turmaERP = turmaId ? turmas.find(t => String(t.id) === turmaId) : null
           const ano = g.ano !== undefined && g.ano !== null ? g.ano : (turmaERP?.ano ? String(turmaERP.ano) : '')
-          const grupoAno = ano || 'Outros / Sem Ano Letivo'
+          const grupoAno = g.isEquipeEscolar ? 'Equipe Escolar' : (ano || 'Outros / Sem Ano Letivo')
           if (!gruposPorAno[grupoAno]) gruposPorAno[grupoAno] = []
           gruposPorAno[grupoAno].push(g)
         })
@@ -503,7 +521,7 @@ export default function ADAdminTurmas() {
               <div key={ano}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                   <div style={{ padding: '6px 16px', background: 'hsl(var(--bg-muted))', borderRadius: 20, fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-main))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Ano Letivo: {ano}
+                    {ano === 'Equipe Escolar' ? 'Equipe Escolar' : `Ano Letivo: ${ano}`}
                   </div>
                   <div style={{ flex: 1, height: 1, background: 'hsl(var(--border-subtle))' }} />
                 </div>
@@ -512,8 +530,8 @@ export default function ADAdminTurmas() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
-                        {['Grupo / Turma', 'Alunos', 'Colaboradores', 'Status', ''].map(h => (
-                          <th key={h} style={{ padding: '14px 20px', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{h}</th>
+                        {['Grupo / Turma', ano === 'Equipe Escolar' ? null : 'Alunos', 'Colaboradores', 'Status', ''].filter(Boolean).map(h => (
+                          <th key={h as string} style={{ padding: '14px 20px', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{h as string}</th>
                         ))}
                       </tr>
                     </thead>
@@ -530,17 +548,22 @@ export default function ADAdminTurmas() {
                                   <BookOpen size={18} />
                                 </div>
                                 <div>
-                                  <div style={{ fontWeight: 800, fontSize: 14 }}>{g.nome}</div>
+                                  <div style={{ fontWeight: 800, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    {g.nome}
+                                    {g.isEquipeEscolar && <span style={{ fontSize: 10, padding: '2px 8px', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderRadius: 10, fontWeight: 700 }}>Equipe Escolar</span>}
+                                  </div>
                                   <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mural Digital Ativo</div>
                                 </div>
                               </div>
                             </td>
-                            <td style={{ padding: '16px 20px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <Users size={14} color="hsl(var(--text-muted))" />
-                                <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
-                              </div>
-                            </td>
+                            {ano !== 'Equipe Escolar' && (
+                              <td style={{ padding: '16px 20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Users size={14} color="hsl(var(--text-muted))" />
+                                  <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
+                                </div>
+                              </td>
+                            )}
                             <td style={{ padding: '16px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
                                 {todosColabs.slice(0, 4).map((colId, idx) => {
@@ -581,7 +604,7 @@ export default function ADAdminTurmas() {
                 <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0 }}>{editingGroupId ? 'Editar Grupo Digital' : 'Criar Grupo Digital'}</h3>
                 <button onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setEditingGroupId(null); }} style={{ width: 32, height: 32, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
               </div>
-              <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal } : g)) } else { const novo: GrupoDigital = { id: crypto.randomUUID(), nome: novoNome, cor: novaCor, alunosIds: [], colaboradoresIds: [], equipesIds: [], ano: novoAno, isGlobalAccess: novoIsGlobal }; setGrupos([...(grupos || []), novo]); } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <form onSubmit={e => { e.preventDefault(); if (editingGroupId) { setGrupos((grupos || []).map(g => g.id === editingGroupId ? { ...g, nome: novoNome, cor: novaCor, ano: novoAno, isGlobalAccess: novoIsGlobal, isEquipeEscolar: novoIsEquipeEscolar } : g)) } else { const novo: GrupoDigital = { id: crypto.randomUUID(), nome: novoNome, cor: novaCor, alunosIds: [], colaboradoresIds: [], equipesIds: [], ano: novoAno, isGlobalAccess: novoIsGlobal, isEquipeEscolar: novoIsEquipeEscolar }; setGrupos([...(grupos || []), novo]); } setNovoNome(''); setNovoAno(''); setNovoIsGlobal(false); setNovoIsEquipeEscolar(false); setEditingGroupId(null); setShowNovoGrupo(false) }} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 <input className="form-input" placeholder="Nome do Grupo" autoFocus value={novoNome} onChange={e => setNovoNome(e.target.value)} required />
                 
                 <div>
@@ -621,8 +644,21 @@ export default function ADAdminTurmas() {
                     <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos usuários e tem acesso a todas turmas (menos comunicados, só se for destinatário).</span>
                   </div>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'rgba(234,179,8,0.05)', borderRadius: 14, border: '1px solid rgba(234,179,8,0.1)' }}>
+                  <input 
+                    type="checkbox" 
+                    id="isEquipeEscolar" 
+                    checked={novoIsEquipeEscolar} 
+                    onChange={e => setNovoIsEquipeEscolar(e.target.checked)}
+                    style={{ width: 18, height: 18, cursor: 'pointer' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label htmlFor="isEquipeEscolar" style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', cursor: 'pointer' }}>Equipe Escolar</label>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>Visível a todos os colaboradores para envio de comunicados/momentos.</span>
+                  </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
+                  <button type="button" onClick={() => { setShowNovoGrupo(false); setNovoAno(''); setNovoIsGlobal(false); setNovoIsEquipeEscolar(false); setEditingGroupId(null); }} className="btn btn-secondary">Cancelar</button>
                   <button type="submit" className="btn btn-primary" style={{ background: novaCor, border: 'none' }}>{editingGroupId ? 'Salvar Alterações' : 'Criar Grupo'}</button>
                 </div>
               </form>

@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
   try {
-    const supabase = await createProtectedClient()
+    const { user, errorResponse } = await requireAuth()
+    if (errorResponse) return errorResponse
     
     // Select apenas os campos básicos e indexados para performance < 100ms
     const { data, error } = await supabase
