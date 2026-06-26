@@ -51,6 +51,10 @@ interface TargetParams {
   destino?: string
   /** IDs diretos de colaboradores/funcionários a incluir */
   colaboradoresIds?: string[]
+  /** Nomes ou IDs de grupos manuais a incluir */
+  grupos?: string[]
+  /** IDs de funcionários enviados pelo frontend */
+  funcionariosIds?: string[]
 }
 
 /**
@@ -193,15 +197,17 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     const supabase = supabaseServer
 
     const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const grupos = (dados.grupos || []).map(String).filter(Boolean)
+    const allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
     const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
-    const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
+    const colaboradoresIds = [...(dados.colaboradoresIds || []), ...(dados.funcionariosIds || [])].map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
 
     const isTodos =
       destino === 'todos' ||
       destino === 'toda a escola' ||
       destino === 'all' ||
-      turmas.some(t => {
+      allGroupTerms.some(t => {
         const tl = t.toLowerCase().trim()
         return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
       })
@@ -224,8 +230,8 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
       }
 
-      // Adicionar turmas
-      if (turmas.length > 0) {
+      // Adicionar turmas e grupos
+      if (allGroupTerms.length > 0) {
         const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo')
         if (!turmasError) {
           const matchedTurmaIds = (allTurmas || [])
@@ -233,14 +239,14 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
               const tId = String(t.id).toLowerCase()
               const tNome = String(t.nome || '').toLowerCase()
               const tCod = String(t.codigo || '').toLowerCase()
-              return turmas.some(turma => {
+              return allGroupTerms.some(turma => {
                 const tl = turma.toLowerCase().trim()
                 return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
               })
             })
             .map(t => String(t.id))
 
-          const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+          const allSearchTerms = Array.from(new Set([...allGroupTerms, ...matchedTurmaIds]))
 
           if (allSearchTerms.length > 0) {
             const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'turma', allSearchTerms)
