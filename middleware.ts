@@ -72,6 +72,11 @@ export async function middleware(request: NextRequest) {
             if (!keepConnected) {
               delete sessionOptions.maxAge;
               delete sessionOptions.expires;
+            } else {
+              const expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              sessionOptions.maxAge = 31536000;
+              sessionOptions.expires = expires;
             }
             response.cookies.set(name, value, sessionOptions)
           })

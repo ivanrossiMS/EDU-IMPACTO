@@ -33,12 +33,17 @@ export async function createProtectedClient() {
                   try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
                }
             })
-            const isNative = cookieStore.get('is_native_app')?.value === '1';
+            const keepConnected = cookieStore.get('edu_keep_connected')?.value === '1';
             cookiesToSet.forEach(({ name, value, options }) => {
               const sessionOptions = { ...options };
-              if (!isNative) {
+              if (!keepConnected) {
                 delete sessionOptions.maxAge;
                 delete sessionOptions.expires;
+              } else {
+                const expires = new Date();
+                expires.setFullYear(expires.getFullYear() + 1);
+                sessionOptions.maxAge = 31536000;
+                sessionOptions.expires = expires;
               }
               cookieStore.set(name, value, sessionOptions)
             })
