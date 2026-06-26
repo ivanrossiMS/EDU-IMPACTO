@@ -34,9 +34,10 @@ export async function createProtectedClient() {
                }
             })
             cookiesToSet.forEach(({ name, value, options }) => {
-              const expires = new Date();
-              expires.setFullYear(expires.getFullYear() + 1);
-              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 31536000, expires })
+              const sessionOptions = { ...options };
+              delete sessionOptions.maxAge;
+              delete sessionOptions.expires;
+              cookieStore.set(name, value, sessionOptions)
             })
           } catch {
             // Ignorado intencionalmente: ocorre em Server Components sem contexto de mutação

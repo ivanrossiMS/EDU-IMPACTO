@@ -65,9 +65,12 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value, options }) => {
+            const sessionOptions = { ...options };
+            delete sessionOptions.maxAge;
+            delete sessionOptions.expires;
+            response.cookies.set(name, value, sessionOptions)
+          })
         },
       },
     }
