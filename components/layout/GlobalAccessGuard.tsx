@@ -368,7 +368,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
       if (isFamilyOrStudent) {
         router.replace('/agenda-digital')
       } else {
-        router.replace('/dashboard')
+        router.replace('/login?step=choose_system')
       }
     }
   }, [hydrated, currentUser, pathname, router])
