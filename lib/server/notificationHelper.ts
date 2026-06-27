@@ -323,23 +323,28 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       const allAlunoIds = alunosToProcess.map(a => a.id)
       const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'aluno_id, responsavel_id', 'aluno_id', allAlunoIds)
 
+      // Agrupar responsáveis por aluno, sempre incluindo o ID do próprio aluno (para logins virtuais)
+      const mapResponsaveis = new Map<string, Set<string>>()
+      
+      alunosToProcess.forEach(a => {
+        mapResponsaveis.set(a.id, new Set([a.id]))
+      })
+
       if (vinculados && vinculados.length > 0) {
-        // Agrupar responsáveis por aluno
-        const mapResponsaveis = new Map<string, Set<string>>()
         vinculados.forEach(v => {
           if (v.aluno_id && v.responsavel_id) {
             const aid = String(v.aluno_id)
-            if (!mapResponsaveis.has(aid)) mapResponsaveis.set(aid, new Set())
+            if (!mapResponsaveis.has(aid)) mapResponsaveis.set(aid, new Set([aid]))
             mapResponsaveis.get(aid)!.add(String(v.responsavel_id))
           }
         })
-
-        studentsResult = alunosToProcess.map(a => ({
-          aluno_id: a.id,
-          aluno_nome: a.nome,
-          responsaveis_ids: Array.from(mapResponsaveis.get(a.id) || [])
-        })).filter(s => s.responsaveis_ids.length > 0) // Only return students with attached responsaveis
       }
+
+      studentsResult = alunosToProcess.map(a => ({
+        aluno_id: a.id,
+        aluno_nome: a.nome,
+        responsaveis_ids: Array.from(mapResponsaveis.get(a.id) || [])
+      }))
     }
 
     return {
