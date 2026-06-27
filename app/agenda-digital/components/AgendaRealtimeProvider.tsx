@@ -147,6 +147,22 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   }
                 }
               })
+
+              // Se a notificação chegar com o app ABERTO no celular, forçar refresh da interface!
+              OneSignalNative.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
+                console.log('📱 [OneSignal] Notificação recebida em FOREGROUND! Forçando refresh da agenda...', event)
+                queryClient.invalidateQueries({ queryKey: ['agenda'] })
+              })
+
+              // Quando o app volta do background pro foreground (onde o WebSocket do Supabase costuma falhar), forçar refresh!
+              import('@capacitor/app').then(({ App }) => {
+                App.addListener('appStateChange', ({ isActive }) => {
+                  if (isActive) {
+                    console.log('📱 [Capacitor] App voltou para o FOREGROUND! Atualizando dados da agenda para evitar perda de mensagens do WebSocket...')
+                    queryClient.invalidateQueries({ queryKey: ['agenda'] })
+                  }
+                })
+              }).catch(e => console.error('[Capacitor] Erro ao carregar App plugin:', e))
             } catch (nativeErr: any) {
               console.error('[OneSignal] Erro no plugin nativo:', nativeErr.message)
             }
