@@ -85,7 +85,7 @@ export default function ADAdminComunicados() {
   const [search, setSearch] = useState('')
   const [selectedCom, setSelectedCom] = useState<ADComunicado | null>(null)
   const [showComposer, setShowComposer] = useState(false)
-  const [selectedDest, setSelectedDest] = useState<{id: string, name: string, type: 'turma' | 'funcionario' | 'aluno'}[]>([])
+  const [selectedDest, setSelectedDest] = useState<{id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]>([])
   const [showDestModal, setShowDestModal] = useState(false)
       const [anexos, setAnexos] = useState<string[]>([])
   const [dataAgendamento, setDataAgendamento] = useState('')
