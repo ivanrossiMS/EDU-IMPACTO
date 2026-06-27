@@ -135,7 +135,7 @@ export async function POST(request: Request) {
 
     if (targetIds.length > 0) {
       // Notificação Imediata
-      sendAgendaPushNotification({
+      await sendAgendaPushNotification({
         type: 'calendario',
         itemId: String(data.id),
         title: '📅 Novo Evento!',
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
         const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
         
         if (sendAfterDate > new Date()) {
-          sendAgendaPushNotification({
+          await sendAgendaPushNotification({
             type: 'calendario',
             itemId: `${data.id}-reminder`,
             title: '⏰ Lembrete: Amanhã!',

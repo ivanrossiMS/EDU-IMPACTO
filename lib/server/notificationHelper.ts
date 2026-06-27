@@ -147,7 +147,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       // 2. Resolver nomes/IDs de turmas para IDs reais no banco
       const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
-        .select('id, nome, codigo, ano, ano_letivo, dados')
+        .select('id, nome, codigo, ano, dados')
 
       if (turmasError) {
         console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
@@ -157,7 +157,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
             const tId = String(t.id).toLowerCase()
             const tNome = String(t.nome || '').toLowerCase()
             const tCod = String(t.codigo || '').toLowerCase()
-            const tAno = t.ano !== undefined ? String(t.ano) : (t.ano_letivo || t.dados?.anoLetivo || '')
+            const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
             
             return allGroupTerms.some(turma => {
               const tl = turma.toLowerCase().trim()
@@ -299,14 +299,14 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         }
 
         // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, ano_letivo, dados')
+        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, dados')
         if (!turmasError && allTurmas) {
           const matchedTurmaIds = allTurmas
             .filter(t => {
               const tId = String(t.id).toLowerCase()
               const tNome = String(t.nome || '').toLowerCase()
               const tCod = String(t.codigo || '').toLowerCase()
-              const tAno = t.ano !== undefined ? String(t.ano) : (t.ano_letivo || t.dados?.anoLetivo || '')
+              const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
 
               return allGroupTerms.some(turma => {
                 const tl = turma.toLowerCase().trim()
