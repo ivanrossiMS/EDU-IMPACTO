@@ -153,7 +153,9 @@ export default function ADAdminComunicados() {
         status: (asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado') as 'rascunho' | 'agendado' | 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
+        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
+        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       }
 
@@ -180,7 +182,9 @@ export default function ADAdminComunicados() {
         autorFoto: currentUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
+        grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
+        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados',
         prioridade: 'normal',
         fixado: false,

@@ -70,7 +70,8 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
   try {
     const supabase = supabaseServer
 
-    const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const grupos = (dados.grupos || []).map(String).filter(Boolean)
+    const turmas = Array.from(new Set([...(dados.turmas || dados.targetClasses || []).map(String).filter(Boolean), ...grupos]))
     const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
     const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()

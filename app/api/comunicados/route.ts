@@ -71,8 +71,10 @@ export async function GET(request: Request) {
     const conditions = [`destino.eq.todos`];
     if (resolvedTurma) {
       conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
+      conditions.push(`dados->grupos.cs.["${resolvedTurma}"]`);
       if (turmaId && resolvedTurma !== turmaId) {
         conditions.push(`dados->turmas.cs.["${turmaId}"]`);
+        conditions.push(`dados->grupos.cs.["${turmaId}"]`);
       }
     }
     if (alunoId) {
