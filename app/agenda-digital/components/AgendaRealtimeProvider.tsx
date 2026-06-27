@@ -361,6 +361,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     console.log('🎧 [Realtime] Iniciando escuta de eventos para:', identifier)
 
     const addNotification = useAgendaNotifications.getState().addNotification
+    
+    const ensureStringArray = (val: any): string[] => {
+      if (!val) return []
+      if (Array.isArray(val)) return val.map(String)
+      return [String(val)]
+    }
 
     /**
      * Verifica se um evento Supabase é destinado ao usuário atual.
@@ -372,11 +378,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const isTargetingAluno = (dados: any): boolean => {
       if (!dados) return false
 
-      const ensureStringArray = (val: any): string[] => {
-        if (!val) return []
-        if (Array.isArray(val)) return val.map(String)
-        return [String(val)]
-      }
 
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
@@ -498,6 +499,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const merged = { ...row, ...(row.dados || {}) }
 
       const isTarget = isTargetingAluno(merged)
+      
+      const alvoTurmas = ensureStringArray(merged.turmas || merged.targetClasses)
+      const alvoTurmasIds = ensureStringArray(merged.turmasIds || merged.targetClassesIds)
+      const alvoGrupos = ensureStringArray(merged.grupos || merged.targetGroups)
+      const alvoAlunos = ensureStringArray(merged.alunosIds || merged.targetAlunos)
+      const destino = String(merged.destino || '').toLowerCase().trim()
+      
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
 
       // Sempre avisa a página para recarregar se houver qualquer alvo (o backend fará a filtragem 100% segura)
@@ -669,6 +677,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const merged = { ...row, ...(row.dados || {}) }
 
       const isTarget = isTargetingAluno(merged)
+      
+      const alvoTurmas = ensureStringArray(merged.turmas || merged.targetClasses)
+      const alvoTurmasIds = ensureStringArray(merged.turmasIds || merged.targetClassesIds)
+      const alvoGrupos = ensureStringArray(merged.grupos || merged.targetGroups)
+      const alvoAlunos = ensureStringArray(merged.alunosIds || merged.targetAlunos)
+      const destino = String(merged.destino || '').toLowerCase().trim()
+      
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
 
       if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
