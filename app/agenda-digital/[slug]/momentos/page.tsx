@@ -58,6 +58,19 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return () => { document.body.style.overflow = ''; }
   }, [lightboxOpen]);
 
+  useEffect(() => {
+    const handleUpdate = () => {
+      refetch()
+    }
+    window.addEventListener('ad:momentos-insert', handleUpdate)
+    window.addEventListener('ad:momentos-update', handleUpdate)
+    window.addEventListener('ad:momentos-delete', handleUpdate)
+    return () => {
+      window.removeEventListener('ad:momentos-insert', handleUpdate)
+      window.removeEventListener('ad:momentos-update', handleUpdate)
+      window.removeEventListener('ad:momentos-delete', handleUpdate)
+    }
+  }, [refetch])
 
 
   const handleLike = async (momentId: number | string) => {

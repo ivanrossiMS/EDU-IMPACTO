@@ -431,7 +431,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (currentUser?.perfil === 'Colaborador') {
         if (
           destino === 'todos' ||
-          alvoGrupos.length > 0 ||
           alvoTurmas.some(t => ['todos', 'toda a escola', 'todas'].includes(t.toLowerCase().trim()))
         ) return true
 
@@ -498,10 +497,17 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const merged = { ...row, ...(row.dados || {}) }
 
-      if (eventType === 'DELETE' || isTargetingAluno(merged) || !isFamily) {
+      const isTarget = isTargetingAluno(merged)
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+
+      // Sempre avisa a página para recarregar se houver qualquer alvo (o backend fará a filtragem 100% segura)
+      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+      }
 
+      // Mas só mostra o Toast in-app se tivermos certeza absoluta que o aluno é o alvo
+      if (eventType === 'DELETE' || isTarget || !isFamily) {
         if (
           eventType === 'INSERT' &&
           (merged.status === 'enviado' || merged.dados?.status === 'enviado')
@@ -533,10 +539,23 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const { eventType, old, new: newRow } = payload
       const row = eventType === 'DELETE' ? old : newRow
 
-      if (eventType === 'DELETE' || isTargetingAluno({ ...row, ...(row.dados || {}), turmas: row.turmas }) || !isFamily) {
+      const merged = { ...row, ...(row.dados || {}), turmas: row.turmas }
+      const isTarget = isTargetingAluno(merged)
+      
+      const alvoTurmas = Array.isArray(merged.turmas) ? merged.turmas : [merged.turmas].filter(Boolean)
+      const alvoTurmasIds = Array.isArray(merged.turmasIds) ? merged.turmasIds : [merged.turmasIds].filter(Boolean)
+      const alvoGrupos = Array.isArray(merged.grupos) ? merged.grupos : [merged.grupos].filter(Boolean)
+      const alvoAlunos = Array.isArray(merged.alunosIds) ? merged.alunosIds : [merged.alunosIds].filter(Boolean)
+      const destino = String(merged.destino || '').toLowerCase().trim()
+      
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+
+      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
+      }
 
+      if (eventType === 'DELETE' || isTarget || !isFamily) {
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
           addNotification({
@@ -649,10 +668,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const merged = { ...row, ...(row.dados || {}) }
 
-      if (eventType === 'DELETE' || isTargetingAluno(merged)) {
+      const isTarget = isTargetingAluno(merged)
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+
+      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
+      }
 
+      if (eventType === 'DELETE' || isTarget || !isFamily) {
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
           addNotification({
