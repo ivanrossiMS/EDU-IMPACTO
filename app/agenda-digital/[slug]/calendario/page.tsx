@@ -35,8 +35,21 @@ import { useParams } from 'next/navigation'
 // Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function ADCalendarioPage({ params }: { params: any }) {
-  const [eventosAgenda, , { loading, setLocal: setLocalEventos }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
+  const [eventosAgenda, , { loading, setLocal: setLocalEventos, refresh }] = useSupabaseArray<EventoAgenda>('agenda/eventos')
   const [turmas] = useSupabaseArray<any>('turmas')
+
+  useEffect(() => {
+    if (!refresh) return;
+    const handleUpdate = () => refresh();
+    window.addEventListener('ad:eventos_agenda-insert', handleUpdate)
+    window.addEventListener('ad:eventos_agenda-update', handleUpdate)
+    window.addEventListener('ad:eventos_agenda-delete', handleUpdate)
+    return () => {
+      window.removeEventListener('ad:eventos_agenda-insert', handleUpdate)
+      window.removeEventListener('ad:eventos_agenda-update', handleUpdate)
+      window.removeEventListener('ad:eventos_agenda-delete', handleUpdate)
+    }
+  }, [refresh])
 
   useAgendaRealtime({
     table: 'eventos_agenda',

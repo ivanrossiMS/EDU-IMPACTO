@@ -48,9 +48,7 @@ export async function GET(request: Request) {
       criadoPor: row.criado_por,
       ...(row.dados || {}) 
     }))
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
-    })
+    return NextResponse.json(result)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

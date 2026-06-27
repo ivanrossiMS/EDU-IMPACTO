@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,9 +41,7 @@ export async function GET(request: Request) {
       }
       return merged;
     })
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' }
-    })
+    return NextResponse.json(result)
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
@@ -82,19 +80,27 @@ export async function POST(request: Request) {
       }
 
       // Disparar Push APENAS para novos
-      newRows.forEach(async (row: any) => {
-        const targetIds = await getResponsavelIdsForTargets(row.dados)
-        if (targetIds.length > 0) {
-           sendAgendaPushNotification({
-              type: 'momentos',
-              itemId: String(row.id),
-              title: '📸 Novo Momento Publicado!',
-              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
-              targetUserIds: targetIds,
-              targetUrl: '/agenda-digital/momentos'
-           }).catch(err => console.error('Momento Push Error:', err))
+      const allPushPromises: Promise<any>[] = [];
+      for (const row of newRows) {
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+        
+        for (const student of students) {
+          if (student.responsaveis_ids.length > 0) {
+            allPushPromises.push(
+              sendAgendaPushNotification({
+                type: 'momentos',
+                itemId: String(row.id),
+                title: '📸 Novo Momento Publicado!',
+                message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+                targetUserIds: student.responsaveis_ids,
+                targetUrl: '/agenda-digital/momentos',
+                metadata: { aluno_id: student.aluno_id }
+              }).catch(err => console.error('Momento Push Error:', err))
+            )
+          }
         }
-      })
+      }
+      await Promise.allSettled(allPushPromises);
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -112,18 +118,25 @@ export async function POST(request: Request) {
     }
 
     if (isNew) {
-      getResponsavelIdsForTargets(data.dados).then(targetIds => {
-        if (targetIds.length > 0) {
-           sendAgendaPushNotification({
+      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+      const pushPromises = [];
+      
+      for (const student of students) {
+        if (student.responsaveis_ids.length > 0) {
+          pushPromises.push(
+            sendAgendaPushNotification({
               type: 'momentos',
               itemId: String(data.id),
               title: '📸 Novo Momento Publicado!',
-              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
-              targetUserIds: targetIds,
-              targetUrl: '/agenda-digital/momentos'
-           }).catch(err => console.error('Momento Push Error:', err))
+              message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+              targetUserIds: student.responsaveis_ids,
+              targetUrl: '/agenda-digital/momentos',
+              metadata: { aluno_id: student.aluno_id }
+            }).catch(err => console.error('Momento Push Error:', err))
+          )
         }
-      })
+      }
+      await Promise.allSettled(pushPromises);
     }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
