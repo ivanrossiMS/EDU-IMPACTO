@@ -35,7 +35,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   })()
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
-  const { data: fetchMomentos = [], isLoading: loading } = useQueryMomentos(false, endpoint)
+  const { data: fetchMomentos = [], isLoading: loading, refetch } = useQueryMomentos(false, endpoint)
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
 
