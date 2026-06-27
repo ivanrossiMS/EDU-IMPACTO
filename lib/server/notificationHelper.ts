@@ -71,7 +71,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     const supabase = supabaseServer
 
     const grupos = (dados.grupos || []).map(String).filter(Boolean)
-    const turmas = Array.from(new Set([...(dados.turmas || dados.targetClasses || []).map(String).filter(Boolean), ...grupos]))
+    const allGroupTerms = Array.from(new Set([...(dados.turmas || dados.targetClasses || []).map(String).filter(Boolean), ...grupos]))
     const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
     const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
@@ -80,7 +80,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       destino === 'todos' ||
       destino === 'toda a escola' ||
       destino === 'all' ||
-      turmas.some(t => {
+      allGroupTerms.some(t => {
         const tl = t.toLowerCase().trim()
         return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
       })
@@ -99,21 +99,50 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       const ids = Array.from(new Set(
         (data || []).map(d => d.responsavel_id).filter(Boolean).map(String)
       ))
-      console.log(`[NotifHelper] Modo "Todos": ${ids.length} responsáveis encontrados`)
+
+      // Inclui colaboradores diretos (se existirem)
+      colaboradoresIds.forEach(id => {
+        if (id) ids.push(id)
+      })
+
+      console.log(`[NotifHelper] 'Todos' selecionado. Retornando ${ids.length} destinatários.`)
       return ids
     }
 
-    // ── Resolver alunos por turma ─────────────────────────────────────────
+    // ── Selecionados ──────────────────────────────────────────────────────
     let targetAlunosSet = new Set<string>()
 
-    // Adicionar alunos explicitamente listados (limpar prefixos como "a_" ou "_ALU")
     alunosIds.forEach(id => {
       const cleanId = id.replace(/^(a_|_ALU)/, '')
       if (cleanId) targetAlunosSet.add(cleanId)
     })
 
-    if (turmas.length > 0) {
-      // Resolver nomes/IDs de turmas para IDs reais no banco
+    if (allGroupTerms.length > 0) {
+      // 1. Resolver grupos na tabela agenda_grupos
+      const { data: allGrupos, error: gruposError } = await supabase
+        .from('agenda_grupos')
+        .select('id, nome, dados')
+
+      if (!gruposError && allGrupos) {
+        const matchedGrupos = allGrupos.filter(g => {
+          const gId = String(g.id).toLowerCase()
+          const gNome = String(g.nome || '').toLowerCase()
+          return allGroupTerms.some(term => {
+            const tl = term.toLowerCase().trim()
+            return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+          })
+        })
+        
+        matchedGrupos.forEach(g => {
+          const alunosIdsList = g.dados?.alunosIds || [];
+          alunosIdsList.forEach((aId: string) => {
+            const cleanId = aId.replace(/^(a_|_ALU)/, '')
+            if (cleanId) targetAlunosSet.add(cleanId)
+          })
+        })
+      }
+
+      // 2. Resolver nomes/IDs de turmas para IDs reais no banco
       const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
         .select('id, nome, codigo')
@@ -126,7 +155,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
             const tId = String(t.id).toLowerCase()
             const tNome = String(t.nome || '').toLowerCase()
             const tCod = String(t.codigo || '').toLowerCase()
-            return turmas.some(turma => {
+            return allGroupTerms.some(turma => {
               const tl = turma.toLowerCase().trim()
               return tl === tId || tl === tNome || tl === tCod ||
                 tNome.includes(tl) || tl.includes(tNome)
@@ -135,7 +164,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
           .map(t => String(t.id))
 
         // Busca por ID e por nome (backward compatibility)
-        const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+        const allSearchTerms = Array.from(new Set([...allGroupTerms, ...matchedTurmaIds]))
 
         if (allSearchTerms.length > 0) {
           const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
@@ -164,7 +193,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     finalAlunosIds.forEach(id => allResponsavelIds.add(String(id)))
 
     const result = Array.from(allResponsavelIds)
-    console.log(`[NotifHelper] ${result.length} destinatário(s) resolvido(s) | turmas=${turmas.length} | alunos=${finalAlunosIds.length}`)
+    console.log(`[NotifHelper] ${result.length} destinatário(s) resolvido(s) | turmas=${allGroupTerms.length} | alunos=${finalAlunosIds.length}`)
     return result
 
   } catch (err: any) {
@@ -233,6 +262,34 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
       // Adicionar turmas e grupos
       if (allGroupTerms.length > 0) {
+        // 1. Resolver grupos na tabela agenda_grupos
+        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados')
+        if (!gruposError && allGrupos) {
+          const matchedGrupos = allGrupos.filter(g => {
+            const gId = String(g.id).toLowerCase()
+            const gNome = String(g.nome || '').toLowerCase()
+            return allGroupTerms.some(term => {
+              const tl = term.toLowerCase().trim()
+              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+            })
+          })
+          
+          let grupoAlunosIds: string[] = []
+          matchedGrupos.forEach(g => {
+            const list = g.dados?.alunosIds || [];
+            list.forEach((aId: string) => {
+              const cleanId = aId.replace(/^(a_|_ALU)/, '')
+              if (cleanId) grupoAlunosIds.push(cleanId)
+            })
+          })
+
+          if (grupoAlunosIds.length > 0) {
+            const data = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'id', grupoAlunosIds)
+            data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+          }
+        }
+
+        // 2. Resolver nomes/IDs de turmas
         const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo')
         if (!turmasError) {
           const matchedTurmaIds = (allTurmas || [])

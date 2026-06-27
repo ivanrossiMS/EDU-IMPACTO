@@ -60,6 +60,20 @@ export async function GET(request: Request) {
     }
   }
 
+  let studentGroups: string[] = [];
+  if (alunoId) {
+    const cleanId = alunoId.replace(/^(a_|_ALU)/, '');
+    const { data: allGrupos } = await supabase.from('agenda_grupos').select('nome, dados');
+    if (allGrupos) {
+      allGrupos.forEach(g => {
+        const alunosIdsList = g.dados?.alunosIds || [];
+        if (alunosIdsList.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId)) {
+          if (g.nome) studentGroups.push(g.nome);
+        }
+      });
+    }
+  }
+
   let query = supabase.from('comunicados').select('*');
   
   const accessStartDate = await getLoggedUserAccessStartDate();
@@ -71,12 +85,14 @@ export async function GET(request: Request) {
     const conditions = [`destino.eq.todos`];
     if (resolvedTurma) {
       conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
-      conditions.push(`dados->grupos.cs.["${resolvedTurma}"]`);
       if (turmaId && resolvedTurma !== turmaId) {
         conditions.push(`dados->turmas.cs.["${turmaId}"]`);
-        conditions.push(`dados->grupos.cs.["${turmaId}"]`);
       }
     }
+    
+    studentGroups.forEach(gNome => {
+      conditions.push(`dados->grupos.cs.["${gNome}"]`);
+    });
     if (alunoId) {
       conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
       conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
