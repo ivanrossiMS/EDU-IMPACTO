@@ -34,6 +34,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
   const [acessosSyncToInsert, setAcessosSyncToInsert] = useState(0)
   const [acessosSyncError, setAcessosSyncError] = useState('')
   const [acessosSyncPhase, setAcessosSyncPhase] = useState<'fetching' | 'checking' | 'inserting'>('fetching')
+  const [forceLocal, setForceLocal] = useState(false)
 
   // Reset state when opening
   useEffect(() => {
@@ -47,6 +48,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
       setAcessosSyncToInsert(0)
       setAcessosSyncError('')
       setAcessosSyncPhase('fetching')
+      setForceLocal(false)
       if (initialStartDate) setAcessosStartDate(initialStartDate)
       if (initialEndDate) setAcessosEndDate(initialEndDate)
     }
@@ -90,7 +92,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
       const res = await fetch('/api/portaria/dispositivos/sync-acessos', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startDate: acessosStartDate, endDate: acessosEndDate })
+        body: JSON.stringify({ startDate: acessosStartDate, endDate: acessosEndDate, forceLocal })
       })
 
       if (!res.body) throw new Error('Não foi possível iniciar o stream de sincronização')
@@ -188,7 +190,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
               Selecione o período que deseja reprocessar. Todos os acessos encontrados nesse intervalo serão baixados da memória da catraca e processados no diário escolar.
             </p>
 
-            <div style={{ display: 'flex', gap: 16, marginBottom: 24, textAlign: 'left' }}>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20, textAlign: 'left' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 6 }}>Data Inicial</label>
                 <input
@@ -209,6 +211,23 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
                   style={{ width: '100%', height: 42, borderRadius: 10, fontSize: 13, fontWeight: 700, padding: '0 12px' }}
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: 24, textAlign: 'left' }}>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={forceLocal}
+                  onChange={e => setForceLocal(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: '#f59e0b', width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
+                  <strong style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                    Estou na mesma rede local da catraca
+                  </strong>
+                  Marque esta opção apenas se o sistema estiver rodando no servidor local da escola, permitindo que a sincronização acesse IPs privados.
+                </span>
+              </label>
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
