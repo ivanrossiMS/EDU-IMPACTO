@@ -72,7 +72,16 @@ export async function POST(request: Request) {
       
       // Disparar Push (Background)
       for (const row of rows) {
-        const targetIds = await getResponsavelIdsForTargets({ targetClasses: row.turmas })
+        let targetIds = await getResponsavelIdsForTargets({ targetClasses: row.turmas })
+        
+        const visibilidadeUsuario = row.dados?.visibilidadeUsuario || (row as any).visibilidadeUsuario;
+        if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
+          const { data: usuarioDestino } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+          if (usuarioDestino?.id) {
+            targetIds.push(String(usuarioDestino.id));
+          }
+        }
+
         if (targetIds.length > 0) {
           // Notificação Imediata
           await sendAgendaPushNotification({
@@ -114,7 +123,16 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message)
 
     // Disparar Push (Background)
-    const targetIds = await getResponsavelIdsForTargets({ targetClasses: data.turmas })
+    let targetIds = await getResponsavelIdsForTargets({ targetClasses: data.turmas })
+
+    const visibilidadeUsuario = data.dados?.visibilidadeUsuario || (data as any).visibilidadeUsuario;
+    if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
+      const { data: usuarioDestino } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+      if (usuarioDestino?.id) {
+        targetIds.push(String(usuarioDestino.id));
+      }
+    }
+
     if (targetIds.length > 0) {
       // Notificação Imediata
       sendAgendaPushNotification({

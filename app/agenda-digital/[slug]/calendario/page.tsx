@@ -143,14 +143,24 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       }
       if (!Array.isArray(targets)) targets = []
       
-      // Toda a instituição
+      // Toda a instituição ou Ano Letivo
       if (targets.length === 0 || targets.includes('TODOS') || targets.includes('Todos')) {
         return true
       }
+      
       // Turma do aluno or Groups
       if (targets.some((t: any) => {
         if (!t) return false
         const tLower = String(t).toLowerCase()
+        
+        if (tLower === 'todos' || tLower === 'toda a escola' || tLower === 'todas') return true
+        if (tLower.startsWith('todos:')) {
+          const targetAno = tLower.split(':')[1]?.trim()
+          const currentTurmaObj: any = turmas.find(tObj => tObj && (String(tObj.id) === String(aluno?.turma) || String(tObj.codigo) === String(aluno?.turma) || String(tObj.nome) === String(aluno?.turma)))
+          const studentAno = currentTurmaObj ? (currentTurmaObj.ano !== undefined ? String(currentTurmaObj.ano) : (currentTurmaObj.anoLetivo || currentTurmaObj.ano_letivo || currentTurmaObj.dados?.anoLetivo || '')) : ''
+          if (studentAno === targetAno) return true
+        }
+
         return (
           (turmaDoAluno && (tLower === turmaDoAluno.toLowerCase() || turmaDoAluno.toLowerCase().includes(tLower) || tLower.includes(turmaDoAluno.toLowerCase()))) ||
           studentGroupNames.includes(tLower)

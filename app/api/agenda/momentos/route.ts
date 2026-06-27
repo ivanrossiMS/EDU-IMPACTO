@@ -153,3 +153,24 @@ function buildRowAuth(body: any) {
     dados: rest,
   }
 }
+
+export async function DELETE(request: Request) {
+  const { errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  try {
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'ID não informado' }, { status: 400 })
+
+    const supabase = await createProtectedClient()
+    const { error } = await supabase.from('momentos').delete().eq('id', id)
+    
+    if (error) throw new Error(error.message)
+    
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 })
+  }
+}
+

@@ -76,6 +76,8 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
 
+    const todosAnoMatch = allGroupTerms.find(t => t.toLowerCase().trim().startsWith('todos:'))
+
     const isTodos =
       destino === 'todos' ||
       destino === 'toda a escola' ||
@@ -86,7 +88,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       })
 
     // ── Modo "Todos" ──────────────────────────────────────────────────────
-    if (isTodos) {
+    if (isTodos && !todosAnoMatch) {
       const { data, error } = await supabase
         .from('aluno_responsavel')
         .select('responsavel_id')
@@ -145,7 +147,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       // 2. Resolver nomes/IDs de turmas para IDs reais no banco
       const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
-        .select('id, nome, codigo')
+        .select('id, nome, codigo, ano, ano_letivo, dados')
 
       if (turmasError) {
         console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
@@ -155,8 +157,14 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
             const tId = String(t.id).toLowerCase()
             const tNome = String(t.nome || '').toLowerCase()
             const tCod = String(t.codigo || '').toLowerCase()
+            const tAno = t.ano !== undefined ? String(t.ano) : (t.ano_letivo || t.dados?.anoLetivo || '')
+            
             return allGroupTerms.some(turma => {
               const tl = turma.toLowerCase().trim()
+              if (tl.startsWith('todos:')) {
+                const targetAno = tl.split(':')[1]?.trim()
+                return targetAno === tAno
+              }
               return tl === tId || tl === tNome || tl === tCod ||
                 tNome.includes(tl) || tl.includes(tNome)
             })
@@ -164,7 +172,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
           .map(t => String(t.id))
 
         // Busca por ID e por nome (backward compatibility)
-        const allSearchTerms = Array.from(new Set([...allGroupTerms, ...matchedTurmaIds]))
+        const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
 
         if (allSearchTerms.length > 0) {
           const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
@@ -233,6 +241,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     const colaboradoresIds = [...(dados.colaboradoresIds || []), ...(dados.funcionariosIds || [])].map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
 
+    const todosAnoMatch = allGroupTerms.find(t => t.toLowerCase().trim().startsWith('todos:'))
     const isTodos =
       destino === 'todos' ||
       destino === 'toda a escola' ||
@@ -244,7 +253,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
     let alunosToProcess: { id: string, nome: string }[] = []
 
-    if (isTodos) {
+    if (isTodos && !todosAnoMatch) {
       // Busca TODOS os alunos
       const { data, error } = await supabase.from('alunos').select('id, nome')
       if (!error && data) {
@@ -289,22 +298,28 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           }
         }
 
-        // 2. Resolver nomes/IDs de turmas
-        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo')
-        if (!turmasError) {
-          const matchedTurmaIds = (allTurmas || [])
+        // 2. Resolver nomes/IDs de turmas para IDs reais no banco
+        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, ano_letivo, dados')
+        if (!turmasError && allTurmas) {
+          const matchedTurmaIds = allTurmas
             .filter(t => {
               const tId = String(t.id).toLowerCase()
               const tNome = String(t.nome || '').toLowerCase()
               const tCod = String(t.codigo || '').toLowerCase()
+              const tAno = t.ano !== undefined ? String(t.ano) : (t.ano_letivo || t.dados?.anoLetivo || '')
+
               return allGroupTerms.some(turma => {
                 const tl = turma.toLowerCase().trim()
+                if (tl.startsWith('todos:')) {
+                  const targetAno = tl.split(':')[1]?.trim()
+                  return targetAno === tAno
+                }
                 return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
               })
             })
             .map(t => String(t.id))
 
-          const allSearchTerms = Array.from(new Set([...allGroupTerms, ...matchedTurmaIds]))
+          const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
 
           if (allSearchTerms.length > 0) {
             const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'turma', allSearchTerms)

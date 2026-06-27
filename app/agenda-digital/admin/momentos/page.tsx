@@ -63,6 +63,23 @@ export default function ADAdminMomentos() {
     }
   });
 
+  const handleDelete = async (id: string | number) => {
+    try {
+      const res = await fetch(`/api/agenda/momentos?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setFeed(prev => prev.filter(p => String(p.id) !== String(id)));
+        setMomentosFeedLocally?.((prev: any) => prev.filter((p: any) => String(p.id) !== String(id)));
+        adAlert('Momento excluído com sucesso!', 'Sucesso');
+      } else {
+        throw new Error('Erro ao excluir momento na API');
+      }
+    } catch (err: any) {
+      console.error(err);
+      adAlert(err.message || 'Ocorreu um erro ao excluir o momento.', 'Erro');
+    }
+  };
+
+
 
   const submitPost = async () => {
     if (isSubmitting) return
@@ -308,7 +325,7 @@ export default function ADAdminMomentos() {
             key={post.id}
             post={post}
             index={(page - 1) * PAGE_SIZE + i}
-            onDelete={id => adConfirm('Apagar momento?', 'Apagar', () => setFeed(prev => prev.filter(p => p.id !== id)))}
+            onDelete={id => handleDelete(id)}
           />
         ))}
       </div>

@@ -171,6 +171,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           const tcl = tc.toLowerCase()
           if (tcl === 'todos' || tcl === 'toda a escola' || tcl === 'todas') return true
           
+          if (tcl.startsWith('todos:')) {
+            const targetAno = tcl.split(':')[1]?.trim()
+            const currentTurmaObj: any = turmas.find(tObj => tObj && (String(tObj.id) === String(aluno?.turma) || String(tObj.codigo) === String(aluno?.turma) || String(tObj.nome) === String(aluno?.turma)))
+            const studentAno = currentTurmaObj ? (currentTurmaObj.ano !== undefined ? String(currentTurmaObj.ano) : (currentTurmaObj.anoLetivo || currentTurmaObj.ano_letivo || currentTurmaObj.dados?.anoLetivo || '')) : ''
+            if (studentAno === targetAno) return true
+          }
+          
           // Check if it matches any of the student's classes (current or historical)
           return todasTurmasDoAluno.some(minhaTurma => 
             minhaTurma.includes(tcl) || tcl.includes(minhaTurma)

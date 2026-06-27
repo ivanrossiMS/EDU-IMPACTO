@@ -44,6 +44,7 @@ export default function ADMomentosPage() {
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
 
   // Estado para o Lightbox/Galeria
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -280,6 +281,25 @@ export default function ADMomentosPage() {
       })
     } catch (err) {
       console.error("Error updating momento comments:", err)
+    }
+  }
+
+  const handleDeleteMomento = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta mídia? Esta ação não pode ser desfeita.')) return;
+    setIsDeleting(id);
+    try {
+      const res = await fetch(`/api/agenda/momentos?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMomentosFeedLocally?.(prev => prev.filter(m => String(m.id) !== String(id)));
+        adAlert('Momento excluído com sucesso!', 'Sucesso');
+      } else {
+        throw new Error('Erro ao excluir momento');
+      }
+    } catch (err: any) {
+      console.error(err);
+      adAlert(err.message || 'Ocorreu um erro ao excluir o momento.', 'Erro');
+    } finally {
+      setIsDeleting(null);
     }
   }
   
@@ -577,6 +597,28 @@ export default function ADMomentosPage() {
                         })()} • {displayTime}
                       </div>
                     </div>
+                    {/* Delete Button (ultra modern) */}
+                    {(currentUser?.id === (m as any).authorId || currentUser?.nome === m.author || currentUser?.perfil === 'administrador' || String(currentUser?.cargo).toLowerCase().includes('diretor') || String(currentUser?.cargo).toLowerCase().includes('admin')) && (
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {isDeleting === m.id ? (
+                          <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: '#94a3b8' }} />
+                        ) : (
+                          <button 
+                            onClick={() => handleDeleteMomento(m.id as string)}
+                            title="Excluir Momento"
+                            style={{ 
+                              width: 32, height: 32, borderRadius: '10px', border: 'none', background: 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                              color: '#cbd5e1'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.15)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#cbd5e1'; e.currentTarget.style.transform = 'scale(1) rotate(0deg)'; e.currentTarget.style.boxShadow = 'none'; }}
+                          >
+                            <Trash2 size={16} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Mídia estilo Filme Polaroid */}

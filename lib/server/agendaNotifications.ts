@@ -91,17 +91,18 @@ export async function sendAgendaPushNotification({
     )
 
     // ── Verificação de duplicidade ──────────────────────────────────────────
-    // Evita disparar o mesmo push duas vezes para o mesmo itemId+type
+    // Evita disparar o mesmo push duas vezes para o mesmo itemId+type+aluno_id
+    const dedupKey = metadata?.aluno_id ? `${itemId}_${metadata.aluno_id}` : itemId;
     const { data: existingLog } = await supabaseService
       .from('agenda_push_logs')
       .select('id, status')
-      .eq('item_id', itemId)
+      .eq('item_id', dedupKey)
       .eq('type', type)
       .eq('status', 'sent')
       .maybeSingle()
 
     if (existingLog) {
-      console.log(`${logPrefix} Push duplicado interceptado (já enviado). Ignorando.`)
+      console.log(`${logPrefix} Push duplicado interceptado (já enviado para dedupKey=${dedupKey}). Ignorando.`)
       return { success: true, skipped: true, reason: 'already_sent' }
     }
 
@@ -135,7 +136,7 @@ export async function sendAgendaPushNotification({
     const { error: logError } = await supabaseService.from('agenda_push_logs').insert({
       user_id: senderUserId || null,
       type,
-      item_id: itemId,
+      item_id: dedupKey,
       title,
       message,
       target_url: fullUrl,

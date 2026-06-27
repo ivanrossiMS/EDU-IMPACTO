@@ -411,7 +411,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         // Todos/Escola toda
         if (
           destino === 'todos' ||
-          alvoTurmas.some(t => ['todos', 'toda a escola', 'todas', 'all'].includes(t.toLowerCase().trim()))
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+          })
         ) return true
 
         // Turma específica
@@ -448,7 +451,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (currentUser?.perfil === 'Colaborador') {
         if (
           destino === 'todos' ||
-          alvoTurmas.some(t => ['todos', 'toda a escola', 'todas'].includes(t.toLowerCase().trim()))
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+          })
         ) return true
 
         const userGroups = agendaCtx?.chatGroups || []
