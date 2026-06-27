@@ -381,6 +381,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
+      const alvoGrupos = ensureStringArray(dados.grupos || dados.targetGroups)
       const destino = String(dados.destino || '').toLowerCase().trim()
 
       // Admin recebe tudo
@@ -420,6 +421,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           alvoAlunos.includes(`_ALU${alunoStr}`)
         ) return true
 
+        // Grupos customizados (Deixamos passar para que o backend verifique no refetch)
+        if (alvoGrupos.length > 0) return true
+
         return false
       }
 
@@ -427,6 +431,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (currentUser?.perfil === 'Colaborador') {
         if (
           destino === 'todos' ||
+          alvoGrupos.length > 0 ||
           alvoTurmas.some(t => ['todos', 'toda a escola', 'todas'].includes(t.toLowerCase().trim()))
         ) return true
 
