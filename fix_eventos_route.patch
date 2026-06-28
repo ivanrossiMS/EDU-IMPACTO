@@ -1,0 +1,52 @@
+--- app/api/agenda/eventos/route.ts
++++ app/api/agenda/eventos/route.ts
+@@ -76,9 +76,21 @@
+         
+         const visibilidadeUsuario = row.dados?.visibilidadeUsuario || (row as any).visibilidadeUsuario;
+         if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
+-          const { data: usuarioDestino } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+-          if (usuarioDestino?.id) {
+-            targetIds.push(String(usuarioDestino.id));
++          const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++          if (sysUser?.id) {
++            targetIds.push(String(sysUser.id));
++          } else {
++            const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++            if (respUser?.id) {
++              targetIds.push(String(respUser.id));
++            } else {
++              const { data: alunoUser } = await supabase.from('alunos').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++              if (alunoUser?.id) {
++                targetIds.push(String(alunoUser.id));
++                const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
++                vincs?.forEach(v => targetIds.push(String(v.responsavel_id)));
++              }
++            }
+           }
+         }
+ 
+@@ -127,9 +139,21 @@
+ 
+     const visibilidadeUsuario = data.dados?.visibilidadeUsuario || (data as any).visibilidadeUsuario;
+     if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
+-      const { data: usuarioDestino } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+-      if (usuarioDestino?.id) {
+-        targetIds.push(String(usuarioDestino.id));
++      const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++      if (sysUser?.id) {
++        targetIds.push(String(sysUser.id));
++      } else {
++        const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++        if (respUser?.id) {
++          targetIds.push(String(respUser.id));
++        } else {
++          const { data: alunoUser } = await supabase.from('alunos').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
++          if (alunoUser?.id) {
++            targetIds.push(String(alunoUser.id));
++            const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
++            vincs?.forEach(v => targetIds.push(String(v.responsavel_id)));
++          }
++        }
+       }
+     }
+ 

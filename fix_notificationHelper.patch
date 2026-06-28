@@ -1,0 +1,115 @@
+--- lib/server/notificationHelper.ts
++++ lib/server/notificationHelper.ts
+@@ -15,6 +15,22 @@
+ 
+ import { supabaseServer } from '@/lib/supabaseServer'
+ 
++async function fetchInChunks<T>(
++  supabase: any,
++  table: string,
++  select: string,
++  column: string,
++  values: string[],
++  chunkSize = 100
++): Promise<T[]> {
++  if (!values || values.length === 0) return []
++  const results: T[] = []
++  for (let i = 0; i < values.length; i += chunkSize) {
++    const chunk = values.slice(i, i + chunkSize)
++    const { data, error } = await supabase.from(table).select(select).in(column, chunk)
++    if (error) {
++      console.error(`[fetchInChunks] Error fetching from ${table}:`, error.message)
++    } else if (data) {
++      results.push(...data)
++    }
++  }
++  return results
++}
++
+ interface TargetParams {
+   /** Nomes ou IDs das turmas destinatárias */
+   turmas?: string[]
+@@ -107,17 +123,10 @@
+         const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+ 
+         if (allSearchTerms.length > 0) {
+-          const { data: alunosTurma, error: alunosError } = await supabase
+-            .from('alunos')
+-            .select('id')
+-            .in('turma', allSearchTerms)
+-
+-          if (alunosError) {
+-            console.error('[NotifHelper] Erro ao buscar alunos por turma:', alunosError.message)
+-          } else {
+-            ;(alunosTurma || []).forEach(a => targetAlunosSet.add(String(a.id)))
+-          }
++          const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
++          alunosTurma.forEach(a => targetAlunosSet.add(String(a.id)))
+         }
+       }
+     }
+ 
+@@ -130,17 +139,10 @@
+     let allResponsavelIds = new Set<string>()
+ 
+     if (finalAlunosIds.length > 0) {
+-      const { data: vinculados, error: vincError } = await supabase
+-        .from('aluno_responsavel')
+-        .select('responsavel_id')
+-        .in('aluno_id', finalAlunosIds)
+-
+-      if (vincError) {
+-        console.error('[NotifHelper] Erro ao buscar vínculos:', vincError.message)
+-      } else {
+-        ;(vinculados || []).forEach(v => {
+-          if (v.responsavel_id) allResponsavelIds.add(String(v.responsavel_id))
+-        })
+-      }
++      const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'responsavel_id', 'aluno_id', finalAlunosIds)
++      vinculados.forEach(v => {
++        if (v.responsavel_id) allResponsavelIds.add(String(v.responsavel_id))
++      })
+     }
+ 
+     // ── Adicionar colaboradores diretos ───────────────────────────────────
+@@ -213,10 +215,8 @@
+       // Adicionar alunos explicitamente listados
+       const cleanAlunosIds = alunosIds.map(id => id.replace(/^(a_|_ALU)/, '')).filter(Boolean)
+       if (cleanAlunosIds.length > 0) {
+-        const { data, error } = await supabase.from('alunos').select('id, nome').in('id', cleanAlunosIds)
+-        if (!error && data) {
+-          data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+-        }
++        const data = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'id', cleanAlunosIds)
++        data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+       }
+ 
+       // Adicionar turmas
+@@ -238,10 +238,8 @@
+           const allSearchTerms = Array.from(new Set([...turmas, ...matchedTurmaIds]))
+ 
+           if (allSearchTerms.length > 0) {
+-            const { data: alunosTurma, error: alunosError } = await supabase.from('alunos').select('id, nome').in('turma', allSearchTerms)
+-            if (!alunosError && alunosTurma) {
+-              alunosTurma.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+-            }
++            const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'turma', allSearchTerms)
++            alunosTurma.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+           }
+         }
+       }
+@@ -254,12 +252,8 @@
+ 
+     if (alunosToProcess.length > 0) {
+       const allAlunoIds = alunosToProcess.map(a => a.id)
+-      const { data: vinculados, error: vincError } = await supabase
+-        .from('aluno_responsavel')
+-        .select('aluno_id, responsavel_id')
+-        .in('aluno_id', allAlunoIds)
+-
+-      if (!vincError && vinculados) {
++      const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'aluno_id, responsavel_id', 'aluno_id', allAlunoIds)
++      if (vinculados && vinculados.length > 0) {
+         // Agrupar responsáveis por aluno
+         const mapResponsaveis = new Map<string, Set<string>>()
+         vinculados.forEach(v => {

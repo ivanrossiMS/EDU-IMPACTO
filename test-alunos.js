@@ -1,12 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const fs = require('fs');
+
 async function test() {
-  const { data, error } = await supabase
-    .from('alunos')
-    .select('id, nome, foto')
-    .eq('id', 4697);
-  console.log("DATA:", data);
-  if (data && data.length > 0) console.log("ID TYPE:", typeof data[0].id);
+  const file = fs.readFileSync('app/api/route.ts', 'utf8'); // fake, I need URL/Key from somewhere...
 }
-test();

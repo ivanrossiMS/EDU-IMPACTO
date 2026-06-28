@@ -1,0 +1,59 @@
+--- components/portaria/SyncAcessosModal.tsx
++++ components/portaria/SyncAcessosModal.tsx
+@@ -4,7 +4,7 @@
+ 
+ import { useState, useEffect } from 'react'
+-import { CalendarRange, RefreshCw, Check, Activity, XCircle } from 'lucide-react'
++import { CalendarRange, RefreshCw, Check, Activity, XCircle, AlertTriangle } from 'lucide-react'
+ 
+ const ACCENT = '#06b6d4'
+ 
+@@ -35,6 +35,7 @@
+   const [acessosSyncToInsert, setAcessosSyncToInsert] = useState(0)
+   const [acessosSyncError, setAcessosSyncError] = useState('')
+   const [acessosSyncPhase, setAcessosSyncPhase] = useState<'fetching' | 'checking' | 'inserting'>('fetching')
++  const [forceLocal, setForceLocal] = useState(false)
+ 
+   // Reset state when opening
+   useEffect(() => {
+@@ -48,6 +49,7 @@
+       setAcessosSyncToInsert(0)
+       setAcessosSyncError('')
+       setAcessosSyncPhase('fetching')
++      setForceLocal(false)
+       if (initialStartDate) setAcessosStartDate(initialStartDate)
+       if (initialEndDate) setAcessosEndDate(initialEndDate)
+     }
+@@ -90,7 +92,7 @@
+       const res = await fetch('/api/portaria/dispositivos/sync-acessos', { 
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({ startDate: acessosStartDate, endDate: acessosEndDate })
++        body: JSON.stringify({ startDate: acessosStartDate, endDate: acessosEndDate, forceLocal })
+       })
+ 
+       if (!res.body) throw new Error('Não foi possível iniciar o stream de sincronização')
+@@ -211,6 +213,22 @@
+               </div>
+             </div>
+ 
++            <div style={{ marginBottom: 24, textAlign: 'left' }}>
++              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
++                <input 
++                  type="checkbox" 
++                  checked={forceLocal}
++                  onChange={e => setForceLocal(e.target.checked)}
++                  style={{ marginTop: 2, accentColor: '#f59e0b', width: 16, height: 16 }}
++                />
++                <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
++                  <strong style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4 }}>
++                    <AlertTriangle size={14} /> Estou na mesma rede local da catraca
++                  </strong>
++                  Marque esta opção apenas se o sistema estiver rodando no servidor local da escola, permitindo que a sincronização acesse IPs privados.
++                </span>
++              </label>
++            </div>
++
+             <div style={{ display: 'flex', gap: 12 }}>
+               <button
+                 onClick={onClose}
