@@ -124,7 +124,7 @@ export default function SimuladosDashboard() {
 
         {/* ESTATÍSTICAS - Glassmorphism Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginBottom: 48 }}>
-          {cards.map((c, i) => (
+          {cards.map((c: any, i) => (
             <Link href={c.link} key={i} style={{ textDecoration: 'none' }}>
               <motion.div 
                 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * i, duration: 0.5 }}
