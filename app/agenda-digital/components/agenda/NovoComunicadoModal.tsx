@@ -49,6 +49,10 @@ export default function NovoComunicadoModal({
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [tempAgendamento, setTempAgendamento] = useState('')
 
+  // ASAAS Cobranças
+  const [showCobrancaModal, setShowCobrancaModal] = useState(false)
+  const [cobrancaForm, setCobrancaForm] = useState({ titulo: '', valor: '', vencimento: '' })
+
   const editorRef = useRef<HTMLDivElement>(null)
   
   useEffect(() => {
@@ -66,6 +70,7 @@ export default function NovoComunicadoModal({
         setConteudo('')
         setAnexos([])
         setDataAgendamento('')
+        setCobrancaForm({ titulo: '', valor: '', vencimento: '' })
         if (editorRef.current) editorRef.current.innerHTML = ''
       }
     }
@@ -76,7 +81,8 @@ export default function NovoComunicadoModal({
       titulo,
       conteudo,
       anexos,
-      dataAgendamento
+      dataAgendamento,
+      cobranca: cobrancaForm.valor ? cobrancaForm : null
     }, isDraft)
   }
 
@@ -579,7 +585,7 @@ export default function NovoComunicadoModal({
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Relatório</span>
               </button>
 
-              <button onClick={(e) => { e.preventDefault(); alert('Em breve: Cobrança') }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#10B981'; e.currentTarget.style.background = '#ECFDF5'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
+              <button onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#10B981'; e.currentTarget.style.background = '#ECFDF5'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
                 <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                   <Receipt size={20} color="#10B981" />
                 </div>
@@ -588,7 +594,7 @@ export default function NovoComunicadoModal({
             </div>
 
             {/* PREVIEW ANEXOS */}
-            {anexos.length > 0 && (
+            {(anexos.length > 0 || cobrancaForm.valor) && (
               <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 12 }}>
                 {anexos.map((anexo, i) => {
                   let name = '';
@@ -622,17 +628,33 @@ export default function NovoComunicadoModal({
                         )}
                         <button 
                           onClick={(e) => { e.preventDefault(); setAnexos(anexos.filter(a => a !== anexo)); }}
-                          style={{ position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12, background: 'rgba(255, 255, 255, 0.9)', color: '#EF4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                          style={{ position: 'absolute', top: -6, right: -6, width: 24, height: 24, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
                         >
-                          <Trash2 size={12} />
+                          <X size={14} />
                         </button>
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#475569', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{name}</div>
                     </div>
                   )
                 })}
+                
+                {/* Cobrança Anexada visualmente na mesma lista */}
+                {cobrancaForm.valor && (
+                  <div style={{ position: 'relative', height: 100, background: '#ECFDF5', border: '1px solid #10B981', borderRadius: 12, padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                     <div style={{ fontSize: 11, fontWeight: 700, color: '#10B981', marginBottom: 4 }}>COBRANÇA</div>
+                     <div style={{ fontSize: 13, fontWeight: 600, color: '#047857', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cobrancaForm.titulo}</div>
+                     <div style={{ fontSize: 14, fontWeight: 800, color: '#065F46', marginTop: 4 }}>R$ {cobrancaForm.valor}</div>
+                     <button 
+                        onClick={(e) => { e.preventDefault(); setCobrancaForm({ titulo: '', valor: '', vencimento: '' }); }}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 24, height: 24, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}
+                      >
+                        <X size={14} />
+                      </button>
+                  </div>
+                )}
               </div>
             )}
+
             {isUploading && (
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, background: '#F5F3FF', padding: '12px 16px', borderRadius: 16 }}>
                  <div style={{ width: 20, height: 20, borderRadius: 10, border: '2px solid #C4B5FD', borderTopColor: '#6D5DF6', animation: 'spin 1s linear infinite' }} />
@@ -760,6 +782,52 @@ export default function NovoComunicadoModal({
           // Não precisa fechar aqui, o ReportsSelectionModal chama onClose internamente no handleFinish
         }}
       />
+      {/* MODAL DE COBRANÇA */}
+      {showCobrancaModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="card" style={{ width: '100%', maxWidth: 400, background: '#FFF', borderRadius: 24, padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800 }}>Anexar Cobrança (Asaas)</h3>
+              <button onClick={() => setShowCobrancaModal(false)} className="btn btn-ghost btn-circle btn-sm"><X size={18}/></button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Título da Cobrança</label>
+                <input type="text" className="input" placeholder="Ex: Taxa de Material Didático" value={cobrancaForm.titulo} onChange={e => setCobrancaForm({...cobrancaForm, titulo: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Valor (R$)</label>
+                  <input type="number" step="0.01" className="input" placeholder="0.00" value={cobrancaForm.valor} onChange={e => setCobrancaForm({...cobrancaForm, valor: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>Vencimento</label>
+                  <input type="date" className="input" value={cobrancaForm.vencimento} onChange={e => setCobrancaForm({...cobrancaForm, vencimento: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12 }} />
+                </div>
+              </div>
+              
+              <div style={{ padding: 12, background: '#ECFDF5', color: '#065F46', fontSize: 13, borderRadius: 12, marginTop: 8 }}>
+                <strong>Aviso:</strong> A cobrança será gerada dinamicamente quando a família inserir o CPF no aplicativo.
+              </div>
+
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', marginTop: 8, padding: 16, background: '#10B981', border: 0, borderRadius: 12, color: '#fff', fontWeight: 700 }}
+                onClick={() => {
+                  if(!cobrancaForm.titulo || !cobrancaForm.valor || !cobrancaForm.vencimento) {
+                    alert("Preencha todos os campos da cobrança!");
+                    return;
+                  }
+                  setShowCobrancaModal(false);
+                }}
+              >
+                Anexar Cobrança
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </>, 
     document.body
   );

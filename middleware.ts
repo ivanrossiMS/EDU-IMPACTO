@@ -126,6 +126,7 @@ export async function middleware(request: NextRequest) {
       '/api/auth',
       '/api/financeiro/baixar-por-responsavel',
       '/api/financeiro/titulos',
+      '/api/cobrancas',
       '/api/upload-midia',
       '/api/comunicados_respostas',
       '/api/configuracoes',

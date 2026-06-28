@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2 } from 'lucide-react'
+import { X, Paperclip, FileText, CheckCircle2, ShieldAlert, Calendar, Mic, Send, Share, Bookmark, MoreHorizontal, Edit2, Trash2, Loader2, CreditCard, Info, ExternalLink } from 'lucide-react'
 import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -102,6 +102,44 @@ export function ComunicadoViewModal({
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
+  
+  const [cobranca, setCobranca] = useState<any>(null)
+  const [cobrancaDestinatario, setCobrancaDestinatario] = useState<any>(null)
+  const [showCpfModal, setShowCpfModal] = useState(false)
+  const [cpfInput, setCpfInput] = useState('')
+  const [isGeneratingPayment, setIsGeneratingPayment] = useState(false)
+  const [paymentLink, setPaymentLink] = useState('')
+
+  useEffect(() => {
+    if (comunicado?.id) {
+      const fetchCobranca = async () => {
+         const { supabase } = await import('@/lib/supabase');
+         const { data, error } = await supabase
+           .from('agenda_cobrancas')
+           .select('*, agenda_cobrancas_destinatarios(*)')
+           .eq('comunicado_id', String(comunicado.id))
+           .maybeSingle();
+           
+         if (data) {
+            setCobranca(data); // Sempre salva a cobrança se existir
+            
+            if (data.agenda_cobrancas_destinatarios && currentUserSlug && !isAdminMode) {
+               const cleanSlug = currentUserSlug.replace(/^(a_|_ALU)/, '');
+               const dest = data.agenda_cobrancas_destinatarios.find((d: any) => 
+                  String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
+               );
+               if (dest) {
+                  setCobrancaDestinatario(dest);
+                  if (dest.url_pagamento) {
+                     setPaymentLink(dest.url_pagamento);
+                  }
+               }
+            }
+         }
+      }
+      fetchCobranca();
+    }
+  }, [comunicado?.id, currentUserSlug, isAdminMode])
 
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
@@ -353,6 +391,42 @@ export function ComunicadoViewModal({
       }
     } else {
       alert(`Falha ao abrir ${parsed.name}`)
+    }
+  }
+
+  const handleGeneratePayment = async () => {
+    if (!cpfInput || cpfInput.replace(/\D/g, '').length !== 11) {
+      alert('Por favor, insira um CPF válido (11 dígitos numéricos).');
+      return;
+    }
+    setIsGeneratingPayment(true);
+    try {
+      const res = await fetch('/api/cobrancas/asaas-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cobranca_destinatario_id: cobrancaDestinatario.id,
+          cobranca_id: cobranca.id,
+          cpf: cpfInput.replace(/\D/g, '')
+        })
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert('Erro ao gerar cobrança: ' + data.error);
+      } else {
+        setPaymentLink(data.invoiceUrl);
+        setShowCpfModal(false);
+        // Abre automaticamente a fatura recém gerada
+        if (typeof window !== 'undefined' && (window as any).Capacitor) {
+          window.open(data.invoiceUrl, '_system') || window.open(data.invoiceUrl, '_blank');
+        } else {
+          window.open(data.invoiceUrl, '_blank');
+        }
+      }
+    } catch (e: any) {
+      alert('Erro inesperado: ' + e.message);
+    } finally {
+      setIsGeneratingPayment(false);
     }
   }
 
@@ -658,6 +732,118 @@ export function ComunicadoViewModal({
               )}
             </div>
 
+            {/* Cobrança UI */}
+            {cobranca && (cobrancaDestinatario || isAdminMode) && (() => {
+              const statusStr = cobrancaDestinatario?.status || 'PENDING';
+              const isPaid = statusStr === 'CONFIRMED' || statusStr === 'RECEIVED';
+              const isOverdue = !isPaid && new Date(cobranca.vencimento) < new Date(new Date().setHours(0,0,0,0));
+              
+              let colors = {
+                bg: '#ffffff',
+                border: 'rgba(0,0,0,0.08)',
+                accent: '#3b82f6',
+                accentBg: 'rgba(59,130,246,0.1)',
+                text: '#0f172a',
+                label: '#64748b'
+              };
+
+              let badgeText = "COBRANÇA DIGITAL";
+              let Icon = FileText;
+
+              if (isAdminMode) {
+                colors.bg = '#f8fafc';
+                colors.accent = '#64748b';
+                colors.accentBg = '#f1f5f9';
+                badgeText = "COBRANÇA (ADMIN)";
+                Icon = Info;
+              } else if (isPaid) {
+                colors.bg = '#f0fdf4';
+                colors.accent = '#10b981';
+                colors.accentBg = '#ecfdf5';
+                colors.border = 'rgba(16,185,129,0.25)';
+                badgeText = "PAGAMENTO RECEBIDO";
+                Icon = CheckCircle2;
+              } else if (isOverdue) {
+                colors.bg = '#fffbeb';
+                colors.accent = '#f59e0b'; // Orange
+                colors.accentBg = '#fffbeb';
+                colors.border = 'rgba(245,158,11,0.25)';
+                badgeText = "PAGAMENTO EM ABERTO";
+                Icon = ShieldAlert;
+              } else {
+                colors.bg = '#fffbeb';
+                colors.accent = '#f59e0b'; // Orange
+                colors.accentBg = '#fffbeb';
+                colors.border = 'rgba(245,158,11,0.25)';
+                badgeText = "PAGAMENTO EM ABERTO";
+                Icon = Calendar;
+              }
+
+              return (
+                <div style={{ 
+                  marginTop: 24, 
+                  background: colors.bg, 
+                  border: `1px solid ${colors.border}`, 
+                  borderRadius: 16, 
+                  padding: '16px 20px',
+                  display: 'flex', 
+                  flexWrap: 'wrap',
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  gap: 20, 
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.03)' 
+                }}>
+                  {/* Left Column: Icon + Info */}
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', flex: '1 1 250px' }}>
+                     <div style={{ width: 46, height: 46, borderRadius: '50%', background: colors.accentBg, color: colors.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `inset 0 0 0 1px ${colors.border}` }}>
+                       <Icon size={22} />
+                     </div>
+                     <div>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                         <span style={{ fontSize: 11, fontWeight: 800, color: colors.accent, letterSpacing: 0.5 }}>{badgeText}</span>
+                         <span style={{ fontSize: 11, color: colors.label, fontWeight: 500 }}>• Venc: {new Date(cobranca.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</span>
+                       </div>
+                       <div style={{ fontSize: 14, fontWeight: 600, color: colors.text, marginBottom: 2 }}>{cobranca.titulo}</div>
+                       <div style={{ fontSize: 22, fontWeight: 800, color: colors.text, letterSpacing: -0.5 }}>
+                          R$ {Number(cobranca.valor).toFixed(2).replace('.', ',')}
+                       </div>
+                     </div>
+                  </div>
+
+                  {/* Right Column: Actions */}
+                  <div style={{ flexShrink: 0, flex: '1 1 auto', display: 'flex', justifyContent: 'flex-end' }}>
+                     {isAdminMode ? (
+                       <div style={{ color: '#64748b', fontSize: 12, fontWeight: 500, maxWidth: 160, textAlign: 'right', padding: '8px 12px', background: '#f1f5f9', borderRadius: 8 }}>
+                          Visualização restrita do modo Admin.
+                       </div>
+                     ) : isPaid ? (
+                       <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
+                          <CheckCircle2 size={18} /> Pago
+                       </div>
+                     ) : (
+                       paymentLink ? (
+                         <button 
+                           onClick={() => window.open(paymentLink, '_blank')}
+                           style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
+                         >
+                           <ExternalLink size={18} />
+                           ACESSAR FATURA
+                         </button>
+                       ) : (
+                         <button 
+                           onClick={() => setShowCpfModal(true)}
+                           style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
+                         >
+                           <CreditCard size={18} />
+                           PAGAR AGORA
+                         </button>
+                       )
+                     )}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Attachments - Visual Order */}
             {comunicado.anexos && comunicado.anexos.length > 0 && !isLoadingFull && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, width: '100%', maxWidth: 800, margin: '0 auto' }}>
@@ -935,6 +1121,39 @@ export function ComunicadoViewModal({
           )}
         </motion.div>
       </motion.div>
+
+      {/* MODAL CPF PARA COBRANÇA */}
+      {showCpfModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ width: '100%', maxWidth: 400, background: '#FFF', borderRadius: 24, padding: 24, boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Pagar Cobrança</h3>
+              <button onClick={() => setShowCpfModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20}/></button>
+            </div>
+            
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 14, color: '#475569', marginBottom: 16 }}>Para gerar o link de pagamento seguro via Asaas (PIX ou Cartão), precisamos validar o seu CPF.</p>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>CPF do Pagador</label>
+              <input 
+                 type="text" 
+                 placeholder="000.000.000-00" 
+                 value={cpfInput} 
+                 onChange={e => setCpfInput(e.target.value)} 
+                 style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, fontSize: 16 }} 
+                 maxLength={14}
+              />
+            </div>
+
+            <button 
+              onClick={handleGeneratePayment}
+              disabled={isGeneratingPayment}
+              style={{ width: '100%', padding: 16, background: '#10B981', border: 0, borderRadius: 12, color: '#fff', fontWeight: 700, fontSize: 16, cursor: isGeneratingPayment ? 'not-allowed' : 'pointer', opacity: isGeneratingPayment ? 0.7 : 1 }}
+            >
+              {isGeneratingPayment ? 'GERANDO LINK...' : 'GERAR LINK DE PAGAMENTO'}
+            </button>
+          </motion.div>
+        </div>
+      )}
     </Portal>
   )
 }

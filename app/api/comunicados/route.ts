@@ -287,6 +287,36 @@ export async function POST(request: Request) {
       await Promise.allSettled(pushPromises);
     }
 
+    // Criar Cobrança Asaas se existir
+    if (body.cobranca && data.destino !== 'interno') {
+       try {
+         const cobrancaObj = {
+           comunicado_id: String(data.id),
+           titulo: body.cobranca.titulo,
+           valor: parseFloat(body.cobranca.valor),
+           vencimento: body.cobranca.vencimento
+         }
+         
+         const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single()
+         
+         if (!cobrancaErr && cobrancaSalva) {
+            const { students } = await getStudentTargetsForComunicados(data.dados);
+            const destinatariosToInsert = students.map((s: any) => ({
+              cobranca_id: cobrancaSalva.id,
+              destinatario_id: s.aluno_id,
+              destinatario_nome: s.aluno_nome,
+              status: 'PENDING'
+            }))
+            
+            if (destinatariosToInsert.length > 0) {
+               await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert)
+            }
+         }
+       } catch (err) {
+         console.error('Erro ao salvar cobrança anexada:', err)
+       }
+    }
+
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {
     console.error("POST CATCH ERROR:", e);

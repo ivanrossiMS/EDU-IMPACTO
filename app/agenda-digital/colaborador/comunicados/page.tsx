@@ -175,7 +175,7 @@ export default function ColaboradorComunicadosPage() {
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
   const handleEnviar = (data: any, asRascunho = false) => {
-    const { titulo, conteudo, anexos, dataAgendamento } = data;
+    const { titulo, conteudo, anexos, dataAgendamento, cobranca } = data;
     const newTitulo = titulo;
     const newConteudo = conteudo;
     if (!newTitulo.trim() || !newConteudo.trim()) {
@@ -197,6 +197,7 @@ export default function ColaboradorComunicadosPage() {
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
         anexos: anexos,
+        cobranca: cobranca,
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
@@ -239,6 +240,7 @@ export default function ColaboradorComunicadosPage() {
         dataEnvio: new Date().toISOString(),
         dataAgendamento: dataAgendamento || null,
         anexos: anexos,
+        cobranca: cobranca,
         leituras: {},
         ciencias: {},
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado'
