@@ -31,6 +31,7 @@ export interface ADComunicado {
   ciencias: Record<string, string>
   status: 'rascunho' | 'agendado' | 'enviado'
   autorFoto?: string | null
+  cobranca?: any
 }
 
 export type ADChat = { id: number | string, name: string, status: string, preview: string, time: string, unread: number, tag: string, date?: string, startDate?: string, startTime?: string }
