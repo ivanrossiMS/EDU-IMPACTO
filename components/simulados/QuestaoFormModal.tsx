@@ -372,13 +372,13 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, width: '100%', maxWidth: showPreview ? 1000 : 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', transition: 'max-width 0.3s ease' }}>
+      <div className="modal-box" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, width: '100%', maxWidth: showPreview ? 1000 : 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', transition: 'max-width 0.3s ease' }}>
         
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="modal-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
             {questao ? 'Editar Questão' : 'Nova Questão'}
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="header-buttons-wrapper" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <motion.button 
               whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
               type="button"
@@ -396,8 +396,8 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
           </div>
         </div>
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          <div style={{ padding: '32px', overflowY: 'auto', flex: 1 }}>
+        <div className="modal-body" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <div className="form-side" style={{ padding: '32px', overflowY: 'auto', flex: 1 }}>
             <form id="questao-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               
               <div>
@@ -468,7 +468,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: 12 }}>
+                  <div className="image-buttons-wrapper" style={{ display: 'flex', gap: 12 }}>
                     <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, background: '#3b82f6', color: 'white', fontWeight: 600, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, width: 'fit-content' }}>
                       {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
                       {uploading ? 'Enviando Imagem...' : 'Enviar Nova Imagem'}
@@ -533,7 +533,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
           </div>
 
           {showPreview && (
-            <div style={{ width: 400, borderLeft: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-app))', padding: '32px', overflowY: 'auto' }}>
+            <div className="preview-side" style={{ width: 400, borderLeft: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-app))', padding: '32px', overflowY: 'auto' }}>
               <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'rgba(59,130,246,0.1)', padding: '4px 8px', borderRadius: 6 }}>
@@ -567,7 +567,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
           )}
         </div>
 
-        <div style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+        <div className="modal-footer" style={{ padding: '24px 32px', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
           <button type="button" onClick={onClose} style={{ padding: '12px 24px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'transparent', color: 'hsl(var(--text-primary))', fontWeight: 600, cursor: 'pointer' }}>
             Cancelar
           </button>
@@ -583,7 +583,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
         {isAiModalOpen && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isGenerating && setIsAiModalOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} />
-            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} style={{ position: 'relative', width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(135deg, hsl(var(--bg-surface)), hsl(var(--bg-elevated)))', borderRadius: 24, padding: 32, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 20px 50px -20px rgba(0,0,0,0.5)' }}>
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="ai-modal-box" style={{ position: 'relative', width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(135deg, hsl(var(--bg-surface)), hsl(var(--bg-elevated)))', borderRadius: 24, padding: 32, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 20px 50px -20px rgba(0,0,0,0.5)' }}>
               
               <button onClick={() => setIsAiModalOpen(false)} disabled={isGenerating} style={{ position: 'absolute', top: 20, right: 20, background: 'transparent', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer', padding: 8 }}>
                 <X size={20} />
@@ -686,6 +686,22 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
         )}
       </AnimatePresence>
 
+      <style>{`
+        @media (max-width: 768px) {
+          .modal-box { max-height: 95vh !important; border-radius: 12px !important; }
+          .modal-header { flex-direction: column; align-items: flex-start !important; padding: 16px !important; gap: 16px; }
+          .header-buttons-wrapper { flex-direction: column; width: 100%; align-items: stretch !important; gap: 8px !important; }
+          .header-buttons-wrapper button { width: 100%; justify-content: center; }
+          .modal-body { flex-direction: column !important; overflow-y: auto !important; }
+          .form-side { padding: 16px !important; overflow-y: visible !important; flex: none !important; }
+          .preview-side { width: 100% !important; border-left: none !important; border-top: 1px solid hsl(var(--border-subtle)) !important; padding: 16px !important; overflow-y: visible !important; flex: none !important; }
+          .image-buttons-wrapper { flex-direction: column !important; width: 100%; align-items: stretch !important; gap: 8px !important; }
+          .image-buttons-wrapper label, .image-buttons-wrapper button { width: 100% !important; justify-content: center; }
+          .modal-footer { flex-direction: column-reverse !important; padding: 16px !important; gap: 8px !important; }
+          .modal-footer button { width: 100%; }
+          .ai-modal-box { padding: 20px !important; max-height: 85vh !important; border-radius: 16px !important; width: calc(100% - 32px) !important; margin: 16px auto !important; }
+        }
+      `}</style>
     </div>
   )
 }

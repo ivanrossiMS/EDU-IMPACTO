@@ -162,16 +162,16 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
   const progressPercent = showProgress ? Math.min(100, Math.round((activeCurrent / activeLimit) * 100)) : 0;
 
   return (
-    <div style={{ padding: '40px 32px', maxWidth: 1000, margin: '0 auto' }}>
+    <div className="page-container" style={{ padding: '40px 32px', maxWidth: 1000, margin: '0 auto' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+        <div className="header-box" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div style={{ flex: 1 }}>
             <Link href="/simulados/lista" style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', textDecoration: 'none', fontWeight: 600, marginBottom: 12 }}>
               <ArrowLeft size={16} /> Voltar para Lista
             </Link>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 32 }}>
+            <div className="title-progress-box" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 32 }}>
               <div>
-                <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>{simulado.titulo}</h1>
+                <h1 className="page-title" style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>{simulado.titulo}</h1>
                 <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>
                   {simulado.simulados_bimestres?.nome} • {simulado.data_aplicacao ? new Date(simulado.data_aplicacao).toLocaleDateString('pt-BR') : 'Data não definida'}
                   {professorFiltro && disciplinaFiltro && (
@@ -181,7 +181,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
               </div>
               
               {showProgress && (
-                <div style={{ 
+                <div className="progress-box" style={{ 
                   background: 'hsl(var(--bg-surface))', 
                   border: '1px solid hsl(var(--border-subtle))', 
                   borderRadius: 16, 
@@ -213,7 +213,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
               )}
             </div>
           </div>
-          <div style={{ marginLeft: 24, alignSelf: 'flex-start' }}>
+          <div className="new-btn-container" style={{ marginLeft: 24, alignSelf: 'flex-start' }}>
             {(!isProfessor || professorDisciplinas.length > 0) && canAddQuestion() && (
               <button 
                 onClick={() => { setEditingQuestao(null); setModalOpen(true); }}
@@ -228,12 +228,12 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
         {/* Questões List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {questoes.length === 0 ? (
-            <div style={{ background: 'hsl(var(--bg-surface))', padding: 60, borderRadius: 20, textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))' }}>
+            <div className="empty-state" style={{ background: 'hsl(var(--bg-surface))', padding: 60, borderRadius: 20, textAlign: 'center', border: '1px dashed hsl(var(--border-subtle))' }}>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, margin: 0 }}>Nenhuma questão cadastrada neste simulado ainda.</p>
             </div>
           ) : (
             questoes.map((q, index) => (
-              <div key={q.id} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
+              <div key={q.id} className="question-card" style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -306,6 +306,20 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
           }} 
         />
       )}
+      
+      <style>{`
+        @media (max-width: 768px) {
+          .page-container { padding: 16px !important; }
+          .header-box { flex-direction: column !important; align-items: stretch !important; gap: 16px; margin-bottom: 24px !important; }
+          .title-progress-box { flex-direction: column !important; gap: 16px !important; }
+          .page-title { font-size: 20px !important; line-height: 1.3 !important; }
+          .progress-box { min-width: 100% !important; padding: 16px !important; margin-top: 8px; }
+          .new-btn-container { margin-left: 0 !important; width: 100%; margin-top: 12px; }
+          .new-btn-container button { width: 100%; justify-content: center; padding: 16px !important; font-size: 16px !important; }
+          .empty-state { padding: 30px 16px !important; }
+          .question-card { padding: 16px !important; }
+        }
+      `}</style>
     </div>
   )
 }

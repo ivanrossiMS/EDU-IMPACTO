@@ -209,10 +209,10 @@ export default function ImprimirSimuladoPage() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#f1f5f9', fontFamily: 'Inter, sans-serif' }}>
+    <div className="page-layout" style={{ display: 'flex', height: '100vh', background: '#f1f5f9', fontFamily: 'Inter, sans-serif' }}>
       
       {/* Sidebar de Configurações (No Print) */}
-      <div className="no-print" style={{ width: 380, background: 'white', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px rgba(0,0,0,0.02)', zIndex: 10 }}>
+      <div className="no-print sidebar-layout" style={{ width: 380, background: 'white', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px rgba(0,0,0,0.02)', zIndex: 10 }}>
         <div style={{ padding: '24px 32px', borderBottom: '1px solid #e2e8f0' }}>
           <button onClick={() => router.back()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', color: '#64748b', fontWeight: 600, cursor: 'pointer', fontSize: 14, padding: 0, marginBottom: 24 }}>
             <ChevronLeft size={18} /> Voltar
@@ -329,7 +329,7 @@ export default function ImprimirSimuladoPage() {
       </div>
 
       {/* Área Central (Canvas / Papel) */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <PaginationEngine 
             questoes={questoes.filter(q => selectedIds.has(q.id))}
@@ -349,6 +349,13 @@ export default function ImprimirSimuladoPage() {
         />
       </div>
 
+      <style>{`
+        @media (max-width: 768px) {
+          .page-layout { flex-direction: column !important; }
+          .sidebar-layout { width: 100% !important; max-height: 50vh !important; border-right: none !important; border-bottom: 1px solid #e2e8f0 !important; }
+          .canvas-layout { padding: 16px !important; }
+        }
+      `}</style>
     </div>
   )
 }

@@ -150,11 +150,11 @@ export default function SimuladosListaPage() {
   }, [hydrated, isProfessor, currentUser])
 
   return (
-    <div style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
+    <div className="page-container" style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         
         {/* HEADER */}
-        <div style={{ 
+        <div className="header-box" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
@@ -175,7 +175,7 @@ export default function SimuladosListaPage() {
             </div>
           </div>
           {!isProfessor && (
-            <button 
+            <button className="action-btn"
               onClick={() => router.push('/simulados/gerenciamento/novo')} 
               style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', padding: '12px 24px', borderRadius: 12, textDecoration: 'none', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -243,7 +243,7 @@ export default function SimuladosListaPage() {
               return (
                 <motion.div key={bimester} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'transparent' }}>
                   {/* Bimestre Header */}
-                  <div 
+                  <div className="bimester-header"
                     onClick={() => toggleBimester(bimester)}
                     style={{ 
                       display: 'flex', 
@@ -289,7 +289,7 @@ export default function SimuladosListaPage() {
                   <AnimatePresence>
                     {!isCollapsed && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 32, paddingLeft: 12 }}>
+                        <div className="turma-container" style={{ display: 'flex', flexDirection: 'column', gap: 32, paddingLeft: 12 }}>
                           {turmasList.map(turma => {
                             const turmaKey = `${bimester}-${turma}`
                             const isTurmaCollapsed = collapsedTurmas[turmaKey]
@@ -298,7 +298,7 @@ export default function SimuladosListaPage() {
                                 {/* Turma Line Connector */}
                                 <div style={{ position: 'absolute', left: 24, top: 24, bottom: 0, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
 
-                                <div
+                                <div className="turma-header"
                                   onClick={() => toggleTurma(bimester, turma)}
                                   style={{ 
                                     position: 'relative',
@@ -340,7 +340,7 @@ export default function SimuladosListaPage() {
                                 <AnimatePresence>
                                   {!isTurmaCollapsed && (
                                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
+                                      <div className="cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
                                         {turmasMap[turma].map((s, i) => {
                                           const qCadastradas = s.questoesCadastradas || 0;
                                           const qRequisitadas = s.simulados_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
@@ -349,7 +349,7 @@ export default function SimuladosListaPage() {
 
                                           return (
                                             <motion.div key={`${turma}-${s.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                                              <div 
+                                              <div className="simulado-card"
                                                 style={{ 
                                                 background: 'hsl(var(--bg-surface))', 
                                                 backdropFilter: 'blur(10px)',
@@ -494,7 +494,7 @@ export default function SimuladosListaPage() {
                                                 </div>
 
                                                 {/* Action Buttons */}
-                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                                                <div className="actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                                                   <button onClick={(e) => handleAction(e, 'gerar_pdf', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar PDF (Estúdio de Edição)" onMouseEnter={e => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
                                                     <FileDown size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Exportar PDF</span>
                                                   </button>
@@ -561,6 +561,22 @@ export default function SimuladosListaPage() {
           onClose={() => setGabaritoModalId(null)}
         />
       )}
+      
+      <style>{`
+        @media (max-width: 768px) {
+          .page-container { padding: 16px !important; }
+          .header-box { flex-direction: column !important; align-items: flex-start !important; padding: 20px !important; gap: 16px; }
+          .header-box h1 { font-size: 24px !important; }
+          .action-btn { width: 100%; justify-content: center; margin-top: 10px; }
+          .bimester-header { padding: 16px !important; flex-wrap: wrap; }
+          .bimester-header h2 { font-size: 16px !important; }
+          .turma-container { padding-left: 0 !important; gap: 16px !important; }
+          .turma-header { padding: 12px 16px !important; }
+          .cards-grid { grid-template-columns: 1fr !important; padding-left: 0 !important; gap: 16px !important; }
+          .simulado-card { padding: 16px !important; }
+          .actions-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+        }
+      `}</style>
     </div>
   )
 }
