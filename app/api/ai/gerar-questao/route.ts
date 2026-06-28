@@ -45,6 +45,11 @@ A questão deve conter:
 2. Exatamente 5 alternativas. Apenas UMA alternativa deve ser correta.
 3. As alternativas NÃO devem ter as letras "A)", "B)", etc. no próprio texto, retorne apenas o conteúdo da alternativa.
 
+CRÍTICO PARA A ORIGINALIDADE:
+- Seja altamente criativo e INÉDITO.
+- NUNCA crie a mesma questão ou use o mesmo contexto duas vezes. Escolha ângulos diferentes, abordagens raras, e situações inusitadas sobre o assunto para evitar repetições.
+- Evite exemplos clichês e óbvios da disciplina.
+
 Você deve retornar APENAS um objeto JSON.`;
 
     const responseSchema: Schema = {
@@ -83,7 +88,9 @@ Você deve retornar APENAS um objeto JSON.`;
         systemInstruction: systemInstruction,
         responseMimeType: 'application/json',
         responseSchema: responseSchema,
-        temperature: 0.7,
+        temperature: 0.95,
+        topK: 64,
+        topP: 0.95,
       }
     });
 
