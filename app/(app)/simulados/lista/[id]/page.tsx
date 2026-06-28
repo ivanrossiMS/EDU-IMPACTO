@@ -275,9 +275,10 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
                       <div style={{ width: 24, height: 24, borderRadius: '50%', background: alt.eh_correta ? '#10b981' : 'rgba(100,116,139,0.2)', color: alt.eh_correta ? 'white' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>
                         {alt.letra}
                       </div>
-                      <div style={{ color: alt.eh_correta ? '#10b981' : 'hsl(var(--text-primary))', fontSize: 14, fontWeight: alt.eh_correta ? 600 : 400 }}>
-                        {alt.texto}
-                      </div>
+                      <div 
+                        style={{ color: alt.eh_correta ? '#10b981' : 'hsl(var(--text-primary))', fontSize: 14, fontWeight: alt.eh_correta ? 600 : 400 }}
+                        dangerouslySetInnerHTML={{ __html: alt.texto }}
+                      />
                     </div>
                   ))}
                 </div>

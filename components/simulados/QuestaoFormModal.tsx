@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify, Sparkles, Bot } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
@@ -9,12 +10,29 @@ import { HtmlContent } from '../HtmlContent'
 export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defaultDisciplinaId, onClose, onSave }: { simuladoId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, onClose: () => void, onSave: () => void }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [disciplinas, setDisciplinas] = useState<any[]>([])
   
   const [idDisciplina, setIdDisciplina] = useState(questao?.id_disciplina || defaultDisciplinaId || '')
   const [enunciado, setEnunciado] = useState(questao ? '' : '<div style="text-align: justify;"><br></div>')
+  const [turma, setTurma] = useState('')
   const [imagensApoio, setImagensApoio] = useState<{url: string, posicao: 'inicio' | 'final'}[]>([])
   const [showPreview, setShowPreview] = useState(true)
+  
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [aiForm, setAiForm] = useState({ assunto: '', turma: '', detalhes: '', formato: 'padrao' })
+  const [aiDificuldade, setAiDificuldade] = useState('media')
+
+  const turmasDisponiveis = [
+    '6º Ano Fundamental',
+    '7º Ano Fundamental',
+    '8º Ano Fundamental',
+    '9º Ano Fundamental',
+    '1º Ano Ensino Médio',
+    '2º Ano Ensino Médio',
+    '3º Ano Ensino Médio',
+  ]
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   
@@ -65,6 +83,12 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
         while (finalHtml.startsWith('<br/>')) finalHtml = finalHtml.slice(5).trim()
         while (finalHtml.endsWith('<br>')) finalHtml = finalHtml.slice(0, -4).trim()
         while (finalHtml.endsWith('<br/>')) finalHtml = finalHtml.slice(0, -5).trim()
+        
+        const matchTurma = finalHtml.match(/<meta name="turma" content="(.*?)">/)
+        if (matchTurma) {
+          setTurma(matchTurma[1])
+          finalHtml = finalHtml.replace(matchTurma[0], '').trim()
+        }
         
         // Garante que o conteúdo existente fique justificado caso não esteja
         if (finalHtml && !finalHtml.includes('text-align: justify') && !finalHtml.includes('text-align:justify')) {
@@ -131,6 +155,66 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
     })
   }
 
+  const handleGenerateImageAi = async () => {
+    const plainText = enunciado.replace(/<[^>]+>/g, '').trim()
+    if (!plainText) {
+      alert('Preencha um pouco do enunciado primeiro para a IA saber sobre o que gerar a imagem.')
+      return
+    }
+
+    setIsGeneratingImage(true)
+    try {
+      const discNome = disciplinas.find(d => d.id === idDisciplina)?.nome || ''
+      const resPrompt = await fetch('/api/ai/gerar-imagem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enunciado: plainText,
+          disciplina: discNome
+        })
+      })
+      const jsonPrompt = await resPrompt.json()
+      if (!resPrompt.ok) throw new Error(jsonPrompt.error || 'Erro ao gerar prompt da imagem')
+
+      const base64DataUrl = jsonPrompt.base64Image
+      if (!base64DataUrl) throw new Error('Imagem não retornada pela API')
+      
+      // Convert Data URL to Blob manually to avoid fetch() limits/errors on Data URLs
+      const base64Data = base64DataUrl.split(',')[1]
+      const byteString = atob(base64Data)
+      const ab = new ArrayBuffer(byteString.length)
+      const ia = new Uint8Array(ab)
+      for (let i = 0; i < byteString.length; i++) {
+        ia[i] = byteString.charCodeAt(i)
+      }
+      const blob = new Blob([ab], { type: 'image/jpeg' })
+      const file = new File([blob], `ia-imagem-${Date.now()}.jpg`, { type: 'image/jpeg' })
+      
+      // Upload to Supabase to persist via API
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('bucket', 'comunicados-midia')
+
+      const uploadRes = await fetch('/api/upload-midia', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!uploadRes.ok) {
+        const errorData = await uploadRes.json()
+        throw new Error(errorData.error || 'Erro no upload da imagem IA')
+      }
+
+      const data = await uploadRes.json()
+      setImagensApoio(prev => [...prev, { url: data.url, posicao: 'final' }])
+    } catch (err: any) {
+      console.error(err)
+      alert('Erro ao gerar imagem com IA: ' + err.message)
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
+
   const getEnunciadoComImagens = () => {
     let htmlInicio = ''
     let htmlFinal = ''
@@ -147,6 +231,72 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
     return htmlInicio + enunciado + htmlFinal
   }
 
+  const handleGenerateAi = async () => {
+    const selectedId = idDisciplina || defaultDisciplinaId
+    if (!selectedId) {
+      alert('Por favor, selecione uma disciplina no modal principal ou verifique se ela foi preenchida.')
+      return
+    }
+    if (!aiForm.assunto) {
+      alert('Por favor, informe o assunto ou tema da questão.')
+      return
+    }
+    if (!aiForm.turma) {
+      alert('Por favor, selecione a turma alvo.')
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const discNome = disciplinas.find(d => d.id === selectedId)?.nome || ''
+      const res = await fetch('/api/ai/gerar-questao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          disciplina: discNome,
+          assunto: aiForm.assunto,
+          dificuldade: aiDificuldade,
+          turma: aiForm.turma,
+          detalhes: aiForm.detalhes,
+          formato: aiForm.formato
+        })
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Erro na API')
+
+      const { enunciado: newEnunciado, alternativas: newAlts } = json.data
+      
+      setEnunciado(newEnunciado)
+      setTurma(aiForm.turma)
+      
+      const updatedAlts = alternativas.map((alt, i) => {
+        const aiAlt = newAlts[i]
+        if (aiAlt) {
+          return { ...alt, texto: aiAlt.texto, correta: aiAlt.eh_correta }
+        }
+        return alt
+      })
+      
+      const corretaCount = updatedAlts.filter(a => a.correta).length
+      if (corretaCount === 0) updatedAlts[0].correta = true
+      if (corretaCount > 1) {
+        let found = false
+        updatedAlts.forEach(a => {
+          if (a.correta && !found) found = true
+          else a.correta = false
+        })
+      }
+
+      setAlternativas(updatedAlts)
+      setIsAiModalOpen(false)
+    } catch (error: any) {
+      alert('Erro ao gerar com IA: ' + error.message)
+      console.error(error)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -155,7 +305,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       const questaoData: any = {
         id_simulado: simuladoId,
         id_disciplina: idDisciplina || null,
-        enunciado: getEnunciadoComImagens(),
+        enunciado: turma ? `${getEnunciadoComImagens()}\n<meta name="turma" content="${turma}">` : getEnunciadoComImagens(),
         ordem: questao?.ordem || 0
       }
 
@@ -210,12 +360,14 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
   }
 
   const updateAlternativa = (index: number, field: string, value: any) => {
-    const newAlts = [...alternativas]
-    if (field === 'correta' && value === true) {
-      newAlts.forEach(a => a.correta = false)
-    }
-    newAlts[index] = { ...newAlts[index], [field]: value }
-    setAlternativas(newAlts)
+    setAlternativas(prev => {
+      const newAlts = [...prev]
+      if (field === 'correta' && value === true) {
+        newAlts.forEach(a => a.correta = false)
+      }
+      newAlts[index] = { ...newAlts[index], [field]: value }
+      return newAlts
+    })
   }
 
   return (
@@ -227,6 +379,14 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
             {questao ? 'Editar Questão' : 'Nova Questão'}
           </h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <motion.button 
+              whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+              type="button"
+              onClick={() => setIsAiModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', color: '#ec4899', fontWeight: 700, border: '1px solid rgba(236,72,153,0.2)', cursor: 'pointer', boxShadow: '0 4px 15px rgba(236,72,153,0.1)' }}
+            >
+              <Sparkles size={16} /> Gerar com IA
+            </motion.button>
             <button type="button" onClick={() => setShowPreview(!showPreview)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: showPreview ? 'rgba(59,130,246,0.1)' : 'transparent', color: showPreview ? '#3b82f6' : 'hsl(var(--text-primary))', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>
               <Eye size={16} /> {showPreview ? 'Ocultar Preview' : 'Ver Preview'}
             </button>
@@ -308,18 +468,29 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
                     </div>
                   )}
 
-                  <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, background: '#3b82f6', color: 'white', fontWeight: 600, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, width: 'fit-content' }}>
-                    {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                    {uploading ? 'Enviando Imagem...' : 'Enviar Nova Imagem'}
-                    <input 
-                      type="file" 
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      style={{ display: 'none' }}
-                      onChange={handleFileUpload}
-                      ref={fileInputRef}
-                      disabled={uploading}
-                    />
-                  </label>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, background: '#3b82f6', color: 'white', fontWeight: 600, cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.7 : 1, width: 'fit-content' }}>
+                      {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                      {uploading ? 'Enviando Imagem...' : 'Enviar Nova Imagem'}
+                      <input 
+                        type="file" 
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        style={{ display: 'none' }}
+                        onChange={handleFileUpload}
+                        ref={fileInputRef}
+                        disabled={uploading || isGeneratingImage}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateImageAi}
+                      disabled={uploading || isGeneratingImage}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', borderRadius: 8, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.3)', fontWeight: 600, cursor: (uploading || isGeneratingImage) ? 'wait' : 'pointer', opacity: (uploading || isGeneratingImage) ? 0.7 : 1, width: 'fit-content' }}
+                    >
+                      {isGeneratingImage ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                      {isGeneratingImage ? 'Criando Arte...' : 'Gerar Imagem de Apoio com IA'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -406,6 +577,115 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
         </div>
 
       </div>
+
+      {/* MODAL DE IA */}
+      <AnimatePresence>
+        {isAiModalOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isGenerating && setIsAiModalOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} />
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} style={{ position: 'relative', width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto', background: 'linear-gradient(135deg, hsl(var(--bg-surface)), hsl(var(--bg-elevated)))', borderRadius: 24, padding: 32, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 20px 50px -20px rgba(0,0,0,0.5)' }}>
+              
+              <button onClick={() => setIsAiModalOpen(false)} disabled={isGenerating} style={{ position: 'absolute', top: 20, right: 20, background: 'transparent', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer', padding: 8 }}>
+                <X size={20} />
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 16px -4px rgba(236,72,153,0.5)', flexShrink: 0 }}>
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h2 style={{ color: 'hsl(var(--text-primary))', margin: 0, fontSize: 24, fontWeight: 900, letterSpacing: '-0.02em' }}>Gerar Questão</h2>
+                  <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Deixe a IA criar o conteúdo para você</p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
+                  <div>
+                    <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Dificuldade *</label>
+                    <select 
+                      value={aiDificuldade} 
+                      onChange={e => setAiDificuldade(e.target.value)}
+                      style={{ width: '100%', padding: '14px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none' }}
+                    >
+                      <option value="facil">Fácil</option>
+                      <option value="media">Média</option>
+                      <option value="dificil">Difícil</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Formato do Enunciado *</label>
+                    <select 
+                      value={aiForm.formato} 
+                      onChange={e => setAiForm({...aiForm, formato: e.target.value})}
+                      style={{ width: '100%', padding: '14px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none' }}
+                    >
+                      <option value="padrao">Padrão / Contextualizado (Equilibrado)</option>
+                      <option value="curto">Curto e Direto (Mais Objetivo)</option>
+                      <option value="enem">Estilo ENEM (Situação-problema e Textos Base)</option>
+                      <option value="caso_clinico">Caso Clínico / Situação Real (Prático)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Turma / Público Alvo *</label>
+                  <select 
+                    value={aiForm.turma} 
+                    onChange={e => setAiForm({...aiForm, turma: e.target.value})}
+                    style={{ width: '100%', padding: '14px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none' }}
+                  >
+                    <option value="" disabled>Selecione a Turma...</option>
+                    {turmasDisponiveis.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Assunto / Tema *</label>
+                  <input 
+                    placeholder="Ex: Revolução Francesa, Equações de 2º Grau..."
+                    value={aiForm.assunto} onChange={e => setAiForm({...aiForm, assunto: e.target.value})} 
+                    style={{ width: '100%', padding: '14px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s' }} 
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Detalhes ou Contexto (Opcional)</label>
+                  <textarea 
+                    placeholder="Ex: Use um exemplo do dia a dia envolvendo supermercado..."
+                    value={aiForm.detalhes} onChange={e => setAiForm({...aiForm, detalhes: e.target.value})} 
+                    style={{ width: '100%', padding: '14px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', minHeight: 80, resize: 'vertical', fontFamily: 'inherit' }} 
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 40 }}>
+                <button onClick={() => setIsAiModalOpen(false)} disabled={isGenerating} style={{ flex: 1, padding: 16, borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', cursor: 'pointer', fontWeight: 700 }}>
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleGenerateAi} 
+                  disabled={isGenerating || !aiForm.assunto || !aiForm.turma} 
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16, borderRadius: 14, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700, boxShadow: '0 8px 20px -8px rgba(236,72,153,0.6)', opacity: (isGenerating || !aiForm.assunto || !aiForm.turma) ? 0.7 : 1 }}
+                >
+                  {isGenerating ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Sparkles size={18} />
+                    </motion.div>
+                  ) : <Bot size={18} />}
+                  {isGenerating ? 'Gerando...' : 'Gerar Questão'}
+                </button>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   )
 }

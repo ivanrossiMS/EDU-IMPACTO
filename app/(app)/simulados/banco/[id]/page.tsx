@@ -4,9 +4,8 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, List, CheckCircle2, Sparkles, X, Bot } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { useApp } from '@/lib/context'
 
 // A simple zero-dependency Rich Text Editor component
 function SimpleRichTextEditor({ value, onChange, placeholder }: { value: string, onChange: (val: string) => void, placeholder?: string }) {
@@ -50,9 +49,11 @@ function SimpleRichTextEditor({ value, onChange, placeholder }: { value: string,
   )
 }
 
-export default function NovaQuestaoBancoPage() {
+export default function EditarQuestaoPage() {
   const router = useRouter()
-  const { currentUser } = useApp()
+  const params = useParams()
+  const id = params?.id as string
+  const [fetching, setFetching] = useState(true)
   const [enunciado, setEnunciado] = useState('')
   const [disciplinaId, setDisciplinaId] = useState('')
   const [dificuldade, setDificuldade] = useState('media')
@@ -152,6 +153,48 @@ export default function NovaQuestaoBancoPage() {
     fetchDisciplinas()
   }, [])
 
+  useEffect(() => {
+    if (!id) return
+    const fetchQuestao = async () => {
+      try {
+        const { data: q, error } = await supabase.from('simulados_questoes').select('*').eq('id', id).single()
+        if (error) throw error
+        if (q) {
+          setDisciplinaId(q.id_disciplina || '')
+          setDificuldade(q.nivel_dificuldade || 'media')
+          
+          let cleanEnunciado = q.enunciado || ''
+          const matchTurma = cleanEnunciado.match(/<meta name="turma" content="(.*?)">/)
+          if (matchTurma) {
+            setTurma(matchTurma[1])
+            cleanEnunciado = cleanEnunciado.replace(matchTurma[0], '')
+          }
+          setEnunciado(cleanEnunciado.trim())
+          
+          const { data: alts } = await supabase.from('simulados_alternativas').select('*').eq('id_questao', id).order('letra')
+          if (alts && alts.length > 0) {
+            const loadedAlts = alts.map((a: any) => ({
+              letra: a.letra,
+              texto: a.texto,
+              correta: a.eh_correta
+            }))
+            // guarantee 5 alternatives
+            while(loadedAlts.length < 5) {
+              const letras = ['A','B','C','D','E']
+              loadedAlts.push({ letra: letras[loadedAlts.length], texto: '', correta: false })
+            }
+            setAlternativas(loadedAlts)
+          }
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setFetching(false)
+      }
+    }
+    fetchQuestao()
+  }, [id])
+
   const turmasDisponiveis = [
     '6º Ano Fundamental',
     '7º Ano Fundamental',
@@ -170,7 +213,7 @@ export default function NovaQuestaoBancoPage() {
     setAlternativas(prev => prev.map((alt, i) => i === index ? { ...alt, texto: text } : alt))
   }
 
-  const handleSave = async () => {
+  const handleUpdate = async () => {
     if (!enunciado.trim() || !disciplinaId || !turma || !dificuldade) {
       alert('Preencha o enunciado, disciplina, dificuldade e turma.')
       return
@@ -183,34 +226,25 @@ export default function NovaQuestaoBancoPage() {
 
     setLoading(true)
     try {
-      if (currentUser?.id) {
-        const { error: upsertErr } = await supabase.from('simulados_professores').upsert({ 
-          id: currentUser.id,
-          nome: currentUser.nome || 'Professor'
-        }).select()
-        if (upsertErr) {
-          console.error('Erro ao registrar professor no espelho:', upsertErr)
-        }
-      }
-
       // Adiciona a turma silenciosamente ao HTML do enunciado para poder ser pesquisada depois
       const finalEnunciado = turma 
         ? `${enunciado}\n<meta name="turma" content="${turma}">`
         : enunciado
 
-      const { data: qData, error: qErr } = await supabase.from('simulados_questoes').insert({
+      const { error: qErr } = await supabase.from('simulados_questoes').update({
         id_disciplina: disciplinaId,
         enunciado: finalEnunciado,
         nivel_dificuldade: dificuldade,
         tipo_questao: 'multipla_escolha',
-        banco_questao: true,
-        id_professor: currentUser?.id || null
-      }).select().single()
+        banco_questao: true
+      }).eq('id', id)
 
       if (qErr) throw qErr
 
+      await supabase.from('simulados_alternativas').delete().eq('id_questao', id)
+
       const altsToInsert = alternativas.map((a, i) => ({
-        id_questao: qData.id,
+        id_questao: id,
         texto: a.texto,
         letra: a.letra,
         eh_correta: a.correta
@@ -219,7 +253,7 @@ export default function NovaQuestaoBancoPage() {
       const { error: aErr } = await supabase.from('simulados_alternativas').insert(altsToInsert)
       if (aErr) throw aErr
       
-      alert('Questão salva com sucesso no Banco de Questões!')
+      alert('Questão atualizada com sucesso no Banco de Questões!')
       router.push('/simulados/banco')
       router.refresh()
     } catch (err: any) {
@@ -302,8 +336,8 @@ export default function NovaQuestaoBancoPage() {
               <ArrowLeft size={20} />
             </Link>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Nova Questão</h1>
-              <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 14 }}>Cadastre uma nova questão no banco</p>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Editar Questão</h1>
+              <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 14 }}>Atualize os detalhes da questão no banco</p>
             </div>
           </div>
           
@@ -322,17 +356,17 @@ export default function NovaQuestaoBancoPage() {
               Gerar com IA
             </motion.button>
             <button 
-              onClick={handleSave}
-              disabled={loading}
+              onClick={handleUpdate}
+              disabled={loading || fetching}
               style={{ 
                 display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', 
                 borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', 
-                color: '#fff', fontWeight: 700, border: 'none', cursor: loading ? 'wait' : 'pointer',
-                opacity: loading ? 0.7 : 1, boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)'
+                color: '#fff', fontWeight: 700, border: 'none', cursor: (loading || fetching) ? 'wait' : 'pointer',
+                opacity: (loading || fetching) ? 0.7 : 1, boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)'
               }}
             >
               <Save size={18} />
-              {loading ? 'Salvando...' : 'Salvar Questão'}
+              {loading ? 'Atualizando...' : 'Atualizar Questão'}
             </button>
           </div>
         </div>

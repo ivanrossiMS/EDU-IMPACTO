@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { FileText, Calendar, Layers, ChevronRight, PenTool, ChevronDown, FileDown, CheckSquare, Copy, Trash2, User } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FileText, Calendar, Layers, ChevronRight, PenTool, ChevronDown, FileDown, CheckSquare, Copy, Trash2, User, RefreshCw, BookOpen } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
@@ -53,7 +53,6 @@ export default function SimuladosListaPage() {
           approverName = user?.nome || user?.full_name || user?.email?.split('@')[0] || 'Usuário Atual'
         }
       } catch(e) {
-        // fallback if api fails
         const { data: { user } } = await supabase.auth.getUser()
         approverName = user?.user_metadata?.nome || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Usuário Atual'
       }
@@ -69,13 +68,12 @@ export default function SimuladosListaPage() {
     if (!error) {
       setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
     } else {
-      // Fallback: try updating just the status if the first one failed (likely due to missing columns)
       const fallback = await supabase.from('simulados').update({ status: newStatus }).eq('id', id)
       
       if (!fallback.error) {
          setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
          if (isApproving) {
-           alert('Aprovado visualmente!\\n\\nAVISO: Ocorreu um erro ao salvar o nome de quem aprovou. As colunas "aprovado_por" (tipo text) e "data_aprovacao" (tipo timestamp) precisam ser criadas na tabela "simulados" no seu Supabase para salvar essa informação permanentemente no banco.')
+           alert('Aprovado visualmente!\n\nAVISO: Ocorreu um erro ao salvar o nome de quem aprovou. As colunas "aprovado_por" (tipo text) e "data_aprovacao" (tipo timestamp) precisam ser criadas na tabela "simulados" no seu Supabase para salvar essa informação permanentemente no banco.')
          }
       } else {
          alert('Erro ao atualizar status: ' + fallback.error.message)
@@ -152,46 +150,76 @@ export default function SimuladosListaPage() {
   }, [hydrated, isProfessor, currentUser])
 
   return (
-    <div style={{ padding: '40px 32px', maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
-          <div>
-            <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>Meus Simulados</h1>
-            <p style={{ color: 'hsl(var(--text-secondary))', margin: '2px 0 0', fontSize: 14 }}>Selecione um simulado para gerenciar suas questões e gabarito</p>
+        
+        {/* HEADER */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          marginBottom: 40,
+          background: 'linear-gradient(135deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-elevated)) 100%)',
+          padding: '24px 32px',
+          borderRadius: 24,
+          border: '1px solid hsl(var(--border-subtle))',
+          boxShadow: '0 10px 30px -15px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, rgba(59,130,246,0.1), rgba(139,92,246,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(59,130,246,0.2)' }}>
+              <BookOpen size={28} color="#3b82f6" />
+            </div>
+            <div>
+              <h1 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Meus Simulados</h1>
+              <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Selecione um simulado para gerenciar suas questões e estrutura</p>
+            </div>
           </div>
+          {!isProfessor && (
+            <button 
+              onClick={() => router.push('/simulados/gerenciamento/novo')} 
+              style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', padding: '12px 24px', borderRadius: 12, textDecoration: 'none', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <PenTool size={18} /> Novo Simulado
+            </button>
+          )}
         </div>
 
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
-            <div style={{ color: 'hsl(var(--text-secondary))' }}>Carregando simulados...</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 100, background: 'hsl(var(--bg-surface))', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))' }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }} style={{ marginBottom: 16 }}>
+              <RefreshCw size={32} color="#6366f1" />
+            </motion.div>
+            <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 600, fontSize: 16 }}>Sincronizando banco de dados...</div>
           </div>
         ) : simulados.length === 0 ? (
           <div style={{ 
             background: 'hsl(var(--bg-surface))', 
-            border: '1px solid hsl(var(--border-subtle))', 
-            borderRadius: 20, 
-            padding: 60,
+            border: '1px dashed hsl(var(--border-subtle))', 
+            borderRadius: 24, 
+            padding: 80,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             textAlign: 'center'
           }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <FileText size={32} />
+            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(59,130,246,0.05)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+              <FileText size={40} />
             </div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>Nenhum Simulado Encontrado</h2>
-            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: '0 0 24px', maxWidth: 400 }}>
-              {isProfessor ? 'Você ainda não foi vinculado a nenhum simulado. Aguarde novas requisições da coordenação.' : 'Você ainda não possui nenhum simulado cadastrado. Vá até a tela de Gerenciamento para criar o seu primeiro simulado.'}
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px', letterSpacing: '-0.02em' }}>Nenhum Simulado Encontrado</h2>
+            <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, margin: '0 0 32px', maxWidth: 450, lineHeight: 1.5 }}>
+              {isProfessor ? 'Você ainda não foi vinculado a nenhum simulado. Aguarde novas requisições da coordenação.' : 'Você ainda não possui nenhum simulado cadastrado. Crie seu primeiro simulado agora mesmo.'}
             </p>
             {!isProfessor && (
-              <button onClick={() => router.push('/simulados/gerenciamento/novo')} style={{ background: '#3b82f6', color: 'white', padding: '10px 20px', borderRadius: 8, textDecoration: 'none', fontWeight: 600, border: 'none', cursor: 'pointer' }}>
-                Criar Simulado
+              <button onClick={() => router.push('/simulados/gerenciamento/novo')} style={{ background: '#3b82f6', color: 'white', padding: '14px 28px', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)' }}>
+                Criar Simulado Agora
               </button>
             )}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
             {Object.keys(simulados.reduce((acc, curr) => {
               const bimester = curr.simulados_bimestres?.nome || 'Sem Bimestre'
               if (!acc[bimester]) acc[bimester] = []
@@ -213,267 +241,314 @@ export default function SimuladosListaPage() {
               const turmasList = Object.keys(turmasMap).sort((a, b) => a.localeCompare(b))
               
               return (
-                <div key={bimester}>
+                <motion.div key={bimester} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ background: 'transparent' }}>
+                  {/* Bimestre Header */}
                   <div 
                     onClick={() => toggleBimester(bimester)}
                     style={{ 
                       display: 'flex', 
                       alignItems: 'center', 
                       justifyContent: 'space-between',
-                      marginBottom: isCollapsed ? 0 : 20, 
-                      padding: '16px 24px', 
-                      background: 'hsl(var(--bg-surface))',
+                      marginBottom: isCollapsed ? 0 : 24, 
+                      padding: '20px 28px', 
+                      background: 'linear-gradient(90deg, hsl(var(--bg-surface)) 0%, hsl(var(--bg-app)) 100%)',
                       border: '1px solid hsl(var(--border-subtle))',
+                      borderLeft: '4px solid #6366f1',
                       borderRadius: 16,
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+                      boxShadow: '0 4px 20px -10px rgba(0,0,0,0.05)',
                       cursor: 'pointer', 
                       userSelect: 'none',
-                      transition: 'all 0.2s'
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.borderColor = '#3b82f6'
                       e.currentTarget.style.transform = 'translateY(-2px)'
-                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(59,130,246,0.1)'
+                      e.currentTarget.style.boxShadow = '0 8px 25px -10px rgba(99,102,241,0.15)'
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
                       e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)'
+                      e.currentTarget.style.boxShadow = '0 4px 20px -10px rgba(0,0,0,0.05)'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#3b82f6', width: 36, height: 36, background: 'rgba(59,130,246,0.1)', borderRadius: 10 }}>
-                        <Layers size={20} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1', width: 40, height: 40, background: 'rgba(99,102,241,0.1)', borderRadius: 12 }}>
+                        <Layers size={22} />
                       </div>
-                      <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>
                         {bimester}
                       </h2>
-                      <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', padding: '4px 12px', borderRadius: 100, fontWeight: 700, letterSpacing: '0.02em' }}>
+                      <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(99,102,241,0.1)', color: '#6366f1', padding: '6px 14px', borderRadius: 100, fontWeight: 800, letterSpacing: '0.05em' }}>
                         {bimesterSimulados.length} SIMULADO{bimesterSimulados.length !== 1 ? 'S' : ''}
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
-                      <ChevronDown size={24} />
-                    </div>
+                    <motion.div animate={{ rotate: isCollapsed ? -90 : 0 }} transition={{ duration: 0.3 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-elevated))', width: 36, height: 36, borderRadius: '50%' }}>
+                      <ChevronDown size={20} />
+                    </motion.div>
                   </div>
                   
-                  {!isCollapsed && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-                      {turmasList.map(turma => {
-                        const turmaKey = `${bimester}-${turma}`
-                        const isTurmaCollapsed = collapsedTurmas[turmaKey]
-                        return (
-                          <div key={turma}>
-                            <div
-                              onClick={() => toggleTurma(bimester, turma)}
-                              style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'space-between',
-                                marginBottom: isTurmaCollapsed ? 0 : 16, 
-                                padding: '12px 20px', 
-                                background: 'hsl(var(--bg-app))',
-                                border: '1px solid hsl(var(--border-subtle))',
-                                borderRadius: 12,
-                                cursor: 'pointer', 
-                                userSelect: 'none',
-                                transition: 'all 0.2s'
-                              }}
-                              onMouseEnter={e => {
-                                e.currentTarget.style.borderColor = '#3b82f6'
-                                e.currentTarget.style.background = 'rgba(59,130,246,0.02)'
-                              }}
-                              onMouseLeave={e => {
-                                e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
-                                e.currentTarget.style.background = 'hsl(var(--bg-app))'
-                              }}
-                            >
-                              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} />
-                                Turma: {turma}
-                                <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', padding: '2px 8px', borderRadius: 100, fontWeight: 700 }}>
-                                  {turmasMap[turma].length} DISCIPLINA{turmasMap[turma].length !== 1 ? 'S' : ''}
-                                </span>
-                              </h3>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', transform: isTurmaCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>
-                                <ChevronDown size={20} />
-                              </div>
-                            </div>
-                            {!isTurmaCollapsed && (
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24, marginBottom: 24 }}>
-                                {turmasMap[turma].map((s, i) => {
-                                  const qCadastradas = s.questoesCadastradas || 0;
-                                  const qRequisitadas = s.simulados_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
-                                  const percent = qRequisitadas > 0 ? Math.min(Math.round((qCadastradas / qRequisitadas) * 100), 100) : 0;
-                                  const isComplete = qRequisitadas > 0 && qCadastradas >= qRequisitadas;
+                  <AnimatePresence>
+                    {!isCollapsed && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 32, paddingLeft: 12 }}>
+                          {turmasList.map(turma => {
+                            const turmaKey = `${bimester}-${turma}`
+                            const isTurmaCollapsed = collapsedTurmas[turmaKey]
+                            return (
+                              <div key={turma} style={{ position: 'relative' }}>
+                                {/* Turma Line Connector */}
+                                <div style={{ position: 'absolute', left: 24, top: 24, bottom: 0, width: 2, background: 'hsl(var(--border-subtle))', zIndex: 0 }} />
 
-                                  return (
-                                    <motion.div key={`${turma}-${s.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                                      <div 
-                                        style={{ 
-                                        background: 'hsl(var(--bg-surface))', 
-                                        border: '1px solid hsl(var(--border-subtle))', 
-                                        borderRadius: 20, 
-                                        padding: 24,
-                                        transition: 'all 0.2s',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-                                      }}
-                                      onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-4px)'}
-                                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                                      >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
-                                          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(244,63,94,0.1)', color: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            <PenTool size={20} />
-                                          </div>
-                                          {s.status === 'aprovado' ? (
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                          <span 
-                                            onClick={(e) => handleAprovarToggle(e, s.id, s.status)}
-                                            title="Clique para reverter para Rascunho"
-                                            style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.2)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
-                                          >Aprovado</span>
-                                          {s.aprovado_por && (
-                                            <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
-                                              Aprovado por {s.aprovado_por} em {s.data_aprovacao ? new Date(s.data_aprovacao).toLocaleDateString('pt-BR') : ''}
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : s.status === 'publicado' ? (
-                                        <span style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Publicado</span>
-                                      ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                                          <span 
-                                            onClick={(e) => handleAprovarToggle(e, s.id, s.status || 'rascunho')}
-                                            title="Clique para aprovar"
-                                            style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s' }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.2)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,0.1)'}
-                                          >
-                                            Rascunho
-                                          </span>
-                                        </div>
-                                      )}
-                                        </div>
-                                        
-                                        <h3 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 16px', lineHeight: 1.3 }}>{s.titulo}</h3>
-                                        
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 13 }}>
-                                            <Calendar size={14} />
-                                            <span>Aplicação: {s.data_aplicacao?.split('-').reverse().join('/') || 'Não definida'}</span>
-                                          </div>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 13 }}>
-                                            <Layers size={14} />
-                                            <span>{s.simulados_bimestres?.nome || 'Bimestre não definido'}</span>
-                                          </div>
-                                          <div style={{ marginTop: 8, marginBottom: 8 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 13 }}>
-                                              <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                <FileText size={14} /> Progresso
-                                              </span>
-                                              <span style={{ color: isComplete ? '#10b981' : '#3b82f6', fontWeight: 700 }}>
-                                                {qCadastradas} / {qRequisitadas} ({percent}%)
-                                              </span>
-                                            </div>
-                                            <div style={{ width: '100%', height: 6, background: 'hsl(var(--border-subtle))', borderRadius: 4, overflow: 'hidden' }}>
-                                              <motion.div 
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${percent}%` }}
-                                                transition={{ duration: 1, ease: 'easeOut' }}
-                                                style={{ height: '100%', background: isComplete ? '#10b981' : '#3b82f6', borderRadius: 4 }}
-                                              />
-                                            </div>
-                                          </div>
-                                          {s.simulados_requisicoes && s.simulados_requisicoes.length > 0 ? (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                                              {s.simulados_requisicoes.map((req: any, idx: number) => {
-                                                const profName = professoresMap[req.id_professor] || 'Professor não encontrado'
-                                                const discName = req.simulados_disciplinas?.nome || 'Sem Disciplina'
-                                                const requestedQty = req.quantidade_questoes || 0
-                                                const currentQty = s.simulados_questoes?.filter((q: any) => 
-                                                  q.id_professor === req.id_professor && q.id_disciplina === req.id_disciplina
-                                                ).length || 0
-
-                                                const reqKey = `${s.id}-${req.id_professor}-${req.id_disciplina}`
-                                                const isBlocked = isProfessor && currentUser && currentUser.id !== req.id_professor
-
-                                                return (
-                                                  <motion.div 
-                                                    key={idx} 
-                                                    animate={shakeId === reqKey ? { x: [-5, 5, -5, 5, 0], transition: { duration: 0.3 } } : {}}
-                                                    onClick={() => {
-                                                      if (isBlocked) {
-                                                        setShakeId(reqKey)
-                                                        setTimeout(() => setShakeId(null), 300)
-                                                        return
-                                                      }
-                                                      router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
-                                                    }}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: 8, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
-                                                    onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.02)' } }}
-                                                    onMouseLeave={e => { if (!isBlocked) { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' } }}
-                                                  >
-                                                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: isBlocked ? 0.5 : 1 }}>
-                                                      <User size={16} />
-                                                    </div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                                      <span style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName}</span>
-                                                      <span style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{discName}</span>
-                                                    </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: currentQty >= requestedQty ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: currentQty >= requestedQty ? '#10b981' : '#f59e0b', padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                                                      {currentQty}/{requestedQty} quest.
-                                                    </div>
-                                                  </motion.div>
-                                                )
-                                              })}
-                                            </div>
-                                          ) : (
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 13 }}>
-                                              <User size={14} />
-                                              <span>Nenhum professor atribuído</span>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-                                          <button onClick={(e) => handleAction(e, 'gerar_pdf', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar PDF (Estúdio de Edição)" onMouseEnter={e => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.borderColor = '#3b82f6' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))' }}>
-                                            <FileDown size={14} /> <span style={{ fontSize: 12, fontWeight: 600 }}>PDF</span>
-                                          </button>
-                                          <button onClick={(e) => handleAction(e, 'gerar_gabarito', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar Gabarito" onMouseEnter={e => { e.currentTarget.style.color = '#10b981'; e.currentTarget.style.borderColor = '#10b981' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))' }}>
-                                            <CheckSquare size={14} /> <span style={{ fontSize: 12, fontWeight: 600 }}>Gabarito</span>
-                                          </button>
-                                          <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))' }}>
-                                            <Copy size={14} /> <span style={{ fontSize: 12, fontWeight: 600 }}>Adaptar</span>
-                                          </button>
-                                          <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                            <Trash2 size={14} /> <span style={{ fontSize: 12, fontWeight: 600 }}>Excluir</span>
-                                          </button>
-                                        </div>
-
-                                        <div 
-                                          onClick={() => router.push(`/simulados/lista/${s.id}`)}
-                                          style={{ borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#3b82f6', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
-                                          onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-                                          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                        >
-                                          <span>Ver Todas as Questões</span>
-                                          <ChevronRight size={16} />
-                                        </div>
-                                      </div>
+                                <div
+                                  onClick={() => toggleTurma(bimester, turma)}
+                                  style={{ 
+                                    position: 'relative',
+                                    zIndex: 1,
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    marginBottom: isTurmaCollapsed ? 0 : 20, 
+                                    padding: '14px 24px', 
+                                    background: 'hsl(var(--bg-surface))',
+                                    border: '1px solid hsl(var(--border-subtle))',
+                                    borderRadius: 14,
+                                    cursor: 'pointer', 
+                                    userSelect: 'none',
+                                    transition: 'all 0.2s',
+                                    boxShadow: '0 4px 10px rgba(0,0,0,0.02)'
+                                  }}
+                                  onMouseEnter={e => {
+                                    e.currentTarget.style.borderColor = '#8b5cf6'
+                                    e.currentTarget.style.background = 'rgba(139,92,246,0.02)'
+                                  }}
+                                  onMouseLeave={e => {
+                                    e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                                    e.currentTarget.style.background = 'hsl(var(--bg-surface))'
+                                  }}
+                                >
+                                  <h3 style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#8b5cf6', boxShadow: '0 0 0 4px rgba(139,92,246,0.2)' }} />
+                                    Turma: {turma}
+                                    <span style={{ marginLeft: 8, fontSize: 11, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', padding: '4px 10px', borderRadius: 100, fontWeight: 700, letterSpacing: '0.05em' }}>
+                                      {turmasMap[turma].length} ITEM{turmasMap[turma].length !== 1 ? 'S' : ''}
+                                    </span>
+                                  </h3>
+                                  <motion.div animate={{ rotate: isTurmaCollapsed ? -90 : 0 }} style={{ color: 'hsl(var(--text-secondary))' }}>
+                                    <ChevronDown size={20} />
                                   </motion.div>
-                                  )
-                                })}
+                                </div>
+                                
+                                <AnimatePresence>
+                                  {!isTurmaCollapsed && (
+                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
+                                        {turmasMap[turma].map((s, i) => {
+                                          const qCadastradas = s.questoesCadastradas || 0;
+                                          const qRequisitadas = s.simulados_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
+                                          const percent = qRequisitadas > 0 ? Math.min(Math.round((qCadastradas / qRequisitadas) * 100), 100) : 0;
+                                          const isComplete = qRequisitadas > 0 && qCadastradas >= qRequisitadas;
+
+                                          return (
+                                            <motion.div key={`${turma}-${s.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                                              <div 
+                                                style={{ 
+                                                background: 'hsl(var(--bg-surface))', 
+                                                backdropFilter: 'blur(10px)',
+                                                border: '1px solid hsl(var(--border-subtle))', 
+                                                borderRadius: 24, 
+                                                padding: '24px 28px',
+                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                boxShadow: '0 10px 30px -15px rgba(0,0,0,0.05)',
+                                                position: 'relative',
+                                                overflow: 'hidden'
+                                              }}
+                                              onMouseEnter={e => {
+                                                e.currentTarget.style.transform = 'translateY(-6px)';
+                                                e.currentTarget.style.boxShadow = '0 20px 40px -15px rgba(0,0,0,0.1)';
+                                                e.currentTarget.style.borderColor = 'hsl(var(--border-muted))';
+                                              }}
+                                              onMouseLeave={e => {
+                                                e.currentTarget.style.transform = 'translateY(0)';
+                                                e.currentTarget.style.boxShadow = '0 10px 30px -15px rgba(0,0,0,0.05)';
+                                                e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))';
+                                              }}
+                                              >
+                                                {/* Gradient Top Bar */}
+                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: s.status === 'aprovado' ? 'linear-gradient(90deg, #10b981, #34d399)' : s.status === 'publicado' ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
+
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, marginTop: 4 }}>
+                                                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, rgba(244,63,94,0.1) 0%, rgba(225,29,72,0.1) 100%)', color: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(244,63,94,0.2)' }}>
+                                                    <PenTool size={22} />
+                                                  </div>
+                                                  {s.status === 'aprovado' ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                      <span 
+                                                        onClick={(e) => handleAprovarToggle(e, s.id, s.status)}
+                                                        title="Clique para reverter para Rascunho"
+                                                        style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid rgba(16,185,129,0.3)', letterSpacing: '0.05em' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.2)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                                                      >Aprovado</span>
+                                                      {s.aprovado_por && (
+                                                        <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 6, fontWeight: 500 }}>
+                                                          Por {s.aprovado_por.split(' ')[0]} em {s.data_aprovacao ? new Date(s.data_aprovacao).toLocaleDateString('pt-BR') : ''}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  ) : s.status === 'publicado' ? (
+                                                    <span style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', border: '1px solid rgba(59,130,246,0.3)', letterSpacing: '0.05em' }}>Publicado</span>
+                                                  ) : (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                      <span 
+                                                        onClick={(e) => handleAprovarToggle(e, s.id, s.status || 'rascunho')}
+                                                        title="Clique para aprovar"
+                                                        style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid rgba(245,158,11,0.3)', letterSpacing: '0.05em' }}
+                                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.2)'}
+                                                        onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,0.1)'}
+                                                      >
+                                                        Rascunho
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                
+                                                <h3 style={{ fontSize: 19, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 16px', lineHeight: 1.3, letterSpacing: '-0.02em' }}>{s.titulo}</h3>
+                                                
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-secondary))', fontSize: 14, fontWeight: 500 }}>
+                                                    <Calendar size={16} color="hsl(var(--text-muted))" />
+                                                    <span>Aplicação: <span style={{ color: 'hsl(var(--text-primary))' }}>{s.data_aplicacao?.split('-').reverse().join('/') || 'Não definida'}</span></span>
+                                                  </div>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-secondary))', fontSize: 14, fontWeight: 500 }}>
+                                                    <Layers size={16} color="hsl(var(--text-muted))" />
+                                                    <span>{s.simulados_bimestres?.nome || 'Bimestre não definido'}</span>
+                                                  </div>
+                                                  
+                                                  <div style={{ marginTop: 12, marginBottom: 8, padding: '16px', background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
+                                                      <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                                        <FileText size={16} /> Progresso
+                                                      </span>
+                                                      <span style={{ color: isComplete ? '#10b981' : '#3b82f6', fontWeight: 900, fontSize: 14 }}>
+                                                        {qCadastradas} / {qRequisitadas} <span style={{ opacity: 0.6, fontSize: 12 }}>({percent}%)</span>
+                                                      </span>
+                                                    </div>
+                                                    <div style={{ width: '100%', height: 8, background: 'hsl(var(--bg-surface))', borderRadius: 100, overflow: 'hidden', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)' }}>
+                                                      <motion.div 
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${percent}%` }}
+                                                        transition={{ duration: 1, ease: 'easeOut' }}
+                                                        style={{ height: '100%', background: isComplete ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #3b82f6, #60a5fa)', borderRadius: 100 }}
+                                                      />
+                                                    </div>
+                                                  </div>
+
+                                                  {s.simulados_requisicoes && s.simulados_requisicoes.length > 0 ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                                                      {s.simulados_requisicoes.map((req: any, idx: number) => {
+                                                        const profName = professoresMap[req.id_professor] || 'Professor não encontrado'
+                                                        const discName = req.simulados_disciplinas?.nome || 'Sem Disciplina'
+                                                        const requestedQty = req.quantidade_questoes || 0
+                                                        const currentQty = s.simulados_questoes?.filter((q: any) => 
+                                                          q.id_professor === req.id_professor && q.id_disciplina === req.id_disciplina
+                                                        ).length || 0
+
+                                                        const reqKey = `${s.id}-${req.id_professor}-${req.id_disciplina}`
+                                                        const isBlocked = isProfessor && currentUser && currentUser.id !== req.id_professor
+
+                                                        return (
+                                                          <motion.div 
+                                                            key={idx} 
+                                                            animate={shakeId === reqKey ? { x: [-5, 5, -5, 5, 0], transition: { duration: 0.3 } } : {}}
+                                                            onClick={() => {
+                                                              if (isBlocked) {
+                                                                setShakeId(reqKey)
+                                                                setTimeout(() => setShakeId(null), 300)
+                                                                return
+                                                              }
+                                                              router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
+                                                            }}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 12, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '12px 16px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
+                                                            onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.03)' } }}
+                                                            onMouseLeave={e => { if (!isBlocked) { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' } }}
+                                                          >
+                                                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: isBlocked ? 0.5 : 1 }}>
+                                                              <User size={18} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
+                                                              <span style={{ fontWeight: 700, color: 'hsl(var(--text-primary))', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName}</span>
+                                                              <span style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{discName}</span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: currentQty >= requestedQty ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: currentQty >= requestedQty ? '#10b981' : '#f59e0b', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
+                                                              {currentQty}/{requestedQty} <span style={{ opacity: 0.7, fontWeight: 600 }}>Q.</span>
+                                                            </div>
+                                                          </motion.div>
+                                                        )
+                                                      })}
+                                                    </div>
+                                                  ) : (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 14, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px dashed hsl(var(--border-subtle))' }}>
+                                                      <User size={16} />
+                                                      <span>Nenhum professor atribuído</span>
+                                                    </div>
+                                                  )}
+                                                </div>
+
+                                                {/* Action Buttons */}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                                                  <button onClick={(e) => handleAction(e, 'gerar_pdf', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar PDF (Estúdio de Edição)" onMouseEnter={e => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                    <FileDown size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Exportar PDF</span>
+                                                  </button>
+                                                  <button onClick={(e) => handleAction(e, 'gerar_gabarito', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar Gabarito" onMouseEnter={e => { e.currentTarget.style.color = '#10b981'; e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = 'rgba(16,185,129,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                    <CheckSquare size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Gabarito</span>
+                                                  </button>
+                                                  <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                    <Copy size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Adaptar</span>
+                                                  </button>
+                                                  <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                    <Trash2 size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Excluir</span>
+                                                  </button>
+                                                </div>
+
+                                                <div 
+                                                  onClick={() => router.push(`/simulados/lista/${s.id}`)}
+                                                  style={{ 
+                                                    borderTop: '1px solid hsl(var(--border-subtle))', 
+                                                    paddingTop: 20, 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'space-between', 
+                                                    color: '#3b82f6', 
+                                                    fontSize: 15, 
+                                                    fontWeight: 800, 
+                                                    cursor: 'pointer', 
+                                                    transition: 'all 0.2s',
+                                                    textTransform: 'uppercase',
+                                                    letterSpacing: '0.05em'
+                                                  }}
+                                                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                                                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)' }}
+                                                >
+                                                  <span>Ver Todas as Questões</span>
+                                                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <ChevronRight size={18} />
+                                                  </div>
+                                                </div>
+                                              </div>
+                                          </motion.div>
+                                          )
+                                        })}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                            )
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               )
             })}
           </div>
@@ -489,4 +564,3 @@ export default function SimuladosListaPage() {
     </div>
   )
 }
-
