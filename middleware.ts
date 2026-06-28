@@ -32,6 +32,7 @@ const PUBLIC_PATHS = [
   '/recibo',            // recibos públicos
   '/_next',             // assets Next.js
   '/favicon.ico',
+  '/api/webhooks',      // webhooks externos (Asaas, etc)
 ]
 
 function isPublicPath(pathname: string): boolean {
