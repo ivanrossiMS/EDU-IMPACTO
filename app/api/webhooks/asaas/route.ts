@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: Request) {
   try {
@@ -35,8 +35,12 @@ export async function POST(request: Request) {
     }
 
     if (newStatus) {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+      const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } })
+
       // Atualizar o banco de dados
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from('agenda_cobrancas_destinatarios')
         .update({ status: newStatus })
         .eq('asaas_payment_id', asaasPaymentId)
