@@ -17,7 +17,6 @@ export default function ADAdminCobrancas() {
   const [loading, setLoading] = useState(true)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [filterModalStatus, setFilterModalStatus] = useState<'ALL' | 'PAID' | 'PENDING'>('ALL')
-  const [filterMethod, setFilterMethod] = useState('ALL')
   const [modalSearchTerm, setModalSearchTerm] = useState('')
   const [alunosMap, setAlunosMap] = useState<Record<string, string>>({})
 
@@ -388,23 +387,6 @@ export default function ADAdminCobrancas() {
                   </div>
                 </div>
 
-                <div style={{ width: 1, height: 24, background: 'rgba(0,0,0,0.1)' }}></div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Forma Pgto:</span>
-                  <select 
-                    value={filterMethod} 
-                    onChange={(e) => setFilterMethod(e.target.value)}
-                    style={{ padding: '6px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600, border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#0f172a', outline: 'none', cursor: 'pointer', appearance: 'auto' }}
-                  >
-                    <option value="ALL">Todas</option>
-                    <option value="PIX">Pix</option>
-                    <option value="CREDIT_CARD">Cartão</option>
-                    <option value="BOLETO">Boleto</option>
-                  </select>
-                </div>
-
-                <div style={{ width: 1, height: 24, background: 'rgba(0,0,0,0.1)' }}></div>
 
                 <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
                   <Search size={16} color="#94a3b8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
@@ -425,7 +407,7 @@ export default function ADAdminCobrancas() {
                       <th style={{ padding: '16px 8px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>DESTINATÁRIO</th>
                       <th style={{ padding: '16px 8px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>PAGADOR LOGADO</th>
                       <th style={{ padding: '16px 8px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>ENVIADO EM</th>
-                      <th style={{ padding: '16px 8px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>FORMA PGTO.</th>
+
                       <th style={{ padding: '16px 8px', textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>DATA PGTO.</th>
                       <th style={{ padding: '16px 8px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: 0.5 }}>STATUS ASAAS</th>
                     </tr>
@@ -436,7 +418,6 @@ export default function ADAdminCobrancas() {
                         const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED';
                         if (filterModalStatus === 'PAID' && !isPaid) return false;
                         if (filterModalStatus === 'PENDING' && isPaid) return false;
-                        if (filterMethod !== 'ALL' && d.forma_pagamento !== filterMethod) return false;
                         
                         if (modalSearchTerm.trim()) {
                           const term = modalSearchTerm.toLowerCase();
@@ -451,13 +432,6 @@ export default function ADAdminCobrancas() {
                       const isPaid = d.status === 'CONFIRMED' || d.status === 'RECEIVED';
                       const payDate = isPaid ? new Date(d.updated_at || d.created_at).toLocaleDateString('pt-BR') : '--';
                       
-                      // Map payment method names
-                      const methodNames: Record<string, string> = {
-                        'PIX': 'Pix',
-                        'CREDIT_CARD': 'Cartão',
-                        'BOLETO': 'Boleto'
-                      };
-                      const methodName = d.forma_pagamento ? (methodNames[d.forma_pagamento] || d.forma_pagamento) : '--';
                       const turmaNome = alunosMap[d.destinatario_id] || (d.destinatario_nome ? alunosMap[d.destinatario_nome.trim()] : undefined);
 
                       return (
@@ -482,9 +456,7 @@ export default function ADAdminCobrancas() {
                           <td style={{ padding: '16px 8px', fontSize: 14, color: '#64748b' }}>
                             {new Date(d.created_at).toLocaleDateString('pt-BR')}
                           </td>
-                          <td style={{ padding: '16px 8px', fontSize: 14, color: '#64748b', fontWeight: 500 }}>
-                            {methodName}
-                          </td>
+
                           <td style={{ padding: '16px 8px', fontSize: 14, color: isPaid ? '#10b981' : '#cbd5e1', fontWeight: isPaid ? 600 : 400 }}>
                             {payDate}
                           </td>
