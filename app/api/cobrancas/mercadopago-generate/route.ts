@@ -49,6 +49,11 @@ export async function POST(request: Request) {
       external_reference: cobranca_destinatario_id, // Usamos para linkar no Webhook
       statement_descriptor: 'EDU IMPACTO',
       notification_url: 'https://resilient-cuchufli-2b4125.netlify.app/api/webhooks/mercadopago',
+      payment_methods: {
+        excluded_payment_methods: [],
+        excluded_payment_types: [],
+        default_payment_method_id: 'pix'
+      },
       expires: true,
       expiration_date_to: expirationDate.toISOString()
     };
