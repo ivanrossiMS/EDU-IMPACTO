@@ -138,8 +138,11 @@ export function ComunicadoViewModal({
          }
       }
       fetchCobranca();
+      // Poll every 5 seconds to catch webhook updates in real-time
+      const cobInterval = setInterval(fetchCobranca, 5000);
+      return () => clearInterval(cobInterval);
     }
-  }, [comunicado?.id, currentUserSlug, isAdminMode])
+  }, [comunicado, currentUserSlug, isAdminMode])
 
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
