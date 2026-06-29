@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +18,46 @@ export async function GET(request: Request) {
     const offsetParam = searchParams.get('offset')
     const limit = limitParam ? parseInt(limitParam, 10) : 30
     const offset = offsetParam ? parseInt(offsetParam, 10) : 0
+    const alunoId = searchParams.get('aluno_id')
+
+    // VERIFICAÇÃO DE PERFIL E IDOR
+    let isFamilyOrStudent = false;
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    if (
+      perfil === 'Família' || 
+      perfil === 'Responsável' || 
+      cargo === 'Responsável' || 
+      cargo === 'Aluno' || 
+      perfil === 'Aluno'
+    ) {
+      isFamilyOrStudent = true;
+    } else {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('perfil, cargo')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (dbUser && (
+        dbUser.perfil === 'Família' || 
+        dbUser.perfil === 'Responsável' || 
+        dbUser.cargo === 'Responsável' || 
+        dbUser.cargo === 'Aluno' || 
+        dbUser.perfil === 'Aluno'
+      )) {
+        isFamilyOrStudent = true;
+      }
+    }
+
+    if (isFamilyOrStudent) {
+      if (!alunoId) {
+        return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
+      }
+      const isOwner = await checkResponsavelRelationship(user.id, alunoId);
+      if (!isOwner) {
+        return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar fotos/momentos deste aluno.' }, { status: 403 });
+      }
+    }
 
     const accessStartDate = await getLoggedUserAccessStartDate(true)
     let query = supabase.from('momentos').select('*')
@@ -52,6 +92,12 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
+      return NextResponse.json({ error: 'Acesso negado: Famílias não podem publicar Momentos.' }, { status: 403 });
+    }
+
     const body = await request.json()
     const supabase = await createProtectedClient()
 
@@ -80,27 +126,29 @@ export async function POST(request: Request) {
       }
 
       // Disparar Push APENAS para novos
-      const allPushPromises: Promise<any>[] = [];
-      for (const row of newRows) {
-        const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
-        
-        for (const student of students) {
-          if (student.responsaveis_ids.length > 0) {
-            allPushPromises.push(
-              sendAgendaPushNotification({
-                type: 'momentos',
-                itemId: String(row.id),
-                title: '📸 Novo Momento Publicado!',
-                message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
-                targetUserIds: student.responsaveis_ids,
-                targetUrl: '/agenda-digital/momentos',
-                metadata: { aluno_id: student.aluno_id }
-              }).catch(err => console.error('Momento Push Error:', err))
-            )
+      after(async () => {
+        const allPushPromises: Promise<any>[] = [];
+        for (const row of newRows) {
+          const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+          
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              allPushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'momentos',
+                  itemId: String(row.id),
+                  title: '📸 Novo Momento Publicado!',
+                  message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: '/agenda-digital/momentos',
+                  metadata: { aluno_id: student.aluno_id }
+                }).catch(err => console.error('Momento Push Error:', err))
+              )
+            }
           }
         }
-      }
-      await Promise.allSettled(allPushPromises);
+        await Promise.allSettled(allPushPromises);
+      });
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -118,25 +166,27 @@ export async function POST(request: Request) {
     }
 
     if (isNew) {
-      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
-      const pushPromises = [];
-      
-      for (const student of students) {
-        if (student.responsaveis_ids.length > 0) {
-          pushPromises.push(
-            sendAgendaPushNotification({
-              type: 'momentos',
-              itemId: String(data.id),
-              title: '📸 Novo Momento Publicado!',
-              message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
-              targetUserIds: student.responsaveis_ids,
-              targetUrl: '/agenda-digital/momentos',
-              metadata: { aluno_id: student.aluno_id }
-            }).catch(err => console.error('Momento Push Error:', err))
-          )
+      after(async () => {
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+        const pushPromises = [];
+        
+        for (const student of students) {
+          if (student.responsaveis_ids.length > 0) {
+            pushPromises.push(
+              sendAgendaPushNotification({
+                type: 'momentos',
+                itemId: String(data.id),
+                title: '📸 Novo Momento Publicado!',
+                message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+                targetUserIds: student.responsaveis_ids,
+                targetUrl: '/agenda-digital/momentos',
+                metadata: { aluno_id: student.aluno_id }
+              }).catch(err => console.error('Momento Push Error:', err))
+            )
+          }
         }
-      }
-      await Promise.allSettled(pushPromises);
+        await Promise.allSettled(pushPromises);
+      });
     }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
@@ -159,6 +209,12 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
+      return NextResponse.json({ error: 'Acesso negado: Famílias não podem apagar Momentos.' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID não informado' }, { status: 400 })

@@ -371,3 +371,36 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     return { students: [], directColaboradores: [] }
   }
 }
+
+/**
+ * Verifica se o usuário logado (authUserId) tem permissão de visualizar 
+ * dados sensíveis de um aluno específico (alunoId).
+ * Garante proteção contra IDOR (Insecure Direct Object Reference).
+ */
+export async function checkResponsavelRelationship(authUserId: string, alunoId: string): Promise<boolean> {
+  if (!authUserId || !alunoId) return false;
+  try {
+    const supabase = supabaseServer;
+    
+    const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+    const cleanAuthId = String(authUserId).replace(/^(a_|_ALU)/, '');
+    
+    // Se o próprio aluno estiver logado
+    if (cleanAuthId === cleanAlunoId) return true;
+    
+    // Verifica na tabela aluno_responsavel
+    const { data, error } = await supabase
+      .from('aluno_responsavel')
+      .select('id')
+      .eq('responsavel_id', authUserId)
+      .eq('aluno_id', cleanAlunoId)
+      .maybeSingle();
+      
+    if (!error && data) return true;
+    
+    return false;
+  } catch (err) {
+    console.error('[NotifHelper] Erro ao verificar vínculo de responsável:', err);
+    return false;
+  }
+}

@@ -1,11 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
-
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 export const dynamic = 'force-dynamic'
 
 function normalizeRow(row: any) {
@@ -40,6 +39,50 @@ export async function GET(request: Request) {
   const idParam = searchParams.get('id');
   const sinceParam = searchParams.get('since');
   
+  // VERIFICAÇÃO DE PERFIL
+  let isFamilyOrStudent = false;
+  const perfil = user.user_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || '';
+  if (
+    perfil === 'Família' || 
+    perfil === 'Responsável' || 
+    cargo === 'Responsável' || 
+    cargo === 'Aluno' || 
+    perfil === 'Aluno'
+  ) {
+    isFamilyOrStudent = true;
+  } else {
+    const { data: dbUser } = await supabase
+      .from('system_users')
+      .select('perfil, cargo')
+      .eq('id', user.id)
+      .maybeSingle();
+    
+    const dbPerfil = dbUser?.perfil || '';
+    const dbCargo = dbUser?.cargo || '';
+    if (
+      dbPerfil === 'Família' || 
+      dbPerfil === 'Responsável' || 
+      dbCargo === 'Responsável' || 
+      dbCargo === 'Aluno' || 
+      dbPerfil === 'Aluno'
+    ) {
+      isFamilyOrStudent = true;
+    }
+  }
+
+  // BLINDAGEM IDOR: Se for família, DEVE informar um aluno_id que lhe pertença
+  if (isFamilyOrStudent) {
+    if (!alunoId) {
+      // Se não enviou alunoId, não pode ler tudo solto
+      return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
+    }
+    const isOwner = await checkResponsavelRelationship(user.id, alunoId);
+    if (!isOwner) {
+      return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
+    }
+  }
+
   let resolvedTurma = turmaId;
   if (!turmaId && alunoId) {
      const { data: aData } = await supabase.from('alunos').select('turma').eq('id', alunoId).single();
@@ -122,40 +165,6 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const { data: { user: currentUser } } = await authClient.auth.getUser();
-  let isFamilyOrStudent = false;
-  if (currentUser) {
-    const perfil = currentUser.user_metadata?.perfil || '';
-    const cargo = currentUser.user_metadata?.cargo || '';
-    if (
-      perfil === 'Família' || 
-      perfil === 'Responsável' || 
-      cargo === 'Responsável' || 
-      cargo === 'Aluno' || 
-      perfil === 'Aluno'
-    ) {
-      isFamilyOrStudent = true;
-    } else {
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('perfil, cargo')
-        .eq('id', user.id)
-        .maybeSingle();
-      
-      const dbPerfil = dbUser?.perfil || '';
-      const dbCargo = dbUser?.cargo || '';
-      if (
-        dbPerfil === 'Família' || 
-        dbPerfil === 'Responsável' || 
-        dbCargo === 'Responsável' || 
-        dbCargo === 'Aluno' || 
-        dbPerfil === 'Aluno'
-      ) {
-        isFamilyOrStudent = true;
-      }
-    }
-  }
-
   const normalized = (data || []).map(normalizeRow);
   let filtered = isFamilyOrStudent
     ? normalized.filter((c: any) => c.destino !== 'interno')
@@ -186,6 +195,13 @@ export async function POST(request: Request) {
 
   const authClient = await createProtectedClient();
   const supabase = authClient;
+
+  const perfil = user.user_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || '';
+  if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
+    return NextResponse.json({ error: 'Acesso negado: Famílias e Alunos não podem criar comunicados.' }, { status: 403 });
+  }
+
   console.log("==> POST /api/comunicados CALLED!");
   try {
     const body = await request.json()
@@ -203,43 +219,43 @@ export async function POST(request: Request) {
       }
       console.log("==> UPSERT SUCCESS");
       
-      // Disparar Pushes para cada comunicado
-      const allPushPromises = [];
-      for (const row of rows) {
-        if (row.destino === 'interno') continue;
-        const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
-        
-        for (const student of students) {
-          if (student.responsaveis_ids.length > 0) {
+      after(async () => {
+        const allPushPromises = [];
+        for (const row of rows) {
+          if (row.destino === 'interno') continue;
+          const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+          
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              allPushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'comunicados',
+                  itemId: String(row.id),
+                  title: `📢 Comunicado: ${row.titulo}`,
+                  message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: '/agenda-digital/comunicados',
+                  metadata: { aluno_id: student.aluno_id }
+                }).catch(err => console.error("Push Error:", err))
+              );
+            }
+          }
+
+          if (directColaboradores.length > 0) {
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(row.id),
                 title: `📢 Comunicado: ${row.titulo}`,
-                message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
-                targetUserIds: student.responsaveis_ids,
-                targetUrl: '/agenda-digital/comunicados',
-                metadata: { aluno_id: student.aluno_id }
-              }).catch(err => console.error("Push Error:", err))
+                message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
+                targetUserIds: directColaboradores,
+                targetUrl: '/agenda-digital/comunicados'
+              }).catch(err => console.error("Push Error Colab:", err))
             );
           }
         }
-
-        if (directColaboradores.length > 0) {
-          allPushPromises.push(
-            sendAgendaPushNotification({
-              type: 'comunicados',
-              itemId: String(row.id),
-              title: `📢 Comunicado: ${row.titulo}`,
-              message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
-              targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/comunicados'
-            }).catch(err => console.error("Push Error Colab:", err))
-          );
-        }
-      }
-      
-      await Promise.allSettled(allPushPromises);
+        await Promise.allSettled(allPushPromises);
+      });
       
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -250,41 +266,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     
-    // Disparar Push
+    // Disparar Push em background
     if (data.destino !== 'interno') {
-      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
-      const pushPromises = [];
-      
-      for (const student of students) {
-        if (student.responsaveis_ids.length > 0) {
+      after(async () => {
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+        const pushPromises = [];
+        
+        for (const student of students) {
+          if (student.responsaveis_ids.length > 0) {
+            pushPromises.push(
+              sendAgendaPushNotification({
+                type: 'comunicados',
+                itemId: String(data.id),
+                title: `📢 Comunicado: ${data.titulo}`,
+                message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                targetUserIds: student.responsaveis_ids,
+                targetUrl: '/agenda-digital/comunicados',
+                metadata: { aluno_id: student.aluno_id }
+              }).catch(err => console.error("Push Error:", err))
+            );
+          }
+        }
+
+        if (directColaboradores.length > 0) {
           pushPromises.push(
             sendAgendaPushNotification({
               type: 'comunicados',
               itemId: String(data.id),
               title: `📢 Comunicado: ${data.titulo}`,
-              message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
-              targetUserIds: student.responsaveis_ids,
-              targetUrl: '/agenda-digital/comunicados',
-              metadata: { aluno_id: student.aluno_id }
-            }).catch(err => console.error("Push Error:", err))
+              message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
+              targetUserIds: directColaboradores,
+              targetUrl: '/agenda-digital/comunicados'
+            }).catch(err => console.error("Push Error Colab:", err))
           );
         }
-      }
-
-      if (directColaboradores.length > 0) {
-        pushPromises.push(
-          sendAgendaPushNotification({
-            type: 'comunicados',
-            itemId: String(data.id),
-            title: `📢 Comunicado: ${data.titulo}`,
-            message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
-            targetUserIds: directColaboradores,
-            targetUrl: '/agenda-digital/comunicados'
-          }).catch(err => console.error("Push Error Colab:", err))
-        );
-      }
-      
-      await Promise.allSettled(pushPromises);
+        
+        await Promise.allSettled(pushPromises);
+      });
     }
 
     // Criar Cobrança Asaas se existir
@@ -330,6 +348,13 @@ export async function PUT(request: Request) {
 
   const authClient = await createProtectedClient();
   const supabase = authClient;
+
+  const perfil = user.user_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || '';
+  if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
+    return NextResponse.json({ error: 'Acesso negado: Permissão insuficiente.' }, { status: 403 });
+  }
+
   try {
     const { id, dados } = await request.json()
     if (!id || !dados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
@@ -349,6 +374,13 @@ export async function DELETE(request: Request) {
 
   const authClient = await createProtectedClient();
   const supabase = authClient;
+
+  const perfil = user.user_metadata?.perfil || '';
+  const cargo = user.user_metadata?.cargo || '';
+  if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
+    return NextResponse.json({ error: 'Acesso negado: Permissão insuficiente.' }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
