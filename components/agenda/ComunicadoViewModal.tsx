@@ -404,7 +404,7 @@ export function ComunicadoViewModal({
     }
     setIsGeneratingPayment(true);
     try {
-      const res = await fetch('/api/cobrancas/asaas-generate', {
+      const res = await fetch('/api/cobrancas/mercadopago-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
