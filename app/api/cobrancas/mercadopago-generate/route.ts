@@ -8,9 +8,9 @@ export async function POST(request: Request) {
     if (errorResponse) return errorResponse
 
     const body = await request.json()
-    const { cobranca_destinatario_id, cobranca_id, cpf, payment_method } = body
+    const { cobranca_destinatario_id, cobranca_id } = body
 
-    if (!cobranca_destinatario_id || !cobranca_id || !cpf) {
+    if (!cobranca_destinatario_id || !cobranca_id) {
       return NextResponse.json({ error: 'Faltam dados obrigatórios' }, { status: 400 })
     }
 
@@ -44,11 +44,7 @@ export async function POST(request: Request) {
       ],
       payer: {
         email: email,
-        name: nome,
-        identification: {
-          type: 'CPF',
-          number: cpf.replace(/\D/g, '')
-        }
+        name: nome
       },
       external_reference: cobranca_destinatario_id, // Usamos para linkar no Webhook
       statement_descriptor: 'EDU IMPACTO',

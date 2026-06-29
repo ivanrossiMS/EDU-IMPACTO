@@ -105,8 +105,6 @@ export function ComunicadoViewModal({
   
   const [cobranca, setCobranca] = useState<any>(null)
   const [cobrancaDestinatario, setCobrancaDestinatario] = useState<any>(null)
-  const [showCpfModal, setShowCpfModal] = useState(false)
-  const [cpfInput, setCpfInput] = useState('')
   const [isGeneratingPayment, setIsGeneratingPayment] = useState(false)
   const [paymentLink, setPaymentLink] = useState('')
 
@@ -398,10 +396,6 @@ export function ComunicadoViewModal({
   }
 
   const handleGeneratePayment = async () => {
-    if (!cpfInput || cpfInput.replace(/\D/g, '').length !== 11) {
-      alert('Por favor, insira um CPF válido (11 dígitos numéricos).');
-      return;
-    }
     setIsGeneratingPayment(true);
     try {
       const res = await fetch('/api/cobrancas/mercadopago-generate', {
@@ -409,8 +403,7 @@ export function ComunicadoViewModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cobranca_destinatario_id: cobrancaDestinatario.id,
-          cobranca_id: cobranca.id,
-          cpf: cpfInput.replace(/\D/g, '')
+          cobranca_id: cobranca.id
         })
       });
       const data = await res.json();
@@ -418,7 +411,6 @@ export function ComunicadoViewModal({
         alert('Erro ao gerar cobrança: ' + data.error);
       } else {
         setPaymentLink(data.invoiceUrl);
-        setShowCpfModal(false);
         // Abre automaticamente a fatura recém gerada
         if (typeof window !== 'undefined' && (window as any).Capacitor) {
           window.open(data.invoiceUrl, '_system') || window.open(data.invoiceUrl, '_blank');
@@ -823,24 +815,23 @@ export function ComunicadoViewModal({
                        <div style={{ color: colors.accent, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6, background: colors.accentBg, padding: '10px 20px', borderRadius: 12, border: `1px solid ${colors.border}` }}>
                           <CheckCircle2 size={18} /> Pago
                        </div>
+                     ) : paymentLink ? (
+                        <button 
+                          onClick={() => window.open(paymentLink, '_blank')}
+                          style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
+                        >
+                          <ExternalLink size={18} />
+                          ACESSAR FATURA
+                        </button>
                      ) : (
-                       paymentLink ? (
-                         <button 
-                           onClick={() => window.open(paymentLink, '_blank')}
-                           style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
-                         >
-                           <ExternalLink size={18} />
-                           ACESSAR FATURA
-                         </button>
-                       ) : (
-                         <button 
-                           onClick={() => setShowCpfModal(true)}
-                           style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
-                         >
-                           <CreditCard size={18} />
-                           PAGAR AGORA
-                         </button>
-                       )
+                        <button 
+                          onClick={handleGeneratePayment}
+                          disabled={isGeneratingPayment}
+                          style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: isGeneratingPayment ? 'wait' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40`, opacity: isGeneratingPayment ? 0.7 : 1 }}
+                        >
+                          <CreditCard size={18} />
+                          {isGeneratingPayment ? 'GERANDO LINK...' : 'PAGAR AGORA'}
+                        </button>
                      )}
                   </div>
                 </div>
@@ -1125,38 +1116,7 @@ export function ComunicadoViewModal({
         </motion.div>
       </motion.div>
 
-      {/* MODAL CPF PARA COBRANÇA */}
-      {showCpfModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' }}>
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ width: '100%', maxWidth: 400, background: '#FFF', borderRadius: 24, padding: 24, boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>Pagar Cobrança</h3>
-              <button onClick={() => setShowCpfModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20}/></button>
-            </div>
-            
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 14, color: '#475569', marginBottom: 16 }}>Para gerar o link de pagamento seguro via Asaas (PIX ou Cartão), precisamos validar o seu CPF.</p>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 6 }}>CPF do Pagador</label>
-              <input 
-                 type="text" 
-                 placeholder="000.000.000-00" 
-                 value={cpfInput} 
-                 onChange={e => setCpfInput(e.target.value)} 
-                 style={{ width: '100%', padding: '12px 16px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12, fontSize: 16 }} 
-                 maxLength={14}
-              />
-            </div>
 
-            <button 
-              onClick={handleGeneratePayment}
-              disabled={isGeneratingPayment}
-              style={{ width: '100%', padding: 16, background: '#10B981', border: 0, borderRadius: 12, color: '#fff', fontWeight: 700, fontSize: 16, cursor: isGeneratingPayment ? 'not-allowed' : 'pointer', opacity: isGeneratingPayment ? 0.7 : 1 }}
-            >
-              {isGeneratingPayment ? 'GERANDO LINK...' : 'GERAR LINK DE PAGAMENTO'}
-            </button>
-          </motion.div>
-        </div>
-      )}
     </Portal>
   )
 }
