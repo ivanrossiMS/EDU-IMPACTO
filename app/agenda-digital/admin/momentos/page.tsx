@@ -13,7 +13,7 @@ import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 
 export default function ADAdminMomentos() {
-  const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
+  const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   const { turmas = [] } = useData()
   const [alunos = []] = useSupabaseArray<any>('alunos/lightweight', [])
   const { currentUser } = useApp()
@@ -201,7 +201,7 @@ export default function ADAdminMomentos() {
     })
   }, [feed, filterTurma, alunos, turmas])
 
-  const totalPages = Math.max(1, Math.ceil(filteredFeed.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filteredFeed.length / PAGE_SIZE)) + (hasNextPageMomentos ? 1 : 0)
   
   const pagedFeed = React.useMemo(() => {
     return filteredFeed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -358,7 +358,7 @@ export default function ADAdminMomentos() {
             }}
           >‹</button>
 
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
+          {Array.from({ length: Math.ceil(filteredFeed.length / PAGE_SIZE) }, (_, i) => i + 1).map(n => (
             <button
               key={n}
               onClick={() => setPage(n)}
@@ -375,18 +375,23 @@ export default function ADAdminMomentos() {
           ))}
 
           <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
+            onClick={() => {
+              if (page >= Math.ceil(filteredFeed.length / PAGE_SIZE) && hasNextPageMomentos && fetchNextPageMomentos) {
+                fetchNextPageMomentos()
+              }
+              setPage(p => p + 1)
+            }}
+            disabled={page >= totalPages && !hasNextPageMomentos}
             style={{
               width: 38, height: 38, borderRadius: 10, border: '1.5px solid #e2e8f0',
-              background: page === totalPages ? '#f9fafb' : '#fff', color: page === totalPages ? '#d1d5db' : '#374151',
-              cursor: page === totalPages ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: (page >= totalPages && !hasNextPageMomentos) ? '#f9fafb' : '#fff', color: (page >= totalPages && !hasNextPageMomentos) ? '#d1d5db' : '#374151',
+              cursor: (page >= totalPages && !hasNextPageMomentos) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontWeight: 700, fontSize: 16, transition: 'all 0.2s'
             }}
           >›</button>
 
           <span style={{ marginLeft: 8, fontSize: 13, color: '#6b7280' }}>
-            {filteredFeed.length} momento{filteredFeed.length !== 1 ? 's' : ''} · Página {page} de {totalPages}
+            {filteredFeed.length}{hasNextPageMomentos ? '+' : ''} momento{filteredFeed.length !== 1 ? 's' : ''} · Página {page}
           </span>
         </div>
       )}

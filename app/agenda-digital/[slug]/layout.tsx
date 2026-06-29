@@ -725,7 +725,10 @@ export default function ADInnerLayout({
     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
     if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
     if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
-    if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+    if (item.label === 'Financeiro') {
+      if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
+      if (!userAccessRole.isFin) return false;
+    }
     return true
   })
 

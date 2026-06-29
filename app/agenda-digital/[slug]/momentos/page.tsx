@@ -35,7 +35,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   })()
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
-  const { data: fetchMomentos = [], isLoading: loading, refetch } = useQueryMomentos(false, endpoint)
+  const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(false, endpoint)
+  const fetchMomentos = fetchMomentosData?.pages?.flat() || []
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
 
@@ -78,16 +79,19 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     
     // Otimistic UI
     queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
-      if (!old) return old;
-      return old.map((m: any) => {
-        if (m.id !== momentId) return m;
-        const likesArray = m.likes || []
-        const isLiked = likesArray.includes(myName)
-        return {
-          ...m,
-          likes: isLiked ? likesArray.filter((name: string) => name !== myName) : [...likesArray, myName]
-        }
-      });
+      if (!old || !old.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any[]) => page.map((m: any) => {
+          if (m.id !== momentId) return m;
+          const likesArray = m.likes || []
+          const isLiked = likesArray.includes(myName)
+          return {
+            ...m,
+            likes: isLiked ? likesArray.filter((name: string) => name !== myName) : [...likesArray, myName]
+          }
+        }))
+      };
     });
 
     // Salvar no backend e disparar push
@@ -110,15 +114,18 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
     // Otimistic UI
     queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
-      if (!old) return old;
-      return old.map((m: any) => {
-        if (m.id !== momentId) return m;
-        const commentsArray = m.comments || []
-        return {
-          ...m,
-          comments: [...commentsArray, { id: Date.now().toString(), author: myName, text, time: 'Agora' }]
-        }
-      });
+      if (!old || !old.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any[]) => page.map((m: any) => {
+          if (m.id !== momentId) return m;
+          const commentsArray = m.comments || []
+          return {
+            ...m,
+            comments: [...commentsArray, { id: Date.now().toString(), author: myName, text, time: 'Agora' }]
+          }
+        }))
+      };
     });
     setCommentInputs(prev => ({ ...prev, [momentId]: '' }))
 
@@ -635,9 +642,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               );
             })}
             
-            {visibleCount < meusMomentos.length && (
+            {(visibleCount < meusMomentos.length || hasNextPage) && (
               <button 
-                onClick={() => setVisibleCount(prev => prev + 5)}
+                onClick={() => {
+                  if (visibleCount >= meusMomentos.length && hasNextPage && fetchNextPage) {
+                    fetchNextPage()
+                  }
+                  setVisibleCount(prev => prev + 5)
+                }}
                 className="btn btn-secondary" 
                 style={{ 
                   marginTop: 20, 

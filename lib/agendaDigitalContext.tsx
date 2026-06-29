@@ -103,6 +103,10 @@ interface ADContextState {
   adLoading: boolean
   setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
   isDataLoading: boolean
+  fetchNextPageComunicados?: () => void
+  hasNextPageComunicados?: boolean
+  fetchNextPageMomentos?: () => void
+  hasNextPageMomentos?: boolean
 }
 
 const AgendaDigitalContext = createContext<ADContextState>({
@@ -131,7 +135,11 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adConfirm: () => {},
   adLoading: false,
   setAdLoading: () => {},
-  isDataLoading: false
+  isDataLoading: false,
+  fetchNextPageComunicados: () => {},
+  hasNextPageComunicados: false,
+  fetchNextPageMomentos: () => {},
+  hasNextPageMomentos: false
 })
 
 // Dados de semente para demonstração
@@ -151,11 +159,25 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const queryClient = useQueryClient()
 
   const comunicadosQuery = useQueryComunicados(isFamilyFetch, '/api/comunicados')
-  const comunicados = comunicadosQuery.data || []
+  const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading
 
+  const applyFlatUpdater = (oldData: any, updater: any, limit = 30) => {
+    if (!oldData || !oldData.pages) return oldData;
+    if (typeof updater === 'function') {
+      const flatArray = oldData.pages.flat();
+      const newFlatArray = updater(flatArray);
+      const newPages = [];
+      for(let i = 0; i < newFlatArray.length; i += limit) {
+        newPages.push(newFlatArray.slice(i, i + limit));
+      }
+      return { ...oldData, pages: newPages.length ? newPages : [[]] };
+    }
+    return updater;
+  }
+
   const setLocalComunicadosState = useCallback((updater: any) => {
-    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], updater)
+    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], (oldData: any) => applyFlatUpdater(oldData, updater, 30))
   }, [queryClient])
   const setComunicadosState = useCallback((updater: any) => {
     setLocalComunicadosState(updater)
@@ -169,11 +191,11 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const messagesLoading = false;
   
   const momentosQuery = useQueryMomentos(isFamilyFetch, '/api/agenda/momentos')
-  const momentosFeed = momentosQuery.data || []
+  const momentosFeed = momentosQuery.data?.pages?.flat() || []
   const momentosLoading = momentosQuery.isLoading
 
   const setLocalMomentosFeed = useCallback((updater: any) => {
-    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], updater)
+    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (oldData: any) => applyFlatUpdater(oldData, updater, 20))
   }, [queryClient])
   const setMomentosFeed = useCallback((updater: any) => {
     setLocalMomentosFeed(updater)
@@ -308,7 +330,11 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       adConfirm,
       adLoading,
       setAdLoading,
-      isDataLoading
+      isDataLoading,
+      fetchNextPageComunicados: comunicadosQuery.fetchNextPage,
+      hasNextPageComunicados: comunicadosQuery.hasNextPage,
+      fetchNextPageMomentos: momentosQuery.fetchNextPage,
+      hasNextPageMomentos: momentosQuery.hasNextPage
     }}>
       {children}
       

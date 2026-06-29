@@ -170,7 +170,7 @@ export default function ColaboradorComunicadosPage() {
   }, [turmas, userGroups, currentUser])
   
   
-  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
   
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
@@ -376,21 +376,15 @@ export default function ColaboradorComunicadosPage() {
     }
     
     try {
-      const res = await fetch(`/api/comunicados?id=${comunicadoId}`);
-      if (!res.ok) throw new Error('Failed to fetch');
-      const dataArr = await res.json();
-      const dbCom = dataArr[0]; // GET returns array
-      
-      if (dbCom) {
-        const dados = dbCom.dados || {};
-        const newCiencias = { ...(dados.ciencias || {}), [userSlug]: nowIso };
-        dados.ciencias = newCiencias;
-        await fetch(`/api/comunicados`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: comunicadoId, dados })
-        });
-      }
+      await fetch('/api/agenda/notificacoes/marcar-ciencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+           tipo: 'comunicado',
+           id: comunicadoId,
+           alunoId: userSlug
+        })
+      });
     } catch (e) { console.error('Failed to save ciencia', e) }
   }
 
@@ -1068,13 +1062,18 @@ export default function ColaboradorComunicadosPage() {
               </motion.div>
             )
           })}
-              {filteredComunicados.length > limit && (
-                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
-                   <button onClick={() => setLimit(l => l + 6)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-                     Carregar Mais
-                   </button>
-                 </div>
-              )}
+              {(filteredComunicados.length > limit || hasNextPageComunicados) && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
+              <button className="btn btn-secondary" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }} onClick={() => {
+                if (limit >= filteredComunicados.length && hasNextPageComunicados && fetchNextPageComunicados) {
+                  fetchNextPageComunicados()
+                }
+                setLimit(l => l + 6)
+              }}>
+                Carregar mais
+              </button>
+            </div>
+          )}
             </>
           )
         })()}

@@ -77,7 +77,8 @@ export async function GET(request: Request) {
       // Se não enviou alunoId, não pode ler tudo solto
       return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
     }
-    const isOwner = await checkResponsavelRelationship(user.id, alunoId);
+    const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
+    const isOwner = await checkResponsavelRelationship(checkId, alunoId);
     if (!isOwner) {
       return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
     }
@@ -165,7 +166,35 @@ export async function GET(request: Request) {
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const normalized = (data || []).map(normalizeRow);
+  const itemIds = data ? data.map((d: any) => String(d.id)) : [];
+  let allReads: any[] = [];
+  let allCiencias: any[] = [];
+
+  if (itemIds.length > 0) {
+     const [readsRes, cienciasRes] = await Promise.all([
+        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds),
+        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em').in('content_id', itemIds)
+     ]);
+     allReads = readsRes.data || [];
+     allCiencias = cienciasRes.data || [];
+  }
+
+  const normalized = (data || []).map((row: any) => {
+     const merged = normalizeRow(row);
+     
+     // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
+     const itemReads = allReads.filter(r => r.content_id === String(row.id));
+     itemReads.forEach(r => {
+        merged.leituras[r.usuario_id] = r.read_at;
+     });
+
+     const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
+     itemCiencias.forEach(c => {
+        merged.ciencias[c.usuario_id] = c.ciente_em;
+     });
+
+     return merged;
+  });
   let filtered = isFamilyOrStudent
     ? normalized.filter((c: any) => c.destino !== 'interno')
     : normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');

@@ -109,7 +109,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const [limit, setLimit] = useState(6)
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicados = [], isLoading: loading, refetch } = useQueryComunicados(false, endpoint)
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryComunicados(false, endpoint)
+  const comunicados = comunicadosData?.pages?.flat() || []
   
   const searchParams = useSearchParams()
   const queryId = searchParams.get('id')
@@ -173,35 +174,33 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     
     // Update React Query Cache directly
     queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
-      if (!old) return old;
-      return old.map((c: any) => {
-        if (c.id === comunicadoId) {
-          const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
-          if (selectedComunicado && selectedComunicado.id === comunicadoId) {
-            setSelectedComunicado(updated)
+      if (!old || !old.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any[]) => page.map((c: any) => {
+          if (c.id === comunicadoId) {
+            const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
+            if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+              setSelectedComunicado(updated)
+            }
+            return updated
           }
-          return updated
-        }
-        return c
-      })
+          return c
+        }))
+      };
     })
 
     try {
-      const res = await fetch(`/api/comunicados?id=${comunicadoId}`);
-      if (!res.ok) throw new Error('Failed to fetch');
-      const dataArr = await res.json();
-      const dbCom = dataArr[0]; // GET returns array
-      
-      if (dbCom) {
-        const dados = dbCom.dados || {};
-        const newCiencias = { ...(dados.ciencias || {}), [resolvedParams.slug]: nowIso };
-        dados.ciencias = newCiencias;
-        await fetch(`/api/comunicados`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: comunicadoId, dados })
-        });
-      }
+      await fetch('/api/agenda/notificacoes/marcar-ciencia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+           tipo: 'comunicado',
+           id: comunicadoId,
+           alunoId: resolvedParams.slug
+        })
+      });
+      window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
     } catch (e) { console.error('Failed to save ciencia', e) }
   }
 
@@ -643,8 +642,11 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     
                     if (!isRead) {
                       queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
-                        if (!old) return old;
-                        return old.map((x: any) => x.id === c.id ? updatedComunicado : x);
+                        if (!old || !old.pages) return old;
+                        return {
+                          ...old,
+                          pages: old.pages.map((page: any[]) => page.map((x: any) => x.id === c.id ? updatedComunicado : x))
+                        };
                       })
                       fetch('/api/agenda/notificacoes/marcar-lido', {
                         method: 'POST',
@@ -792,9 +794,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               </motion.div>
             )
           })}
-              {filteredComunicados.length > limit && (
+              {(filteredComunicados.length > limit || hasNextPage) && (
                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
-                   <button onClick={() => setLimit(l => l + 6)} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+                   <button onClick={() => {
+                     if (limit >= filteredComunicados.length && hasNextPage && fetchNextPage) {
+                       fetchNextPage()
+                     }
+                     setLimit(l => l + 6)
+                   }} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
                      Carregar Mais
                    </button>
                  </div>

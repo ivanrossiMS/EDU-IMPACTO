@@ -48,6 +48,7 @@ export default function NovoComunicadoModal({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [tempAgendamento, setTempAgendamento] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // ASAAS Cobranças
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
@@ -76,14 +77,48 @@ export default function NovoComunicadoModal({
     }
   }, [isOpen, initialData])
 
-  const handleAction = (isDraft: boolean) => {
-    onSave({
-      titulo,
-      conteudo,
-      anexos,
-      dataAgendamento,
-      cobranca: cobrancaForm.valor ? cobrancaForm : null
-    }, isDraft)
+  // Rascunho Automático Local
+  useEffect(() => {
+    if (isOpen && !initialData) {
+      const savedDraft = localStorage.getItem('@edu-impacto/comunicado-draft');
+      if (savedDraft) {
+        try {
+          const parsed = JSON.parse(savedDraft);
+          if (parsed.titulo) setTitulo(parsed.titulo);
+          if (parsed.conteudo) {
+            setConteudo(parsed.conteudo);
+            if (editorRef.current) editorRef.current.innerHTML = parsed.conteudo;
+          }
+        } catch (e) {}
+      }
+    }
+  }, [isOpen, initialData]);
+
+  useEffect(() => {
+    if (isOpen && !initialData && (titulo || conteudo)) {
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem('@edu-impacto/comunicado-draft', JSON.stringify({ titulo, conteudo }));
+      }, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [titulo, conteudo, isOpen, initialData]);
+
+  const handleAction = async (isDraft: boolean) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        titulo,
+        conteudo,
+        anexos,
+        dataAgendamento,
+        cobranca: cobrancaForm.valor ? cobrancaForm : null
+      }, isDraft);
+      localStorage.removeItem('@edu-impacto/comunicado-draft');
+    } finally {
+      // The parent component might close the modal, so we reset state
+      setTimeout(() => setIsSubmitting(false), 500);
+    }
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -668,7 +703,8 @@ export default function NovoComunicadoModal({
         <div className="ad-nc-footer">
           <button 
             className="ad-nc-footer-btn ad-nc-btn-secondary" 
-            style={{ flexDirection: 'column', gap: 4 }}
+            style={{ flexDirection: 'column', gap: 4, opacity: isSubmitting ? 0.6 : 1 }}
+            disabled={isSubmitting}
             onClick={() => handleAction(true)}
           >
             <Save size={18} color="#64748B" />
@@ -677,7 +713,8 @@ export default function NovoComunicadoModal({
 
           <button 
             className="ad-nc-footer-btn ad-nc-btn-secondary" 
-            style={{ flexDirection: 'column', gap: 4 }}
+            style={{ flexDirection: 'column', gap: 4, opacity: isSubmitting ? 0.6 : 1 }}
+            disabled={isSubmitting}
             onClick={() => {
               if (!dataAgendamento) {
                  const nowLocal = new Date();
@@ -702,16 +739,18 @@ export default function NovoComunicadoModal({
             className="ad-nc-footer-btn" 
             style={{
               background: 'linear-gradient(135deg, #6D5DF6 0%, #8B5CF6 100%)',
-              color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(109, 93, 246, 0.3)'
+              color: 'white', border: 'none', boxShadow: '0 4px 12px rgba(109, 93, 246, 0.3)',
+              opacity: isSubmitting ? 0.6 : 1
             }}
+            disabled={isSubmitting}
             onClick={() => handleAction(false)}
           >
-            {isUploading ? (
+            {isUploading || isSubmitting ? (
               <div style={{ width: 18, height: 18, borderRadius: 9, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite' }} />
             ) : (
               <SendIcon size={18} fill="currentColor" />
             )}
-            <span>Enviar</span>
+            <span>{isSubmitting ? 'Enviando...' : 'Enviar'}</span>
           </button>
         </div>
 

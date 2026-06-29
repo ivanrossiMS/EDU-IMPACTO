@@ -39,6 +39,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { useQuery } from '@tanstack/react-query'
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
@@ -60,13 +61,28 @@ export function ADSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [canScrollRight, setCanScrollRight] = useState(true)
+  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
+  const isAlunoLogado = currentUser?.cargo === 'Aluno'
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
   const isSlugPath = segments[1] === 'agenda-digital' && segments[2] && segments[2] !== 'admin' && segments[2] !== 'selecionar-aluno'
   const alunoId = isSlugPath ? segments[2] : ''
+
+  const { data: profileData } = useQuery({
+    queryKey: ['agenda', 'perfil-acesso', alunoId, respId, isAlunoLogado],
+    queryFn: async () => {
+       if (!alunoId || !respId) return null;
+       const res = await fetch(`/api/agenda/perfil-acesso?slug=${alunoId}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`);
+       if (!res.ok) throw new Error('Falha ao carregar perfil');
+       return res.json();
+    },
+    enabled: !!(alunoId && respId),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [canScrollRight, setCanScrollRight] = useState(true)
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
@@ -153,7 +169,18 @@ export function ADSidebar() {
         if (alunoId === 'colaborador') {
           return ['comunicados', 'Mídia', 'Agenda', 'Perfil'].includes(item.label)
         }
-        if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+        
+        let isFin = false;
+        if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
+           isFin = true;
+        } else if (profileData?.vinculo) {
+           isFin = !!profileData.vinculo.resp_financeiro;
+        }
+
+        if (item.label === 'Financeiro') {
+           if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
+           if (!isFin) return false;
+        }
         if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
         if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
         if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
@@ -470,7 +497,19 @@ export function ADSidebar() {
                     if (alunoId === 'colaborador') {
                       return ['Comunicados', 'Mídia', 'Calendário', 'Meu Perfil'].includes(item.label)
                     }
-                    if (item.label === 'Financeiro' && adConfig?.permissoes?.visualizarFinanceiro === false) return false
+                    
+                    let isFin = false;
+                    if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
+                       isFin = true;
+                    } else if (profileData?.vinculo) {
+                       isFin = !!profileData.vinculo.resp_financeiro;
+                    }
+                    console.log('ADSidebar desktop isFin check:', { alunoId, vinculo: profileData?.vinculo, isFin });
+
+                    if (item.label === 'Financeiro') {
+                       if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
+                       if (!isFin) return false;
+                    }
                     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
                     if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
                     if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false

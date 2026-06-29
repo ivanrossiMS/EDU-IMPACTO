@@ -8,11 +8,9 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const authClient = await createProtectedClient();
     const supabase = supabaseServer;
-
     const body = await request.json()
-    const { tipo, ids, alunoId } = body
+    const { tipo, id, alunoId } = body
 
     let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
     if (!isFamily) {
@@ -23,55 +21,39 @@ export async function POST(request: Request) {
     }
     const readerId = isFamily ? alunoId : user.id
 
-    if (!tipo || !ids || !readerId || !Array.isArray(ids) || ids.length === 0) {
+    if (!tipo || !id || !readerId) {
       return NextResponse.json({ error: 'Parâmetros incompletos' }, { status: 400 })
-    }
-
-    // Determine the table name based on type
-    const tableMap: Record<string, string> = {
-      'comunicado': 'comunicados',
-      'momento': 'momentos',
-      'evento': 'eventos_agenda',
-      'ocorrencia': 'ocorrencias',
-      'nota': 'boletins',
-      'frequencia': 'frequencias'
-    }
-
-    const table = tableMap[tipo]
-    if (!table) {
-      return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
     }
 
     const now = new Date().toISOString()
     
     try {
-      const readRecords = ids.map((id: string) => ({
+      const cienciaRecord = {
         usuario_id: readerId, 
         perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
         content_id: id,
-        read_at: now
-      }));
+        ciente_em: now
+      };
 
-      // Utiliza insert em vez de upsert para não depender de UNIQUE CONSTRAINT nomeada no PostgREST
       const { error: insertError } = await supabase
-        .from('agenda_notification_reads')
-        .insert(readRecords);
+        .from('agenda_ciencias')
+        .insert(cienciaRecord);
         
       if (insertError) {
         // Código 23505 é Duplicate Key (ou seja, a pessoa já leu/deu ciência). Podemos ignorar com segurança.
         if (insertError.code !== '23505') {
-          throw new Error(`Erro ao inserir read record: ${insertError.message}`);
+          throw new Error(`Erro ao inserir ciencia record: ${insertError.message}`);
         }
       }
     } catch (e: any) {
-      console.error("Erro ao registrar leitura na nova tabela:", e);
+      console.error("Erro ao registrar ciência na tabela nova:", e);
       return NextResponse.json({ error: e.message }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, count: ids.length })
+    return NextResponse.json({ ok: true, count: 1 })
   } catch (err: any) {
-    console.error("Erro em marcar-lido:", err)
+    console.error("Erro em marcar-ciencia:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

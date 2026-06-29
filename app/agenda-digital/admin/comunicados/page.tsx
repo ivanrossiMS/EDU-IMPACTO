@@ -13,7 +13,7 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
@@ -25,6 +25,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
+import { DashboardEngajamento } from '@/components/agenda/DashboardEngajamento'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -34,7 +35,7 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados } = useAgendaDigital()
   const { turmas = [] } = useData();
   const [alunos, setAlunos] = useSupabaseArray<any>('alunos/lightweight');
   const { forms, setDisparos } = useFormularios()
@@ -108,6 +109,7 @@ export default function ADAdminComunicados() {
   const [authorFilter, setAuthorFilter] = useState<string>('todos');
   const [attachmentFilter, setAttachmentFilter] = useState<string>('todos');
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
+  const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
 
   const [visibleCount, setVisibleCount] = useState(10);
 
@@ -368,6 +370,9 @@ export default function ADAdminComunicados() {
           <button className="btn btn-secondary" onClick={() => setShowMonthlyReport(true)} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <Calendar size={16} /> Relatório Mensal
           </button>
+          <button className="btn btn-secondary" onClick={() => setShowEngagementDashboard(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderColor: 'transparent' }}>
+            <Activity size={16} /> Engajamento
+          </button>
           <button className="btn btn-primary" onClick={handleNovo}>
             <Plus size={16} /> Novo Comunicado
           </button>
@@ -529,10 +534,15 @@ export default function ADAdminComunicados() {
              )
           })}
 
-          {filtered.length > visibleCount && (
+          {(filtered.length > visibleCount || hasNextPageComunicados) && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
               <button 
-                onClick={() => setVisibleCount(prev => prev + 10)}
+                onClick={() => {
+                  if (visibleCount >= filtered.length && hasNextPageComunicados && fetchNextPageComunicados) {
+                    fetchNextPageComunicados()
+                  }
+                  setVisibleCount(prev => prev + 10)
+                }}
                 style={{
                   background: '#f1f5f9',
                   color: '#475569',
@@ -793,6 +803,13 @@ export default function ADAdminComunicados() {
             </motion.div>
           </motion.div>
         )}
+
+        <DashboardEngajamento 
+          isOpen={showEngagementDashboard} 
+          onClose={() => setShowEngagementDashboard(false)} 
+          comunicados={comunicados} 
+          alunosAtivos={alunosAtivos} 
+        />
       </AnimatePresence>
 
       <ReportsSelectionModal 

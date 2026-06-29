@@ -388,12 +388,12 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
     // Se o próprio aluno estiver logado
     if (cleanAuthId === cleanAlunoId) return true;
     
-    // Verifica na tabela aluno_responsavel
+    // Verifica na tabela aluno_responsavel (pode ser authUserId ou o responsavel_id vindo do metadata)
     const { data, error } = await supabase
       .from('aluno_responsavel')
       .select('id')
-      .eq('responsavel_id', authUserId)
       .eq('aluno_id', cleanAlunoId)
+      .or(`responsavel_id.eq."${cleanAuthId}",responsavel_id.eq."${authUserId}"`)
       .maybeSingle();
       
     if (!error && data) return true;

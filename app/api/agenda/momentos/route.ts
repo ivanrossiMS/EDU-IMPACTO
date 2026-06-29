@@ -53,9 +53,10 @@ export async function GET(request: Request) {
       if (!alunoId) {
         return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
       }
-      const isOwner = await checkResponsavelRelationship(user.id, alunoId);
+      const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
+      const isOwner = await checkResponsavelRelationship(checkId, alunoId);
       if (!isOwner) {
-        return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar fotos/momentos deste aluno.' }, { status: 403 });
+        return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
       }
     }
 
@@ -66,8 +67,24 @@ export async function GET(request: Request) {
     }
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
+    
+    const itemIds = data ? data.map((d: any) => String(d.id)) : [];
+    let allReads: any[] = [];
+  
+    if (itemIds.length > 0) {
+       const readsRes = await supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds);
+       allReads = readsRes.data || [];
+    }
+
     const result = (data || []).map(row => {
       const merged = { ...row, ...(row.dados || {}) }
+      
+      merged.leituras = merged.leituras && typeof merged.leituras === 'object' && !Array.isArray(merged.leituras) ? merged.leituras : {}
+      const itemReads = allReads.filter(r => r.content_id === String(row.id));
+      itemReads.forEach(r => {
+         merged.leituras[r.usuario_id] = r.read_at;
+      });
+
       if (merged.midias && Array.isArray(merged.midias)) {
         merged.midias = merged.midias.map((m: any) => {
           if (m.url && m.url.startsWith('data:image/') && m.url.length > 500) {
@@ -205,7 +222,7 @@ function buildRowAuth(body: any) {
 }
 
 export async function DELETE(request: Request) {
-  const { errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
   try {

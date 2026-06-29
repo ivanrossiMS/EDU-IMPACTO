@@ -19,7 +19,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage() {
-  const { momentosFeed, isDataLoading } = useAgendaDigital()
+  const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos/lightweight', []);
   
   
@@ -761,9 +761,14 @@ export default function ADMomentosPage() {
               );
             })}
             
-            {visibleCount < meusMomentos.length && (
+            {(visibleCount < meusMomentos.length || hasNextPageMomentos) && (
               <button 
-                onClick={() => setVisibleCount(prev => prev + 5)}
+                onClick={() => {
+                  if (visibleCount >= meusMomentos.length && hasNextPageMomentos && fetchNextPageMomentos) {
+                    fetchNextPageMomentos()
+                  }
+                  setVisibleCount(prev => prev + 5)
+                }}
                 className="btn btn-secondary" 
                 style={{ 
                   marginTop: 20, 

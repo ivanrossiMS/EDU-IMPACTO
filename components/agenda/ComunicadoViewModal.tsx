@@ -145,7 +145,7 @@ export function ComunicadoViewModal({
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
       setIsLoadingFull(true)
-      fetch(`/api/comunicados?id=${comunicado.id}`)
+      fetch(`/api/comunicados?id=${comunicado.id}${currentUserSlug && currentUserSlug !== 'admin' ? `&aluno_id=${currentUserSlug}` : ''}`)
         .then(res => res.json())
         .then(data => {
           if (data && data.length > 0) {

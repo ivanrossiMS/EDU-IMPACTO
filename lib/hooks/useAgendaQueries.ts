@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { ADComunicado, ADMomento } from '@/lib/agendaDigitalContext'
@@ -7,17 +7,26 @@ import { useApp } from '@/lib/context'
 // --- COMUNICADOS ---
 export function useQueryComunicados(
   isFamily: boolean,
-  fetchUrl: string | null = '/api/comunicados'
+  fetchUrl: string | null = '/api/comunicados',
+  pageSize: number = 30
 ) {
   const { currentUser } = useApp()
-  const query = useQuery<ADComunicado[]>({
+  const query = useInfiniteQuery({
     queryKey: ['agenda', 'comunicados', fetchUrl],
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || isFamily || !fetchUrl) return [] 
-      const res = await fetch(fetchUrl, { credentials: 'include' })
+      const url = new URL(fetchUrl, window.location.origin)
+      url.searchParams.set('limit', String(pageSize))
+      url.searchParams.set('offset', String(pageParam * pageSize))
+      
+      const res = await fetch(url.toString(), { credentials: 'include' })
       if (!res.ok) throw new Error('Falha ao buscar comunicados')
       const data = await res.json()
       return Array.isArray(data) ? data : []
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === pageSize ? allPages.length : undefined
     },
     staleTime: 1000 * 60 * 5, // 5 min de cache fresco
     gcTime: 1000 * 60 * 10, // 10 min na memória
@@ -32,17 +41,26 @@ export function useQueryComunicados(
 // --- MOMENTOS ---
 export function useQueryMomentos(
   isFamily: boolean,
-  fetchUrl: string | null = '/api/agenda/momentos'
+  fetchUrl: string | null = '/api/agenda/momentos',
+  pageSize: number = 20
 ) {
   const { currentUser } = useApp()
-  const query = useQuery<ADMomento[]>({
+  const query = useInfiniteQuery({
     queryKey: ['agenda', 'momentos', fetchUrl],
-    queryFn: async () => {
+    initialPageParam: 0,
+    queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || isFamily || !fetchUrl) return [] 
-      const res = await fetch(fetchUrl, { credentials: 'include' })
+      const url = new URL(fetchUrl, window.location.origin)
+      url.searchParams.set('limit', String(pageSize))
+      url.searchParams.set('offset', String(pageParam * pageSize))
+      
+      const res = await fetch(url.toString(), { credentials: 'include' })
       if (!res.ok) throw new Error('Falha ao buscar momentos')
       const data = await res.json()
       return Array.isArray(data) ? data : []
+    },
+    getNextPageParam: (lastPage, allPages) => {
+      return lastPage.length === pageSize ? allPages.length : undefined
     },
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 10,
