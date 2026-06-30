@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     let allReads: any[] = [];
   
     if (itemIds.length > 0) {
-       const readsRes = await supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds);
+       const readsRes = await supabase.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds);
        allReads = readsRes.data || [];
     }
 

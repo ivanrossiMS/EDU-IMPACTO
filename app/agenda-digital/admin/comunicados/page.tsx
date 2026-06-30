@@ -108,14 +108,37 @@ export default function ADAdminComunicados() {
   
   const [authorFilter, setAuthorFilter] = useState<string>('todos');
   const [attachmentFilter, setAttachmentFilter] = useState<string>('todos');
+  const [reportAuthorFilter, setReportAuthorFilter] = useState<string>('todos');
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
+  const [colaboradores, setColaboradores] = useState<{nome: string}[]>([]);
 
   const [visibleCount, setVisibleCount] = useState(10);
 
   useEffect(() => {
     setVisibleCount(10);
   }, [tab, search, authorFilter, attachmentFilter]);
+
+  useEffect(() => {
+    const fetchColaboradores = async () => {
+      try {
+        const res = await fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000');
+        if (res.ok) {
+          const json = await res.json();
+          if (json && Array.isArray(json.data)) {
+            const validUsers = json.data.filter((u: any) => u && u.nome);
+            const uniqueUsers = Array.from(new Map(validUsers.map((u: any) => [u.nome, u])).values()) as any[];
+            // Ordenar alfabeticamente
+            uniqueUsers.sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+            setColaboradores(uniqueUsers);
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching colaboradores:', e);
+      }
+    };
+    fetchColaboradores();
+  }, []);
 
   useEffect(() => {
     if (viewingCom || viewingDestCom || viewingReportPayload || selectedCom) {
@@ -1185,6 +1208,20 @@ export default function ADAdminComunicados() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <div style={{ position: 'relative' }}>
+                    <User size={14} style={{ position: 'absolute', left: 10, top: 8, color: 'hsl(var(--primary))', pointerEvents: 'none' }} />
+                    <select 
+                      className="form-input" 
+                      value={reportAuthorFilter}
+                      onChange={e => setReportAuthorFilter(e.target.value)}
+                      style={{ paddingLeft: 30, width: 150, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--primary))', background: '#fff', border: 'none', fontSize: 12, height: 32, borderRadius: 16 }}
+                    >
+                      <option value="todos">Todos os Usuários</option>
+                      {colaboradores.map(c => (
+                        <option key={c.nome} value={c.nome}>{c.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ position: 'relative' }}>
                     <Paperclip size={14} style={{ position: 'absolute', left: 10, top: 8, color: 'hsl(var(--primary))', pointerEvents: 'none' }} />
                     <select 
                       className="form-input" 
@@ -1217,6 +1254,10 @@ export default function ADAdminComunicados() {
                   comunicados.forEach(c => {
                     if (c.id?.startsWith('AD-COM-REL-STU-')) return;
                     let valid = true;
+                    if (reportAuthorFilter !== 'todos') {
+                      const cAutor = c.autor || (c as any).dados?.autor;
+                      if (cAutor !== reportAuthorFilter) valid = false;
+                    }
                     if (attachmentFilter !== 'todos') {
                       const anexosList = c.anexos || [];
                       const hasAny = anexosList.length > 0;

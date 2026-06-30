@@ -55,7 +55,6 @@ function SelecionarPerfilAdminContent() {
         {/* Dynamic styles block for modern theme design */}
         <style dangerouslySetInnerHTML={{__html: `
         /* Make parent wrappers transparent so portal background shows through */
-        .agenda-digital-wrapper, 
         .ad-main-scroll {
           background: transparent !important;
         }

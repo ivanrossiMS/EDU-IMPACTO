@@ -155,7 +155,13 @@ export default function ADAdminMomentos() {
         media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
 
-      setFeed(prev => [post, ...prev])
+      setMomentosFeedLocally?.(prev => [post, ...prev])
+      fetch('/api/agenda/momentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(post)
+      }).catch(err => console.error("Error creating momento:", err))
+
       setShowModal(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
       adAlert('Momento publicado com sucesso!', '🎉 Sucesso')

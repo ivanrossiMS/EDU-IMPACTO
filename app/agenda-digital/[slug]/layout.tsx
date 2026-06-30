@@ -1529,7 +1529,6 @@ export default function ADInnerLayout({
           }
           .agenda-digital-wrapper {
             padding-bottom: 80px !important;
-            background: transparent !important;
             width: 100% !important;
             max-width: 100vw !important;
             min-width: 0 !important;

@@ -110,7 +110,7 @@ function AgendaDigitalIndexContent() {
       justifyContent: 'center',
       minHeight: '80vh',
       width: '100%',
-      background: 'hsl(var(--bg-main))',
+      background: 'transparent',
       fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
       

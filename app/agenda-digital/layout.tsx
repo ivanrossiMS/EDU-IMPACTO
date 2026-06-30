@@ -22,7 +22,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
   const { currentUser, hydrated } = useApp()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  if (!hydrated) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+  if (!hydrated) return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
 
   // Família não precisa carregar os dados massivos globais do ERP
   if (isFamily) {
@@ -114,7 +114,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])
 
   // Enquanto verificando: tela em branco (sem flash de erro)
-  if (accessState === 'checking') return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+  if (accessState === 'checking') return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
 
   // Acesso negado — somente após verificação completa com dados reais
   if (accessState === 'denied') {
@@ -138,13 +138,23 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-main))' }} />
+  if (!mounted) return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
 
   return (
     <>
 
-      <div className="agenda-digital-wrapper" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'transparent' }}>
+      <div className="agenda-digital-wrapper ad-mesh-bg" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
         <style dangerouslySetInnerHTML={{__html: `
+          :root {
+            --ad-bg-mesh: radial-gradient(ellipse at top right, rgba(216, 180, 254, 0.45) 0%, transparent 70%), radial-gradient(ellipse at bottom left, rgba(186, 230, 253, 0.45) 0%, transparent 70%);
+            --ad-bg-color: #ffffff;
+          }
+          .ad-mesh-bg {
+            background-color: var(--ad-bg-color) !important;
+            background-image: var(--ad-bg-mesh) !important;
+            background-attachment: fixed !important;
+          }
+          
           /* Esconde a interface do ERP */
           .sidebar { display: none !important; }
           .topbar { display: none !important; }
