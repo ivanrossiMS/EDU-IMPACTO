@@ -205,7 +205,7 @@ export function ComunicadoViewModal({
 
       if (!threadsMap.has(threadId)) {
         threadsMap.set(threadId, {
-          studentId: threadId,
+          studentId: alunoObj?.id || threadId,
           studentName: alunoObj?.nome || (!msg.is_admin ? msg.remetente_nome : 'Aluno') || 'Usuário',
           studentFoto: alunoObj?.foto,
           messages: [],
@@ -943,9 +943,12 @@ export function ComunicadoViewModal({
                      {adminThreads.map(thread => (
                         <div key={thread.studentId} onClick={() => setSelectedThreadId(thread.studentId)} style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
                           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#dbeafe', color: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, overflow: 'hidden', flexShrink: 0 }}>
-                              {thread.studentFoto ? <img src={thread.studentFoto} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : thread.studentName.charAt(0).toUpperCase()}
-                            </div>
+                            <UserAvatar 
+                              userId={thread.studentId}
+                              name={thread.studentName}
+                              fotoUrl={thread.studentFoto}
+                              size={44}
+                            />
                             <div>
                               <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{thread.studentName}</div>
                               <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>{thread.messages.length} mensagens com este usuário</div>
@@ -984,11 +987,16 @@ export function ComunicadoViewModal({
                       let isFromResponsavel = alunoObj && msg.remetente_nome && msg.remetente_nome.trim().toLowerCase() !== alunoObj.nome.trim().toLowerCase();
                       
                       // Fallback: If we couldn't find alunoObj, but we know the student's name from the parent component (in parent app, currentUserName is passed but actually we want student's name. Wait, the modal title is `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}`).
-                      const threadStudentName = isAdminMode ? adminThreads.find(t => t.studentId === selectedThreadId)?.studentName : null;
+                      const threadStudent = isAdminMode ? adminThreads.find(t => t.studentId === selectedThreadId) : null;
+                      const threadStudentName = threadStudent?.studentName || null;
+                      const threadStudentFoto = threadStudent?.studentFoto || null;
+
                       if (!alunoObj && msg.remetente_nome) {
                          if (threadStudentName && msg.remetente_nome.trim().toLowerCase() !== threadStudentName.trim().toLowerCase()) {
                             isFromResponsavel = true;
-                            alunoObj = { nome: threadStudentName };
+                            alunoObj = { id: selectedThreadId, nome: threadStudentName, foto: threadStudentFoto };
+                         } else if (threadStudentName) {
+                            alunoObj = { id: selectedThreadId, nome: threadStudentName, foto: threadStudentFoto };
                          } else if (!isAdminMode) {
                             // in parent app, if we still don't have alunoObj, let's look at the first message in the thread to get the student's name, or just use the fact that if it's me, and msg.remetente_nome != adminThreads... wait, in parent app adminThreads is not used for title.
                             // The easiest is just rely on the fixed find().
@@ -1011,9 +1019,12 @@ export function ComunicadoViewModal({
                       
                       return (
                         <div key={msg.id} style={{ display: 'flex', gap: 12 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: isMe ? '#e2e8f0' : '#dbeafe', color: isMe ? '#475569' : '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, overflow: 'hidden', flexShrink: 0 }}>
-                            {avatarToUse ? <img src={avatarToUse} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : (alunoObj?.nome || msg.remetente_nome).charAt(0).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            userId={msg.is_admin ? msg.remetente_id : (alunoObj?.id || msg.remetente_id)}
+                            name={alunoObj?.nome || msg.remetente_nome}
+                            fotoUrl={avatarToUse}
+                            size={36}
+                          />
                           <div>
                             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 6 }}>
                               <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome}</span>

@@ -72,72 +72,55 @@ export async function GET(request: Request) {
 
     const idsArray = Array.from(linkedAlunoIds)
 
-    // ─── Step 3: Fetch alunos + pending titulos in PARALLEL ───────────────────
-    const [alunosResult] = await Promise.all([
-      supabase
+    // ─── Step 3: Fetch alunos ───────────────────
+    const { data: alunos } = await supabase
         .from('alunos')
         .select('id,nome,turma,status,foto,serie,unidade,matricula,dados')
-        .in('id', idsArray),
-    ])
+        .in('id', idsArray);
 
-    const alunos = alunosResult.data
     if (!alunos || alunos.length === 0) {
       return NextResponse.json([])
     }
 
-    const alunosAtivos = alunos // Mantém todos os alunos
     const ativosIds = alunos.map(a => a.id)
     const ativosMatriculas = alunos.map(a => a.matricula).filter(Boolean)
     const ativosNomes = alunos.map(a => a.nome).filter(Boolean)
+    const turmaIds = [...new Set(alunos.map(a => a.turma).filter(Boolean))]
 
-    // ─── Step 4: Fetch pending titulos (parallel, non-blocking) ──────────────
-    let pendingTitulos: any[] = []
-    try {
-      const orConditions: string[] = []
-      if (ativosIds.length > 0) orConditions.push(`alunoId.in.(${ativosIds.join(',')})`)
-      if (ativosMatriculas.length > 0) {
-        orConditions.push(`alunoId.in.(${ativosMatriculas.join(',')})`)
-        const safeMats = ativosMatriculas.map(m => `"${String(m).replace(/"/g, '')}"`).join(',')
-        if (safeMats) orConditions.push(`aluno.in.(${safeMats})`)
-      }
-      if (ativosNomes.length > 0) {
-        const safeNomes = ativosNomes.map(n => `"${n.replace(/"/g, '')}"`).join(',')
-        if (safeNomes) orConditions.push(`aluno.in.(${safeNomes})`)
-      }
-
-      // Se tiver mais que 50 vínculos, pula a query pesada de títulos para evitar erro de URL limit no PostgREST
-      if (orConditions.length > 0 && ativosIds.length <= 50) {
-        const { data: titulos } = await supabase
-          .from('titulos')
-          .select('id,status,aluno,alunoId')
-          .eq('status', 'atrasado')
-          .or(orConditions.join(','))
-        pendingTitulos = titulos || []
-      }
-    } catch (_) {
-      // Titulos fetch is non-critical — proceed without pendência counts
+    // ─── Step 4: Fetch pending titulos & turmas in PARALLEL (non-blocking) ──────────────
+    const orConditions: string[] = []
+    if (ativosIds.length > 0) orConditions.push(`alunoId.in.(${ativosIds.join(',')})`)
+    if (ativosMatriculas.length > 0) {
+      orConditions.push(`alunoId.in.(${ativosMatriculas.join(',')})`)
+      const safeMats = ativosMatriculas.map(m => `"${String(m).replace(/"/g, '')}"`).join(',')
+      if (safeMats) orConditions.push(`aluno.in.(${safeMats})`)
+    }
+    if (ativosNomes.length > 0) {
+      const safeNomes = ativosNomes.map(n => `"${n.replace(/"/g, '')}"`).join(',')
+      if (safeNomes) orConditions.push(`aluno.in.(${safeNomes})`)
     }
 
-    // ─── Step 4.5: Fetch Turma details to get Nome and Ano ────────────────
-    const turmaIds = [...new Set(alunosAtivos.map(a => a.turma).filter(Boolean))]
+    const fetchTitulos = (orConditions.length > 0 && ativosIds.length <= 50) 
+      ? supabase.from('titulos').select('id,status,aluno,alunoId').eq('status', 'atrasado').or(orConditions.join(','))
+      : Promise.resolve({ data: [] });
+
+    const fetchTurmas = turmaIds.length > 0
+      ? supabase.from('turmas').select('id,nome,ano,codigo').in('id', turmaIds)
+      : Promise.resolve({ data: [] });
+
+    const [titulosResult, turmasResult] = await Promise.allSettled([fetchTitulos, fetchTurmas]);
+
+    const pendingTitulos = titulosResult.status === 'fulfilled' && titulosResult.value.data ? titulosResult.value.data : [];
+    const turmasData = turmasResult.status === 'fulfilled' && turmasResult.value.data ? turmasResult.value.data : [];
+
+    // ─── Step 4.5: Map Turma details ────────────────
     let turmasMap: Record<string, { nome: string, ano: number }> = {}
-    
-    if (turmaIds.length > 0) {
-      // Sometimes a.turma could be ID or codigo
-      const { data: turmasData } = await supabase
-        .from('turmas')
-        .select('id,nome,ano,codigo')
-        .in('id', turmaIds)
-      
-      if (turmasData) {
-        turmasData.forEach((t: any) => {
-          turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
-        })
-      }
-    }
+    turmasData.forEach((t: any) => {
+      turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+    })
 
     // ─── Step 5: Build result ─────────────────────────────────────────────────
-    const result = alunosAtivos.map(a => {
+    const result = alunos.map(a => {
       const pendentesAluno = pendingTitulos.filter((t: any) =>
         t.alunoId === a.id || t.aluno === a.nome || (a.matricula && (t.alunoId === a.matricula || t.aluno === a.matricula))
       )

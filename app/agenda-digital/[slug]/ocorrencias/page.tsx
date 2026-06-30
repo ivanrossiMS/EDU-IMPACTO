@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApiQuery } from '@/hooks/useApi'
 import React, { useMemo, useState, useEffect } from 'react'
-import { AlertTriangle, AlertCircle, CheckCircle, Eye, Check, Loader2, Filter, FileText } from 'lucide-react'
+import { AlertTriangle, AlertCircle, CheckCircle, Eye, Check, Loader2, Filter, FileText, ShieldCheck, Sparkles } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
@@ -242,12 +242,80 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
           ))}
         </div>
       ) : ocorrenciasFiltradas.length === 0 ? (
-        <div style={{ background: '#fff', padding: '56px 40px', borderRadius: 28, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.01)' }}>
-          <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12 }}>Nenhuma ocorrência</h3>
-          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
-            Tudo certo por aqui! Não existem registros disciplinares ou de ocorrências para este aluno.
-          </p>
-        </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          style={{ 
+            background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', 
+            padding: '80px 40px', 
+            borderRadius: 32, 
+            textAlign: 'center', 
+            border: '1px solid rgba(255,255,255,0.8)', 
+            boxShadow: '0 20px 40px rgba(15, 23, 42, 0.03), inset 0 2px 10px rgba(255,255,255,1)',
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          {/* Subtle background glow */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 300, height: 300, background: 'radial-gradient(circle, rgba(16, 185, 129, 0.04) 0%, rgba(255,255,255,0) 70%)', zIndex: 0 }} />
+
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
+            style={{ 
+              width: 80, 
+              height: 80, 
+              borderRadius: '50%', 
+              background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              marginBottom: 24,
+              position: 'relative',
+              zIndex: 1,
+              boxShadow: '0 8px 24px rgba(16, 185, 129, 0.15), inset 0 2px 4px rgba(255,255,255,0.9)'
+            }}
+          >
+            <ShieldCheck size={40} color="#059669" strokeWidth={1.5} />
+            <motion.div 
+              animate={{ rotate: 360 }} 
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              style={{ position: 'absolute', inset: -10, border: '1px dashed rgba(16, 185, 129, 0.3)', borderRadius: '50%' }}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5, type: 'spring' }}
+              style={{ position: 'absolute', top: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            >
+              <Sparkles size={16} color="#10b981" />
+            </motion.div>
+          </motion.div>
+
+          <motion.h3 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 12, letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}
+          >
+            Histórico Exemplar
+          </motion.h3>
+          
+          <motion.p 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
+          >
+            Tudo certo por aqui! Não existem registros disciplinares ou de ocorrências para este aluno. Um excelente sinal de bom comportamento.
+          </motion.p>
+        </motion.div>
       ) : (
         <div style={{ position: 'relative' }}>
           {/* Vertical continuous timeline line */}

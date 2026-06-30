@@ -911,11 +911,25 @@ function SelecionarAlunoContent() {
         </section>
       </main>
 
-      {/* Footer Area with Logout */}
       <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
         <button 
-          onClick={async () => {
-            await fetch('/api/auth/logout', { method: 'POST' });
+          onClick={async (e) => {
+            const btn = e.currentTarget;
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
+            btn.style.opacity = '0.7';
+            btn.style.pointerEvents = 'none';
+
+            // 1. Limpa todos os caches locais que podem causar resíduos visuais
+            localStorage.clear();
+            sessionStorage.clear();
+
+            // 2. Aciona a API de logout no servidor (mata os cookies HTTPOnly)
+            try {
+              await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (err) {}
+
+            // 3. Força o redirecionamento instantâneo para a página inicial de login
             window.location.href = '/login';
           }}
           className="premium-logout-btn"

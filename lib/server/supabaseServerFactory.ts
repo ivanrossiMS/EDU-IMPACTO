@@ -33,18 +33,15 @@ export async function createProtectedClient() {
                   try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
                }
             })
-            const keepConnected = cookieStore.get('edu_keep_connected')?.value === '1';
             cookiesToSet.forEach(({ name, value, options }) => {
               const sessionOptions = { ...options };
-              if (!keepConnected) {
-                delete sessionOptions.maxAge;
-                delete sessionOptions.expires;
-              } else {
-                const expires = new Date();
-                expires.setFullYear(expires.getFullYear() + 1);
-                sessionOptions.maxAge = 315360000;
-                sessionOptions.expires = expires;
-              }
+              
+              // Unconditionally keep the user connected for 1 year
+              const expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              sessionOptions.maxAge = 315360000;
+              sessionOptions.expires = expires;
+              
               cookieStore.set(name, value, sessionOptions)
             })
           } catch {

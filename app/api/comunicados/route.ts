@@ -120,7 +120,21 @@ export async function GET(request: Request) {
 
   let query = supabase.from('comunicados').select('*');
   
-  const accessStartDate = await getLoggedUserAccessStartDate();
+  let accessStartDate = await getLoggedUserAccessStartDate();
+
+  if (alunoId) {
+    const { data: studentData } = await supabase.from('alunos').select('created_at, dados').eq('id', alunoId).maybeSingle();
+    if (studentData) {
+      const dateStr = studentData.dados?.data_matricula || studentData.dados?.data_inicio || studentData.dados?.data_ingresso || studentData.created_at;
+      if (dateStr) {
+        const studentEntryDate = new Date(dateStr);
+        if (!accessStartDate || studentEntryDate > accessStartDate) {
+          accessStartDate = studentEntryDate;
+        }
+      }
+    }
+  }
+
   if (accessStartDate) {
     query = query.gte('data', accessStartDate.toISOString());
   }

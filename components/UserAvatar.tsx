@@ -26,7 +26,7 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
     try {
       let foto = null;
 
-      if (userId && isValidUuid(userId)) {
+      if (userId) {
         try {
           const res = await fetch(`/api/user-photo?id=${userId}`);
           if (res.ok) {

@@ -4,7 +4,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '@/lib/context'
-import { GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2 } from 'lucide-react'
+import { GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2, Sparkles } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -218,11 +218,81 @@ export default function ADNotasPage({ params }: { params: any }) {
   if (boletins.length === 0) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <EmptyStateCard 
-          title="Nenhum Boletim"
-          description="Ainda não há notas ou boletins lançados para este aluno no sistema."
-          icon={<FileText size={48} style={{ color: '#94a3b8', opacity: 0.8 }} />}
-        />
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          style={{ 
+            background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)', 
+            padding: '80px 40px', 
+            borderRadius: 32, 
+            textAlign: 'center', 
+            border: '1px solid rgba(255,255,255,0.8)', 
+            boxShadow: '0 20px 40px rgba(15, 23, 42, 0.03), inset 0 2px 10px rgba(255,255,255,1)',
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            maxWidth: 500
+          }}
+        >
+          {/* Subtle background glow */}
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 300, height: 300, background: 'radial-gradient(circle, rgba(59, 130, 246, 0.04) 0%, rgba(255,255,255,0) 70%)', zIndex: 0 }} />
+
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 20 }}
+            style={{ 
+              width: 80, 
+              height: 80, 
+              borderRadius: '50%', 
+              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              marginBottom: 24,
+              position: 'relative',
+              zIndex: 1,
+              boxShadow: '0 8px 24px rgba(59, 130, 246, 0.15), inset 0 2px 4px rgba(255,255,255,0.9)'
+            }}
+          >
+            <GraduationCap size={40} color="#2563eb" strokeWidth={1.5} />
+            <motion.div 
+              animate={{ rotate: 360 }} 
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              style={{ position: 'absolute', inset: -10, border: '1px dashed rgba(59, 130, 246, 0.3)', borderRadius: '50%' }}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5, type: 'spring' }}
+              style={{ position: 'absolute', top: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+            >
+              <Sparkles size={16} color="#3b82f6" />
+            </motion.div>
+          </motion.div>
+
+          <motion.h3 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 12, letterSpacing: '-0.02em', position: 'relative', zIndex: 1 }}
+          >
+            Nenhum Boletim
+          </motion.h3>
+          
+          <motion.p 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
+          >
+            Ainda não há notas ou boletins lançados para este aluno no sistema. Novas avaliações aparecerão aqui automaticamente.
+          </motion.p>
+        </motion.div>
       </div>
     )
   }

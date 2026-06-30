@@ -5,24 +5,40 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-const memCache = new Map<string, { value: any, timestamp: number }>();
+// Cache persistente em Dev Mode para evitar wiping durante Hot-Reloads
+const globalCache = (global as any).configCache || new Map<string, { value: any, timestamp: number }>();
+if (process.env.NODE_ENV !== 'production') {
+  (global as any).configCache = globalCache;
+}
 const CACHE_TTL = 300_000; // 5 minutos
 
-// GET /api/configuracoes?chave=cfgDisciplinas  → single key
-// GET /api/configuracoes                        → all keys
-// GET /api/configuracoes?chaves=k1,k2,k3       → bulk fetch (NEW — eliminates 16 separate requests)
-export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
+// Chaves que são puramente visuais/públicas e não necessitam de bloqueio por autenticação
+const PUBLIC_KEYS = ['ad_banner', 'ad_config', 'cfgTurnos', 'cfgTiposOcorrencia'];
 
-  // Usa o Service Role para ler configurações globais, garantindo acesso a famílias sem barreiras de RLS
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const chave = searchParams.get('chave')
+  const chaves = searchParams.get('chaves')  // comma-separated bulk
+
+  // Verifica se as chaves solicitadas são todas públicas
+  let isPublicRequest = false;
+  if (chaves) {
+    const keys = chaves.split(',').map(k => k.trim()).filter(Boolean);
+    isPublicRequest = keys.every(k => PUBLIC_KEYS.includes(k));
+  } else if (chave) {
+    isPublicRequest = PUBLIC_KEYS.includes(chave);
+  }
+
+  // Se não for uma requisição apenas de chaves públicas, exige autenticação
+  if (!isPublicRequest) {
+    const { user, errorResponse } = await requireAuth()
+    if (errorResponse) return errorResponse
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
-  const { searchParams } = new URL(request.url)
-  const chave = searchParams.get('chave')
-  const chaves = searchParams.get('chaves')  // comma-separated bulk
 
   // ── BULK fetch (multiple keys in one query) ─────────────────────
   if (chaves) {
@@ -30,7 +46,7 @@ export async function GET(request: Request) {
     if (keys.length === 0) return NextResponse.json({})
 
     const cacheKey = keys.sort().join(',');
-    const cached = memCache.get(cacheKey);
+    const cached = globalCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
        return NextResponse.json(cached.value, {
          headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
@@ -50,7 +66,7 @@ export async function GET(request: Request) {
       result[row.chave] = row.valor
     }
 
-    memCache.set(cacheKey, { value: result, timestamp: Date.now() });
+    globalCache.set(cacheKey, { value: result, timestamp: Date.now() });
 
     return NextResponse.json(result, {
       headers: {

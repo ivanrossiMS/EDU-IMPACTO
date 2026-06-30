@@ -28,15 +28,29 @@ export async function GET(request: Request) {
         }
       }
     )
+    let authFoto = null;
+    // Somente faz a busca no auth se o id parecer um UUID, para evitar erro do SDK
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      const { data, error } = await supabaseAdmin.auth.admin.getUserById(id)
+      if (!error && data?.user) {
+        authFoto = data.user.user_metadata?.foto || data.user.user_metadata?.fotoUrl || null
+      }
+    }
     
-    const { data, error } = await supabaseAdmin.auth.admin.getUserById(id)
-    
-    if (error || !data?.user) {
-      return NextResponse.json({ foto: null }, { status: 404 })
+    if (authFoto) return NextResponse.json({ foto: authFoto })
+
+    // Se não encontrou no auth (ou não tem foto), busca na tabela alunos (caso seja ID de aluno)
+    const { data: alunoData, error: alunoError } = await supabaseAdmin
+      .from('alunos')
+      .select('foto')
+      .eq('id', id)
+      .single()
+      
+    if (!alunoError && alunoData?.foto) {
+      return NextResponse.json({ foto: alunoData.foto })
     }
 
-    const foto = data.user.user_metadata?.foto || data.user.user_metadata?.fotoUrl || null
-    return NextResponse.json({ foto })
+    return NextResponse.json({ foto: null }, { status: 404 })
   } catch (err) {
     return NextResponse.json({ foto: null }, { status: 500 })
   }

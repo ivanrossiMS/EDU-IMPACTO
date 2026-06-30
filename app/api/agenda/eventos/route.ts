@@ -4,7 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +54,99 @@ export async function GET(request: Request) {
   }
 }
 
+async function dispatchPushNotifications(supabase: any, row: any) {
+  const { students, directColaboradores } = await getStudentTargetsForComunicados({ targetClasses: row.turmas })
+  
+  // Handle visibilidadeUsuario
+  const visibilidadeUsuario = row.dados?.visibilidadeUsuario || row.visibilidadeUsuario;
+  if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
+    const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+    if (sysUser?.id) {
+      directColaboradores.push(String(sysUser.id));
+    } else {
+      const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
+      if (respUser?.id) {
+        directColaboradores.push(String(respUser.id));
+      } else {
+        const { data: alunoUser } = await supabase.from('alunos').select('id, nome').ilike('nome', visibilidadeUsuario).maybeSingle();
+        if (alunoUser?.id) {
+           const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
+           const responsaveis_ids = [String(alunoUser.id)];
+           vincs?.forEach((v: any) => responsaveis_ids.push(String(v.responsavel_id)));
+           students.push({
+             aluno_id: String(alunoUser.id),
+             aluno_nome: alunoUser.nome || 'Aluno',
+             responsaveis_ids
+           });
+        }
+      }
+    }
+  }
+
+  // Common date calculation for reminder
+  let sendAfterStr = null;
+  let shouldSendReminder = false;
+  if (row.data) {
+    const eventDate = new Date(`${row.data}T12:00:00Z`);
+    eventDate.setUTCDate(eventDate.getUTCDate() - 1);
+    sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
+    const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
+    shouldSendReminder = sendAfterDate > new Date();
+  }
+
+  // 1. Dispatch for students (individualized messages)
+  for (const student of students) {
+    if (!student.responsaveis_ids || student.responsaveis_ids.length === 0) continue;
+    
+    // Notificação Imediata
+    await sendAgendaPushNotification({
+      type: 'calendario',
+      itemId: `${row.id}-${student.aluno_id}`,
+      title: '📅 Novo Evento!',
+      message: `O evento "${row.titulo}" foi adicionado para o aluno(a) ${student.aluno_nome}.`,
+      targetUserIds: student.responsaveis_ids,
+      targetUrl: '/agenda-digital/calendario'
+    }).catch(err => console.error('Evento Push Error:', err))
+
+    // Lembrete Agendado
+    if (shouldSendReminder && sendAfterStr) {
+      await sendAgendaPushNotification({
+        type: 'calendario',
+        itemId: `${row.id}-${student.aluno_id}-reminder`,
+        title: '⏰ Lembrete: Amanhã!',
+        message: `Amanhã o aluno(a) ${student.aluno_nome} tem o evento: ${row.titulo}. Não se esqueça!`,
+        targetUserIds: student.responsaveis_ids,
+        targetUrl: '/agenda-digital/calendario',
+        sendAfter: sendAfterStr
+      }).catch(err => console.error('Evento Reminder Error:', err))
+    }
+  }
+
+  // 2. Dispatch for direct colaboradores / untargeted responsaveis
+  if (directColaboradores && directColaboradores.length > 0) {
+    await sendAgendaPushNotification({
+      type: 'calendario',
+      itemId: String(row.id),
+      title: '📅 Novo Evento!',
+      message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
+      targetUserIds: directColaboradores,
+      targetUrl: '/agenda-digital/calendario'
+    }).catch(err => console.error('Evento Push Error:', err))
+
+    if (shouldSendReminder && sendAfterStr) {
+      await sendAgendaPushNotification({
+        type: 'calendario',
+        itemId: `${row.id}-reminder`,
+        title: '⏰ Lembrete: Amanhã!',
+        message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
+        targetUserIds: directColaboradores,
+        targetUrl: '/agenda-digital/calendario',
+        sendAfter: sendAfterStr
+      }).catch(err => console.error('Evento Reminder Error:', err))
+    }
+  }
+}
+
 export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -72,59 +165,7 @@ export async function POST(request: Request) {
       
       // Disparar Push (Background)
       for (const row of rows) {
-        let targetIds = await getResponsavelIdsForTargets({ targetClasses: row.turmas })
-        
-        const visibilidadeUsuario = row.dados?.visibilidadeUsuario || (row as any).visibilidadeUsuario;
-        if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
-          const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-          if (sysUser?.id) {
-            targetIds.push(String(sysUser.id));
-          } else {
-            const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-            if (respUser?.id) {
-              targetIds.push(String(respUser.id));
-            } else {
-              const { data: alunoUser } = await supabase.from('alunos').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-              if (alunoUser?.id) {
-                targetIds.push(String(alunoUser.id));
-                const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
-                vincs?.forEach(v => targetIds.push(String(v.responsavel_id)));
-              }
-            }
-          }
-        }
-
-        if (targetIds.length > 0) {
-          // Notificação Imediata
-          await sendAgendaPushNotification({
-            type: 'calendario',
-            itemId: String(row.id),
-            title: '📅 Novo Evento!',
-            message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
-            targetUserIds: targetIds,
-            targetUrl: '/agenda-digital/calendario'
-          }).catch(err => console.error('Evento Push Error:', err))
-
-          // Lembrete Agendado para 1 dia antes às 20h
-          if (row.data) {
-            const eventDate = new Date(`${row.data}T12:00:00Z`);
-            eventDate.setUTCDate(eventDate.getUTCDate() - 1);
-            const sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
-            const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
-            
-            if (sendAfterDate > new Date()) {
-              await sendAgendaPushNotification({
-                type: 'calendario',
-                itemId: `${row.id}-reminder`,
-                title: '⏰ Lembrete: Amanhã!',
-                message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
-                targetUserIds: targetIds,
-                targetUrl: '/agenda-digital/calendario',
-                sendAfter: sendAfterStr
-              }).catch(err => console.error('Evento Reminder Error:', err))
-            }
-          }
-        }
+        await dispatchPushNotifications(supabase, row);
       }
 
       return NextResponse.json({ ok: true, count: rows.length })
@@ -135,59 +176,7 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message)
 
     // Disparar Push (Background)
-    let targetIds = await getResponsavelIdsForTargets({ targetClasses: data.turmas })
-
-    const visibilidadeUsuario = data.dados?.visibilidadeUsuario || (data as any).visibilidadeUsuario;
-    if (visibilidadeUsuario && visibilidadeUsuario !== 'Todos') {
-      const { data: sysUser } = await supabase.from('system_users').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-      if (sysUser?.id) {
-        targetIds.push(String(sysUser.id));
-      } else {
-        const { data: respUser } = await supabase.from('responsaveis').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-        if (respUser?.id) {
-          targetIds.push(String(respUser.id));
-        } else {
-          const { data: alunoUser } = await supabase.from('alunos').select('id').ilike('nome', visibilidadeUsuario).maybeSingle();
-          if (alunoUser?.id) {
-            targetIds.push(String(alunoUser.id));
-            const { data: vincs } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoUser.id);
-            vincs?.forEach(v => targetIds.push(String(v.responsavel_id)));
-          }
-        }
-      }
-    }
-
-    if (targetIds.length > 0) {
-      // Notificação Imediata
-      await sendAgendaPushNotification({
-        type: 'calendario',
-        itemId: String(data.id),
-        title: '📅 Novo Evento!',
-        message: `O evento "${data.titulo}" foi adicionado à sua agenda.`,
-        targetUserIds: targetIds,
-        targetUrl: '/agenda-digital/calendario'
-      }).catch(err => console.error('Evento Push Error:', err))
-
-      // Lembrete Agendado
-      if (data.data) {
-        const eventDate = new Date(`${data.data}T12:00:00Z`);
-        eventDate.setUTCDate(eventDate.getUTCDate() - 1);
-        const sendAfterStr = `${eventDate.toISOString().split('T')[0]} 20:00:00 GMT-0300`;
-        const sendAfterDate = new Date(`${eventDate.toISOString().split('T')[0]}T20:00:00-03:00`);
-        
-        if (sendAfterDate > new Date()) {
-          await sendAgendaPushNotification({
-            type: 'calendario',
-            itemId: `${data.id}-reminder`,
-            title: '⏰ Lembrete: Amanhã!',
-            message: `Amanhã temos o evento: ${data.titulo}. Não se esqueça!`,
-            targetUserIds: targetIds,
-            targetUrl: '/agenda-digital/calendario',
-            sendAfter: sendAfterStr
-          }).catch(err => console.error('Evento Reminder Error:', err))
-        }
-      }
-    }
+    await dispatchPushNotifications(supabase, data);
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (err: any) {
