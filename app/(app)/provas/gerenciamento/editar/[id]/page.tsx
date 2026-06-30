@@ -40,15 +40,7 @@ export default function EditarSimuladoPage({
     },
   ]);
 
-  const seriesOptions = [
-    "6º Ano",
-    "7º Ano",
-    "8º Ano",
-    "9º Ano",
-    "1ª Série",
-    "2ª Série",
-    "3ª Série",
-  ];
+  const seriesOptions = ['1º Ano', '2º Ano', '3º Ano', '4º Ano', '5º Ano', '6º Ano', '7º Ano', '8º Ano', '9º Ano', '1ª Série', '2ª Série', '3ª Série'];
 
   useEffect(() => {
     async function loadData() {
@@ -80,24 +72,24 @@ export default function EditarSimuladoPage({
         }
       } catch (e) {}
 
-      // Load existing simulado
-      const { data: simulado } = await supabase
-        .from("simulados")
+      // Load existing prova
+      const { data: prova } = await supabase
+        .from("provas")
         .select("*")
         .eq("id", id)
         .single();
-      if (simulado) {
-        setTitulo(simulado.titulo);
-        setDataAplicacao(simulado.data_aplicacao || "");
-        setBimestreId(simulado.id_bimestre || "");
-        setSeries(simulado.turmas || []);
+      if (prova) {
+        setTitulo(prova.titulo);
+        setDataAplicacao(prova.data_aplicacao || "");
+        setBimestreId(prova.id_bimestre || "");
+        setSeries(prova.turmas || []);
       }
 
       // Load existing requisicoes
       const { data: reqs } = await supabase
-        .from("simulados_requisicoes")
+        .from("provas_requisicoes")
         .select("*")
-        .eq("id_simulado", id);
+        .eq("id_prova", id);
       if (reqs && reqs.length > 0) {
         setRequisicoes(
           reqs.map((r) => ({
@@ -174,7 +166,7 @@ export default function EditarSimuladoPage({
     setLoading(true);
     try {
       const { error: simError } = await supabase
-        .from("simulados")
+        .from("provas")
         .update({
           titulo,
           data_aplicacao: dataAplicacao,
@@ -187,30 +179,30 @@ export default function EditarSimuladoPage({
 
       // Update requisicoes by deleting old and inserting new
       await supabase
-        .from("simulados_requisicoes")
+        .from("provas_requisicoes")
         .delete()
-        .eq("id_simulado", id);
+        .eq("id_prova", id);
 
       if (requisicoes.length > 0) {
         const reqs = requisicoes.map((r) => ({
-          id_simulado: id,
+          id_prova: id,
           id_disciplina: r.disciplinaId,
           id_professor: r.professorId,
           quantidade_questoes: r.qtdQuestoes,
           status: "pendente",
         }));
         const { error: reqError } = await supabase
-          .from("simulados_requisicoes")
+          .from("provas_requisicoes")
           .insert(reqs);
         if (reqError) throw reqError;
       }
 
-      alert("Simulado atualizado com sucesso!");
-      router.push("/simulados/gerenciamento");
+      alert("Prova atualizada com sucesso!");
+      router.push("/provas/gerenciamento");
     } catch (err) {
       console.error(err);
       alert(
-        "Erro ao atualizar simulado: " +
+        "Erro ao atualizar prova: " +
           ((err as any).message || JSON.stringify(err))
       );
     } finally {
@@ -236,7 +228,7 @@ export default function EditarSimuladoPage({
         >
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <Link
-              href="/simulados/gerenciamento"
+              href="/provas/gerenciamento"
               style={{
                 width: 40,
                 height: 40,
@@ -261,7 +253,7 @@ export default function EditarSimuladoPage({
                   letterSpacing: "-0.02em",
                 }}
               >
-                Editar Simulado
+                Editar Prova
               </h1>
               <p
                 style={{
@@ -270,7 +262,7 @@ export default function EditarSimuladoPage({
                   fontSize: 13,
                 }}
               >
-                Altere as configurações do simulado e requisições
+                Altere as configurações da prova e requisições
               </p>
             </div>
           </div>
@@ -327,13 +319,13 @@ export default function EditarSimuladoPage({
                   letterSpacing: "0.05em",
                 }}
               >
-                Título do Simulado
+                Título da Prova
               </label>
               <input
                 type="text"
                 value={titulo}
                 onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ex: Simulado Geral 2º Bimestre"
+                placeholder="Ex: Prova Geral 2º Bimestre"
                 style={{
                   width: "100%",
                   padding: "12px 16px",

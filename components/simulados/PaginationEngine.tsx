@@ -113,16 +113,41 @@ export function PaginationEngine({
           return h;
         });
 
+        let descritivaH = 0;
+        let linhasResposta = 5;
+        let estiloEspaco = 'em_branco';
+        if (q.tipo_questao === 'descritiva') {
+          const match = q.enunciado?.match(/<meta name="linhas_resposta" content="(.*?)">/);
+          if (match) {
+            linhasResposta = parseInt(match[1], 10) || 5;
+          }
+          const matchEstilo = q.enunciado?.match(/<meta name="estilo_espaco" content="(.*?)">/);
+          if (matchEstilo) {
+            estiloEspaco = matchEstilo[1];
+          }
+          descritivaH = linhasResposta * 28 + 20; // 28px height per line + padding
+          totalH += descritivaH + ALT_SPACING;
+        }
+
         if (currentY + questionMargin + totalH <= getAvailableHeight()) {
-          pushBlock({ type: 'full', q, qIndex: idx }, totalH, questionMargin);
+          pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, questionMargin);
         } else {
           pushBlock({ type: 'part_enunciado', q, qIndex: idx }, enunH, questionMargin);
           (q.imagens || []).forEach((img: string, i: number) => {
              pushBlock({ type: 'part_img', q, imgUrl: img, imgIndex: i }, imgsH[i], ALT_SPACING);
           });
-          (q.simulados_alternativas || []).forEach((a: any, i: number) => {
-             pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
-          });
+          
+          if (q.tipo_questao === 'descritiva') {
+             for (let i = 0; i < linhasResposta; i++) {
+                const lineH = 28;
+                const margin = i === 0 ? ALT_SPACING : 0;
+                pushBlock({ type: 'part_descritiva_line', q, estiloEspaco }, lineH, margin);
+             }
+          } else {
+            (q.simulados_alternativas || []).forEach((a: any, i: number) => {
+               pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
+            });
+          }
         }
       });
 
@@ -130,6 +155,10 @@ export function PaginationEngine({
         if (currentCols.some(col => col.length > 0)) {
           newPages.push(currentCols);
         }
+      }
+
+      if (newPages.length === 0) {
+        newPages.push(Array.from({ length: columns }, () => []));
       }
 
       setPages(newPages);

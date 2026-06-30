@@ -6,10 +6,10 @@ import { FileText, Calendar, Layers, ChevronRight, PenTool, ChevronDown, FileDow
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { GabaritoModal } from '@/components/simulados/GabaritoModal'
+import { ProvaGabaritoModal } from '@/components/simulados/ProvaGabaritoModal'
 
 export default function SimuladosListaPage() {
-  const [simulados, setSimulados] = useState<any[]>([])
+  const [provas, setSimulados] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [collapsedBimesters, setCollapsedBimesters] = useState<Record<string, boolean>>({})
   const [collapsedTurmas, setCollapsedTurmas] = useState<Record<string, boolean>>({})
@@ -42,7 +42,7 @@ export default function SimuladosListaPage() {
     const newStatus = currentStatus === 'aprovado' ? 'rascunho' : 'aprovado'
     const isApproving = newStatus === 'aprovado'
     
-    if (!window.confirm(isApproving ? 'Confirmar aprovação deste simulado?' : 'Reverter simulado para rascunho?')) return
+    if (!window.confirm(isApproving ? 'Confirmar aprovação desta prova?' : 'Reverter prova para rascunho?')) return
 
     let approverName = 'Usuário Atual'
     if (isApproving) {
@@ -60,7 +60,7 @@ export default function SimuladosListaPage() {
     
     const now = isApproving ? new Date().toISOString() : null
     
-    const { error } = await supabase.from('simulados').update({ 
+    const { error } = await supabase.from('provas').update({ 
       status: newStatus,
       ...(isApproving ? { aprovado_por: approverName, data_aprovacao: now } : { aprovado_por: null, data_aprovacao: null })
     }).eq('id', id)
@@ -68,12 +68,12 @@ export default function SimuladosListaPage() {
     if (!error) {
       setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
     } else {
-      const fallback = await supabase.from('simulados').update({ status: newStatus }).eq('id', id)
+      const fallback = await supabase.from('provas').update({ status: newStatus }).eq('id', id)
       
       if (!fallback.error) {
          setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
          if (isApproving) {
-           alert('Aprovado visualmente!\n\nAVISO: Ocorreu um erro ao salvar o nome de quem aprovou. As colunas "aprovado_por" (tipo text) e "data_aprovacao" (tipo timestamp) precisam ser criadas na tabela "simulados" no seu Supabase para salvar essa informação permanentemente no banco.')
+           alert('Aprovado visualmente!\n\nAVISO: Ocorreu um erro ao salvar o nome de quem aprovou. As colunas "aprovado_por" (tipo text) e "data_aprovacao" (tipo timestamp) precisam ser criadas na tabela "provas" no seu Supabase para salvar essa informação permanentemente no banco.')
          }
       } else {
          alert('Erro ao atualizar status: ' + fallback.error.message)
@@ -81,28 +81,28 @@ export default function SimuladosListaPage() {
     }
   }
 
-  const handleAction = (e: React.MouseEvent, action: string, simuladoId: string) => {
+  const handleAction = (e: React.MouseEvent, action: string, provaId: string) => {
     e.preventDefault()
     e.stopPropagation()
     
     if (action === 'excluir') {
-      if (window.confirm('Tem certeza que deseja excluir este simulado? Esta ação não pode ser desfeita.')) {
-        supabase.from('simulados').delete().eq('id', simuladoId).then(({ error }) => {
+      if (window.confirm('Tem certeza que deseja excluir esta prova? Esta ação não pode ser desfeita.')) {
+        supabase.from('provas').delete().eq('id', provaId).then(({ error }) => {
           if (!error) {
-            setSimulados(prev => prev.filter(s => s.id !== simuladoId))
+            setSimulados(prev => prev.filter(s => s.id !== provaId))
           } else {
-            alert('Erro ao excluir simulado.')
+            alert('Erro ao excluir prova.')
           }
         })
       }
     } else if (action === 'gerenciar') {
-      router.push(`/simulados/lista/${simuladoId}`)
+      router.push(`/provas/lista/${provaId}`)
     } else if (action === 'gerar_pdf') {
-      router.push(`/simulados/imprimir/${simuladoId}`)
+      router.push(`/provas/imprimir/${provaId}`)
     } else if (action === 'gerar_gabarito') {
-      setGabaritoModalId(simuladoId)
+      setGabaritoModalId(provaId)
     } else if (action === 'adaptar') {
-      router.push(`/simulados/adaptar/${simuladoId}`)
+      router.push(`/provas/adaptar/${provaId}`)
     } else {
       alert(`Ação de ${action} em desenvolvimento.`)
     }
@@ -111,11 +111,11 @@ export default function SimuladosListaPage() {
   useEffect(() => {
     if (!hydrated) return
     async function loadData() {
-      const { data } = await supabase.from('simulados').select(`
+      const { data } = await supabase.from('provas').select(`
         *,
         simulados_bimestres ( nome ),
-        simulados_questoes ( id, id_professor, id_disciplina ),
-        simulados_requisicoes ( id_professor, id_disciplina, quantidade_questoes, simulados_disciplinas ( nome ) )
+        provas_questoes ( id, id_professor, id_disciplina ),
+        provas_requisicoes ( id_professor, id_disciplina, quantidade_questoes, simulados_disciplinas ( nome ) )
       `).order('created_at', { ascending: false })
 
       try {
@@ -134,14 +134,27 @@ export default function SimuladosListaPage() {
 
         if (isProfessor && currentUser) {
           processedData = processedData.filter(s => {
-            const reqs = s.simulados_requisicoes || []
+            const reqs = s.provas_requisicoes || []
             return reqs.some((r: any) => r.id_professor === currentUser.id)
           })
         }
 
-        setSimulados(processedData.map(s => ({
+        const enriched = processedData.map(s => {
+          if (s.status === 'rascunho' || s.status === 'em_andamento') {
+            const reqs = s.provas_requisicoes || []
+            let pending = false
+            reqs.forEach((r: any) => {
+              const qts = s.provas_questoes?.filter((q: any) => q.id_disciplina === r.id_disciplina).length || 0
+              if (qts < (r.quantidade_questoes || 0)) pending = true
+            })
+            if (!pending && reqs.length > 0) s.status = 'pronto_para_revisao'
+          }
+          return s
+        })
+
+        setSimulados(enriched.map(s => ({
           ...s,
-          questoesCadastradas: s.simulados_questoes?.length || 0
+          questoesCadastradas: s.provas_questoes?.length || 0
         })))
       }
       setLoading(false)
@@ -170,18 +183,18 @@ export default function SimuladosListaPage() {
               <BookOpen size={28} color="#3b82f6" />
             </div>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Meus Simulados</h1>
-              <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Selecione um simulado para gerenciar suas questões e estrutura</p>
+              <h1 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Minhas Provas</h1>
+              <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Selecione uma prova para gerenciar suas questões e estrutura</p>
             </div>
           </div>
           {!isProfessor && (
             <button className="action-btn"
-              onClick={() => router.push('/simulados/gerenciamento/novo')} 
+              onClick={() => router.push('/provas/gerenciamento/novo')} 
               style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', color: 'white', padding: '12px 24px', borderRadius: 12, textDecoration: 'none', fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
             >
-              <PenTool size={18} /> Novo Simulado
+              <PenTool size={18} /> Nova Prova
             </button>
           )}
         </div>
@@ -193,7 +206,7 @@ export default function SimuladosListaPage() {
             </motion.div>
             <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 600, fontSize: 16 }}>Sincronizando banco de dados...</div>
           </div>
-        ) : simulados.length === 0 ? (
+        ) : provas.length === 0 ? (
           <div style={{ 
             background: 'hsl(var(--bg-surface))', 
             border: '1px dashed hsl(var(--border-subtle))', 
@@ -208,25 +221,25 @@ export default function SimuladosListaPage() {
             <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(59,130,246,0.05)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
               <FileText size={40} />
             </div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px', letterSpacing: '-0.02em' }}>Nenhum Simulado Encontrado</h2>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px', letterSpacing: '-0.02em' }}>Nenhuma Prova Encontrada</h2>
             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, margin: '0 0 32px', maxWidth: 450, lineHeight: 1.5 }}>
-              {isProfessor ? 'Você ainda não foi vinculado a nenhum simulado. Aguarde novas requisições da coordenação.' : 'Você ainda não possui nenhum simulado cadastrado. Crie seu primeiro simulado agora mesmo.'}
+              {isProfessor ? 'Você ainda não foi vinculado a nenhuma prova. Aguarde novas requisições da coordenação.' : 'Você ainda não possui nenhuma prova cadastrada. Crie sua primeira prova agora mesmo.'}
             </p>
             {!isProfessor && (
-              <button onClick={() => router.push('/simulados/gerenciamento/novo')} style={{ background: '#3b82f6', color: 'white', padding: '14px 28px', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)' }}>
-                Criar Simulado Agora
+              <button onClick={() => router.push('/provas/gerenciamento/novo')} style={{ background: '#3b82f6', color: 'white', padding: '14px 28px', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(59,130,246,0.6)' }}>
+                Criar Prova Agora
               </button>
             )}
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
-            {Object.keys(simulados.reduce((acc, curr) => {
+            {Object.keys(provas.reduce((acc, curr) => {
               const bimester = curr.simulados_bimestres?.nome || 'Sem Bimestre'
               if (!acc[bimester]) acc[bimester] = []
               acc[bimester].push(curr)
               return acc
             }, {} as Record<string, any[]>)).sort((a, b) => a.localeCompare(b)).map(bimester => {
-              const bimesterSimulados = simulados.filter(s => (s.simulados_bimestres?.nome || 'Sem Bimestre') === bimester)
+              const bimesterSimulados = provas.filter(s => (s.simulados_bimestres?.nome || 'Sem Bimestre') === bimester)
               const isCollapsed = collapsedBimesters[bimester]
               
               // Group by Turma
@@ -277,7 +290,7 @@ export default function SimuladosListaPage() {
                         {bimester}
                       </h2>
                       <span style={{ marginLeft: 8, fontSize: 12, background: 'rgba(99,102,241,0.1)', color: '#6366f1', padding: '6px 14px', borderRadius: 100, fontWeight: 800, letterSpacing: '0.05em' }}>
-                        {bimesterSimulados.length} SIMULADO{bimesterSimulados.length !== 1 ? 'S' : ''}
+                        {bimesterSimulados.length} PROVA{bimesterSimulados.length !== 1 ? 'S' : ''}
                       </span>
                     </div>
 
@@ -343,13 +356,13 @@ export default function SimuladosListaPage() {
                                       <div className="cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
                                         {turmasMap[turma].map((s, i) => {
                                           const qCadastradas = s.questoesCadastradas || 0;
-                                          const qRequisitadas = s.simulados_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
+                                          const qRequisitadas = s.provas_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
                                           const percent = qRequisitadas > 0 ? Math.min(Math.round((qCadastradas / qRequisitadas) * 100), 100) : 0;
                                           const isComplete = qRequisitadas > 0 && qCadastradas >= qRequisitadas;
 
                                           return (
                                             <motion.div key={`${turma}-${s.id}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-                                              <div className="simulado-card"
+                                              <div className="prova-card"
                                                 style={{ 
                                                 background: 'hsl(var(--bg-surface))', 
                                                 backdropFilter: 'blur(10px)',
@@ -442,13 +455,13 @@ export default function SimuladosListaPage() {
                                                     </div>
                                                   </div>
 
-                                                  {s.simulados_requisicoes && s.simulados_requisicoes.length > 0 ? (
+                                                  {s.provas_requisicoes && s.provas_requisicoes.length > 0 ? (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-                                                      {s.simulados_requisicoes.map((req: any, idx: number) => {
-                                                        const profName = professoresMap[req.id_professor] || 'Professor não encontrado'
+                                                      {s.provas_requisicoes.map((req: any, idx: number) => {
+                                                        const profName = professoresMap[req.id_professor] || 'Professor não encontrada'
                                                         const discName = req.simulados_disciplinas?.nome || 'Sem Disciplina'
                                                         const requestedQty = req.quantidade_questoes || 0
-                                                        const currentQty = s.simulados_questoes?.filter((q: any) => 
+                                                        const currentQty = s.provas_questoes?.filter((q: any) => 
                                                           q.id_professor === req.id_professor && q.id_disciplina === req.id_disciplina
                                                         ).length || 0
 
@@ -465,7 +478,7 @@ export default function SimuladosListaPage() {
                                                                 setTimeout(() => setShakeId(null), 300)
                                                                 return
                                                               }
-                                                              router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
+                                                              router.push(`/provas/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
                                                             }}
                                                             style={{ display: 'flex', alignItems: 'center', gap: 12, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '12px 16px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
                                                             onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.03)' } }}
@@ -501,16 +514,16 @@ export default function SimuladosListaPage() {
                                                   <button onClick={(e) => handleAction(e, 'gerar_gabarito', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar Gabarito" onMouseEnter={e => { e.currentTarget.style.color = '#10b981'; e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = 'rgba(16,185,129,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
                                                     <CheckSquare size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Gabarito</span>
                                                   </button>
-                                                  <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                  <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar Prova" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
                                                     <Copy size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Adaptar</span>
                                                   </button>
-                                                  <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                  <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir Prova" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
                                                     <Trash2 size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Excluir</span>
                                                   </button>
                                                 </div>
 
                                                 <div 
-                                                  onClick={() => router.push(`/simulados/lista/${s.id}`)}
+                                                  onClick={() => router.push(`/provas/lista/${s.id}`)}
                                                   style={{ 
                                                     borderTop: '1px solid hsl(var(--border-subtle))', 
                                                     paddingTop: 20, 
@@ -556,8 +569,8 @@ export default function SimuladosListaPage() {
       </motion.div>
 
       {gabaritoModalId && (
-        <GabaritoModal
-          simuladoId={gabaritoModalId}
+        <ProvaGabaritoModal
+          provaId={gabaritoModalId}
           onClose={() => setGabaritoModalId(null)}
         />
       )}
@@ -573,7 +586,7 @@ export default function SimuladosListaPage() {
           .turma-container { padding-left: 0 !important; gap: 16px !important; }
           .turma-header { padding: 12px 16px !important; }
           .cards-grid { grid-template-columns: 1fr !important; padding-left: 0 !important; gap: 16px !important; }
-          .simulado-card { padding: 16px !important; }
+          .prova-card { padding: 16px !important; }
           .actions-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
         }
       `}</style>

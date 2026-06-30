@@ -25,9 +25,7 @@ export default function NovoSimuladoPage() {
   const [requisicoes, setRequisicoes] = useState([
     { id: Date.now().toString(), disciplinaId: '', professorId: '', qtdQuestoes: 10 }
   ])
-
-  const seriesOptions = ['6º Ano', '7º Ano', '8º Ano', '9º Ano', '1ª Série', '2ª Série', '3ª Série']
-
+  const seriesOptions = ['1º Ano', '2º Ano', '3º Ano', '4º Ano', '5º Ano', '6º Ano', '7º Ano', '8º Ano', '9º Ano', '1ª Série', '2ª Série', '3ª Série']
   useEffect(() => {
     async function loadData() {
       const { data: bims } = await supabase.from('simulados_bimestres').select('*').eq('status', 'ativo').order('nome')
@@ -86,7 +84,7 @@ export default function NovoSimuladoPage() {
 
     setLoading(true)
     try {
-      const { data: simData, error: simError } = await supabase.from('simulados').insert([{
+      const { data: simData, error: simError } = await supabase.from('provas').insert([{
         titulo,
         data_aplicacao: dataAplicacao,
         id_bimestre: bimestreId || null,
@@ -98,21 +96,21 @@ export default function NovoSimuladoPage() {
 
       if (requisicoes.length > 0) {
         const reqs = requisicoes.map(r => ({
-          id_simulado: simData.id,
+          id_prova: simData.id,
           id_disciplina: r.disciplinaId,
           id_professor: r.professorId,
           quantidade_questoes: r.qtdQuestoes,
           status: 'pendente'
         }))
-        const { error: reqError } = await supabase.from('simulados_requisicoes').insert(reqs)
+        const { error: reqError } = await supabase.from('provas_requisicoes').insert(reqs)
         if (reqError) throw reqError
       }
       
-      alert('Simulado criado com sucesso! Requisições prontas.')
-      router.push('/simulados/gerenciamento')
+      alert('Prova criada com sucesso! Requisições prontas.')
+      router.push('/provas/gerenciamento')
     } catch (err) {
       console.error(err)
-      alert('Erro ao criar simulado: ' + ((err as any).message || JSON.stringify(err)))
+      alert('Erro ao criar prova: ' + ((err as any).message || JSON.stringify(err)))
     } finally {
       setLoading(false)
     }
@@ -125,11 +123,11 @@ export default function NovoSimuladoPage() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link href="/simulados/gerenciamento" style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100, 116, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-primary))', textDecoration: 'none' }}>
+            <Link href="/provas/gerenciamento" style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100, 116, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-primary))', textDecoration: 'none' }}>
               <ArrowLeft size={20} />
             </Link>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Novo Simulado</h1>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Nova Prova</h1>
               <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 14 }}>Planejamento e requisição de questões</p>
             </div>
           </div>
@@ -153,12 +151,12 @@ export default function NovoSimuladoPage() {
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32, marginBottom: 32 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Título do Simulado</label>
+              <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Título da Prova</label>
               <input 
                 type="text" 
                 value={titulo} 
                 onChange={e => setTitulo(e.target.value)}
-                placeholder="Ex: Simulado Geral 2º Bimestre"
+                placeholder="Ex: Prova Geral 2º Bimestre"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none' }}
               />
             </div>

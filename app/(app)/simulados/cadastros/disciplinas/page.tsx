@@ -24,7 +24,7 @@ export default function DisciplinasPage() {
 
   const loadProfessores = async () => {
     try {
-      const res = await fetch('/api/configuracoes/usuarios?type=colaboradores')
+      const res = await fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000')
       if (res.ok) {
         const json = await res.json()
         const data = json.data || json

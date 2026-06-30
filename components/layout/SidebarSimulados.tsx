@@ -18,14 +18,16 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/simulados', icon: <LayoutDashboard size={18} /> },
-  { label: 'Gerenciamento', href: '/simulados/gerenciamento', icon: <PenTool size={18} /> },
+  { label: 'Gerenciar Simulados', href: '/simulados/gerenciamento', icon: <PenTool size={18} /> },
   { label: 'Meus Simulados', href: '/simulados/lista', icon: <FileText size={18} /> },
+  { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} /> },
+  { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} /> },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Bimestres', href: '/simulados/cadastros/bimestres', icon: <Layers size={18} /> },
   { label: 'Disciplinas', href: '/simulados/cadastros/disciplinas', icon: <BookOpen size={18} /> },
   { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
-  { label: 'Voltar ao ERP', href: '/dashboard', icon: <ChevronLeft size={18} /> },
+  { label: 'Voltar ao ERP', href: '/login?step=choose_system', icon: <ChevronLeft size={18} /> },
   { label: 'Trocar Sistema', href: '/login?step=choose_system', icon: <ChevronLeft size={18} /> },
 ]
 
@@ -39,7 +41,7 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Meus Simulados', 'Trocar Sistema'].includes(item.label)
+      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas', 'Trocar Sistema'].includes(item.label)
     }
     return item.label !== 'Trocar Sistema'
   })
@@ -75,7 +77,7 @@ export function SidebarSimulados() {
         }}
       >
         {activeNavItems.map((item, idx) => {
-          const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/dashboard' && pathname?.startsWith(item.href))
+          const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
           return (
             <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 60 }}>
               <div style={{
@@ -92,7 +94,7 @@ export function SidebarSimulados() {
                 {item.icon}
               </div>
               <span style={{ fontSize: 10, color: isActive ? '#f43f5e' : 'rgba(255,255,255,0.5)', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s' }}>
-                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'ERP' : item.label === 'Trocar Sistema' ? 'Seleção' : item.label}
+                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'Seleção' : item.label === 'Trocar Sistema' ? 'Seleção' : item.label}
               </span>
             </Link>
           )
@@ -172,8 +174,8 @@ export function SidebarSimulados() {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }} className="no-scrollbar">
         {activeNavItems.map((item, idx) => {
-          const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/dashboard' && pathname?.startsWith(item.href))
-          const isBack = item.href === '/dashboard' || item.href === '/login?step=choose_system'
+          const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
+          const isBack = item.href === '/login?step=choose_system'
 
           return (
             <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : 0 }}>
@@ -228,7 +230,7 @@ export function SidebarSimulados() {
 
         {/* User Profile Frame */}
         <div style={{
-          marginTop: activeNavItems.some(i => i.href === '/dashboard') ? 16 : 'auto',
+          marginTop: activeNavItems.some(i => i.href === '/login?step=choose_system') ? 16 : 'auto',
           marginBottom: 16,
           padding: collapsed ? '12px 0' : '16px',
           background: 'rgba(255,255,255,0.02)',

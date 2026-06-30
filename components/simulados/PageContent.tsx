@@ -174,7 +174,34 @@ export function PageContent({
                             </button>
                           </div>
                         ))}
+                        
+                        {q.tipo_questao === 'descritiva' && (
+                          block.estiloEspaco === 'pautado' ? (
+                            <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column' }}>
+                              {Array.from({ length: block.linhasResposta || 5 }).map((_, i) => (
+                                <div key={i} style={{ height: 28, borderBottom: '1px solid #000' }} />
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: 16, width: '100%', height: ((block.linhasResposta || 5) * 28) }} />
+                          )
+                        )}
                       </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (block.type === 'part_descritiva_line') {
+                return (
+                  <div key={`b-${bIndex}`} style={{ marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
+                    <div style={{ width: '28px', minWidth: '28px' }}></div>
+                    <div style={{ flex: 1 }}>
+                      {block.estiloEspaco === 'pautado' ? (
+                        <div style={{ height: 28, borderBottom: '1px solid #000', width: '100%' }} />
+                      ) : (
+                        <div style={{ height: 28, width: '100%' }} />
+                      )}
                     </div>
                   </div>
                 );
