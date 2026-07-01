@@ -189,7 +189,7 @@ export function PaginationEngine({
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [questoes, columns, fontSize, trigger]);
+  }, [questoes, columns, fontSize, trigger, forceExtraPage]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const shadowColWidth = columns === 1 ? '180mm' : '84mm';
