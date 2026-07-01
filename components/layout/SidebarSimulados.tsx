@@ -22,6 +22,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Meus Simulados', href: '/simulados/lista', icon: <FileText size={18} /> },
   { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} /> },
   { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} /> },
+  { label: 'Gerenciar Redação ENEM', href: '/redacao-enem/gerenciamento', icon: <PenTool size={18} /> },
+  { label: 'Minhas Redações ENEM', href: '/redacao-enem/lista', icon: <FileText size={18} /> },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
 ]
@@ -57,7 +59,7 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas'].includes(item.label)
+      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas', 'Minhas Redações ENEM'].includes(item.label)
     }
     return true
   })
