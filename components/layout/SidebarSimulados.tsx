@@ -204,8 +204,8 @@ export function SidebarSimulados() {
           const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
           const isBack = item.href === '/login?step=choose_system'
 
-          const hasNextInGroup = item.groupId && arr[idx + 1]?.groupId === item.groupId
           const hasPrevInGroup = item.groupId && arr[idx - 1]?.groupId === item.groupId
+          const isChild = hasPrevInGroup
 
           return (
             <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : 0 }}>
@@ -214,14 +214,13 @@ export function SidebarSimulados() {
                 alignItems: 'center',
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 gap: 16,
-                padding: collapsed ? '12px 0' : '14px 18px',
+                padding: collapsed ? '12px 0' : (isChild ? '14px 18px 14px 44px' : '14px 18px'),
                 borderRadius: 16,
                 background: isActive ? 'linear-gradient(90deg, rgba(244,63,94,0.1) 0%, rgba(244,63,94,0.02) 100%)' : 'transparent',
                 color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 border: isActive ? '1px solid rgba(244,63,94,0.2)' : '1px solid transparent',
-                position: 'relative',
-                overflow: 'hidden'
+                position: 'relative'
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
@@ -238,29 +237,28 @@ export function SidebarSimulados() {
                 }
               }}
               >
+                {!collapsed && isChild && (
+                  <div style={{
+                    position: 'absolute',
+                    top: -22,
+                    left: 27,
+                    width: 13,
+                    height: 45,
+                    borderLeft: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                    borderBottom: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                    borderBottomLeftRadius: 10,
+                    pointerEvents: 'none',
+                    zIndex: 0,
+                    transition: 'all 0.3s ease'
+                  }} />
+                )}
+
                 {isActive && !collapsed && (
                   <motion.div layoutId="activeNavIndicator" style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 3, background: '#f43f5e', borderRadius: '0 4px 4px 0', boxShadow: '0 0 10px rgba(244,63,94,0.5)' }} />
                 )}
                 
                 <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {item.icon}
-                  {/* Linha conectora ultramoderna */}
-                  {!collapsed && hasNextInGroup && (
-                    <div style={{ 
-                      position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', 
-                      width: 2, height: 26, 
-                      background: 'linear-gradient(to bottom, rgba(244,63,94,0.4), rgba(244,63,94,0.1))', 
-                      zIndex: -1, marginTop: 4
-                    }} />
-                  )}
-                  {!collapsed && hasPrevInGroup && (
-                    <div style={{ 
-                      position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', 
-                      width: 2, height: 26, 
-                      background: 'linear-gradient(to top, rgba(244,63,94,0.4), rgba(244,63,94,0.1))', 
-                      zIndex: -1, marginBottom: 4
-                    }} />
-                  )}
                 </div>
                 
                 <AnimatePresence>
