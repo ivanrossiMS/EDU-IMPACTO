@@ -14,16 +14,17 @@ interface NavItem {
   label: string
   href: string
   icon: React.ReactNode
+  groupId?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/simulados', icon: <LayoutDashboard size={18} /> },
-  { label: 'Gerenciar Simulados', href: '/simulados/gerenciamento', icon: <PenTool size={18} /> },
-  { label: 'Meus Simulados', href: '/simulados/lista', icon: <FileText size={18} /> },
-  { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} /> },
-  { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} /> },
-  { label: 'Gerenciar Redação ENEM', href: '/redacao-enem/gerenciamento', icon: <PenTool size={18} /> },
-  { label: 'Minhas Redações ENEM', href: '/redacao-enem/lista', icon: <FileText size={18} /> },
+  { label: 'Gerenciar Simulados', href: '/simulados/gerenciamento', icon: <PenTool size={18} />, groupId: 'simulados' },
+  { label: 'Meus Simulados', href: '/simulados/lista', icon: <FileText size={18} />, groupId: 'simulados' },
+  { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} />, groupId: 'provas' },
+  { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} />, groupId: 'provas' },
+  { label: 'Gerenciar Redação ENEM', href: '/redacao-enem/gerenciamento', icon: <PenTool size={18} />, groupId: 'redacao' },
+  { label: 'Minhas Redações ENEM', href: '/redacao-enem/lista', icon: <FileText size={18} />, groupId: 'redacao' },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
 ]
@@ -199,9 +200,12 @@ export function SidebarSimulados() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8 }} className="no-scrollbar">
-        {activeNavItems.map((item, idx) => {
+        {activeNavItems.map((item, idx, arr) => {
           const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
           const isBack = item.href === '/login?step=choose_system'
+
+          const hasNextInGroup = item.groupId && arr[idx + 1]?.groupId === item.groupId
+          const hasPrevInGroup = item.groupId && arr[idx - 1]?.groupId === item.groupId
 
           return (
             <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : 0 }}>
@@ -240,6 +244,23 @@ export function SidebarSimulados() {
                 
                 <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {item.icon}
+                  {/* Linha conectora ultramoderna */}
+                  {!collapsed && hasNextInGroup && (
+                    <div style={{ 
+                      position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', 
+                      width: 2, height: 26, 
+                      background: 'linear-gradient(to bottom, rgba(244,63,94,0.4), rgba(244,63,94,0.1))', 
+                      zIndex: -1, marginTop: 4
+                    }} />
+                  )}
+                  {!collapsed && hasPrevInGroup && (
+                    <div style={{ 
+                      position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', 
+                      width: 2, height: 26, 
+                      background: 'linear-gradient(to top, rgba(244,63,94,0.4), rgba(244,63,94,0.1))', 
+                      zIndex: -1, marginBottom: 4
+                    }} />
+                  )}
                 </div>
                 
                 <AnimatePresence>
