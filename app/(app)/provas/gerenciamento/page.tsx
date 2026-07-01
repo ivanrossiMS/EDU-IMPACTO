@@ -30,7 +30,7 @@ export default function GerenciamentoSimuladosPage() {
       
       // Filtra para mostrar apenas provas que o usuário criou ou que ele é o professor vinculado,
       // exceto se for Administrador ou Diretor
-      if (currentUserPerfil !== 'Administrador Master' && currentUserPerfil !== 'Diretor Geral') {
+      if (currentUserPerfil === 'Professor') {
          filteredData = data.filter(s => {
            const isCreator = s.criado_por === currentUser.id;
            const isLinkedProfessor = s.provas_requisicoes?.some((r: any) => r.id_professor === currentUser.id);

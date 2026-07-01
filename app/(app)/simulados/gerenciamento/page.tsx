@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PenTool, Plus, Printer, MoreVertical, Search, Trash2, Edit2, Calendar, Layout, FileText, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useApp } from '@/lib/context'
 
 export default function GerenciamentoSimuladosPage() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -12,18 +13,27 @@ export default function GerenciamentoSimuladosPage() {
   const [simulados, setSimulados] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const { currentUser, currentUserPerfil } = useApp()
 
   const loadData = async () => {
+    if (!currentUser) return;
     setLoading(true)
     const { data } = await supabase.from('simulados').select(`
       *,
       simulados_bimestres ( nome ),
-      simulados_requisicoes ( quantidade_questoes ),
+      simulados_requisicoes ( quantidade_questoes, id_professor ),
       simulados_questoes ( id )
     `).order('created_at', { ascending: false })
     
     if (data) {
-      const mapped = data.map(s => {
+      let filteredData = data;
+      if (currentUserPerfil === 'Professor') {
+         filteredData = data.filter(s => {
+           return s.simulados_requisicoes?.some((r: any) => r.id_professor === currentUser.id);
+         });
+      }
+
+      const mapped = filteredData.map(s => {
         const questoesTotais = s.simulados_requisicoes?.reduce((acc: number, r: any) => acc + (r.quantidade_questoes || 0), 0) || 0
         const questoesCadastradas = s.simulados_questoes?.length || 0
         return {
@@ -39,8 +49,10 @@ export default function GerenciamentoSimuladosPage() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    if (currentUser) {
+      loadData()
+    }
+  }, [currentUser])
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este simulado? Esta ação não pode ser desfeita.')) return
