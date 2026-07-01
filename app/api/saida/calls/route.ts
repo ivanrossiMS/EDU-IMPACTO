@@ -98,7 +98,7 @@ export async function POST(request: Request) {
         return [r.id, status]
       }))
 
-      const { error } = await supabase.from('saida_calls').upsert(rows)
+      const { error } = await supabaseService.from('saida_calls').upsert(rows)
       if (error) throw new Error(error.message)
       
       // Processar Notificações de Saída
@@ -172,7 +172,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data, error } = await supabase.from('saida_calls').upsert(row).select().single()
+    const { data, error } = await supabaseService.from('saida_calls').upsert(row).select().single()
     if (error) throw new Error(error.message)
 
     const isConfirmed = data.dados?.status === 'confirmed'
@@ -233,8 +233,14 @@ export async function DELETE(request: Request) {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
-    const supabase = await createProtectedClient()
-    const { error } = await supabase.from('saida_calls').delete().eq('id', id)
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseService = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
+    )
+
+    const { error } = await supabaseService.from('saida_calls').delete().eq('id', id)
     if (error) throw new Error(error.message)
 
     return NextResponse.json({ ok: true })
