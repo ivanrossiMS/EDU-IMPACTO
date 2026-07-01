@@ -364,11 +364,12 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     )
   }, [activeCalls, student.id])
 
-  const alreadyConfirmed = useMemo(() => {
-    return activeCalls.some(c =>
+  const confirmedCall = useMemo(() => {
+    return activeCalls.find(c =>
       c.studentId === student.id && c.status === 'confirmed'
     )
   }, [activeCalls, student.id])
+  const alreadyConfirmed = !!confirmedCall
 
   const initials = useMemo(() => student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase(), [student.nome])
 
@@ -406,11 +407,11 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                 background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)',
               }}>⚠ Já em chamada</span>
             )}
-            {alreadyConfirmed && (
+            {confirmedCall && (
               <span style={{
                 marginLeft: 4, padding: '1px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800,
                 background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)',
-              }}>✅ Saída Confirmada</span>
+              }}>✅ Saída Confirmada às {confirmedCall.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall.calledAt)} ({confirmedCall.guardianName || 'Autorizado'})</span>
             )}
           </div>
         </div>
@@ -432,7 +433,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
             </span>
           )}
         </div>
-        {!autorizaSaida && autorizados.length === 0 && !student.responsavel && (
+        {!autorizaSaida && respList.length === 0 && (
           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
             Nenhum responsável configurado. Cadastre em Saúde &amp; Obs do aluno.
           </div>

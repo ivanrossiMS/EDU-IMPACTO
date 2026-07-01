@@ -50,19 +50,25 @@ export async function getAuthUserByEmail(email: string) {
 
 /**
  * Helper: busca um usuário do Supabase Auth por email usando filter.
- * Evita carregar 1.000 usuários na memória.
+ * Usa a tabela system_users como fonte primária (O(1) com índice)
+ * em vez de carregar todos os usuários do Auth (O(n)).
  */
 export async function lookupAuthUserByEmail(email: string) {
   const admin = getAdminClient()
-  // Supabase Admin API v2 suporta filtro por email via listUsers filter param
-  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 })
-  // Fallback: usar getUserByEmail via undocumented filter — se não disponível,
-  // fazemos lookup na tabela interna system_users que é sempre consistente
-  const { data: found } = await admin.auth.admin.listUsers({
-    page: 1,
-    perPage: 1000,
-  })
-  return (found?.users || []).find(
-    u => u.email?.toLowerCase() === email.toLowerCase()
-  ) || null
+  // Busca na tabela interna — sempre consistente e indexada
+  const { data: found } = await admin
+    .from('system_users')
+    .select('id, email, nome, cargo, perfil, status')
+    .eq('email', email.toLowerCase().trim())
+    .maybeSingle()
+  
+  if (!found) return null
+  
+  // Se precisar dos dados completos do Supabase Auth, busca só esse usuário
+  try {
+    const { data: authUser } = await admin.auth.admin.getUserById(found.id)
+    return authUser?.user || null
+  } catch {
+    return null
+  }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ export async function GET(request: Request) {
     const fromDate = url.searchParams.get('from')
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
-    let query = supabase.from('saida_calls').select('*').order('created_at', { ascending: false }).limit(1500)
+    let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(300)
     
     if (studentId) {
       query = query.eq('dados->>studentId', studentId)
@@ -79,12 +80,7 @@ export async function POST(request: Request) {
       // Buscar status anterior para evitar disparos duplicados de notificação
       const ids = rows.map((r: any) => r.id)
       
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabaseService = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
-      )
+      const supabaseService = getAdminClient()
       
       const { data: existingRows } = await supabaseService.from('saida_calls').select('id, dados').in('id', ids)
       
@@ -98,7 +94,7 @@ export async function POST(request: Request) {
         return [r.id, status]
       }))
 
-      const { error } = await supabaseService.from('saida_calls').upsert(rows)
+      const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
       
       // Processar Notificações de Saída
@@ -155,12 +151,7 @@ export async function POST(request: Request) {
     const row = buildRow(body)
 
     // Buscar status anterior
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabaseService = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
-    )
+    const supabaseService = getAdminClient()
     const { data: existingRow } = await supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
     
     let wasConfirmed = false
@@ -233,12 +224,7 @@ export async function DELETE(request: Request) {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabaseService = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: false }, global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) } }
-    )
+    const supabaseService = getAdminClient()
 
     const { error } = await supabaseService.from('saida_calls').delete().eq('id', id)
     if (error) throw new Error(error.message)

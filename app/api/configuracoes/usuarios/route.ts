@@ -52,15 +52,6 @@ export async function GET(req: Request) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    const supabaseAdmin = getAdminClient()
-    const { data: authData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 10000 }).catch(() => ({ data: { users: [] } }))
-    const authUsersList = authData?.users || []
-    
-    const authMap = new Map<string, any>()
-    for (const au of authUsersList) {
-      if (au.email) authMap.set(au.email.toLowerCase(), au)
-    }
-
     if (type === 'colaboradores') {
       let query = supabase.from('system_users').select('*', { count: 'exact' })
       if (search) {
@@ -69,7 +60,24 @@ export async function GET(req: Request) {
       
       const { data: sysUsers, count } = await query.order('nome').range(from, to)
 
-      const mappedSys = (sysUsers || []).map(u => {
+      // Busca dados do Auth APENAS para os usuários desta página (máx 20)
+      // Em vez de carregar 10.000 usuários para mapear localmente.
+      const supabaseAdmin = getAdminClient()
+      const authMap = new Map<string, any>()
+      if (sysUsers && sysUsers.length > 0) {
+        // Busca em paralelo apenas os usuários desta página pelo ID
+        const authResults = await Promise.allSettled(
+          sysUsers.map((u: any) => supabaseAdmin.auth.admin.getUserById(u.id))
+        )
+        authResults.forEach((result, i) => {
+          if (result.status === 'fulfilled' && result.value.data?.user) {
+            const au = result.value.data.user
+            if (au.email) authMap.set(au.email.toLowerCase(), au)
+          }
+        })
+      }
+
+      const mappedSys = (sysUsers || []).map((u: any) => {
         const email = (u.email || '').trim().toLowerCase()
         const authUser = authMap.get(email)
 
@@ -92,7 +100,7 @@ export async function GET(req: Request) {
           email: email,
           cargo: u.cargo || 'Não definido',
           perfil: perfilStr,
-          status: authUser ? 'ativo' : 'inativo',
+          status: u.status || (authUser ? 'ativo' : 'inativo'),
           ultimoAcesso: authUser?.last_sign_in_at 
             ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
             : 'Nunca acessou'
@@ -101,6 +109,7 @@ export async function GET(req: Request) {
 
       return NextResponse.json({ data: mappedSys, total: count || 0, page, limit })
     }
+
 
     // Fallback logic for general users fetch (legacy support)
     async function fetchAll(table: string, cols: string) {
@@ -125,10 +134,22 @@ export async function GET(req: Request) {
     }
 
     const sysUsers = await fetchAll('system_users', '*')
+
+    // Para o relatório completo (fallback geral), ainda precisamos do mapa de Auth.
+    // Carregamos em paralelo com os dados de alunos para minimizar o tempo total.
+    const supabaseAdminFallback = getAdminClient()
+    const { data: authDataFallback } = await supabaseAdminFallback.auth.admin
+      .listUsers({ page: 1, perPage: 10000 })
+      .catch(() => ({ data: { users: [] } }))
+    const authMap = new Map<string, any>()
+    for (const au of (authDataFallback?.users || [])) {
+      if (au.email) authMap.set(au.email.toLowerCase(), au)
+    }
     
-    const mappedSys = sysUsers.map(u => {
+    const mappedSys = sysUsers.map((u: any) => {
       const email = (u.email || '').trim().toLowerCase()
       const authUser = authMap.get(email)
+
 
       const sysProfile = authUser?.user_metadata?.profile_code
       let perfilStr = 'Colaborador'

@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   const idParam = searchParams.get('id');
   const sinceParam = searchParams.get('since');
   
-  // VERIFICAÇÃO DE PERFIL
+  // VERIFICAÇÃO DE PERFIL — usa user_metadata para evitar round-trip ao banco na maioria dos casos
   let isFamilyOrStudent = false;
   const perfil = user.user_metadata?.perfil || '';
   const cargo = user.user_metadata?.cargo || '';
@@ -51,7 +51,8 @@ export async function GET(request: Request) {
     perfil === 'Aluno'
   ) {
     isFamilyOrStudent = true;
-  } else {
+  } else if (!perfil && !cargo) {
+    // Só consulta o banco se os metadados estão vazios (caso raro)
     const { data: dbUser } = await supabase
       .from('system_users')
       .select('perfil, cargo')
@@ -74,7 +75,6 @@ export async function GET(request: Request) {
   // BLINDAGEM IDOR: Se for família, DEVE informar um aluno_id que lhe pertença
   if (isFamilyOrStudent) {
     if (!alunoId) {
-      // Se não enviou alunoId, não pode ler tudo solto
       return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
     }
     const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
@@ -84,48 +84,37 @@ export async function GET(request: Request) {
     }
   }
 
+  // ── Resolução paralela de turma, grupos e data de acesso ──────────────────
+  // Antes: 4 queries sequenciais. Agora: 2 batches paralelos.
   let resolvedTurma = turmaId;
-  if (!turmaId && alunoId) {
-     const { data: aData } = await supabase.from('alunos').select('turma').eq('id', alunoId).single();
-     if (aData && aData.turma) {
-        const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${aData.turma}",codigo.eq."${aData.turma}",nome.eq."${aData.turma}"`).maybeSingle();
-        if (tData && tData.nome) resolvedTurma = tData.nome;
-        else resolvedTurma = aData.turma;
-     }
-  } else if (turmaId) {
-    const { data: tData } = await supabase.from('turmas').select('nome').eq('id', turmaId).single();
-    if (tData && tData.nome) {
-      resolvedTurma = tData.nome;
-    } else {
-      const { data: cData } = await supabase.from('turmas').select('nome').eq('codigo', turmaId).single();
-      if (cData && cData.nome) {
-        resolvedTurma = cData.nome;
-      }
-    }
-  }
-
   let studentGroups: string[] = [];
-  if (alunoId) {
-    const cleanId = alunoId.replace(/^(a_|_ALU)/, '');
-    const { data: allGrupos } = await supabase.from('agenda_grupos').select('nome, dados');
-    if (allGrupos) {
-      allGrupos.forEach(g => {
-        const alunosIdsList = g.dados?.alunosIds || [];
-        if (alunosIdsList.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId)) {
-          if (g.nome) studentGroups.push(g.nome);
-        }
-      });
-    }
-  }
-
-  let query = supabase.from('comunicados').select('*');
-  
   let accessStartDate = await getLoggedUserAccessStartDate();
 
   if (alunoId) {
-    const { data: studentData } = await supabase.from('alunos').select('created_at, dados').eq('id', alunoId).maybeSingle();
-    if (studentData) {
-      const dateStr = studentData.dados?.data_matricula || studentData.dados?.data_inicio || studentData.dados?.data_ingresso || studentData.created_at;
+    // Batch 1: busca dados do aluno e todos grupos ao mesmo tempo
+    const [alunoRes, gruposRes] = await Promise.all([
+      supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle(),
+      supabase.from('agenda_grupos').select('nome, dados'),
+    ]);
+
+    const alunoData = alunoRes.data;
+    const allGrupos = gruposRes.data;
+
+    if (alunoData) {
+      // Resolver turma
+      const turmaBruta = alunoData.turma;
+      if (turmaBruta) {
+        // Batch 2: resolver nome da turma (por id ou código)
+        const { data: tData } = await supabase
+          .from('turmas')
+          .select('nome')
+          .or(`id.eq."${turmaBruta}",codigo.eq."${turmaBruta}",nome.eq."${turmaBruta}"`)
+          .maybeSingle();
+        resolvedTurma = tData?.nome || turmaBruta;
+      }
+
+      // Resolver data de acesso
+      const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
       if (dateStr) {
         const studentEntryDate = new Date(dateStr);
         if (!accessStartDate || studentEntryDate > accessStartDate) {
@@ -133,7 +122,23 @@ export async function GET(request: Request) {
         }
       }
     }
+
+    // Resolver grupos do aluno (filter local é barato, dados já vierem no batch 1)
+    if (allGrupos) {
+      const cleanId = alunoId.replace(/^(a_|_ALU)/, '');
+      allGrupos.forEach(g => {
+        const alunosIdsList = g.dados?.alunosIds || [];
+        if (alunosIdsList.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId)) {
+          if (g.nome) studentGroups.push(g.nome);
+        }
+      });
+    }
+  } else if (turmaId) {
+    const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${turmaId}",codigo.eq."${turmaId}"`).maybeSingle();
+    if (tData?.nome) resolvedTurma = tData.nome;
   }
+
+  let query = supabase.from('comunicados').select('*');
 
   if (accessStartDate) {
     query = query.gte('data', accessStartDate.toISOString());

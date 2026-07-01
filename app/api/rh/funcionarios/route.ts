@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,43 +9,51 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
-  const { searchParams } = new URL(request.url)
-  const status = searchParams.get('status')
-  const q = searchParams.get('q')
-  const lightweight = searchParams.get('lightweight') === 'true'
+  try {
+    // Usa admin client para leitura — evita problemas de RLS em tabela que não tem policy de SELECT
+    const supabase = getAdminClient()
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const q = searchParams.get('q')
+    const lightweight = searchParams.get('lightweight') === 'true'
 
-  const queryFields = lightweight ? 'id, nome, status, data_nascimento, foto' : '*'
-  let query = supabase.from('funcionarios').select(queryFields as any).order('nome')
-  
-  if (status && status !== 'Todos') query = query.eq('status', status)
-  if (q) query = query.or(`nome.ilike.%${q}%,cargo.ilike.%${q}%,departamento.ilike.%${q}%`)
+    // Lightweight: apenas campos essenciais para séleo de funcionários em dropdowns
+    const queryFields = lightweight ? 'id, nome, status, foto' : '*'
+    let query = supabase.from('funcionarios').select(queryFields as any).order('nome')
+    
+    if (status && status !== 'Todos') query = query.eq('status', status)
+    if (q) query = query.or(`nome.ilike.%${q}%`)
 
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  if (lightweight) {
-    return NextResponse.json(((data || []) as any[]).map(r => ({
-      id: r.id,
-      nome: r.nome,
-      status: r.status,
-      data_nascimento: r.data_nascimento,
-      dataNascimento: r.data_nascimento,
-      foto: r.foto
-    })))
-  }
-
-  return NextResponse.json(((data || []) as any[]).map(({ dados, ...r }) => {
-    const { data_nascimento, tipo_contrato, carga_horaria, perfil_sistema, ...rest } = r
-    return {
-      ...rest,
-      dataNascimento: data_nascimento,
-      tipoContrato: tipo_contrato,
-      cargaHoraria: carga_horaria,
-      perfilSistema: perfil_sistema,
-      ...(dados || {})
+    const { data, error } = await query
+    if (error) {
+      console.error('[funcionarios GET]', error.message, error.details)
+      return NextResponse.json({ error: error.message }, { status: 500 })
     }
-  }))
+
+    if (lightweight) {
+      return NextResponse.json(((data || []) as any[]).map(r => ({
+        id: r.id,
+        nome: r.nome,
+        status: r.status,
+        foto: r.foto
+      })))
+    }
+
+    return NextResponse.json(((data || []) as any[]).map(({ dados, ...r }) => {
+      const { data_nascimento, tipo_contrato, carga_horaria, perfil_sistema, ...rest } = r
+      return {
+        ...rest,
+        dataNascimento: data_nascimento,
+        tipoContrato: tipo_contrato,
+        cargaHoraria: carga_horaria,
+        perfilSistema: perfil_sistema,
+        ...(dados || {})
+      }
+    }))
+  } catch (e: any) {
+    console.error('[funcionarios GET] unexpected:', e?.message)
+    return NextResponse.json({ error: e?.message || 'Erro interno' }, { status: 500 })
+  }
 }
 
 export async function POST(request: Request) {

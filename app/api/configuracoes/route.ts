@@ -77,14 +77,27 @@ export async function GET(request: Request) {
 
   // ── Single key ─────────────────────────────────────────────────
   if (chave) {
+    const cacheKey = `single:${chave}`;
+    const cached = globalCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return NextResponse.json({ valor: cached.value }, {
+        headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
+      })
+    }
+
     const { data, error } = await supabase
       .from('configuracoes')
       .select('valor')
       .eq('chave', chave)
       .single()
     if (error) return NextResponse.json({ valor: null })
-    return NextResponse.json({ valor: data?.valor ?? null })
+
+    globalCache.set(cacheKey, { value: data?.valor ?? null, timestamp: Date.now() });
+    return NextResponse.json({ valor: data?.valor ?? null }, {
+      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
+    })
   }
+
 
   // ── All configs ─────────────────────────────────────────────────
   const { data, error } = await supabase.from('configuracoes').select('*')
