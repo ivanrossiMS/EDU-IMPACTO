@@ -18,7 +18,9 @@ interface PaginationEngineProps {
   isEditHeaderMode?: boolean;
   headerLayout?: any;
   onUpdateHeaderField?: (key: string, newField: any) => void;
-  pageA4Ref?: React.RefObject<HTMLDivElement>;
+  pageA4Ref?: React.RefObject<HTMLDivElement | null>;
+  alternativasLayout?: 'horizontal' | 'vertical';
+  onEditAlternativaImage?: (qId: string, altId: string, file: File) => void;
 }
 
 const MM_TO_PX = 3.7795;
