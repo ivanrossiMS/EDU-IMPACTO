@@ -58,7 +58,7 @@ export function NotificationPopover() {
     })
 
     // 3. Ocorrências recentes (últimos 5 dias)
-    ocorrencias.forEach(o => {
+    ocorrencias.forEach((o: any) => {
       const dateStr = o.created_at || o.data || o.data_registro;
       const oDate = dateStr ? new Date(dateStr) : new Date();
       if (isAfter(oDate, fiveDaysAgo)) {
