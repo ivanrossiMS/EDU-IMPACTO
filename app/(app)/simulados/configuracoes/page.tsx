@@ -149,10 +149,11 @@ export default function SimuladosConfiguracoesPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
-              {/* Coluna 1: SIMULADOS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12 }}>Configurações de Simulado</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+              {/* Card 1: SIMULADOS */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 24, padding: '24px 32px 32px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12, marginBottom: 24 }}>Configurações de Simulado</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
                 
                 {/* Bloco 1: Capa Simulado */}
                 <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
@@ -249,9 +250,12 @@ export default function SimuladosConfiguracoesPage() {
                 </div>
               </div>
 
-              {/* Coluna 2: PROVAS */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12 }}>Configurações de Prova</h2>
+              </div>
+
+              {/* Card 2: PROVAS */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 24, padding: '24px 32px 32px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12, marginBottom: 24 }}>Configurações de Prova</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
                 
                 {/* Bloco 1: Capa Prova */}
                 <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
@@ -348,9 +352,12 @@ export default function SimuladosConfiguracoesPage() {
                 </div>
               </div>
 
-              {/* Coluna 3: REDAÇÃO ENEM */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12 }}>Configurações de Redação Enem</h2>
+              </div>
+
+              {/* Card 3: REDAÇÃO ENEM */}
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 24, padding: '24px 32px 32px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12, marginBottom: 24 }}>Configurações de Redação Enem</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
                 
                 {/* Bloco 1: Capa Prova */}
                 <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
@@ -454,6 +461,7 @@ export default function SimuladosConfiguracoesPage() {
                 Salvar Configurações
               </button>
             </div>
+            </div>
             
           </div>
         )}
@@ -461,4 +469,3 @@ export default function SimuladosConfiguracoesPage() {
     </div>
   )
 }
-
