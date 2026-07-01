@@ -4,8 +4,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Settings, Upload, Image as ImageIcon, Loader2, Save, Download } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import ProfessoresPage from '../cadastros/professores/page'
+import DisciplinasPage from '../cadastros/disciplinas/page'
+import BimestresPage from '../cadastros/bimestres/page'
+
 
 export default function SimuladosConfiguracoesPage() {
+  
+  const [activeTab, setActiveTab] = useState<'fundos' | 'professores' | 'disciplinas' | 'bimestres'>('fundos')
   const [loading, setLoading] = useState(true)
   const [uploadingCapa, setUploadingCapa] = useState(false)
   const [uploadingOutras, setUploadingOutras] = useState(false)
@@ -141,6 +147,41 @@ export default function SimuladosConfiguracoesPage() {
             <p style={{ color: 'hsl(var(--text-secondary))', margin: '2px 0 0', fontSize: 14 }}>Ajuste os fundos de impressão para as provas e simulados.</p>
           </div>
         </div>
+
+        {/* TABS HEADER */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 32, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 16, overflowX: 'auto' }}>
+          {[
+            { id: 'fundos', label: 'Imagens e Fundos' },
+            { id: 'professores', label: 'Professores' },
+            { id: 'disciplinas', label: 'Disciplinas' },
+            { id: 'bimestres', label: 'Bimestres' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 12,
+                fontWeight: 600,
+                fontSize: 14,
+                cursor: 'pointer',
+                border: 'none',
+                background: activeTab === tab.id ? 'rgba(59,130,246,0.1)' : 'transparent',
+                color: activeTab === tab.id ? '#3b82f6' : 'hsl(var(--text-secondary))',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'professores' && <div style={{ margin: '-40px -32px' }}><ProfessoresPage /></div>}
+        {activeTab === 'disciplinas' && <div style={{ margin: '-40px -32px' }}><DisciplinasPage /></div>}
+        {activeTab === 'bimestres' && <div style={{ margin: '-40px -32px' }}><BimestresPage /></div>}
+        
+        <div style={{ display: activeTab === 'fundos' ? 'block' : 'none' }}>
 
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}>
@@ -465,6 +506,7 @@ export default function SimuladosConfiguracoesPage() {
             
           </div>
         )}
+        </div>
       </motion.div>
     </div>
   )
