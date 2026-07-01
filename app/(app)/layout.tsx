@@ -222,7 +222,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAgendaDigital = pathname?.startsWith('/agenda-digital')
   const isSimulados = pathname?.startsWith('/simulados')
   const isProvas = pathname?.startsWith('/provas')
-  const hideGlobalSidebar = isAgendaDigital || isSimulados || isProvas
+  const isRedacaoEnem = pathname?.startsWith('/redacao-enem')
+  const hideGlobalSidebar = isAgendaDigital || isSimulados || isProvas || isRedacaoEnem
 
   return (
     <DataProvider>
