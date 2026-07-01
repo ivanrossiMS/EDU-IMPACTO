@@ -484,7 +484,7 @@ export function PageContent({
 
               if (block.type === 'part_alts_container') {
             return (
-              <div key={idx} style={{ padding: '0 40px', marginTop: block.renderMarginTop }}>
+              <div key={bIndex} style={{ padding: '0 40px', marginTop: block.renderMarginTop }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   {block.q.simulados_alternativas?.map((a: any) => (
                     <div key={a.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
