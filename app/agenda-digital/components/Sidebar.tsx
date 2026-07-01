@@ -642,32 +642,34 @@ export function ADSidebar() {
                   </button>
                 </div>
 
-                <button
-                  onClick={() => window.location.href = '/login?step=choose_system'}
-                  style={{
-                    width: '100%', height: 34, borderRadius: 8, marginTop: 8,
-                    background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))',
-                    border: '1px solid rgba(0, 210, 255, 0.3)',
-                    color: '#00D2FF', fontSize: 11, fontWeight: 700, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
-                    cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: '0 4px 15px rgba(0, 210, 255, 0.1)',
-                    position: 'relative', overflow: 'hidden', textTransform: 'uppercase', letterSpacing: '0.05em'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 210, 255, 0.2)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))';
-                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 210, 255, 0.1)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <LayoutDashboard size={14} style={{ zIndex: 1 }} />
-                  <span style={{ zIndex: 1 }}>Mudar de Módulo</span>
-                </button>
+                {!isFamily && (
+                  <button
+                    onClick={() => window.location.href = '/login?step=choose_system'}
+                    style={{
+                      width: '100%', height: 34, borderRadius: 8, marginTop: 8,
+                      background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))',
+                      border: '1px solid rgba(0, 210, 255, 0.3)',
+                      color: '#00D2FF', fontSize: 11, fontWeight: 700, 
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
+                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '0 4px 15px rgba(0, 210, 255, 0.1)',
+                      position: 'relative', overflow: 'hidden', textTransform: 'uppercase', letterSpacing: '0.05em'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))';
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 210, 255, 0.2)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))';
+                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 210, 255, 0.1)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <LayoutDashboard size={14} style={{ zIndex: 1 }} />
+                    <span style={{ zIndex: 1 }}>Mudar de Módulo</span>
+                  </button>
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
@@ -710,15 +712,17 @@ export function ADSidebar() {
                   <LogOut size={18} />
                 </button>
 
-                <button
-                  title="Mudar de Módulo"
-                  onClick={() => window.location.href = '/login?step=choose_system'}
-                  style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))', border: '1px solid rgba(0, 210, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF', cursor: 'pointer', transition: 'all 0.3s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))' }}
-                >
-                  <LayoutDashboard size={18} />
-                </button>
+                {!isFamily && (
+                  <button
+                    title="Mudar de Módulo"
+                    onClick={() => window.location.href = '/login?step=choose_system'}
+                    style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))', border: '1px solid rgba(0, 210, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF', cursor: 'pointer', transition: 'all 0.3s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))' }}
+                  >
+                    <LayoutDashboard size={18} />
+                  </button>
+                )}
               </div>
             )}
           </div>
