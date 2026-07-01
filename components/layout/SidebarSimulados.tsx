@@ -208,14 +208,14 @@ export function SidebarSimulados() {
           const isChild = hasPrevInGroup
 
           return (
-            <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : 0 }}>
+            <Link key={idx} href={item.href} style={{ textDecoration: 'none', marginTop: isBack && idx === activeNavItems.length - 2 ? 'auto' : (isChild ? -6 : 0) }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 gap: 16,
-                padding: collapsed ? '12px 0' : (isChild ? '14px 18px 14px 44px' : '14px 18px'),
-                borderRadius: 16,
+                padding: collapsed ? '10px 0' : (isChild ? '10px 18px 10px 42px' : '10px 18px'),
+                borderRadius: 14,
                 background: isActive ? 'linear-gradient(90deg, rgba(244,63,94,0.1) 0%, rgba(244,63,94,0.02) 100%)' : 'transparent',
                 color: isActive ? '#fb7185' : 'rgba(255,255,255,0.5)',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -240,10 +240,10 @@ export function SidebarSimulados() {
                 {!collapsed && isChild && (
                   <div style={{
                     position: 'absolute',
-                    top: -22,
+                    top: -12,
                     left: 27,
-                    width: 13,
-                    height: 45,
+                    width: 11,
+                    height: 31,
                     borderLeft: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
                     borderBottom: `1.5px solid ${isActive ? 'rgba(244,63,94,0.4)' : 'rgba(255,255,255,0.1)'}`,
                     borderBottomLeftRadius: 10,
