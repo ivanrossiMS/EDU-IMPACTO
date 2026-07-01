@@ -23,9 +23,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} /> },
   { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} /> },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
-  { label: 'Bimestres', href: '/simulados/cadastros/bimestres', icon: <Layers size={18} /> },
-  { label: 'Disciplinas', href: '/simulados/cadastros/disciplinas', icon: <BookOpen size={18} /> },
-  { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
 ]
 
