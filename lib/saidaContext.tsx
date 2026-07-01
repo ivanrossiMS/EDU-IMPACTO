@@ -166,6 +166,18 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const channelRef = useRef<any>(null)
   const processedBroadcasts = useRef<Set<string>>(new Set())
 
+  const persistSingleCall = useCallback(async (call: PickupCall) => {
+    try {
+      await fetch('/api/saida/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(call)
+      })
+    } catch (e) {
+      console.error('Failed to persist call', e)
+    }
+  }, [])
+
   const sendBroadcast = useCallback((event: string, data: any) => {
     if (channelRef.current) {
       const eventId = Math.random().toString(36).substring(2, 15);
@@ -332,12 +344,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       guardianId, guardianName, rfidCode,
       calledAt: now(), status: 'waiting', source,
     }
-    setActiveCalls(prev => [call, ...prev])
+    setActiveCallsLocal?.(prev => [call, ...(prev || [])])
+    persistSingleCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
     addLog('CALL', `Chamada: ${studentName} (${studentClass}) — por ${guardianName}`)
     return call
-  }, [activeCalls, emit, addLog, sendBroadcast])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── blockAttempt ──────────────────────────────────────────────────
   // Logs a BLOCKED access attempt (proibido or wrong day) without creating an
@@ -357,72 +370,115 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       calledAt: now(), status: 'blocked', source: 'rfid',
       blockType, blockReason,
     }
-    setActiveCalls(prev => [call, ...prev])
+    setActiveCallsLocal?.(prev => [call, ...(prev || [])])
+    persistSingleCall(call)
     emit('CALL_STUDENT', { ...call, _remote: false })
     sendBroadcast('CALL_STUDENT', call)
     addLog('BLOCKED', `Acesso bloqueado (${blockType}): ${guardianName} tentou retirar ${studentName} — ${blockReason}`)
     return call
-  }, [addLog, emit, sendBroadcast])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
     const currentNow = now()
-    setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'confirmed', confirmedAt: currentNow } : c
-    ))
-    const call = activeCalls.find(c => c.id === callId)
-    emit('CONFIRM_PICKUP', { callId, confirmedAt: currentNow, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: currentNow })
-    addLog('CONFIRM', `Saída confirmada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog, sendBroadcast])
+    let updatedCall: PickupCall | undefined;
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      return arr.map(c => {
+        if (c.id === callId) {
+          updatedCall = { ...c, status: 'confirmed', confirmedAt: currentNow }
+          return updatedCall
+        }
+        return c
+      })
+    })
+    if (updatedCall) {
+      persistSingleCall(updatedCall)
+      emit('CONFIRM_PICKUP', { callId, confirmedAt: currentNow, _remote: false })
+      sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: currentNow })
+      addLog('CONFIRM', `Saída confirmada: ${updatedCall.studentName ?? callId}`)
+    }
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
-    setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'cancelled' } : c
-    ))
-    const call = activeCalls.find(c => c.id === callId)
-    emit('CANCEL_CALL', { callId, _remote: false })
-    sendBroadcast('CANCEL_CALL', { callId })
-    addLog('CANCEL', `Chamada cancelada: ${call?.studentName ?? callId}`)
-  }, [activeCalls, emit, addLog, sendBroadcast])
+    let updatedCall: PickupCall | undefined;
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      return arr.map(c => {
+        if (c.id === callId) {
+          updatedCall = { ...c, status: 'cancelled' }
+          return updatedCall
+        }
+        return c
+      })
+    })
+    if (updatedCall) {
+      persistSingleCall(updatedCall)
+      emit('CANCEL_CALL', { callId, _remote: false })
+      sendBroadcast('CANCEL_CALL', { callId })
+      addLog('CANCEL', `Chamada cancelada: ${updatedCall.studentName ?? callId}`)
+    }
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── recallStudent ────────────────────────────────────────────────────────
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
-    const call = activeCalls.find(c => c.id === callId)
-    if (!call) return
     const currentNow = now()
-    setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'waiting', calledAt: currentNow } : c
-    ))
-    emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
-    sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
-    const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
-      ? call.studentClass.split(config.voiceTruncateChar)[0].trim() 
-      : call.studentClass
-    speakFn(`${call.studentName}, turma ${cName}`)
-    addLog('RECALL', `Rechamada: ${call.studentName}`)
-  }, [activeCalls, emit, addLog, config, sendBroadcast])
+    let updatedCall: PickupCall | undefined;
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      return arr.map(c => {
+        if (c.id === callId) {
+          updatedCall = { ...c, status: 'waiting', calledAt: currentNow }
+          return updatedCall
+        }
+        return c
+      })
+    })
+    if (updatedCall) {
+      persistSingleCall(updatedCall)
+      emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
+      sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
+      const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
+        ? updatedCall.studentClass.split(config.voiceTruncateChar)[0].trim() 
+        : updatedCall.studentClass
+      speakFn(`${updatedCall.studentName}, turma ${cName}`)
+      addLog('RECALL', `Rechamada: ${updatedCall.studentName}`)
+    }
+  }, [setActiveCallsLocal, emit, addLog, config, sendBroadcast, persistSingleCall])
 
   // ─── revertCall ───────────────────────────────────────────────────────────
   const revertCall = useCallback((callId: string) => {
-    const call = activeCalls.find(c => c.id === callId)
-    if (!call) return
     const currentNow = now()
-    setActiveCalls(prev => prev.map(c =>
-      c.id === callId ? { ...c, status: 'waiting', calledAt: currentNow, confirmedAt: undefined } : c
-    ))
-    emit('REVERT_CALL', { callId, calledAt: currentNow, _remote: false })
-    sendBroadcast('REVERT_CALL', { callId, calledAt: currentNow })
-    addLog('REVERT', `Chamada revertida: ${call.studentName}`)
-  }, [activeCalls, emit, addLog, sendBroadcast])
+    let updatedCall: PickupCall | undefined;
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      return arr.map(c => {
+        if (c.id === callId) {
+          updatedCall = { ...c, status: 'waiting', calledAt: currentNow, confirmedAt: undefined }
+          return updatedCall
+        }
+        return c
+      })
+    })
+    if (updatedCall) {
+      persistSingleCall(updatedCall)
+      emit('REVERT_CALL', { callId, calledAt: currentNow, _remote: false })
+      sendBroadcast('REVERT_CALL', { callId, calledAt: currentNow })
+      addLog('REVERT', `Chamada revertida: ${updatedCall.studentName}`)
+    }
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── deleteCall ───────────────────────────────────────────────────────────
   const deleteCall = useCallback(async (callId: string) => {
-    const call = activeCalls.find(c => c.id === callId)
-    if (!call) return
+    let callName = callId;
     // Remove from local state
-    setActiveCalls(prev => prev.filter(c => c.id !== callId))
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      const call = arr.find(c => c.id === callId)
+      if (call) callName = call.studentName
+      return arr.filter(c => c.id !== callId)
+    })
     // Also delete from DB directly
     try {
       await fetch('/api/saida/calls', {
@@ -434,8 +490,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       console.error('Failed to delete call', e)
     }
     // We don't need a custom broadcast because Supabase Realtime will send a DELETE event
-    addLog('DELETE', `Autorização especial deletada: ${call.studentName}`)
-  }, [activeCalls, setActiveCalls, addLog])
+    addLog('DELETE', `Autorização especial deletada: ${callName}`)
+  }, [setActiveCallsLocal, addLog])
 
   // ─── addSpecialAuth ───────────────────────────────────────────────────────
   const addSpecialAuth = useCallback((
@@ -449,12 +505,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       operatorId: operatorName,
       calledAt: now(), status: 'special_auth', source: 'manual',
     }
-    setActiveCalls(prev => [call, ...prev])
+    setActiveCallsLocal?.(prev => [call, ...(prev || [])])
+    persistSingleCall(call)
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
     addLog('SPECIAL_AUTH', `Autorização Especial: ${studentName} liberado para ${authorizedPerson}`)
     return call
-  }, [emit, addLog, sendBroadcast])
+  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
 
 
