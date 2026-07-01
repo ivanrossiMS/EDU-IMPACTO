@@ -17,7 +17,8 @@ export default function ImprimirProvaPage() {
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [fontSize, setFontSize] = useState<number>(12) // base font size in px
-  const [columns, setColumns] = useState<number>(2) // Layout de colunas
+  const [columns, setColumns] = useState<number>(1) // Layout de colunas fixo em 1 para Redação
+  const [showInstrucoes, setShowInstrucoes] = useState<boolean>(true)
   const [config, setConfig] = useState<any>(null)
 
   const defaultHeaderLayout = {
@@ -394,38 +395,22 @@ export default function ImprimirProvaPage() {
             </div>
           </div>
 
+
           <div style={{ marginBottom: 32 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <LayoutList size={16} color="#3b82f6" /> Layout da Prova
+              <Info size={16} color="#3b82f6" /> Configurações Adicionais
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <button
-                onClick={() => setColumns(1)}
-                style={{
-                  padding: '12px', borderRadius: 12,
-                  background: columns === 1 ? '#3b82f6' : '#f8fafc',
-                  color: columns === 1 ? 'white' : '#475569',
-                  border: `1px solid ${columns === 1 ? '#3b82f6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                }}
-              >
-                <LayoutList size={16} /> 1 Coluna
-              </button>
-              <button
-                onClick={() => setColumns(2)}
-                style={{
-                  padding: '12px', borderRadius: 12,
-                  background: columns === 2 ? '#3b82f6' : '#f8fafc',
-                  color: columns === 2 ? 'white' : '#475569',
-                  border: `1px solid ${columns === 2 ? '#3b82f6' : '#e2e8f0'}`,
-                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
-                }}
-              >
-                <Columns size={16} /> 2 Colunas
-              </button>
-            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: '#f8fafc', padding: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+              <input
+                type="checkbox"
+                checked={showInstrucoes}
+                onChange={(e) => setShowInstrucoes(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#3b82f6' }}
+              />
+              <span style={{ fontSize: 14, color: '#475569', fontWeight: 500 }}>
+                Adicionar folha extra (Instruções de Correções)
+              </span>
+            </label>
           </div>
 
           <div style={{ marginBottom: 32 }}>
@@ -484,6 +469,7 @@ export default function ImprimirProvaPage() {
               headerLayout={headerLayout}
               onUpdateHeaderField={handleUpdateHeaderField}
               pageA4Ref={pageA4Ref}
+              forceExtraPage={showInstrucoes}
             />
         </div>
         <IgnoredQuestionsList

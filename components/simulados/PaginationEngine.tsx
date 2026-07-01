@@ -21,6 +21,7 @@ interface PaginationEngineProps {
   pageA4Ref?: React.RefObject<HTMLDivElement | null>;
   alternativasLayout?: 'horizontal' | 'vertical';
   onEditAlternativaImage?: (qId: string, altId: string, url: string) => void;
+  forceExtraPage?: boolean;
 }
 
 const MM_TO_PX = 3.7795;
@@ -34,7 +35,7 @@ const ALT_SPACING = 12;
 export function PaginationEngine({
   questoes, columns, fontSize, config, simulado,
   onEditEnunciado, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
-  isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref
+  isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -176,6 +177,10 @@ export function PaginationEngine({
       }
 
       if (newPages.length === 0) {
+        newPages.push(Array.from({ length: columns }, () => []));
+      }
+
+      if (forceExtraPage) {
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
