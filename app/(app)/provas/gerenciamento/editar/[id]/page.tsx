@@ -19,9 +19,9 @@ export default function EditarSimuladoPage({
   const resolvedParams = params instanceof Promise ? use(params) : params;
   const { id } = resolvedParams as { id: string };
   const [titulo, setTitulo] = useState("");
-  const [descricao, setDescricao] = useState("");
   const [dataAplicacao, setDataAplicacao] = useState("");
   const [bimestreId, setBimestreId] = useState("");
+  const [valor, setValor] = useState("");
   const [series, setSeries] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -82,6 +82,7 @@ export default function EditarSimuladoPage({
         setTitulo(prova.titulo);
         setDataAplicacao(prova.data_aplicacao || "");
         setBimestreId(prova.id_bimestre || "");
+        setValor(prova.valor || "");
         setSeries(prova.turmas || []);
       }
 
@@ -135,7 +136,18 @@ export default function EditarSimuladoPage({
           if (field === "disciplinaId") {
             const disc = disciplinas.find((d) => d.id === value);
             if (disc) {
-              if (disc.id_professor) updated.professorId = disc.id_professor;
+              let profsIds: string[] = [];
+              if (typeof disc.professores_ids === 'string') {
+                try { profsIds = JSON.parse(disc.professores_ids) } catch(e) {}
+              } else if (Array.isArray(disc.professores_ids)) {
+                profsIds = disc.professores_ids;
+              } else if (disc.id_professor) {
+                profsIds = [disc.id_professor];
+              }
+              
+              if (profsIds.length > 0) updated.professorId = profsIds[0];
+              else updated.professorId = '';
+
               if (disc.quantidade_questoes)
                 updated.qtdQuestoes = disc.quantidade_questoes;
             }
@@ -157,9 +169,13 @@ export default function EditarSimuladoPage({
     if (
       !titulo ||
       !dataAplicacao ||
+      !bimestreId ||
+      !valor ||
+      series.length === 0 ||
+      requisicoes.length === 0 ||
       requisicoes.some((r) => !r.disciplinaId || !r.professorId)
     ) {
-      alert("Preencha todos os campos obrigatórios e as requisições.");
+      alert("Preencha todos os campos obrigatórios (Título, Data, Bimestre, Valor, Séries Aplicáveis e Requisições).");
       return;
     }
 
@@ -169,9 +185,10 @@ export default function EditarSimuladoPage({
         .from("provas")
         .update({
           titulo,
-          data_aplicacao: dataAplicacao,
+          data_aplicacao: dataAplicacao || null,
           id_bimestre: bimestreId || null,
           turmas: series,
+          valor
         })
         .eq("id", id);
 
@@ -407,6 +424,38 @@ export default function EditarSimuladoPage({
               </select>
             </div>
 
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  color: "hsl(var(--text-secondary))",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  marginBottom: 8,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Valor da Prova
+              </label>
+              <input
+                type="text"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+                placeholder="Ex: 10,0"
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  background: "hsl(var(--bg-app))",
+                  border: "1px solid hsl(var(--border-subtle))",
+                  color: "hsl(var(--text-primary))",
+                  fontSize: 15,
+                  outline: "none",
+                }}
+              />
+            </div>
+
             <div style={{ gridColumn: "1 / -1" }}>
               <label
                 style={{
@@ -605,11 +654,26 @@ export default function EditarSimuladoPage({
                     <option value="" disabled>
                       Selecionar...
                     </option>
-                    {professores.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nome}
-                      </option>
-                    ))}
+                    {(() => {
+                      if (!req.disciplinaId) return professores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>);
+                      
+                      const disc = disciplinas.find(d => d.id === req.disciplinaId);
+                      let allowedProfsIds: string[] = [];
+                      if (disc) {
+                        if (typeof disc.professores_ids === 'string') {
+                          try { allowedProfsIds = JSON.parse(disc.professores_ids) } catch(e) {}
+                        } else if (Array.isArray(disc.professores_ids)) {
+                          allowedProfsIds = disc.professores_ids;
+                        } else if (disc.id_professor) {
+                          allowedProfsIds = [disc.id_professor];
+                        }
+                      }
+                      
+                      if (allowedProfsIds.length === 0) return <option value="" disabled>Nenhum prof. vinculado</option>;
+                      
+                      const profsToDisplay = professores.filter(p => allowedProfsIds.includes(p.id));
+                      return profsToDisplay.map(p => <option key={p.id} value={p.id}>{p.nome}</option>);
+                    })()}
                   </select>
                 </div>
 

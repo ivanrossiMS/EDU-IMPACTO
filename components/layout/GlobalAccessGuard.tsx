@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
-import { PremiumLoader } from '@/components/PremiumLoader'
+import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 
@@ -377,7 +377,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
     return (
       <>
         <AnimatePresence>
-          {showSplash && <PremiumLoader key="global-loader" />}
+          {showSplash && <ImpactoLoader key="global-loader" />}
         </AnimatePresence>
       </>
     )
@@ -391,7 +391,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
       return (
         <>
           <AnimatePresence>
-            {showSplash && <PremiumLoader key="global-loader" />}
+            {showSplash && <ImpactoLoader key="global-loader" />}
           </AnimatePresence>
           <AccessDeniedPage pathname={pathname} isFamilyOrStudent={true} />
         </>
@@ -401,7 +401,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
       return (
         <>
           <AnimatePresence>
-            {showSplash && <PremiumLoader key="global-loader" />}
+            {showSplash && <ImpactoLoader key="global-loader" />}
           </AnimatePresence>
         </>
       )
@@ -412,7 +412,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
     return (
       <>
         <AnimatePresence>
-          {showSplash && <PremiumLoader key="global-loader" />}
+          {showSplash && <ImpactoLoader key="global-loader" />}
         </AnimatePresence>
       </>
     )
@@ -421,7 +421,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AnimatePresence>
-        {showSplash && <PremiumLoader key="global-loader" />}
+        {showSplash && <ImpactoLoader key="global-loader" />}
       </AnimatePresence>
       {children}
     </>

@@ -64,7 +64,18 @@ export default function NovoSimuladoPage() {
         if (field === 'disciplinaId') {
           const disc = disciplinas.find(d => d.id === value)
           if (disc) {
-            if (disc.id_professor) updated.professorId = disc.id_professor
+            let profsIds: string[] = [];
+            if (typeof disc.professores_ids === 'string') {
+              try { profsIds = JSON.parse(disc.professores_ids) } catch(e) {}
+            } else if (Array.isArray(disc.professores_ids)) {
+              profsIds = disc.professores_ids;
+            } else if (disc.id_professor) {
+              profsIds = [disc.id_professor];
+            }
+            
+            if (profsIds.length > 0) updated.professorId = profsIds[0];
+            else updated.professorId = '';
+
             if (disc.quantidade_questoes) updated.qtdQuestoes = disc.quantidade_questoes
           }
         }
@@ -248,7 +259,26 @@ export default function NovoSimuladoPage() {
                     style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, outline: 'none' }}
                   >
                     <option value="" disabled>Selecionar...</option>
-                    {professores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    {(() => {
+                      if (!req.disciplinaId) return professores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>);
+                      
+                      const disc = disciplinas.find(d => d.id === req.disciplinaId);
+                      let allowedProfsIds: string[] = [];
+                      if (disc) {
+                        if (typeof disc.professores_ids === 'string') {
+                          try { allowedProfsIds = JSON.parse(disc.professores_ids) } catch(e) {}
+                        } else if (Array.isArray(disc.professores_ids)) {
+                          allowedProfsIds = disc.professores_ids;
+                        } else if (disc.id_professor) {
+                          allowedProfsIds = [disc.id_professor];
+                        }
+                      }
+                      
+                      if (allowedProfsIds.length === 0) return <option value="" disabled>Nenhum prof. vinculado</option>;
+                      
+                      const profsToDisplay = professores.filter(p => allowedProfsIds.includes(p.id));
+                      return profsToDisplay.map(p => <option key={p.id} value={p.id}>{p.nome}</option>);
+                    })()}
                   </select>
                 </div>
 

@@ -338,9 +338,9 @@ export default function SimuladosListaPage() {
                                 </div>
                                 
                                 <AnimatePresence>
-                                  {!isTurmaCollapsed && (
-                                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                                      <div className="cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
+                                    {!isTurmaCollapsed && (
+                                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                                        <div className="cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 24, paddingLeft: 48, paddingBottom: 24, paddingTop: 8 }}>
                                         {turmasMap[turma].map((s, i) => {
                                           const qCadastradas = s.questoesCadastradas || 0;
                                           const qRequisitadas = s.simulados_requisicoes?.reduce((acc: number, req: any) => acc + (req.quantidade_questoes || 0), 0) || 0;
@@ -354,96 +354,82 @@ export default function SimuladosListaPage() {
                                                 background: 'hsl(var(--bg-surface))', 
                                                 backdropFilter: 'blur(10px)',
                                                 border: '1px solid hsl(var(--border-subtle))', 
-                                                borderRadius: 24, 
-                                                padding: '24px 28px',
+                                                borderRadius: 16, 
+                                                padding: '20px',
                                                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                boxShadow: '0 10px 30px -15px rgba(0,0,0,0.05)',
+                                                boxShadow: '0 4px 15px -5px rgba(0,0,0,0.05)',
                                                 position: 'relative',
                                                 overflow: 'hidden'
                                               }}
                                               onMouseEnter={e => {
-                                                e.currentTarget.style.transform = 'translateY(-6px)';
-                                                e.currentTarget.style.boxShadow = '0 20px 40px -15px rgba(0,0,0,0.1)';
+                                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                                e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(0,0,0,0.08)';
                                                 e.currentTarget.style.borderColor = 'hsl(var(--border-muted))';
                                               }}
                                               onMouseLeave={e => {
                                                 e.currentTarget.style.transform = 'translateY(0)';
-                                                e.currentTarget.style.boxShadow = '0 10px 30px -15px rgba(0,0,0,0.05)';
+                                                e.currentTarget.style.boxShadow = '0 4px 15px -5px rgba(0,0,0,0.05)';
                                                 e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))';
                                               }}
                                               >
                                                 {/* Gradient Top Bar */}
-                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: s.status === 'aprovado' ? 'linear-gradient(90deg, #10b981, #34d399)' : s.status === 'publicado' ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
+                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: s.status === 'aprovado' ? 'linear-gradient(90deg, #10b981, #34d399)' : s.status === 'publicado' ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
 
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, marginTop: 4 }}>
-                                                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, rgba(244,63,94,0.1) 0%, rgba(225,29,72,0.1) 100%)', color: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(244,63,94,0.2)' }}>
-                                                    <PenTool size={22} />
-                                                  </div>
-                                                  {s.status === 'aprovado' ? (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                <div className="card-left-section" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                    <h3 style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, display: 'flex', alignItems: 'center', gap: 8, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
+                                                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(236,72,153,0.1)', color: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                        <PenTool size={14} />
+                                                      </div>
+                                                      {s.titulo}
+                                                    </h3>
+                                                    {s.status === 'aprovado' ? (
                                                       <span 
                                                         onClick={(e) => handleAprovarToggle(e, s.id, s.status)}
-                                                        title="Clique para reverter para Rascunho"
-                                                        style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid rgba(16,185,129,0.3)', letterSpacing: '0.05em' }}
+                                                        title={`Aprovado por ${s.aprovado_por?.split(' ')[0] || ''}`}
+                                                        style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0 }}
                                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.2)'}
                                                         onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
                                                       >Aprovado</span>
-                                                      {s.aprovado_por && (
-                                                        <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 6, fontWeight: 500 }}>
-                                                          Por {s.aprovado_por.split(' ')[0]} em {s.data_aprovacao ? new Date(s.data_aprovacao).toLocaleDateString('pt-BR') : ''}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  ) : s.status === 'publicado' ? (
-                                                    <span style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', border: '1px solid rgba(59,130,246,0.3)', letterSpacing: '0.05em' }}>Publicado</span>
-                                                  ) : (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                    ) : s.status === 'publicado' ? (
+                                                      <span style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', flexShrink: 0 }}>Publicado</span>
+                                                    ) : (
                                                       <span 
                                                         onClick={(e) => handleAprovarToggle(e, s.id, s.status || 'rascunho')}
                                                         title="Clique para aprovar"
-                                                        style={{ padding: '6px 14px', borderRadius: 100, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', border: '1px solid rgba(245,158,11,0.3)', letterSpacing: '0.05em' }}
+                                                        style={{ padding: '4px 10px', borderRadius: 100, background: 'rgba(245,158,11,0.1)', color: '#f59e0b', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0 }}
                                                         onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.2)'}
                                                         onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,0.1)'}
                                                       >
                                                         Rascunho
                                                       </span>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                                
-                                                <h3 style={{ fontSize: 19, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 16px', lineHeight: 1.3, letterSpacing: '-0.02em' }}>{s.titulo}</h3>
-                                                
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
-                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-secondary))', fontSize: 14, fontWeight: 500 }}>
-                                                    <Calendar size={16} color="hsl(var(--text-muted))" />
-                                                    <span>Aplicação: <span style={{ color: 'hsl(var(--text-primary))' }}>{s.data_aplicacao?.split('-').reverse().join('/') || 'Não definida'}</span></span>
-                                                  </div>
-                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-secondary))', fontSize: 14, fontWeight: 500 }}>
-                                                    <Layers size={16} color="hsl(var(--text-muted))" />
-                                                    <span>{s.simulados_bimestres?.nome || 'Bimestre não definido'}</span>
+                                                    )}
                                                   </div>
                                                   
-                                                  <div style={{ marginTop: 12, marginBottom: 8, padding: '16px', background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
-                                                      <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                        <FileText size={16} /> Progresso
-                                                      </span>
-                                                      <span style={{ color: isComplete ? '#10b981' : '#3b82f6', fontWeight: 900, fontSize: 14 }}>
-                                                        {qCadastradas} / {qRequisitadas} <span style={{ opacity: 0.6, fontSize: 12 }}>({percent}%)</span>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 500 }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Calendar size={12} color="hsl(var(--text-muted))" /> {s.data_aplicacao?.split('-').reverse().join('/') || 'Não definida'}</span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Layers size={12} color="hsl(var(--text-muted))" /> {s.simulados_bimestres?.nome || 'Bimestre não definido'}</span>
+                                                  </div>
+                                                  
+                                                  <div style={{ marginTop: 'auto', background: 'hsl(var(--bg-app))', borderRadius: 12, padding: '12px', border: '1px solid hsl(var(--border-subtle))' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, fontSize: 11 }}>
+                                                      <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700, letterSpacing: '0.05em' }}>PROGRESSO</span>
+                                                      <span style={{ color: isComplete ? '#10b981' : '#3b82f6', fontWeight: 800 }}>
+                                                        {qCadastradas} / {qRequisitadas} <span style={{ opacity: 0.7, fontWeight: 600 }}>({percent}%)</span>
                                                       </span>
                                                     </div>
-                                                    <div style={{ width: '100%', height: 8, background: 'hsl(var(--bg-surface))', borderRadius: 100, overflow: 'hidden', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)' }}>
+                                                    <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-surface))', borderRadius: 100, overflow: 'hidden' }}>
                                                       <motion.div 
-                                                        initial={{ width: 0 }}
-                                                        animate={{ width: `${percent}%` }}
-                                                        transition={{ duration: 1, ease: 'easeOut' }}
-                                                        style={{ height: '100%', background: isComplete ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #3b82f6, #60a5fa)', borderRadius: 100 }}
+                                                        initial={{ width: 0 }} animate={{ width: `${percent}%` }} transition={{ duration: 1, ease: 'easeOut' }}
+                                                        style={{ height: '100%', background: isComplete ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #3b82f6, #60a5fa)' }}
                                                       />
                                                     </div>
                                                   </div>
+                                                </div>
 
+                                                <div className="card-middle-section" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                                   {s.simulados_requisicoes && s.simulados_requisicoes.length > 0 ? (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                       {s.simulados_requisicoes.map((req: any, idx: number) => {
                                                         const profName = professoresMap[req.id_professor] || 'Professor não encontrado'
                                                         const discName = req.simulados_disciplinas?.nome || 'Sem Disciplina'
@@ -467,70 +453,72 @@ export default function SimuladosListaPage() {
                                                               }
                                                               router.push(`/simulados/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
                                                             }}
-                                                            style={{ display: 'flex', alignItems: 'center', gap: 12, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', fontSize: 13, background: 'hsl(var(--bg-app))', padding: '12px 16px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 8, color: isBlocked ? 'hsl(var(--text-tertiary))' : 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-app))', padding: '6px 10px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
                                                             onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.03)' } }}
                                                             onMouseLeave={e => { if (!isBlocked) { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' } }}
                                                           >
-                                                            <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: isBlocked ? 0.5 : 1 }}>
-                                                              <User size={18} />
+                                                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                              <User size={12} />
                                                             </div>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
-                                                              <span style={{ fontWeight: 700, color: 'hsl(var(--text-primary))', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName}</span>
-                                                              <span style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{discName}</span>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 0 }}>
+                                                              <span style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName}</span>
+                                                              <span style={{ fontSize: 10, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{discName}</span>
                                                             </div>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: currentQty >= requestedQty ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: currentQty >= requestedQty ? '#10b981' : '#f59e0b', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
-                                                              {currentQty}/{requestedQty} <span style={{ opacity: 0.7, fontWeight: 600 }}>Q.</span>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: currentQty >= requestedQty ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', color: currentQty >= requestedQty ? '#10b981' : '#f59e0b', padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                                                              {currentQty}/{requestedQty}
                                                             </div>
                                                           </motion.div>
                                                         )
                                                       })}
                                                     </div>
                                                   ) : (
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 14, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px dashed hsl(var(--border-subtle))' }}>
-                                                      <User size={16} />
-                                                      <span>Nenhum professor atribuído</span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 12, padding: '10px 12px', background: 'hsl(var(--bg-app))', borderRadius: 8, border: '1px dashed hsl(var(--border-subtle))' }}>
+                                                      <User size={14} />
+                                                      <span>Nenhum professor</span>
                                                     </div>
                                                   )}
                                                 </div>
 
-                                                {/* Action Buttons */}
-                                                <div className="actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                                                  <button onClick={(e) => handleAction(e, 'gerar_pdf', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar PDF (Estúdio de Edição)" onMouseEnter={e => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                                    <FileDown size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Exportar PDF</span>
-                                                  </button>
-                                                  <button onClick={(e) => handleAction(e, 'gerar_gabarito', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar Gabarito" onMouseEnter={e => { e.currentTarget.style.color = '#10b981'; e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = 'rgba(16,185,129,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                                    <CheckSquare size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Gabarito</span>
-                                                  </button>
-                                                  <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                                    <Copy size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Adaptar</span>
-                                                  </button>
-                                                  <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir Simulado" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                                    <Trash2 size={16} /> <span style={{ fontSize: 13, fontWeight: 700 }}>Excluir</span>
-                                                  </button>
-                                                </div>
+                                                <div className="card-right-section" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                  <div className="actions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                                    <button onClick={(e) => handleAction(e, 'gerar_pdf', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gerar PDF" onMouseEnter={e => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.background = 'rgba(59,130,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                      <FileDown size={14} /> <span style={{ fontSize: 11, fontWeight: 700 }}>Exportar</span>
+                                                    </button>
+                                                    <button onClick={(e) => handleAction(e, 'gerar_gabarito', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Gabarito" onMouseEnter={e => { e.currentTarget.style.color = '#10b981'; e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.background = 'rgba(16,185,129,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                      <CheckSquare size={14} /> <span style={{ fontSize: 11, fontWeight: 700 }}>Gabarito</span>
+                                                    </button>
+                                                    <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Adaptar" onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                      <Copy size={14} /> <span style={{ fontSize: 11, fontWeight: 700 }}>Adaptar</span>
+                                                    </button>
+                                                    <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir" onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
+                                                      <Trash2 size={14} /> <span style={{ fontSize: 11, fontWeight: 700 }}>Excluir</span>
+                                                    </button>
+                                                  </div>
 
-                                                <div 
-                                                  onClick={() => router.push(`/simulados/lista/${s.id}`)}
-                                                  style={{ 
-                                                    borderTop: '1px solid hsl(var(--border-subtle))', 
-                                                    paddingTop: 20, 
-                                                    display: 'flex', 
-                                                    alignItems: 'center', 
-                                                    justifyContent: 'space-between', 
-                                                    color: '#3b82f6', 
-                                                    fontSize: 15, 
-                                                    fontWeight: 800, 
-                                                    cursor: 'pointer', 
-                                                    transition: 'all 0.2s',
-                                                    textTransform: 'uppercase',
-                                                    letterSpacing: '0.05em'
-                                                  }}
-                                                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-2px)' }}
-                                                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)' }}
-                                                >
-                                                  <span>Ver Todas as Questões</span>
-                                                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    <ChevronRight size={18} />
+                                                  <div 
+                                                    onClick={() => router.push(`/simulados/lista/${s.id}`)}
+                                                    style={{ 
+                                                      marginTop: 'auto',
+                                                      display: 'flex', 
+                                                      alignItems: 'center', 
+                                                      justifyContent: 'center', 
+                                                      gap: 6,
+                                                      background: 'rgba(59,130,246,0.05)',
+                                                      color: '#3b82f6', 
+                                                      padding: '10px',
+                                                      borderRadius: 8,
+                                                      fontSize: 11, 
+                                                      fontWeight: 800, 
+                                                      cursor: 'pointer', 
+                                                      transition: 'all 0.2s',
+                                                      textTransform: 'uppercase',
+                                                      letterSpacing: '0.05em'
+                                                    }}
+                                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.1)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                                                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.05)'; e.currentTarget.style.transform = 'translateY(0)' }}
+                                                  >
+                                                    VER TODAS AS QUESTÕES
+                                                    <ChevronRight size={14} />
                                                   </div>
                                                 </div>
                                               </div>
@@ -563,6 +551,43 @@ export default function SimuladosListaPage() {
       )}
       
       <style>{`
+        @media (min-width: 1024px) {
+          .cards-grid { grid-template-columns: 1fr !important; }
+          .simulado-card {
+            display: grid !important;
+            grid-template-columns: minmax(300px, 1.2fr) minmax(300px, 1.5fr) 280px;
+            gap: 32px;
+            align-items: stretch;
+          }
+          .card-left-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+          }
+          .card-middle-section {
+            border-left: 1px solid hsl(var(--border-subtle));
+            border-right: 1px solid hsl(var(--border-subtle));
+            padding: 0 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+          }
+          .card-right-section {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+          }
+          .card-right-section .actions-grid {
+            margin-bottom: auto !important;
+          }
+          .card-right-section > div[onClick] {
+            border-top: none !important;
+            margin-top: 16px;
+          }
+        }
+        @media (max-width: 1023px) {
+          .card-middle-section { margin: 20px 0; }
+        }
         @media (max-width: 768px) {
           .page-container { padding: 16px !important; }
           .header-box { flex-direction: column !important; align-items: flex-start !important; padding: 20px !important; gap: 16px; }

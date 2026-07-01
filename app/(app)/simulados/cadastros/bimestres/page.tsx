@@ -62,6 +62,22 @@ export default function BimestresPage() {
 
   const filtered = data?.filter(item => item.nome.toLowerCase().includes(search.toLowerCase())) || []
 
+  const getYear = (item: any) => {
+    const match = item.nome.match(/\b(20\d{2})\b/);
+    if (match) return match[1];
+    if (item.data_inicio) return item.data_inicio.substring(0, 4);
+    return 'Sem Ano';
+  }
+
+  const grouped = filtered.reduce((acc, item) => {
+    const year = getYear(item);
+    if (!acc[year]) acc[year] = [];
+    acc[year].push(item);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const sortedYears = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
   return (
     <div style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -126,50 +142,63 @@ export default function BimestresPage() {
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>Adicione bimestres para organizar seus simulados no tempo.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: 20 }}>
-              {filtered.map((item, i) => (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  key={item.id} 
-                  style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 24, background: 'hsl(var(--bg-app))', borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', transition: 'all 0.3s', position: 'relative', overflow: 'hidden' }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.borderColor = '#f43f5e'
-                    e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(244,63,94,0.1)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                    <div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em', marginBottom: 6 }}>{item.nome}</div>
-                      {item.status === 'ativo' ? (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: 100, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}><CheckCircle2 size={12} /> Ativo</div>
-                      ) : (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 100, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}><XCircle size={12} /> Inativo</div>
-                      )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleOpen(item)} style={{ background: 'rgba(100, 116, 139, 0.1)', border: 'none', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-primary))', transition: 'background 0.2s' }}>
-                        <Edit2 size={16} />
-                      </motion.button>
-                      <motion.button whileHover={{ scale: 1.1, background: 'rgba(239,68,68,0.15)' }} whileTap={{ scale: 0.9 }} onClick={() => handleDelete(item.id)} style={{ background: 'rgba(239,68,68,0.05)', border: 'none', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', transition: 'all 0.2s' }}>
-                        <Trash2 size={16} />
-                      </motion.button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+              {sortedYears.map((year, yIdx) => (
+                <div key={year}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <div style={{ width: 8, height: 24, borderRadius: 4, background: '#f43f5e' }} />
+                    <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Ano Letivo {year}</h2>
+                    <div style={{ padding: '4px 10px', background: 'rgba(244,63,94,0.1)', color: '#f43f5e', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                      {grouped[year].length} bimestre{grouped[year].length !== 1 ? 's' : ''}
                     </div>
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
+                    {grouped[year].map((item, i) => (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                        key={item.id} 
+                        style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 16, background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', transition: 'all 0.3s', position: 'relative', overflow: 'hidden' }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.transform = 'translateY(-2px)'
+                          e.currentTarget.style.borderColor = '#f43f5e'
+                          e.currentTarget.style.boxShadow = '0 8px 20px -5px rgba(244,63,94,0.1)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                          e.currentTarget.style.boxShadow = 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                          <div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em', marginBottom: 6 }}>{item.nome}</div>
+                            {item.status === 'ativo' ? (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(16,185,129,0.1)', color: '#10b981', borderRadius: 100, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}><CheckCircle2 size={10} /> Ativo</div>
+                            ) : (
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 100, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}><XCircle size={10} /> Inativo</div>
+                            )}
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleOpen(item)} style={{ background: 'rgba(100, 116, 139, 0.1)', border: 'none', width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'hsl(var(--text-primary))', transition: 'background 0.2s' }}>
+                              <Edit2 size={14} />
+                            </motion.button>
+                            <motion.button whileHover={{ scale: 1.1, background: 'rgba(239,68,68,0.15)' }} whileTap={{ scale: 0.9 }} onClick={() => handleDelete(item.id)} style={{ background: 'rgba(239,68,68,0.05)', border: 'none', width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ef4444', transition: 'all 0.2s' }}>
+                              <Trash2 size={14} />
+                            </motion.button>
+                          </div>
+                        </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'hsl(var(--bg-surface))', padding: '12px 16px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
-                    <Calendar size={16} color="hsl(var(--text-secondary))" />
-                    <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                      {item.data_inicio ? `${item.data_inicio.split('-').reverse().join('/')} até ${item.data_fim.split('-').reverse().join('/')}` : 'Período não definido'}
-                    </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'hsl(var(--bg-surface))', padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
+                          <Calendar size={14} color="hsl(var(--text-secondary))" />
+                          <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                            {item.data_inicio ? `${item.data_inicio.split('-').reverse().join('/')} até ${item.data_fim.split('-').reverse().join('/')}` : 'Período não definido'}
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
           )}

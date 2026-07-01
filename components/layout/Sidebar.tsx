@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
+import { NotificationPopover } from '@/components/layout/NotificationPopover'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 interface NavItem {
@@ -45,10 +46,8 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: false,
     items: [
       { label: 'DASHBOARD', href: '/dashboard', icon: <Home size={16} />, badge: 'LIVE', badgeColor: 'pink' },
-      { label: 'CENTRAL DE ALERTAS', href: '/alertas', icon: <Bell size={16} /> },
       { label: 'MINHAS TAREFAS', href: '/tarefas', icon: <ClipboardCheck size={16} /> },
       { label: 'CALENDÁRIO', href: '/calendario', icon: <Calendar size={16} /> },
-      { label: 'AGENDA DIGITAL', href: '/agenda-digital', icon: <BookHeart size={16} />, target: '_blank' },
     ],
   },
   {
@@ -81,7 +80,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'RH',
     collapsible: true,
     items: [
-      { label: 'GESTÃO DE PESSOAS', href: '/gestao-pessoas', icon: <Users size={16} /> },
       { label: 'FUNCIONÁRIOS', href: '/rh/funcionarios', icon: <Users2 size={16} /> },
       { label: 'FOLHA DE PGTO', href: '/rh/folha', icon: <DollarSign size={16} /> },
       { label: 'ADIANTAMENTOS', href: '/rh/adiantamentos', icon: <Banknote size={16} /> },
@@ -612,6 +610,91 @@ export function Sidebar() {
             )}
           </AnimatePresence>
 
+          {/* ═══ MÓDULOS ═══ */}
+          <div style={{ padding: '0 8px', marginBottom: 16 }}>
+            <AnimatePresence>
+              {!effectiveCollapsed && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.05em', marginBottom: 12, paddingLeft: 4, overflow: 'hidden' }}
+                >
+                  MÓDULOS
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div style={{ display: 'flex', flexDirection: effectiveCollapsed ? 'column' : 'row', gap: 8, justifyContent: 'space-between' }}>
+              
+              {/* Agenda Digital */}
+              <Link href="/agenda-digital" target="_blank" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="Agenda Digital">
+                <motion.div 
+                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
+                  whileTap={{ scale: 0.95 }}
+                  style={{ 
+                    width: effectiveCollapsed ? 40 : 44,
+                    height: effectiveCollapsed ? 40 : 44, 
+                    borderRadius: 14, 
+                    background: 'linear-gradient(135deg, #a855f7, #7e22ce)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.3)', 
+                    border: '1px solid rgba(255,255,255,0.1)' 
+                  }}
+                >
+                  <BookHeart size={effectiveCollapsed ? 20 : 18} color="#fff" />
+                </motion.div>
+                {!effectiveCollapsed && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Agenda<br/>Digital</span>
+                )}
+              </Link>
+
+              {/* Gestão de Pessoas */}
+              <Link href="/gestao-pessoas" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="Gestão de Pessoas">
+                <motion.div 
+                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
+                  whileTap={{ scale: 0.95 }}
+                  style={{ 
+                    width: effectiveCollapsed ? 40 : 44,
+                    height: effectiveCollapsed ? 40 : 44, 
+                    borderRadius: 14, 
+                    background: 'linear-gradient(135deg, #10b981, #047857)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)', 
+                    border: '1px solid rgba(255,255,255,0.1)' 
+                  }}
+                >
+                  <Users size={effectiveCollapsed ? 20 : 18} color="#fff" />
+                </motion.div>
+                {!effectiveCollapsed && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Gestão de<br/>Pessoas</span>
+                )}
+              </Link>
+
+              {/* SIMULADOS */}
+              <Link href="/simulados" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="SIMULADOS">
+                <motion.div 
+                  whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
+                  whileTap={{ scale: 0.95 }}
+                  style={{ 
+                    width: effectiveCollapsed ? 40 : 44,
+                    height: effectiveCollapsed ? 40 : 44, 
+                    borderRadius: 14, 
+                    background: 'linear-gradient(135deg, #f43f5e, #be123c)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    boxShadow: '0 4px 12px rgba(244, 63, 94, 0.3)', 
+                    border: '1px solid rgba(255,255,255,0.1)' 
+                  }}
+                >
+                  <ClipboardPenLine size={effectiveCollapsed ? 20 : 18} color="#fff" />
+                </motion.div>
+                {!effectiveCollapsed && (
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: 1.1 }}>Simulados<br/>e Provas</span>
+                )}
+              </Link>
+
+            </div>
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <motion.div 
               ref={profileCardRef}
@@ -651,15 +734,7 @@ export function Sidebar() {
                         {theme === 'dark' ? <Sun size={17} color="#fbbf24" style={{ filter: 'drop-shadow(0 0 5px rgba(251, 191, 36, 0.4))' }} /> : <Moon size={17} color="#60a5fa" style={{ filter: 'drop-shadow(0 0 5px rgba(96, 165, 250, 0.4))' }} />}
                       </motion.button>
                       
-                      <motion.button 
-                        whileHover={{ background: 'rgba(255,255,255,0.15)', scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={(e) => { e.stopPropagation(); router.push('/agenda-digital/admin/comunicados'); if(isMobile) toggleSidebar(); }}
-                        style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
-                      >
-                        <Bell size={17} color="white" />
-                        <div style={{ position: 'absolute', top: 8, right: 8, width: 5, height: 5, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 8px #ef4444' }} />
-                      </motion.button>
+                      <NotificationPopover />
                   </div>
                 </>
               )}

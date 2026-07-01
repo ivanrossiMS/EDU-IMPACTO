@@ -7,7 +7,7 @@ import { Loader2, Printer, ChevronLeft, Type, CheckSquare, Save, Settings, Info,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 
-export default function ImprimirProvaPage() {
+export default function AdaptarProvaPage() {
   const { id } = useParams()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -16,8 +16,9 @@ export default function ImprimirProvaPage() {
   const [questoes, setQuestoes] = useState<any[]>([])
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [fontSize, setFontSize] = useState<number>(12) // base font size in px
-  const [columns, setColumns] = useState<number>(2) // Layout de colunas
+  const [fontSize, setFontSize] = useState<number>(16) // base font size in px
+  const [columns, setColumns] = useState<number>(1) // Layout de colunas
+  const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>('horizontal') // Layout das alternativas
   const [config, setConfig] = useState<any>(null)
 
   const defaultHeaderLayout = {
@@ -185,12 +186,28 @@ export default function ImprimirProvaPage() {
     setQuestoes(prev => prev.map(q => q.id === qId ? { ...q, enunciado: newText } : q))
   }
 
+  const handleEditAlternativaImage = (qId: string, altId: string, url: string) => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId) {
+        const newAlts = q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, imagem_url: url } : a)
+        return {
+          ...q,
+          provas_alternativas: newAlts,
+          simulados_alternativas: newAlts
+        }
+      }
+      return q
+    }))
+  }
+
   const handleEditAlternativa = (qId: string, altId: string, newText: string) => {
     setQuestoes(prev => prev.map(q => {
       if (q.id === qId) {
+        const newAlts = q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, texto: newText } : a)
         return {
           ...q,
-          provas_alternativas: q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, texto: newText } : a)
+          provas_alternativas: newAlts,
+          simulados_alternativas: newAlts
         }
       }
       return q
@@ -202,12 +219,14 @@ export default function ImprimirProvaPage() {
       if (q.id === qId) {
         const remaining = q.provas_alternativas.filter((a: any) => a.id !== altId)
         const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
-        return {
-          ...q,
-          provas_alternativas: remaining.map((a: any, idx: number) => ({
+        const newAlts = remaining.map((a: any, idx: number) => ({
             ...a,
             letra: letters[idx] || a.letra
           }))
+        return {
+          ...q,
+          provas_alternativas: newAlts,
+          simulados_alternativas: newAlts
         }
       }
       return q
@@ -223,33 +242,70 @@ export default function ImprimirProvaPage() {
   }
 
   const handleSaveAndPrint = async () => {
-    if (!confirm('Deseja salvar esta edição no banco e imprimir?')) return
+    if (!confirm('Deseja salvar esta adaptação no banco e imprimir?')) return
     setSaving(true)
 
     try {
-      const selectedList = questoes.filter(q => selectedIds.has(q.id))
-      const unselectedIds = questoes.filter(q => !selectedIds.has(q.id)).map(q => q.id)
+      // 1. Clone Prova
+      const { data: newProva, error: simErr } = await supabase.from('provas').insert({
+        titulo: prova.titulo + ' ADAPTADO',
+        data_aplicacao: prova.data_aplicacao,
+        id_bimestre: prova.id_bimestre,
+        status: 'rascunho',
+        turmas: prova.turmas
+      }).select().single()
 
-      // 1. Delete unselected questions
-      if (unselectedIds.length > 0) {
-        const { error: delErr } = await supabase.from('provas_questoes').delete().in('id', unselectedIds)
-        if (delErr) throw delErr
+      if (simErr) throw simErr
+
+      // 2. Clone Requisições
+      if (requisicoes.length > 0) {
+        const newReqs = requisicoes.map(r => {
+          const { id, created_at, updated_at, provas, simulados_disciplinas, ...restR } = r
+          return {
+            ...restR,
+            id_prova: newProva.id
+          }
+        })
+        const { error: rErr } = await supabase.from('provas_requisicoes').insert(newReqs)
+        if (rErr) throw rErr
       }
 
-      // 2. Update order of selected questions
+      // 3. Clone selected Questoes and Alternativas
+      const selectedList = questoes.filter(q => selectedIds.has(q.id))
+      
       for (const q of selectedList) {
-        await supabase.from('provas_questoes').update({ ordem: q.ordem }).eq('id', q.id)
+        const { id, created_at, updated_at, simulados_disciplinas, provas_alternativas, simulados_alternativas, ...restQ } = q
+        const { data: newQ, error: qErr } = await supabase.from('provas_questoes').insert({
+          ...restQ,
+          id_prova: newProva.id,
+          eh_adaptada: true
+        }).select().single()
+
+        if (qErr) throw qErr
+
+        const altsToClone = q.provas_alternativas || q.simulados_alternativas || []
+        if (altsToClone.length > 0) {
+          const newAlts = altsToClone.map((a: any) => ({
+            id_questao: newQ.id,
+            letra: a.letra,
+            texto: a.texto,
+            eh_correta: a.eh_correta,
+            imagem_url: a.imagem_url
+          }))
+          const { error: aErr } = await supabase.from('provas_alternativas').insert(newAlts)
+          if (aErr) throw aErr
+        }
       }
 
       // Automatically trigger print after slight delay
       setTimeout(() => {
         window.print()
         setSaving(false)
-        router.push('/provas/gerenciamento')
+        router.push('/provas/lista')
       }, 500)
 
     } catch (e: any) {
-      alert('Erro ao salvar edição: ' + e.message)
+      alert('Erro ao salvar adaptação: ' + e.message)
       setSaving(false)
     }
   }
@@ -309,7 +365,7 @@ export default function ImprimirProvaPage() {
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Settings size={20} />
             </div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Edição</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Estúdio de Adaptação</h1>
           </div>
           <p style={{ color: '#64748b', fontSize: 13, lineHeight: 1.5, margin: 0 }}>Molde a prova visualmente para alunos com necessidades específicas. Remova questões indesejadas e altere o tamanho da fonte global.</p>
         </div>
@@ -428,6 +484,42 @@ export default function ImprimirProvaPage() {
             </div>
           </div>
 
+
+
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
+              <LayoutList size={16} color="#3b82f6" style={{ transform: 'rotate(90deg)' }} /> Layout das Alternativas
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                onClick={() => setAlternativasLayout('vertical')}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: alternativasLayout === 'vertical' ? '#3b82f6' : '#f8fafc',
+                  color: alternativasLayout === 'vertical' ? 'white' : '#475569',
+                  border: `1px solid ${alternativasLayout === 'vertical' ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                Embaixo
+              </button>
+              <button
+                onClick={() => setAlternativasLayout('horizontal')}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: alternativasLayout === 'horizontal' ? '#3b82f6' : '#f8fafc',
+                  color: alternativasLayout === 'horizontal' ? 'white' : '#475569',
+                  border: `1px solid ${alternativasLayout === 'horizontal' ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                Lado a Lado
+              </button>
+            </div>
+          </div>
+
           <div style={{ marginBottom: 32 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
               <CheckSquare size={16} color="#10b981" /> Resumo de Seleção
@@ -473,11 +565,13 @@ export default function ImprimirProvaPage() {
             <PaginationEngine 
               questoes={selectedList}
               columns={columns}
+              alternativasLayout={alternativasLayout}
               fontSize={fontSize}
               config={config}
               simulado={prova}
               onEditEnunciado={handleEditEnunciado}
               onEditAlternativa={handleEditAlternativa}
+              onEditAlternativaImage={handleEditAlternativaImage}
               onRemoveAlternativa={handleRemoveAlternativa}
               onToggleQuestion={handleToggleQuestion}
               isEditHeaderMode={isEditHeaderMode}

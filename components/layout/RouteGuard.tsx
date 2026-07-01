@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
 
 // Pages that are always accessible (never blocked)
-const ALWAYS_ACCESSIBLE = ['/dashboard', '/alertas', '/tarefas', '/calendario']
+const ALWAYS_ACCESSIBLE = ['/dashboard', '/tarefas', '/calendario']
 
 function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, isFamilyOrStudent?: boolean }) {
   const router = useRouter()
@@ -349,8 +349,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     .sort((a, b) => b.length - a.length)[0]
 
   // ── Step 2.5: Check for Gestão Escolar Block (Applies to all ERP routes) ──
-  // Exceptions: /simulados is a separate module. /meu-perfil is global.
-  const isSimuladosRoute = pathname.startsWith('/simulados')
+  // Exceptions: /simulados and /provas are separate modules. /meu-perfil is global.
+  const isSimuladosRoute = pathname.startsWith('/simulados') || pathname.startsWith('/provas')
   const isMeuPerfilRoute = pathname.startsWith('/meu-perfil')
   
   if (userPerfilObj?.bloqueadoGestaoEscolar && !isSimuladosRoute && !isMeuPerfilRoute) {

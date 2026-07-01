@@ -318,6 +318,7 @@ export default function FrequenciaPage() {
   // Filtros home
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString())
   const [filtroSegmento, setFiltroSegmento] = useState('')
+  const [filtroTurno, setFiltroTurno] = useState('')
   const [filtroBusca, setFiltroBusca] = useState('')
   
   const anosDisponiveis = useMemo(() => {
@@ -1842,6 +1843,7 @@ export default function FrequenciaPage() {
     const turmasFiltradas = turmas.filter(t =>
       (filtroAno === 'todos' || t.ano.toString() === filtroAno) &&
       (!filtroSegmento || (t as any).dados?.segmento === filtroSegmento) &&
+      (!filtroTurno || t.turno === filtroTurno) &&
       (!filtroBusca || t.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
     )
 
@@ -2110,6 +2112,16 @@ export default function FrequenciaPage() {
                  {cfgNiveisEnsino?.map((n: any) => (
                    <option key={n.id} value={n.nome}>{n.nome}</option>
                  ))}
+               </select>
+             </div>
+
+             <div style={{ width: '160px' }}>
+               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroTurno} onChange={e => setFiltroTurno(e.target.value)}>
+                 <option value="">Todos os Turnos</option>
+                 <option value="Matutino">Matutino</option>
+                 <option value="Vespertino">Vespertino</option>
+                 <option value="Noturno">Noturno</option>
+                 <option value="Integral">Integral</option>
                </select>
              </div>
 

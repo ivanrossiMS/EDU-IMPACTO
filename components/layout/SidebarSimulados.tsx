@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Sparkles
+  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Sparkles, Loader2
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -27,23 +27,42 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Disciplinas', href: '/simulados/cadastros/disciplinas', icon: <BookOpen size={18} /> },
   { label: 'Professores', href: '/simulados/cadastros/professores', icon: <Users size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
-  { label: 'Voltar ao ERP', href: '/login?step=choose_system', icon: <ChevronLeft size={18} /> },
-  { label: 'Trocar Sistema', href: '/login?step=choose_system', icon: <ChevronLeft size={18} /> },
 ]
 
 export function SidebarSimulados() {
   const pathname = usePathname()
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { currentUserPerfil, setCurrentUserPerfil, currentUser, setCurrentUser } = useApp()
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch(e) {}
+    setCurrentUserPerfil('');
+    setCurrentUser(null);
+    window.location.href = '/login';
+  }
+
+  const overlay = isLoggingOut ? (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 99999,
+      background: 'rgba(15, 23, 42, 0.4)',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16
+    }}>
+      <Loader2 className="animate-spin" size={48} color="#3b82f6" />
+      <span style={{ color: 'white', fontWeight: 600, letterSpacing: '0.05em' }}>Saindo...</span>
+    </div>
+  ) : null;
 
   const isProfessor = currentUserPerfil === 'Professor'
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas', 'Trocar Sistema'].includes(item.label)
+      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas'].includes(item.label)
     }
-    return item.label !== 'Trocar Sistema'
+    return true
   })
 
   // Force close on mobile default
@@ -53,6 +72,8 @@ export function SidebarSimulados() {
 
   if (isMobile) {
     return (
+      <>
+      {overlay}
       <div 
         className="no-scrollbar"
         style={{
@@ -103,11 +124,7 @@ export function SidebarSimulados() {
         <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
 
         <button
-          onClick={() => {
-            setCurrentUserPerfil('');
-            setCurrentUser(null);
-            window.location.href = '/login';
-          }}
+          onClick={handleLogout}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -127,10 +144,13 @@ export function SidebarSimulados() {
           <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>Sair</span>
         </button>
       </div>
+      </>
     )
   }
 
   return (
+    <>
+    {overlay}
     <motion.div 
       animate={{ width: collapsed ? 88 : 280 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -230,88 +250,126 @@ export function SidebarSimulados() {
 
         {/* User Profile Frame */}
         <div style={{
-          marginTop: activeNavItems.some(i => i.href === '/login?step=choose_system') ? 16 : 'auto',
+          marginTop: 'auto',
           marginBottom: 16,
           padding: collapsed ? '12px 0' : '16px',
           background: 'rgba(255,255,255,0.02)',
           borderRadius: 20,
           border: '1px solid rgba(255,255,255,0.05)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'flex-start',
+          flexDirection: 'column',
+          alignItems: collapsed ? 'center' : 'stretch',
           gap: 14,
           transition: 'all 0.3s'
         }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: 14,
-            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
-          }}>
-            <User size={20} strokeWidth={2.5} />
+          {/* User Info (Icon + Name) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 14 }}>
+            <div style={{
+              width: 40,
+              height: 40,
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
+            }}>
+              <User size={20} strokeWidth={2.5} />
+            </div>
+            <AnimatePresence>
+              {!collapsed && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ overflow: 'hidden' }}>
+                  <div style={{ color: 'white', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em' }}>
+                    {currentUser?.nome || 'Usuário'}
+                  </div>
+                  <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 500, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {currentUserPerfil || 'Admin'}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Action Buttons inside Card */}
           <AnimatePresence>
-            {!collapsed && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ overflow: 'hidden' }}>
-                <div style={{ color: 'white', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em' }}>
-                  {currentUser?.nome || 'Usuário'}
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 500, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {currentUserPerfil || 'Admin'}
-                </div>
+            {!collapsed ? (
+              <motion.div key="expanded" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button
+                  onClick={() => window.location.href = '/login?step=choose_system'}
+                  style={{
+                    width: '100%', height: 34, borderRadius: 8,
+                    background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))',
+                    border: '1px solid rgba(0, 210, 255, 0.3)',
+                    color: '#00D2FF', fontSize: 11, fontWeight: 700, 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
+                    cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 4px 15px rgba(0, 210, 255, 0.1)',
+                    position: 'relative', overflow: 'hidden', textTransform: 'uppercase', letterSpacing: '0.05em'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 210, 255, 0.2)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))';
+                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 210, 255, 0.1)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <LayoutDashboard size={14} style={{ zIndex: 1 }} />
+                  <span style={{ zIndex: 1 }}>Trocar de Módulo</span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    width: '100%', height: 34, borderRadius: 8,
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    color: '#ef4444', fontSize: 11, fontWeight: 700, 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
+                    cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    textTransform: 'uppercase', letterSpacing: '0.05em'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                    e.currentTarget.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                    e.currentTarget.style.border = '1px solid rgba(239, 68, 68, 0.2)';
+                  }}
+                >
+                  <LogOut size={14} /> Sair
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div key="collapsed" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', width: '100%', padding: '0 8px' }}>
+                <button
+                  title="Trocar de Módulo"
+                  onClick={() => window.location.href = '/login?step=choose_system'}
+                  style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))', border: '1px solid rgba(0, 210, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))' }}
+                >
+                  <LayoutDashboard size={18} />
+                </button>
+                <button
+                  title="Sair"
+                  onClick={handleLogout}
+                  style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)' }}
+                >
+                  <LogOut size={18} />
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-
-        {/* Botão Sair */}
-        <button
-          onClick={() => {
-            setCurrentUserPerfil('');
-            setCurrentUser(null);
-            window.location.href = '/login';
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            gap: 16,
-            padding: collapsed ? '14px 0' : '14px 18px',
-            borderRadius: 16,
-            background: 'rgba(239,68,68,0.05)',
-            color: '#ef4444',
-            border: '1px solid rgba(239,68,68,0.1)',
-            cursor: 'pointer',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.15)'
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'
-            e.currentTarget.style.boxShadow = '0 8px 24px -8px rgba(239,68,68,0.4)'
-            e.currentTarget.style.transform = 'translateY(-2px)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(239,68,68,0.05)'
-            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.1)'
-            e.currentTarget.style.boxShadow = 'none'
-            e.currentTarget.style.transform = 'translateY(0)'
-          }}
-        >
-          <LogOut size={20} />
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
-                Encerrar Sessão
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
       </div>
 
       <div style={{ padding: '16px', display: 'flex', justifyContent: 'center' }}>
@@ -337,5 +395,6 @@ export function SidebarSimulados() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
     </motion.div>
+    </>
   )
 }

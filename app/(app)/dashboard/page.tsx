@@ -2,7 +2,7 @@
 
 import { useApiQuery } from '@/hooks/useApi'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { PremiumLoader } from '@/components/PremiumLoader'
+import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import { useData, Tarefa } from '@/lib/dataContext'
 import { 
@@ -45,7 +45,7 @@ function Sparkline({ color, path }: { color: string, path: string }) {
         </defs>
         <path d={fillPath} fill={`url(#grad-${color.replace('#','')})`} />
         <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx={endX} cy={endY} r="3" fill={color} stroke="#fff" strokeWidth="1.5" filter={`url(#shadow-${color.replace('#','')})`} />
+        <circle cx={endX} cy={endY} r="3" fill={color} stroke="hsl(var(--bg-surface))" strokeWidth="1.5" filter={`url(#shadow-${color.replace('#','')})`} />
       </svg>
     </div>
   )
@@ -144,10 +144,10 @@ export default function DashboardPage() {
   const eventosHoje = eventosAgenda.filter(e => e.data === todayStr)
 
   const kpiCards = [
-    { label: 'Total de Alunos', value: formatNumber(totalAlunos), icon: <Users size={18} />, color: '#3b82f6', bgIcon: '#eff6ff', sub: 'Matriculados ativos', path: PATHS.blue },
-    { label: 'Taxa de Ocupação', value: fmtPct(taxaOcupacao), icon: <GraduationCap size={18} />, color: '#8b5cf6', bgIcon: '#f5f3ff', sub: 'Capacidade física', path: PATHS.purple },
-    { label: 'Novas Matrículas', value: formatNumber(novasMatriculas), icon: <UserPlus size={18} />, color: '#10b981', bgIcon: '#ecfdf5', sub: 'Este mês', path: PATHS.green },
-    { label: 'Ocorrências', value: formatNumber(ocorrencias.length), icon: <AlertTriangle size={18} />, color: '#f59e0b', bgIcon: '#fffbeb', sub: 'Registradas', path: PATHS.orange },
+    { label: 'Total de Alunos', value: formatNumber(totalAlunos), icon: <Users size={18} />, color: '#3b82f6', bgIcon: 'rgba(59, 130, 246, 0.1)', sub: 'Matriculados ativos', path: PATHS.blue },
+    { label: 'Taxa de Ocupação', value: fmtPct(taxaOcupacao), icon: <GraduationCap size={18} />, color: '#8b5cf6', bgIcon: 'rgba(139, 92, 246, 0.1)', sub: 'Capacidade física', path: PATHS.purple },
+    { label: 'Novas Matrículas', value: formatNumber(novasMatriculas), icon: <UserPlus size={18} />, color: '#10b981', bgIcon: 'rgba(16, 185, 129, 0.1)', sub: 'Este mês', path: PATHS.green },
+    { label: 'Ocorrências', value: formatNumber(ocorrencias.length), icon: <AlertTriangle size={18} />, color: '#f59e0b', bgIcon: 'hsl(var(--bg-surface))beb', sub: 'Registradas', path: PATHS.orange },
   ]
 
   const aniversariantes = useMemo(() => {
@@ -295,7 +295,7 @@ export default function DashboardPage() {
   }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
   if (loadKpis) {
-    return <PremiumLoader />
+    return <ImpactoLoader />
   }
 
   return (
@@ -307,13 +307,13 @@ export default function DashboardPage() {
           <div 
             key={kpi.label} 
             style={{ 
-              background: '#fff',
+              background: 'hsl(var(--bg-surface))',
               padding: '24px', 
               borderRadius: '24px',
               position: 'relative',
               overflow: 'hidden',
               boxShadow: '0 4px 24px rgba(0,0,0,0.02)',
-              border: '1px solid #f8fafc',
+              border: '1px solid hsl(var(--border-subtle))',
               display: 'flex', flexDirection: 'column',
               minHeight: '160px'
             }}
@@ -323,16 +323,16 @@ export default function DashboardPage() {
                 <span style={{ fontSize: '13px', fontWeight: 800, color: kpi.color, display: 'block', marginBottom: '8px' }}>
                   {kpi.label}
                 </span>
-                <div style={{ fontSize: '38px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
+                <div style={{ fontSize: '38px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
                   {kpi.value}
                 </div>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginTop: '10px' }}>
+                <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: '10px' }}>
                   {kpi.sub}
                 </div>
               </div>
               <div style={{ 
                 width: 48, height: 48, 
-                background: `linear-gradient(135deg, ${kpi.bgIcon}, #ffffff)`,
+                background: `linear-gradient(135deg, ${kpi.bgIcon}, hsl(var(--bg-surface))fff)`,
                 borderRadius: '16px', 
                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
                 color: kpi.color,
@@ -347,69 +347,69 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* ═══ Main Area Grid (4 Columns) ═══════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, alignItems: 'start' }}>
+      {/* ═══ Main Area Grid (3 Columns) ═══════════════════════════════════ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, alignItems: 'start' }}>
 
         {/* ── Coluna 1: Pedido de Livros ──────────────────────────── */}
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#eff6ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <BookMarked size={16} color="#3b82f6" />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#111827' }}>Pedido de Livros/Apostilas</span>
+              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Pedido de Livros/Apostilas</span>
             </div>
             <Link href="/administrativo/pedidos-livros" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
+            <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
+              <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
+              <div style={{ fontSize: '24px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
             </div>
-            <div style={{ background: '#fef2f2', padding: '16px', borderRadius: '16px' }}>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '16px' }}>
               <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pendentes</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.pendenteCount}</div>
             </div>
-            <div style={{ background: '#fffbeb', padding: '16px', borderRadius: '16px' }}>
+            <div style={{ background: 'hsl(var(--bg-surface))beb', padding: '16px', borderRadius: '16px' }}>
               <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Em Preparo</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.preparadoCount}</div>
             </div>
-            <div style={{ background: '#ecfdf5', padding: '16px', borderRadius: '16px' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '16px' }}>
               <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Entregues</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.entregueCount}</div>
             </div>
           </div>
 
           <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: '#64748b', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 8 }}>
               <span>Taxa de Entrega</span>
               <span style={{ color: '#10b981' }}>{ordersSummary.totalOrders > 0 ? ((ordersSummary.entregueCount / ordersSummary.totalOrders) * 100).toFixed(0) : 0}%</span>
             </div>
-            <div style={{ width: '100%', height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+            <div style={{ width: '100%', height: 6, background: 'hsl(var(--bg-hover))', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
               <div style={{ width: `${ordersSummary.totalOrders > 0 ? (ordersSummary.entregueCount / ordersSummary.totalOrders) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
             </div>
           </div>
 
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#64748b', marginBottom: 12 }}>Recentes</div>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Recentes</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {ordersSummary.recentOrders.length === 0 ? (
-              <div style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
+              <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
             ) : (
               ordersSummary.recentOrders.slice(0, 3).map((o) => {
                 const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
                 const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
-                const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? '#fffbeb' : '#eff6ff');
+                const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? 'hsl(var(--bg-surface))beb' : '#eff6ff');
 
                 return (
                   <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
                     <div style={{ width: 44, height: 44, borderRadius: '16px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
                       <IconComponent size={20} strokeWidth={2} />
                     </div>
-                    <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid #f1f5f9', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
+                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
                       </div>
                       <div style={{ marginLeft: 12, flexShrink: 0 }}>
                         {!o.feito && !o.entregue && (
@@ -430,155 +430,113 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Coluna 2: Tarefas ──────────────────────────── */}
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', border: '1px solid #f8fafc' }}>
+        {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* Tarefas */}
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#ecfdf5', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, background: 'rgba(16, 185, 129, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ClipboardCheck size={16} color="#10b981" strokeWidth={2.5} />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Tarefas</span>
+              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Tarefas</span>
             </div>
             <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f5f3ff', padding: '6px 12px', borderRadius: '20px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed' }}>Todas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: '#fff', background: '#8b5cf6', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(139, 92, 246, 0.1)', padding: '6px 14px', borderRadius: '20px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#7c3aed' }}>Todas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--bg-surface))', background: '#8b5cf6', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Pendentes</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>Pendentes</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b' }}>Concluídas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: '#94a3b8', background: '#f1f5f9', padding: '2px 6px', borderRadius: '10px' }}>0</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>Concluídas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
             </div>
           </div>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 24, transform: 'rotate(-5deg)' }}>
-              {/* Illustration 3D Clipboard */}
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="clip-grad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#e0e7ff" />
-                    <stop offset="100%" stopColor="#c7d2fe" />
-                  </linearGradient>
-                  <linearGradient id="paper-grad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ffffff" />
-                    <stop offset="100%" stopColor="#f8fafc" />
-                  </linearGradient>
-                  <filter id="shadow-clip" x="0" y="0" width="120" height="120" filterUnits="userSpaceOnUse">
-                    <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#6366f1" floodOpacity="0.2"/>
-                  </filter>
-                </defs>
-                <rect x="15" y="25" width="70" height="75" rx="12" fill="url(#clip-grad)" filter="url(#shadow-clip)" />
-                <rect x="25" y="35" width="50" height="60" rx="6" fill="url(#paper-grad)" />
-                <rect x="35" y="15" width="30" height="20" rx="8" fill="#818cf8" />
-                <rect x="40" y="20" width="20" height="10" rx="4" fill="#ffffff" />
-                {/* Checks */}
-                <path d="M 35 50 L 40 55 L 50 45" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M 35 65 L 40 70 L 50 60" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M 35 80 L 40 85 L 50 75" stroke="#a5b4fc" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
+            <div style={{ marginBottom: 20 }}>
+              <svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="5" y="15" width="50" height="55" rx="10" fill="#e0e7ff" />
+                <rect x="20" y="5" width="20" height="15" rx="5" fill="hsl(var(--bg-surface))" stroke="#a5b4fc" strokeWidth="4" />
+                <path d="M 22 32 L 27 37 L 38 26" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 22 46 L 27 51 L 38 40" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M 22 60 L 27 65 L 38 54" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhuma tarefa pendente</div>
-            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
+            <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', marginBottom: 4 }}>Nenhuma tarefa pendente</div>
+            <div style={{ fontSize: '13px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
           </div>
         </div>
 
         {/* ── Coluna 3: Agenda ──────────────────────────── */}
-        <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden', border: '1px solid #f8fafc' }}>
+        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#f5f3ff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 32, height: 32, background: 'rgba(139, 92, 246, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CalendarIcon size={16} color="#8b5cf6" strokeWidth={2.5} />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Agenda</span>
+              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Agenda</span>
             </div>
-            <Link href="/calendario" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Abrir agenda</Link>
+            <Link href="/calendario" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
           {/* Week View */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Hoje</span>
-              <div style={{ width: 32, height: 32, background: '#8b5cf6', color: '#fff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, boxShadow: '0 4px 10px rgba(139, 92, 246, 0.3)' }}>{hoje.getDate()}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#8b5cf6', padding: '10px 14px', borderRadius: '20px', color: 'hsl(var(--bg-surface))', gap: 4, boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)' }}>
+              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' }}>Hoje</span>
+              <span style={{ fontSize: '16px', fontWeight: 900 }}>{hoje.getDate().toString().padStart(2, '0')}</span>
             </div>
-            {[1, 2, 3, 4, 5].map((offset) => {
+            {[1, 2, 3, 4, 5, 6].map((offset) => {
               const d = new Date(hoje);
               d.setDate(hoje.getDate() + offset);
               const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
               return (
-                <div key={offset} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>{dayName}</span>
-                  <div style={{ width: 32, height: 32, color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>{d.getDate().toString().padStart(2, '0')}</div>
+                <div key={offset} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0' }}>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>{dayName}</span>
+                  <div style={{ color: 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
                 </div>
               )
             })}
           </div>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '20px 0' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
             {eventosHoje.length === 0 ? (
               <>
-                <div style={{ position: 'relative', width: 100, height: 100, marginBottom: 24, transform: 'rotate(5deg)' }}>
-                  {/* Illustration 3D Calendar */}
-                  <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="cal-grad" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#e0e7ff" />
-                        <stop offset="100%" stopColor="#c7d2fe" />
-                      </linearGradient>
-                      <linearGradient id="cal-top" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#818cf8" />
-                        <stop offset="100%" stopColor="#6366f1" />
-                      </linearGradient>
-                      <filter id="shadow-cal" x="0" y="0" width="120" height="120" filterUnits="userSpaceOnUse">
-                        <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#8b5cf6" floodOpacity="0.2"/>
-                      </filter>
-                    </defs>
-                    <rect x="20" y="30" width="60" height="60" rx="12" fill="url(#cal-grad)" filter="url(#shadow-cal)" />
-                    <rect x="20" y="30" width="60" height="20" rx="12" fill="url(#cal-top)" />
-                    {/* Binders */}
-                    <rect x="30" y="20" width="8" height="20" rx="4" fill="#ffffff" />
-                    <rect x="62" y="20" width="8" height="20" rx="4" fill="#ffffff" />
-                    {/* Grid */}
-                    <rect x="30" y="60" width="10" height="10" rx="3" fill="#ffffff" />
-                    <rect x="45" y="60" width="10" height="10" rx="3" fill="#ffffff" />
-                    <rect x="60" y="60" width="10" height="10" rx="3" fill="#ffffff" />
-                    <rect x="30" y="75" width="10" height="10" rx="3" fill="#ffffff" />
-                    <rect x="45" y="75" width="10" height="10" rx="3" fill="#818cf8" />
-                  </svg>
-                </div>
-                <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Sem eventos programados</div>
-                <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Aproveite o dia! ☀️</div>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhum evento para hoje</div>
+                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Aproveite para planejar! 📅</div>
               </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start' }}>
                 {eventosHoje.slice(0, 4).map(e => (
-                  <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: '#f8fafc', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#0f172a' }}>{e.titulo}</span>
-                    {e.horaInicio && <span style={{ fontSize: '11px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>{e.horaInicio}</span>}
+                  <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{e.titulo}</span>
+                    {e.horaInicio && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>{e.horaInicio}</span>}
                   </div>
                 ))}
               </div>
             )}
           </div>
         </div>
+        {/* Fim da Coluna Central */}
+        </div>
 
         {/* ── Coluna 4: Aniversários & Ocorrências ──────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
           {/* Aniversariantes */}
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #fdf2f8' }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, background: '#fdf2f8', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
+                <div style={{ width: 32, height: 32, background: 'rgba(236, 72, 153, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
                   <Cake size={16} strokeWidth={2.5} />
                 </div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>
                   Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
                 </span>
               </div>
@@ -592,16 +550,16 @@ export default function DashboardPage() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {aniversariantes.length === 0 ? (
-                <div style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
+                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
               ) : (
                 aniversariantes.slice(0, 3).map((aniv: any) => (
                   <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #fdf2f8' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
                       {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
-                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                      <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
                     </div>
                     <div style={{ fontSize: '11px', fontWeight: 900, color: '#ec4899', flexShrink: 0, textTransform: 'uppercase' }}>Dia {aniv.dia}</div>
                   </div>
@@ -612,7 +570,7 @@ export default function DashboardPage() {
             <div style={{ textAlign: 'center', marginTop: 20 }}>
               <button 
                 onClick={() => setModalAnivOpen(true)} 
-                style={{ width: '100%', fontSize: '13px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: '#fdf2f8', padding: '12px 24px', borderRadius: '16px', border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                style={{ width: '100%', fontSize: '13px', color: '#ec4899', fontWeight: 800, textDecoration: 'none', background: 'rgba(236, 72, 153, 0.1)', padding: '12px 24px', borderRadius: '16px', border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
                 onMouseOver={(e) => e.currentTarget.style.background = '#fce7f3'}
                 onMouseOut={(e) => e.currentTarget.style.background = '#fdf2f8'}
               >
@@ -622,26 +580,26 @@ export default function DashboardPage() {
           </div>
 
           {/* Ocorrências Recentes */}
-          <div style={{ background: '#fff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #f8fafc' }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, background: '#fffbeb', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+                <div style={{ width: 32, height: 32, background: 'hsl(var(--bg-surface))beb', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
                   <AlertTriangle size={16} strokeWidth={2.5} />
                 </div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#0f172a' }}>Ocorrências Recentes</span>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Ocorrências Recentes</span>
               </div>
               <Link href="/academico/ocorrencias" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {ocorrencias.length === 0 ? (
-                <div style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
+                <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
               ) : (
                 ocorrencias.slice(0, 3).map((oc: any) => {
                   const isGrave = oc.gravidade === 'grave';
                   const isMedia = oc.gravidade === 'media';
                   const color = isGrave ? '#ef4444' : isMedia ? '#f59e0b' : '#3b82f6';
-                  const bg = isGrave ? '#fef2f2' : isMedia ? '#fffbeb' : '#eff6ff';
+                  const bg = isGrave ? '#fef2f2' : isMedia ? 'hsl(var(--bg-surface))beb' : '#eff6ff';
                   
                   // Extract date
                   let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || '';
@@ -656,8 +614,8 @@ export default function DashboardPage() {
                   return (
                     <div key={oc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '16px', background: bg, borderLeft: `4px solid ${color}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.tipo || oc.titulo || 'Ocorrência'}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{oc.tipo || oc.titulo || 'Ocorrência'}</div>
+                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                           <Users size={12} /> {oc.alunoNome || 'Aluno'}
                         </div>
                       </div>
@@ -666,7 +624,7 @@ export default function DashboardPage() {
                           {oc.gravidade || 'Leve'}
                         </div>
                         {fmtDate && (
-                          <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8' }}>
+                          <div style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>
                             {fmtDate}
                           </div>
                         )}
@@ -683,7 +641,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div style={{ background: '#fff', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #f8fafc', flexWrap: 'wrap', gap: 24 }}>
+      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap', gap: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 32, flex: 1 }}>
           
           {/* Circular Progress */}
@@ -698,12 +656,12 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>Engajamento do Sistema</div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 8 }}>Engajamento do Sistema</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <div style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: '#6d28d9' }}>{statsUsuarios.total}</div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#64748b', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
             </div>
-            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
+            <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
           </div>
 
           {/* Wavy Line decoration */}
@@ -724,35 +682,35 @@ export default function DashboardPage() {
         
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {/* Card Colaboradores */}
-          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#8b5cf6' }} />
             </div>
           </div>
           {/* Card Alunos */}
-          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#3b82f6' }} />
             </div>
           </div>
           {/* Card Responsáveis */}
-          <div style={{ background: '#fff', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
-            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
             </div>
           </div>
@@ -778,36 +736,36 @@ export default function DashboardPage() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               style={{ 
                 position: 'relative', width: '100%', maxWidth: 800, maxHeight: '85vh', 
-                background: '#fff', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                background: 'hsl(var(--bg-surface))', borderRadius: 24, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                 display: 'flex', flexDirection: 'column', overflow: 'hidden'
               }}
             >
               {/* Header */}
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(to right, #fdf2f8, #fff)' }}>
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(to right, #fdf2f8, hsl(var(--bg-surface)))' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <div style={{ width: 48, height: 48, borderRadius: 16, background: '#fbcfe8', color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Cake size={24} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1e293b', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Aniversariantes do Mês</h2>
-                    <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0', fontWeight: 600 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Aniversariantes do Mês</h2>
+                    <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '4px 0 0 0', fontWeight: 600 }}>
                       Mês de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setModalAnivOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', background: '#f1f5f9', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <button onClick={() => setModalAnivOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', background: 'hsl(var(--bg-hover))', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }}>
                   <X size={18} />
                 </button>
               </div>
 
               {/* Filters */}
-              <div style={{ padding: '20px 32px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: 16 }}>
+              <div style={{ padding: '20px 32px', background: 'hsl(var(--bg-elevated))', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase' }}>Ano Letivo</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 8, textTransform: 'uppercase' }}>Ano Letivo</label>
                   <select 
                     value={anivFiltroAno} 
                     onChange={e => { setAnivFiltroAno(e.target.value); setAnivFiltroTurma('Todas') }}
-                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: '#1e293b', outline: 'none' }}
+                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-primary))', outline: 'none' }}
                   >
                     <option value="Todos">Todos os Anos Letivos</option>
                     {cfgCalendarioLetivo.map((c: any) => (
@@ -816,11 +774,11 @@ export default function DashboardPage() {
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase' }}>Turma</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 8, textTransform: 'uppercase' }}>Turma</label>
                   <select 
                     value={anivFiltroTurma} 
                     onChange={e => setAnivFiltroTurma(e.target.value)}
-                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: '#1e293b', outline: 'none' }}
+                    style={{ width: '100%', padding: '10px 16px', borderRadius: 12, border: '1px solid #cbd5e1', fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-primary))', outline: 'none' }}
                   >
                     <option value="Todas">Todas as Turmas</option>
                     {turmas.filter((t: any) => anivFiltroAno === 'Todos' || String(t.ano || t.ano_letivo) === anivFiltroAno).map((t: any) => (
@@ -831,21 +789,21 @@ export default function DashboardPage() {
               </div>
 
               {/* List */}
-              <div style={{ padding: 32, overflowY: 'auto', flex: 1, background: '#fff' }}>
+              <div style={{ padding: 32, overflowY: 'auto', flex: 1, background: 'hsl(var(--bg-surface))' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                   {aniversariantes
                     .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
                     .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma)
                     .map((aniv: any) => (
-                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: '16px', border: '1px solid #fce7f3', background: '#fffbfd' }}>
-                      <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: '2px solid #fbcfe8' }}>
+                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: '16px', border: '1px solid #fce7f3', background: 'hsl(var(--bg-surface))bfd' }}>
+                      <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: '2px solid #fbcfe8' }}>
                         {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>Turma • {aniv.turma}</div>
+                        <div style={{ fontSize: '15px', fontWeight: 900, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>Turma • {aniv.turma}</div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#ec4899', padding: '8px 12px', borderRadius: 12, color: '#fff' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#ec4899', padding: '8px 12px', borderRadius: 12, color: 'hsl(var(--bg-surface))' }}>
                         <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', opacity: 0.9 }}>Dia</span>
                         <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{aniv.dia}</span>
                       </div>
@@ -854,7 +812,7 @@ export default function DashboardPage() {
                   {aniversariantes
                     .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
                     .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma).length === 0 && (
-                    <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 15, fontWeight: 600 }}>
+                    <div style={{ gridColumn: '1 / -1', padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 15, fontWeight: 600 }}>
                       Nenhum aniversariante encontrado para os filtros selecionados.
                     </div>
                   )}

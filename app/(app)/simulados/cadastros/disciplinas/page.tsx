@@ -10,7 +10,7 @@ export default function DisciplinasPage() {
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ nome: '', cor: '#3b82f6', id_professor: '', quantidade_questoes: 10 })
+  const [formData, setFormData] = useState({ nome: '', cor: '#3b82f6', professores_ids: [] as string[], quantidade_questoes: 10, segmento: 'Ens. Fund2/Médio' })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [professores, setProfessores] = useState<any[]>([])
@@ -39,10 +39,27 @@ export default function DisciplinasPage() {
   const handleOpen = (item?: any) => {
     if (item) {
       setEditingId(item.id)
-      setFormData({ nome: item.nome, cor: item.cor || '#3b82f6', id_professor: item.id_professor || '', quantidade_questoes: item.quantidade_questoes || 10 })
+      
+      // Migration from single id_professor to array
+      let initialProfs: string[] = [];
+      if (typeof item.professores_ids === 'string') {
+        try { initialProfs = JSON.parse(item.professores_ids) } catch(e) {}
+      } else if (Array.isArray(item.professores_ids)) {
+        initialProfs = item.professores_ids;
+      } else if (item.id_professor) {
+        initialProfs = [item.id_professor];
+      }
+
+      setFormData({ 
+        nome: item.nome, 
+        cor: item.cor || '#3b82f6', 
+        professores_ids: initialProfs, 
+        quantidade_questoes: item.quantidade_questoes || 10,
+        segmento: (item.segmento === 'Ens. Médio' || item.segmento === 'Ens. Fundamental II' || item.segmento === 'Ens. Funf2/Médio') ? 'Ens. Fund2/Médio' : (item.segmento || 'Ens. Fund2/Médio')
+      })
     } else {
       setEditingId(null)
-      setFormData({ nome: '', cor: '#3b82f6', id_professor: '', quantidade_questoes: 10 })
+      setFormData({ nome: '', cor: '#3b82f6', professores_ids: [], quantidade_questoes: 10, segmento: 'Ens. Fund2/Médio' })
     }
     setIsModalOpen(true)
   }
@@ -51,17 +68,21 @@ export default function DisciplinasPage() {
     if (!formData.nome) return alert('O nome é obrigatório')
     setIsSaving(true)
     try {
-      const payload = { ...formData, id_professor: formData.id_professor || null }
+      // Garantir que será salvo como array JSON corretamente ou converter se necessário
+      const payload = { ...formData, professores_ids: JSON.stringify(formData.professores_ids) }
+      
       if (editingId) {
-        await supabase.from('simulados_disciplinas').update(payload).eq('id', editingId)
+        const { error } = await supabase.from('simulados_disciplinas').update(payload).eq('id', editingId)
+        if (error) throw error
       } else {
-        await supabase.from('simulados_disciplinas').insert([payload])
+        const { error } = await supabase.from('simulados_disciplinas').insert([payload])
+        if (error) throw error
       }
       await refresh()
       setIsModalOpen(false)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert('Erro ao salvar')
+      alert(`Erro ao salvar. Verifique se a coluna "professores_ids" existe.\n\nDetalhes do erro: ${e.message || 'Desconhecido'}`)
     } finally {
       setIsSaving(false)
     }
@@ -74,6 +95,23 @@ export default function DisciplinasPage() {
   }
 
   const filtered = data?.filter(item => item.nome.toLowerCase().includes(search.toLowerCase())) || []
+
+  const grouped = filtered.reduce((acc, item) => {
+    let seg = item.segmento || 'Sem Segmento';
+    if (seg === 'Ens. Médio' || seg === 'Ens. Fundamental II' || seg === 'Ens. Funf2/Médio') {
+      seg = 'Ens. Fund2/Médio';
+    }
+    if (!acc[seg]) acc[seg] = [];
+    acc[seg].push(item);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const order = ['Ed. Infantil', 'Ens. Fundamental I', 'Ens. Fund2/Médio', 'Sem Segmento'];
+  const sortedSegments = Object.keys(grouped).sort((a, b) => {
+    const idxA = order.indexOf(a);
+    const idxB = order.indexOf(b);
+    return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
+  });
 
   return (
     <div style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
@@ -139,8 +177,18 @@ export default function DisciplinasPage() {
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, maxWidth: 400, margin: '0 auto' }}>Cadastre disciplinas para estruturar seus simulados.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-              {filtered.map((item, i) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+              {sortedSegments.map(segmento => (
+                <div key={segmento}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                    <div style={{ width: 8, height: 24, borderRadius: 4, background: '#3b82f6' }} />
+                    <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>{segmento}</h2>
+                    <div style={{ padding: '4px 10px', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                      {grouped[segmento].length} disciplina{grouped[segmento].length !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
+                    {grouped[segmento].map((item, i) => (
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                   key={item.id} 
@@ -180,7 +228,12 @@ export default function DisciplinasPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <User size={16} color="hsl(var(--text-muted))" />
                       <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                        {professores.find(p => p.id === item.id_professor)?.nome || item.system_users?.nome || 'Não vinculado'}
+                        {(() => {
+                          const profsIds = item.professores_ids || (item.id_professor ? [item.id_professor] : []);
+                          const profs = professores.filter(p => profsIds.includes(p.id));
+                          if (profs.length > 0) return profs.map(p => p.nome).join(', ');
+                          return item.system_users?.nome || 'Não vinculado';
+                        })()}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -191,7 +244,10 @@ export default function DisciplinasPage() {
                     </div>
                   </div>
 
-                </motion.div>
+                  </motion.div>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -220,11 +276,37 @@ export default function DisciplinasPage() {
                   <input value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }} onFocus={e => e.target.style.borderColor = '#3b82f6'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Professor(a) Titular</label>
-                  <select value={formData.id_professor} onChange={e => setFormData({...formData, id_professor: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none' }} onFocus={e => e.target.style.borderColor = '#3b82f6'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'}>
-                    <option value="">Nenhum professor vinculado</option>
-                    {professores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Segmento</label>
+                  <select value={formData.segmento} onChange={e => setFormData({...formData, segmento: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none' }} onFocus={e => e.target.style.borderColor = '#3b82f6'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'}>
+                    <option value="Ed. Infantil">Ed. Infantil</option>
+                    <option value="Ens. Fundamental I">Ens. Fundamental I</option>
+                    <option value="Ens. Fund2/Médio">Ens. Fund2/Médio</option>
                   </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Professores Vinculados</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 150, overflowY: 'auto', padding: '12px', background: 'hsl(var(--bg-app))', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                    {professores.map(p => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', color: 'hsl(var(--text-primary))', fontSize: 14 }}>
+                        <input 
+                          type="checkbox" 
+                          checked={formData.professores_ids.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({...formData, professores_ids: [...formData.professores_ids, p.id]})
+                            } else {
+                              setFormData({...formData, professores_ids: formData.professores_ids.filter(id => id !== p.id)})
+                            }
+                          }}
+                          style={{ width: 18, height: 18, accentColor: '#3b82f6', cursor: 'pointer' }}
+                        />
+                        {p.nome}
+                      </label>
+                    ))}
+                    {professores.length === 0 && (
+                      <div style={{ color: 'hsl(var(--text-muted))', fontSize: 13, textAlign: 'center' }}>Nenhum professor cadastrado</div>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 20 }}>
                   <div style={{ flex: 1 }}>

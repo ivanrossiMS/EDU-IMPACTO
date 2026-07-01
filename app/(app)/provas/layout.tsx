@@ -98,9 +98,11 @@ function ProvasLayoutInner({ children }: { children: React.ReactNode }) {
 
   if (!mounted) return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-app))' }} />
 
+  const isAdaptarView = pathname?.includes('/adaptar')
+
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'hsl(var(--bg-app))' }}>
-      <SidebarSimulados />
+      {!isAdaptarView && <SidebarSimulados />}
       <div 
         style={{ 
           flex: 1, 

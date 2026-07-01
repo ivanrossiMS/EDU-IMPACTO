@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Upload, Image as ImageIcon, Loader2, Save } from 'lucide-react'
+import { Settings, Upload, Image as ImageIcon, Loader2, Save, Download } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function SimuladosConfiguracoesPage() {
@@ -14,8 +14,16 @@ export default function SimuladosConfiguracoesPage() {
   const [modeloCapaUrl, setModeloCapaUrl] = useState('')
   const [modeloOutrasUrl, setModeloOutrasUrl] = useState('')
   
+  const [provasModeloCapaUrl, setProvasModeloCapaUrl] = useState('')
+  const [provasModeloOutrasUrl, setProvasModeloOutrasUrl] = useState('')
+  
+  const [uploadingProvasCapa, setUploadingProvasCapa] = useState(false)
+  const [uploadingProvasOutras, setUploadingProvasOutras] = useState(false)
+  
   const fileInputCapaRef = useRef<HTMLInputElement>(null)
   const fileInputOutrasRef = useRef<HTMLInputElement>(null)
+  const provasFileInputCapaRef = useRef<HTMLInputElement>(null)
+  const provasFileInputOutrasRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     async function loadConfig() {
@@ -24,6 +32,8 @@ export default function SimuladosConfiguracoesPage() {
         if (data) {
           if (data.modelo_pdf_url) setModeloCapaUrl(data.modelo_pdf_url)
           if (data.modelo_pdf_outras_paginas_url) setModeloOutrasUrl(data.modelo_pdf_outras_paginas_url)
+          if (data.provas_modelo_pdf_url) setProvasModeloCapaUrl(data.provas_modelo_pdf_url)
+          if (data.provas_modelo_pdf_outras_paginas_url) setProvasModeloOutrasUrl(data.provas_modelo_pdf_outras_paginas_url)
         }
       } catch (e) {
         // Table might not exist yet
@@ -77,6 +87,8 @@ export default function SimuladosConfiguracoesPage() {
         id: 'default', 
         modelo_pdf_url: modeloCapaUrl, 
         modelo_pdf_outras_paginas_url: modeloOutrasUrl,
+        provas_modelo_pdf_url: provasModeloCapaUrl,
+        provas_modelo_pdf_outras_paginas_url: provasModeloOutrasUrl,
         updated_at: new Date().toISOString() 
       }
       
@@ -90,6 +102,8 @@ export default function SimuladosConfiguracoesPage() {
       console.error(err)
       if (err.message?.includes('does not exist') || err.code === '42P01') {
         alert('AVISO: A tabela simulados_configuracoes ainda não existe no Supabase. Por favor, rode o script SQL fornecido no plano para criá-la.')
+      } else if (err.code === 'PGRST204' || err.message?.includes('schema cache')) {
+        alert('AVISO: O banco de dados ainda não reconheceu as novas colunas. Por favor, vá no painel do Supabase, entre em Project Settings > API e clique em "Reload schema cache" (ou aguarde alguns minutos e tente novamente).')
       } else {
         alert('Erro ao salvar: ' + err.message)
       }
@@ -118,85 +132,203 @@ export default function SimuladosConfiguracoesPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             
-            {/* Bloco 1: Capa */}
-            <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ImageIcon size={20} color="#3b82f6" />
-                Imagem de Capa (Primeira Página)
-              </h2>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
-                Esta imagem será exibida <b>apenas na primeira página</b> do PDF. Idealmente deve conter o cabeçalho completo, logo da escola e os campos para nome do aluno.
-              </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+              {/* Coluna 1: SIMULADOS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12 }}>Configurações de Simulado</h2>
+                
+                {/* Bloco 1: Capa Simulado */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#3b82f6" />
+                    Imagem de Capa
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será exibida <b>apenas na primeira página</b> do Simulado.
+                  </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {modeloCapaUrl ? (
-                  <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
-                    <img src={modeloCapaUrl} alt="Modelo Capa" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontWeight: 600, cursor: uploadingCapa ? 'wait' : 'pointer', fontSize: 14 }}>
-                      {uploadingCapa ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                      Trocar Imagem da Capa
-                      <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloCapaUrl, setUploadingCapa, fileInputCapaRef)} ref={fileInputCapaRef} disabled={uploadingCapa} />
-                    </label>
-                  </div>
-                ) : (
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: 200, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingCapa ? 'wait' : 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#3b82f6'} onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
-                    {uploadingCapa ? (
-                      <>
-                        <Loader2 size={32} color="#3b82f6" className="animate-spin" />
-                        <span style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando arquivo...</span>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Upload size={24} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {modeloCapaUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={modeloCapaUrl} alt="Modelo Capa" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontWeight: 600, cursor: uploadingCapa ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingCapa ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloCapaUrl, setUploadingCapa, fileInputCapaRef)} ref={fileInputCapaRef} disabled={uploadingCapa} />
+                          </label>
+                          <a href={modeloCapaUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
                         </div>
-                        <span style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem da Capa (PNG/JPG)</span>
-                      </>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingCapa ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingCapa ? (
+                          <>
+                            <Loader2 size={24} color="#3b82f6" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloCapaUrl, setUploadingCapa, fileInputCapaRef)} ref={fileInputCapaRef} disabled={uploadingCapa} />
+                      </label>
                     )}
-                    <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloCapaUrl, setUploadingCapa, fileInputCapaRef)} ref={fileInputCapaRef} disabled={uploadingCapa} />
-                  </label>
-                )}
+                  </div>
+                </div>
+
+                {/* Bloco 2: Outras Páginas Simulado */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#64748b" />
+                    Fundo (Demais Páginas)
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será repetida da <b>segunda página em diante</b> no Simulado.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {modeloOutrasUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={modeloOutrasUrl} alt="Modelo Outras Páginas" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, cursor: uploadingOutras ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingOutras ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloOutrasUrl, setUploadingOutras, fileInputOutrasRef)} ref={fileInputOutrasRef} disabled={uploadingOutras} />
+                          </label>
+                          <a href={modeloOutrasUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingOutras ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingOutras ? (
+                          <>
+                            <Loader2 size={24} color="#64748b" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100,116,139,0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem (Opcional)</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloOutrasUrl, setUploadingOutras, fileInputOutrasRef)} ref={fileInputOutrasRef} disabled={uploadingOutras} />
+                      </label>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Bloco 2: Outras Páginas */}
-            <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ImageIcon size={20} color="#64748b" />
-                Imagem de Fundo (Demais Páginas)
-              </h2>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, marginBottom: 24, lineHeight: 1.5 }}>
-                Esta imagem será repetida da <b>segunda página em diante</b>. Deve ser um design mais limpo, sem os campos de nome do aluno, servindo apenas como marca d'água ou borda.
-              </p>
+              {/* Coluna 2: PROVAS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 12 }}>Configurações de Prova</h2>
+                
+                {/* Bloco 1: Capa Prova */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#10b981" />
+                    Imagem de Capa
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será exibida <b>apenas na primeira página</b> da Prova.
+                  </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {modeloOutrasUrl ? (
-                  <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
-                    <img src={modeloOutrasUrl} alt="Modelo Outras Páginas" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, cursor: uploadingOutras ? 'wait' : 'pointer', fontSize: 14 }}>
-                      {uploadingOutras ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                      Trocar Imagem de Fundo
-                      <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloOutrasUrl, setUploadingOutras, fileInputOutrasRef)} ref={fileInputOutrasRef} disabled={uploadingOutras} />
-                    </label>
-                  </div>
-                ) : (
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: 200, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingOutras ? 'wait' : 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#64748b'} onMouseLeave={e => e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'}>
-                    {uploadingOutras ? (
-                      <>
-                        <Loader2 size={32} color="#64748b" className="animate-spin" />
-                        <span style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando arquivo...</span>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(100,116,139,0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Upload size={24} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {provasModeloCapaUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={provasModeloCapaUrl} alt="Modelo Capa Prova" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 600, cursor: uploadingProvasCapa ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingProvasCapa ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setProvasModeloCapaUrl, setUploadingProvasCapa, provasFileInputCapaRef)} ref={provasFileInputCapaRef} disabled={uploadingProvasCapa} />
+                          </label>
+                          <a href={provasModeloCapaUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
                         </div>
-                        <span style={{ fontSize: 14, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem de Fundo (Opcional)</span>
-                      </>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingProvasCapa ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingProvasCapa ? (
+                          <>
+                            <Loader2 size={24} color="#10b981" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(16,185,129,0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setProvasModeloCapaUrl, setUploadingProvasCapa, provasFileInputCapaRef)} ref={provasFileInputCapaRef} disabled={uploadingProvasCapa} />
+                      </label>
                     )}
-                    <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setModeloOutrasUrl, setUploadingOutras, fileInputOutrasRef)} ref={fileInputOutrasRef} disabled={uploadingOutras} />
-                  </label>
-                )}
+                  </div>
+                </div>
+
+                {/* Bloco 2: Outras Páginas Prova */}
+                <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ImageIcon size={18} color="#64748b" />
+                    Fundo (Demais Páginas)
+                  </h3>
+                  <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                    Esta imagem será repetida da <b>segunda página em diante</b> na Prova.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {provasModeloOutrasUrl ? (
+                      <div style={{ border: '1px dashed hsl(var(--border-subtle))', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'hsl(var(--bg-app))' }}>
+                        <img src={provasModeloOutrasUrl} alt="Modelo Outras Páginas Prova" style={{ maxWidth: '100%', maxHeight: 150, objectFit: 'contain', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }} />
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, cursor: uploadingProvasOutras ? 'wait' : 'pointer', fontSize: 13 }}>
+                            {uploadingProvasOutras ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                            Trocar
+                            <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setProvasModeloOutrasUrl, setUploadingProvasOutras, provasFileInputOutrasRef)} ref={provasFileInputOutrasRef} disabled={uploadingProvasOutras} />
+                          </label>
+                          <a href={provasModeloOutrasUrl} target="_blank" download style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, background: 'rgba(100,116,139,0.1)', color: '#475569', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>
+                            <Download size={16} />
+                            Baixar
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, height: 150, border: '2px dashed hsl(var(--border-subtle))', borderRadius: 12, background: 'hsl(var(--bg-app))', cursor: uploadingProvasOutras ? 'wait' : 'pointer', transition: 'all 0.2s' }}>
+                        {uploadingProvasOutras ? (
+                          <>
+                            <Loader2 size={24} color="#64748b" className="animate-spin" />
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Enviando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100,116,139,0.1)', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Upload size={20} />
+                            </div>
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Selecionar Imagem (Opcional)</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, setProvasModeloOutrasUrl, setUploadingProvasOutras, provasFileInputOutrasRef)} ref={provasFileInputOutrasRef} disabled={uploadingProvasOutras} />
+                      </label>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -15,6 +15,10 @@ interface PaginationEngineProps {
   onEditAlternativa: (qId: string, altId: string, newText: string) => void;
   onRemoveAlternativa: (qId: string, altId: string) => void;
   onToggleQuestion: (qId: string) => void;
+  isEditHeaderMode?: boolean;
+  headerLayout?: any;
+  onUpdateHeaderField?: (key: string, newField: any) => void;
+  pageA4Ref?: React.RefObject<HTMLDivElement>;
 }
 
 const MM_TO_PX = 3.7795;
@@ -27,7 +31,8 @@ const ALT_SPACING = 12;
 
 export function PaginationEngine({
   questoes, columns, fontSize, config, simulado,
-  onEditEnunciado, onEditAlternativa, onRemoveAlternativa, onToggleQuestion
+  onEditEnunciado, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
+  isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -107,11 +112,18 @@ export function PaginationEngine({
           return h;
         });
 
-        const altsH = (q.simulados_alternativas || []).map((a: any) => {
-          const h = heights[`${q.id}-alt-${a.id}`] || 0;
+        let altsH: number[] = [];
+        if (alternativasLayout === 'horizontal') {
+          const h = heights[`${q.id}-alts-container`] || 0;
           totalH += h + ALT_SPACING;
-          return h;
-        });
+          altsH = [h];
+        } else {
+          altsH = (q.simulados_alternativas || []).map((a: any) => {
+            const h = heights[`${q.id}-alt-${a.id}`] || 0;
+            totalH += h + ALT_SPACING;
+            return h;
+          });
+        }
 
         let descritivaH = 0;
         let linhasResposta = 5;
@@ -144,9 +156,13 @@ export function PaginationEngine({
                 pushBlock({ type: 'part_descritiva_line', q, estiloEspaco }, lineH, margin);
              }
           } else {
-            (q.simulados_alternativas || []).forEach((a: any, i: number) => {
-               pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
-            });
+            if (alternativasLayout === 'horizontal') {
+              pushBlock({ type: 'part_alts_container', q }, altsH[0], ALT_SPACING);
+            } else {
+              (q.simulados_alternativas || []).forEach((a: any, i: number) => {
+                 pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
+              });
+            }
           }
         }
       });
@@ -239,20 +255,41 @@ export function PaginationEngine({
               />
             ))}
 
-            {q.simulados_alternativas?.map((a: any) => (
-              <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                  border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                }}>
-                  {a.letra}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
-                </div>
+            {alternativasLayout === 'horizontal' ? (
+              <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
+                {q.simulados_alternativas?.map((a: any) => (
+                  <div key={`shadow-alt-${a.id}`} style={{ display: 'flex', gap: 12 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                      border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                    }}>
+                      {a.letra}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      {a.imagem_url && <img src={a.imagem_url} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                      <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              q.simulados_alternativas?.map((a: any) => (
+                <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                    border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                  }}>
+                    {a.letra}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    {a.imagem_url && <img src={a.imagem_url} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                    <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )})}
       </div>
@@ -280,6 +317,8 @@ export function PaginationEngine({
               page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
               onEditEnunciado={onEditEnunciado} onEditAlternativa={onEditAlternativa} 
               onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
+              isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField} pageA4Ref={pageA4Ref}
+              alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
             />
           </div>
         ))}
@@ -302,6 +341,8 @@ export function PaginationEngine({
                 page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
                 onEditEnunciado={onEditEnunciado} onEditAlternativa={onEditAlternativa} 
                 onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
+                isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField}
+                alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
               />
             </div>
           ))}
