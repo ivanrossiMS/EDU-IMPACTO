@@ -48,7 +48,7 @@ export default function NovoSimuladoPage() {
   }, [])
 
   const handleAddRequisicao = () => {
-    setRequisicoes(prev => [...prev, { id: Date.now().toString(), disciplinaId: '', professorId: '', qtdQuestoes: 10 }])
+    setRequisicoes(prev => [...prev, { id: Date.now().toString(), disciplinaId: '', professorId: '', qtdQuestoes: 1 }])
   }
 
   const handleRemoveRequisicao = (id: string) => {
@@ -95,12 +95,11 @@ export default function NovoSimuladoPage() {
       !titulo ||
       !dataAplicacao ||
       !bimestreId ||
-      !valor ||
       series.length === 0 ||
       requisicoes.length === 0 ||
       requisicoes.some(r => !r.disciplinaId || !r.professorId)
     ) {
-      alert('Preencha todos os campos obrigatórios (Título, Data, Bimestre, Valor, Séries Aplicáveis e Requisições).')
+      alert('Preencha todos os campos obrigatórios (Título, Data, Bimestre, Séries Aplicáveis e Requisições).')
       return
     }
 
@@ -267,7 +266,7 @@ export default function NovoSimuladoPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {requisicoes.map((req, i) => (
-              <div key={req.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px auto', gap: 16, alignItems: 'center', background: 'hsl(var(--bg-app))', padding: 16, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
+              <div key={req.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 16, alignItems: 'center', background: 'hsl(var(--bg-app))', padding: 16, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
                 <div>
                   <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>Disciplina</label>
                   <select 
@@ -311,16 +310,7 @@ export default function NovoSimuladoPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase' }}>Quant.</label>
-                  <input 
-                    type="number" 
-                    min="1"
-                    value={req.qtdQuestoes} 
-                    onChange={e => handleRequisicaoChange(req.id, 'qtdQuestoes', parseInt(e.target.value))}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', textAlign: 'center' }}
-                  />
-                </div>
+
 
                 <div style={{ paddingTop: 18 }}>
                   <button 
@@ -333,18 +323,7 @@ export default function NovoSimuladoPage() {
               </div>
             ))}
             
-            <div>
-              <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Valor da Prova
-              </label>
-              <input
-                type="text"
-                value={valor}
-                onChange={e => setValor(e.target.value)}
-                placeholder="Ex: 10,0"
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none' }}
-              />
-            </div>
+
           </div>
         </div>
 
