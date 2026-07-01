@@ -22,7 +22,7 @@ export default function GerenciamentoSimuladosPage() {
       simulados_bimestres ( nome ),
       provas_requisicoes ( quantidade_questoes, id_professor ),
       provas_questoes ( id )
-    `).or('tipo.eq.prova,tipo.is.null').order('created_at', { ascending: false })
+    `).eq('tipo', 'redacao_enem').order('created_at', { ascending: false })
     
     if (data) {
       let filteredData = data;
@@ -110,18 +110,18 @@ export default function GerenciamentoSimuladosPage() {
               <PenTool size={32} color="#f43f5e" />
             </div>
             <div>
-              <h1 style={{ fontSize: 32, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Gerenciar Provas</h1>
+              <h1 style={{ fontSize: 32, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Gerenciar Redação ENEM</h1>
               <p style={{ color: 'hsl(var(--text-secondary))', margin: '6px 0 0', fontSize: 15 }}>Painel de controle para criação, edição e publicação</p>
             </div>
           </div>
           
-          <Link href="/provas/gerenciamento/novo" style={{ textDecoration: 'none' }}>
+          <Link href="/redacao-enem/gerenciamento/novo" style={{ textDecoration: 'none' }}>
             <motion.div
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px', borderRadius: 14, background: 'linear-gradient(135deg, #f43f5e 0%, #e11d48 100%)', color: '#fff', fontWeight: 800, boxShadow: '0 10px 25px -10px rgba(244,63,94,0.6)', cursor: 'pointer' }}
             >
-              <Plus size={20} /> Nova Prova
+              <Plus size={20} /> Nova Redação
             </motion.div>
           </Link>
         </div>
@@ -246,7 +246,7 @@ export default function GerenciamentoSimuladosPage() {
                             >
                               <Link href={`/provas/gerenciamento/editar/${s.id}`} style={{ textDecoration: 'none' }}>
                                 <div style={{ width: '100%', padding: '10px 14px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-app))'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                                  <Edit2 size={16} /> Editar Prova
+                                  <Edit2 size={16} /> Editar Redação
                                 </div>
                               </Link>
 

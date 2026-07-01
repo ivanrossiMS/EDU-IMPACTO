@@ -96,13 +96,13 @@ export default function SimuladosListaPage() {
         })
       }
     } else if (action === 'gerenciar') {
-      router.push(`/provas/lista/${provaId}`)
+      router.push(`/redacao-enem/lista/${provaId}`)
     } else if (action === 'gerar_pdf') {
-      router.push(`/provas/imprimir/${provaId}`)
+      router.push(`/redacao-enem/imprimir/${provaId}`)
     } else if (action === 'gerar_gabarito') {
       setGabaritoModalId(provaId)
     } else if (action === 'adaptar') {
-      router.push(`/provas/adaptar/${provaId}`)
+      router.push(`/redacao-enem/adaptar/${provaId}`)
     } else {
       alert(`Ação de ${action} em desenvolvimento.`)
     }
@@ -116,7 +116,7 @@ export default function SimuladosListaPage() {
         simulados_bimestres ( nome ),
         provas_questoes ( id, id_professor, id_disciplina ),
         provas_requisicoes ( id_professor, id_disciplina, quantidade_questoes, simulados_disciplinas ( nome ) )
-      `).or('tipo.eq.prova,tipo.is.null').order('created_at', { ascending: false })
+      `).eq('tipo', 'redacao_enem').order('created_at', { ascending: false })
 
       try {
         const res = await fetch('/api/configuracoes/usuarios?type=colaboradores&limit=1000')
@@ -183,7 +183,7 @@ export default function SimuladosListaPage() {
               <BookOpen size={28} color="#3b82f6" />
             </div>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Minhas Provas</h1>
+              <h1 style={{ fontSize: 28, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.03em' }}>Minhas Redações ENEM</h1>
               <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Selecione uma prova para gerenciar suas questões e estrutura</p>
             </div>
           </div>
@@ -194,7 +194,7 @@ export default function SimuladosListaPage() {
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
             >
-              <PenTool size={18} /> Nova Prova
+              <PenTool size={18} /> Nova Redação
             </button>
           )}
         </div>
@@ -472,7 +472,7 @@ export default function SimuladosListaPage() {
                                                                   setTimeout(() => setShakeId(null), 300)
                                                                   return
                                                                 }
-                                                                router.push(`/provas/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
+                                                                router.push(`/redacao-enem/lista/${s.id}?professor=${req.id_professor}&disciplina=${req.id_disciplina}`)
                                                               }}
                                                               style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'hsl(var(--bg-surface))', padding: '8px 10px', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))', cursor: isBlocked ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: isBlocked ? 0.6 : 1 }}
                                                               onMouseEnter={e => { if (!isBlocked) { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,130,246,0.05)'; e.currentTarget.style.transform = 'translateY(-2px)' } }}
@@ -516,10 +516,7 @@ export default function SimuladosListaPage() {
                                                       <CheckSquare size={18} />
                                                       <span>Gabarito</span>
                                                     </button>
-                                                    <button onClick={(e) => handleAction(e, 'adaptar', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', fontSize: 12, fontWeight: 600 }} onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.background = 'rgba(139,92,246,0.05)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
-                                                      <Copy size={18} />
-                                                      <span>Adaptar</span>
-                                                    </button>
+
                                                     <button onClick={(e) => handleAction(e, 'excluir', s.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 12px', background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s', fontSize: 12, fontWeight: 600 }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.background = 'hsl(var(--bg-app))' }}>
                                                       <Trash2 size={18} />
                                                       <span>Excluir</span>
@@ -527,7 +524,7 @@ export default function SimuladosListaPage() {
                                                   </div>
 
                                                   <div 
-                                                    onClick={() => router.push(`/provas/lista/${s.id}`)}
+                                                    onClick={() => router.push(`/redacao-enem/lista/${s.id}`)}
                                                     style={{ 
                                                       display: 'flex', 
                                                       alignItems: 'center', 
