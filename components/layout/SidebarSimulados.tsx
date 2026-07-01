@@ -62,6 +62,13 @@ export function SidebarSimulados() {
       return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas', 'Minhas Redações ENEM'].includes(item.label)
     }
     return true
+  }).map(item => {
+    if (!isProfessor) {
+      if (item.label === 'Meus Simulados') return { ...item, label: 'Todos Simulados' }
+      if (item.label === 'Minhas Provas') return { ...item, label: 'Todas Provas' }
+      if (item.label === 'Minhas Redações ENEM') return { ...item, label: 'Todas Redações ENEM' }
+    }
+    return item;
   })
 
   // Force close on mobile default
