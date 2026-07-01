@@ -111,7 +111,7 @@ export default function NovoSimuladoPage() {
         id_bimestre: bimestreId || null,
         turmas: series,
         status: 'rascunho',
-        valor,
+        tipo: 'redacao_enem',
         criado_por: currentUser?.id || null
       }
       
@@ -148,7 +148,7 @@ export default function NovoSimuladoPage() {
       } else {
         alert('Prova criada com sucesso! Requisições prontas.')
       }
-      router.push('/provas/gerenciamento')
+      router.push('/redacao-enem/gerenciamento')
     } catch (err) {
       console.error(err)
       alert('Erro ao criar prova: ' + ((err as any).message || JSON.stringify(err)))

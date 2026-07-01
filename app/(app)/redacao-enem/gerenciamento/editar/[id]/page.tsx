@@ -214,7 +214,7 @@ export default function EditarSimuladoPage({
       }
 
       alert("Prova atualizada com sucesso!");
-      router.push("/provas/gerenciamento");
+      router.push("/redacao-enem/gerenciamento");
     } catch (err) {
       console.error(err);
       alert(
