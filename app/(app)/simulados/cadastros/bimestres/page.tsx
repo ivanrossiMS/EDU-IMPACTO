@@ -153,7 +153,7 @@ export default function BimestresPage() {
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 16 }}>
-                    {grouped[year].map((item, i) => (
+                    {grouped[year].map((item: any, i: number) => (
                       <motion.div 
                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                         key={item.id} 
