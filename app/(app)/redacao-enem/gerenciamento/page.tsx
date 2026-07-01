@@ -9,6 +9,7 @@ import { useApp } from '@/lib/context'
 
 export default function GerenciamentoSimuladosPage() {
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedTurma, setSelectedTurma] = useState('')
   const [provas, setSimulados] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
@@ -88,7 +89,14 @@ export default function GerenciamentoSimuladosPage() {
     }
   }
 
-  const filtered = provas.filter(s => s.titulo.toLowerCase().includes(searchTerm.toLowerCase()))
+  const filtered = provas.filter(s => {
+    const matchName = s.titulo.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchTurma = selectedTurma === '' ? true : (s.turmas || []).includes(selectedTurma)
+    return matchName && matchTurma
+  })
+
+  // Extrair todas as turmas únicas para o filtro
+  const todasTurmas = Array.from(new Set(provas.flatMap(s => s.turmas || []))).sort()
 
   return (
     <div style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
@@ -144,6 +152,22 @@ export default function GerenciamentoSimuladosPage() {
               onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'}
             />
           </div>
+          <select
+            value={selectedTurma}
+            onChange={e => setSelectedTurma(e.target.value)}
+            style={{
+              padding: '16px 24px', borderRadius: 16,
+              background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+              color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none',
+              cursor: 'pointer', minWidth: 200, fontWeight: 600,
+              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+            }}
+          >
+            <option value="">Todas as Séries</option>
+            {todasTurmas.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
 
         {loading ? (
@@ -194,16 +218,29 @@ export default function GerenciamentoSimuladosPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 500 }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> Aplicação: {s.dataAplicacao?.split('-').reverse().join('/') || 'Indefinida'}</span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Layout size={14} /> {s.simulados_bimestres?.nome || 'S/ Bimestre'}</span>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {(s.turmas || []).map((t: string) => (
-                            <span key={t} style={{ padding: '2px 8px', borderRadius: 100, background: 'hsl(var(--bg-app))', fontSize: 11, fontWeight: 700 }}>{t}</span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', flex: 1, minWidth: 200 }}>
+                    {(s.turmas || []).map((t: string) => (
+                      <span key={t} style={{ 
+                        padding: '8px 16px', 
+                        borderRadius: 12, 
+                        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.15) 100%)', 
+                        color: '#2563eb', 
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        fontSize: 16, 
+                        fontWeight: 900,
+                        letterSpacing: '-0.02em',
+                        textAlign: 'center'
+                      }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 40, flex: 1, justifyContent: 'flex-end' }}>
                     <div style={{ width: 140 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 800, marginBottom: 8, color: isComplete ? '#10b981' : '#f43f5e' }}>
                         <span>PROGRESSO</span>
