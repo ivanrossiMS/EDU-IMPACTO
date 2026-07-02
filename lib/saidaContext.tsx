@@ -381,93 +381,77 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   // ─── confirmPickup ────────────────────────────────────────────────────────
   const confirmPickup = useCallback((callId: string) => {
     const currentNow = now()
-    let updatedCall: PickupCall | undefined;
+    const callToUpdate = activeCalls.find(c => c.id === callId)
+    if (!callToUpdate) return
+    const updatedCall = { ...callToUpdate, status: 'confirmed' as const, confirmedAt: currentNow }
+
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      return arr.map(c => {
-        if (c.id === callId) {
-          updatedCall = { ...c, status: 'confirmed', confirmedAt: currentNow }
-          return updatedCall
-        }
-        return c
-      })
+      return arr.map(c => c.id === callId ? updatedCall : c)
     })
-    if (updatedCall) {
-      persistSingleCall(updatedCall)
-      emit('CONFIRM_PICKUP', { callId, confirmedAt: currentNow, _remote: false })
-      sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: currentNow })
-      addLog('CONFIRM', `Saída confirmada: ${updatedCall.studentName ?? callId}`)
-    }
-  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+    
+    persistSingleCall(updatedCall)
+    emit('CONFIRM_PICKUP', { callId, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId, confirmedAt: currentNow })
+    addLog('CONFIRM', `Saída confirmada: ${updatedCall.studentName ?? callId}`)
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── cancelCall ───────────────────────────────────────────────────────────
   const cancelCall = useCallback((callId: string) => {
-    let updatedCall: PickupCall | undefined;
+    const callToUpdate = activeCalls.find(c => c.id === callId)
+    if (!callToUpdate) return
+    const updatedCall = { ...callToUpdate, status: 'cancelled' as const }
+
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      return arr.map(c => {
-        if (c.id === callId) {
-          updatedCall = { ...c, status: 'cancelled' }
-          return updatedCall
-        }
-        return c
-      })
+      return arr.map(c => c.id === callId ? updatedCall : c)
     })
-    if (updatedCall) {
-      persistSingleCall(updatedCall)
-      emit('CANCEL_CALL', { callId, _remote: false })
-      sendBroadcast('CANCEL_CALL', { callId })
-      addLog('CANCEL', `Chamada cancelada: ${updatedCall.studentName ?? callId}`)
-    }
-  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+    
+    persistSingleCall(updatedCall)
+    emit('CANCEL_CALL', { callId, _remote: false })
+    sendBroadcast('CANCEL_CALL', { callId })
+    addLog('CANCEL', `Chamada cancelada: ${updatedCall.studentName ?? callId}`)
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── recallStudent ────────────────────────────────────────────────────────
   const recallStudent = useCallback((callId: string, speakFn: (text: string) => void) => {
     const currentNow = now()
-    let updatedCall: PickupCall | undefined;
+    const callToUpdate = activeCalls.find(c => c.id === callId)
+    if (!callToUpdate) return
+    const updatedCall = { ...callToUpdate, status: 'waiting' as const, calledAt: currentNow }
+
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      return arr.map(c => {
-        if (c.id === callId) {
-          updatedCall = { ...c, status: 'waiting', calledAt: currentNow }
-          return updatedCall
-        }
-        return c
-      })
+      return arr.map(c => c.id === callId ? updatedCall : c)
     })
-    if (updatedCall) {
-      persistSingleCall(updatedCall)
-      emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
-      sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
-      const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
-        ? updatedCall.studentClass.split(config.voiceTruncateChar)[0].trim() 
-        : updatedCall.studentClass
-      speakFn(`${updatedCall.studentName}, turma ${cName}`)
-      addLog('RECALL', `Rechamada: ${updatedCall.studentName}`)
-    }
-  }, [setActiveCallsLocal, emit, addLog, config, sendBroadcast, persistSingleCall])
+    
+    persistSingleCall(updatedCall)
+    emit('RECALL_STUDENT', { callId, calledAt: currentNow, _remote: false })
+    sendBroadcast('RECALL_STUDENT', { callId, calledAt: currentNow })
+    const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar 
+      ? updatedCall.studentClass.split(config.voiceTruncateChar)[0].trim() 
+      : updatedCall.studentClass
+    speakFn(`${updatedCall.studentName}, turma ${cName}`)
+    addLog('RECALL', `Rechamada: ${updatedCall.studentName}`)
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, config, sendBroadcast, persistSingleCall])
 
   // ─── revertCall ───────────────────────────────────────────────────────────
   const revertCall = useCallback((callId: string) => {
     const currentNow = now()
-    let updatedCall: PickupCall | undefined;
+    const callToUpdate = activeCalls.find(c => c.id === callId)
+    if (!callToUpdate) return
+    const updatedCall = { ...callToUpdate, status: 'waiting' as const, calledAt: currentNow, confirmedAt: undefined }
+
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      return arr.map(c => {
-        if (c.id === callId) {
-          updatedCall = { ...c, status: 'waiting', calledAt: currentNow, confirmedAt: undefined }
-          return updatedCall
-        }
-        return c
-      })
+      return arr.map(c => c.id === callId ? updatedCall : c)
     })
-    if (updatedCall) {
-      persistSingleCall(updatedCall)
-      emit('REVERT_CALL', { callId, calledAt: currentNow, _remote: false })
-      sendBroadcast('REVERT_CALL', { callId, calledAt: currentNow })
-      addLog('REVERT', `Chamada revertida: ${updatedCall.studentName}`)
-    }
-  }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+    
+    persistSingleCall(updatedCall)
+    emit('REVERT_CALL', { callId, calledAt: currentNow, _remote: false })
+    sendBroadcast('REVERT_CALL', { callId, calledAt: currentNow })
+    addLog('REVERT', `Chamada revertida: ${updatedCall.studentName}`)
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── deleteCall ───────────────────────────────────────────────────────────
   const deleteCall = useCallback(async (callId: string) => {

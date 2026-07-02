@@ -12,6 +12,7 @@ interface PaginationEngineProps {
   config: any;
   simulado: any;
   onEditEnunciado: (qId: string, newText: string) => void;
+  onEditEnunciadoImage?: (qId: string, imgIndex: number, url: string) => void;
   onEditAlternativa: (qId: string, altId: string, newText: string) => void;
   onRemoveAlternativa: (qId: string, altId: string) => void;
   onToggleQuestion: (qId: string) => void;
@@ -34,7 +35,7 @@ const ALT_SPACING = 12;
 
 export function PaginationEngine({
   questoes, columns, fontSize, config, simulado,
-  onEditEnunciado, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
+  onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage
 }: PaginationEngineProps) {
   
@@ -263,22 +264,43 @@ export function PaginationEngine({
             ))}
 
             {alternativasLayout === 'horizontal' ? (
-              <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
-                {q.simulados_alternativas?.map((a: any) => (
-                  <div key={`shadow-alt-${a.id}`} style={{ display: 'flex', gap: 12 }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                      border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                    }}>
-                      {a.letra}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      {a.imagem_url && <img src={a.imagem_url} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
-                      <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
-                    </div>
-                  </div>
-                ))}
+              <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 }}>
+                {(() => {
+                  const imgWidths = q.simulados_alternativas
+                    ?.filter((a: any) => a.imagem_url)
+                    .map((a: any) => {
+                      const parts = a.imagem_url.split('#w=');
+                      return parts.length > 1 ? parseInt(parts[1]) : 250;
+                    }) || [];
+                  const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                  return q.simulados_alternativas?.map((a: any) => {
+                    const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
+                    const imgBaseUrl = urlParts[0];
+                    const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                    const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                    const effectiveWidth = imgWidth || maxImgWidth;
+
+                    return (
+                      <div key={`shadow-alt-${a.id}`} style={{ 
+                        display: 'flex', gap: 12, alignItems: 'flex-start',
+                        flex: effectiveWidth ? '0 0 auto' : '1 1 200px'
+                      }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                          border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                        }}>
+                          {a.letra}
+                        </div>
+                        <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                          {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                          <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             ) : (
               q.simulados_alternativas?.map((a: any) => (
@@ -322,7 +344,8 @@ export function PaginationEngine({
           >
             <PageContent 
               page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
-              onEditEnunciado={onEditEnunciado} onEditAlternativa={onEditAlternativa} 
+              onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
+              onEditAlternativa={onEditAlternativa} 
               onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
               isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField} pageA4Ref={pageA4Ref}
               alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
@@ -346,7 +369,8 @@ export function PaginationEngine({
             >
               <PageContent 
                 page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
-                onEditEnunciado={onEditEnunciado} onEditAlternativa={onEditAlternativa} 
+                onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
+                onEditAlternativa={onEditAlternativa} 
                 onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
                 isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField}
                 alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}

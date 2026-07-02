@@ -266,7 +266,6 @@ function StudentCard({
           }}>{aluno.nome}</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 3 }}>
             {aluno.turno}{aluno.serie ? ` · ${aluno.serie}` : ''}
-            {aluno.id ? ` · Cód. ${aluno.id}` : ''}
           </div>
         </div>
       </div>

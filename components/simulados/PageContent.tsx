@@ -20,10 +20,57 @@ export function PageContent({
   onUpdateHeaderField,
   pageA4Ref,
   alternativasLayout = 'vertical',
-  onEditAlternativaImage
+  onEditAlternativaImage,
+  onEditEnunciadoImage
 }: any) {
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
+  const [mainImgMenuOpen, setMainImgMenuOpen] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleMainImageAction = async (qId: string, imgIndex: number, action: 'upload' | 'ai', altText: string) => {
+    setMainImgMenuOpen(null);
+    if (!onEditEnunciadoImage) return;
+
+    if (action === 'ai') {
+      setIsGenerating(true);
+      try {
+        const res = await fetch('/api/ai/gerar-imagem', {
+          method: 'POST', body: JSON.stringify({ enunciado: altText, disciplina: 'Geral' }),
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.base64Image) {
+          onEditEnunciadoImage(qId, imgIndex, data.base64Image);
+        } else {
+          alert('Erro ao gerar imagem por IA.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Erro ao gerar imagem por IA.');
+      }
+      setIsGenerating(false);
+    } else {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async (e) => {
+        const file = (e.target as any).files[0];
+        if (!file) return;
+        setIsGenerating(true);
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const res = await fetch('/api/upload-midia', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (data.url) onEditEnunciadoImage(qId, imgIndex, data.url);
+        } catch (err) {
+          console.error(err);
+        }
+        setIsGenerating(false);
+      };
+      input.click();
+    }
+  };
 
   const handleImageAction = async (qId: string, altId: string, action: 'upload' | 'ai', altText: string) => {
     setImgMenuOpen(null);
@@ -286,28 +333,100 @@ export function PageContent({
                           }}
                           style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', marginBottom: 12, wordBreak: 'break-word', cursor: 'text' }}
                         />
-                        {q.imagens?.map((img: string, i: number) => (
-                          <img key={i} src={img} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginTop: 12, display: 'block' }} />
-                        ))}
-                        <div style={alternativasLayout === 'horizontal' ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 } : {}}>
-                          {q.simulados_alternativas?.map((a: any) => (
-                            <div key={a.id} className="alt-hover-group" style={{ display: 'flex', gap: 12, marginTop: alternativasLayout === 'vertical' ? 12 : 0, alignItems: 'flex-start', position: 'relative' }}>
-                              <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                                border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                              }}>
-                                {a.letra}
-                              </div>
-                              <div style={{ flex: 1, position: 'relative' }}>
-                                {a.imagem_url && (() => {
-                                  const urlParts = a.imagem_url.split('#w=');
-                                  const imgBaseUrl = urlParts[0];
-                                  const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
-                                  const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                                  
-                                  return (
-                                    <div style={{ position: 'relative', marginBottom: 8, width: imgWidth ? `${imgWidth}px` : '250px', maxWidth: '100%' }}>
+                        {q.imagens?.map((img: string, i: number) => {
+                          const urlParts = img.split('#w=');
+                          const imgBaseUrl = urlParts[0];
+                          const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                          const menuKey = `${q.id}-img-${i}`;
+
+                          return (
+                            <div key={i} className="alt-hover-group" style={{ position: 'relative', marginBottom: 12, width: imgWidth ? `${imgWidth}px` : '100%', maxWidth: '100%' }}>
+                              <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                              
+                              {onEditEnunciadoImage && (
+                                <div className="no-print alt-img-actions" style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4 }}>
+                                  <button
+                                    onClick={() => onEditEnunciadoImage(q.id, i, `${imgBaseUrl}#w=${imgWidth ? Math.min(800, imgWidth + 50) : 400}`)}
+                                    style={{ background: 'rgba(59,130,246,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                    title="Aumentar"
+                                  >
+                                    <ZoomIn size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => onEditEnunciadoImage(q.id, i, `${imgBaseUrl}#w=${imgWidth ? Math.max(100, imgWidth - 50) : 300}`)}
+                                    style={{ background: 'rgba(59,130,246,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                    title="Diminuir"
+                                  >
+                                    <ZoomOut size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => onEditEnunciadoImage(q.id, i, '')}
+                                    style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                    title="Remover"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              )}
+                              
+                              {onEditEnunciadoImage && (
+                                <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: mainImgMenuOpen === menuKey ? 1 : undefined, pointerEvents: mainImgMenuOpen === menuKey ? 'auto' : undefined }}>
+                                  <button 
+                                    onClick={() => setMainImgMenuOpen(mainImgMenuOpen === menuKey ? null : menuKey)}
+                                    style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}
+                                  >
+                                    <ImageIcon size={12} /> Alterar Imagem
+                                  </button>
+                                  {mainImgMenuOpen === menuKey && (
+                                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                      <button onClick={() => handleMainImageAction(q.id, i, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
+                                        <Upload size={14} /> Fazer Upload
+                                      </button>
+                                      <button onClick={() => handleMainImageAction(q.id, i, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}>
+                                        <Sparkles size={14} /> Gerar com IA
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        <div style={alternativasLayout === 'horizontal' ? { display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 } : {}}>
+                          {(() => {
+                            const imgWidths = q.simulados_alternativas
+                              ?.filter((a: any) => a.imagem_url)
+                              .map((a: any) => {
+                                const parts = a.imagem_url.split('#w=');
+                                return parts.length > 1 ? parseInt(parts[1]) : 250;
+                              }) || [];
+                            const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                            return q.simulados_alternativas?.map((a: any) => {
+                              const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
+                              const imgBaseUrl = urlParts[0];
+                              const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                              const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                              const effectiveWidth = imgWidth || maxImgWidth;
+                              
+                              return (
+                                <div key={a.id} className="alt-hover-group" style={{ 
+                                  display: 'flex', gap: 12, 
+                                  marginTop: alternativasLayout === 'vertical' ? 12 : 0, 
+                                  alignItems: 'flex-start', position: 'relative',
+                                  flex: alternativasLayout === 'horizontal' ? (effectiveWidth ? '0 0 auto' : '1 1 200px') : '1 1 auto'
+                                }}>
+                                  <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                                    border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                                  }}>
+                                    {a.letra}
+                                  </div>
+                                  <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                                  {a.imagem_url && (
+                                    <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
                                       <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                       {onEditAlternativaImage && (
                                         <div className="no-print alt-img-actions" style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4 }}>
@@ -335,18 +454,17 @@ export function PageContent({
                                         </div>
                                       )}
                                     </div>
-                                  );
-                                })()}
-                                
-                                <HtmlContent 
-                                  editable={true}
-                                  html={a.texto}
-                                  onBlurHtml={(newHtml) => {
-                                    onEditAlternativa(q.id, a.id, newHtml);
-                                    forceRepaginate();
-                                  }}
-                                  style={{ wordBreak: 'break-word', outline: 'none' }}
-                                />
+                                  )}
+                                  
+                                  <HtmlContent 
+                                    editable={true}
+                                    html={a.texto}
+                                    onBlurHtml={(newHtml) => {
+                                      onEditAlternativa(q.id, a.id, newHtml);
+                                      forceRepaginate();
+                                    }}
+                                    style={{ wordBreak: 'break-word', outline: 'none' }}
+                                  />
 
                                 {onEditAlternativaImage && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
@@ -398,7 +516,8 @@ export function PageContent({
                                 </button>
                               )}
                             </div>
-                          ))}
+                          )
+                          })})()}
                         </div>
                         
                         {q.tipo_questao === 'descritiva' && (
@@ -485,30 +604,45 @@ export function PageContent({
               if (block.type === 'part_alts_container') {
             return (
               <div key={bIndex} style={{ padding: '0 40px', marginTop: block.renderMarginTop }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  {block.q.simulados_alternativas?.map((a: any) => (
-                    <div key={a.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                      <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                        border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                      }}>
-                        {a.letra}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        {a.imagem_url && (() => {
-                          const urlParts = a.imagem_url.split('#w=');
-                          const imgBaseUrl = urlParts[0];
-                          const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
-                          const imgWidth = imgWidthStr ? `${imgWidthStr}px` : '250px';
-                          return (
-                            <img src={imgBaseUrl} style={{ width: imgWidth, maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />
-                          );
-                        })()}
-                        <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
-                      </div>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                  {(() => {
+                    const imgWidths = block.q.simulados_alternativas
+                      ?.filter((a: any) => a.imagem_url)
+                      .map((a: any) => {
+                        const parts = a.imagem_url.split('#w=');
+                        return parts.length > 1 ? parseInt(parts[1]) : 250;
+                      }) || [];
+                    const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                    return block.q.simulados_alternativas?.map((a: any) => {
+                      const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
+                      const imgBaseUrl = urlParts[0];
+                      const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                      const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                      const effectiveWidth = imgWidth || maxImgWidth;
+
+                      return (
+                        <div key={a.id} style={{ 
+                          display: 'flex', gap: 12, alignItems: 'flex-start',
+                          flex: effectiveWidth ? '0 0 auto' : '1 1 200px'
+                        }}>
+                          <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                            border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                          }}>
+                            {a.letra}
+                          </div>
+                          <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                            {a.imagem_url && (
+                              <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+                            )}
+                            <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             );
@@ -528,25 +662,39 @@ export function PageContent({
                       }}>
                         {a.letra}
                       </div>
-                      <div style={{ flex: 1 }}>
-                        {a.imagem_url && (() => {
-                          const urlParts = a.imagem_url.split('#w=');
+                      <div style={{ flex: 1, position: 'relative' }}>
+                        {(() => {
+                          const imgWidths = q.simulados_alternativas
+                            ?.filter((altInfo: any) => altInfo.imagem_url)
+                            .map((altInfo: any) => {
+                              const parts = altInfo.imagem_url.split('#w=');
+                              return parts.length > 1 ? parseInt(parts[1]) : 250;
+                            }) || [];
+                          const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+                          
+                          const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
                           const imgBaseUrl = urlParts[0];
                           const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
-                          const imgWidth = imgWidthStr ? `${imgWidthStr}px` : '250px';
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                          const effectiveWidth = imgWidth || maxImgWidth;
+
                           return (
-                            <img src={imgBaseUrl} style={{ width: imgWidth, maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+                            <div style={{ maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                              {a.imagem_url && (
+                                <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />
+                              )}
+                              <HtmlContent 
+                                editable={true}
+                                html={a.texto}
+                                onBlurHtml={(newHtml) => {
+                                  onEditAlternativa(q.id, a.id, newHtml);
+                                  forceRepaginate();
+                                }}
+                                style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
+                              />
+                            </div>
                           );
                         })()}
-                        <HtmlContent 
-                          editable={true}
-                          html={a.texto}
-                          onBlurHtml={(newHtml) => {
-                            onEditAlternativa(q.id, a.id, newHtml);
-                            forceRepaginate();
-                          }}
-                          style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
-                        />
                       </div>
                       <button
                         className="no-print alt-delete-btn"

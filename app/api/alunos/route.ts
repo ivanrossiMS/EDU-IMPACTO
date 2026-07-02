@@ -363,6 +363,15 @@ export async function POST(request: Request) {
       }
     }
 
+    // 0.1 Verifica duplicidade de E-mail do Aluno
+    if (row.email && row.email.trim()) {
+      const emailLower = row.email.trim().toLowerCase()
+      const { data: existingStudentEmail } = await supabase.from('alunos').select('id, nome').eq('email', emailLower).maybeSingle()
+      if (existingStudentEmail) {
+        return NextResponse.json({ error: `Este e-mail já está sendo utilizado por outro aluno (${existingStudentEmail.nome})!` }, { status: 400 })
+      }
+    }
+
     // 1. Salvar o aluno (Insert para criação)
     const { data: studentData, error: studentError } = await supabase
       .from('alunos')
@@ -450,6 +459,19 @@ export async function POST(request: Request) {
           } else {
             respDataToSave[col] = resp[col]
           }
+        }
+      }
+      
+      // Verifica duplicidade de E-mail do Responsável
+      if (respDataToSave.email && respDataToSave.email.trim()) {
+        const emailLower = respDataToSave.email.trim().toLowerCase()
+        let query = supabase.from('responsaveis').select('id, nome').eq('email', emailLower)
+        if (!isNewResp && respDataToSave.id) {
+          query = query.neq('id', respDataToSave.id)
+        }
+        const { data: existingRespEmail } = await query.maybeSingle()
+        if (existingRespEmail) {
+          throw new Error(`Este e-mail já está sendo utilizado por outro responsável (${existingRespEmail.nome})!`)
         }
       }
       
@@ -570,6 +592,15 @@ export async function PUT(request: Request) {
 
     console.error(`[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
 
+    // 0. Verifica duplicidade de E-mail do Aluno
+    if (row.email && row.email.trim()) {
+      const emailLower = row.email.trim().toLowerCase()
+      const { data: existingStudentEmail } = await supabase.from('alunos').select('id, nome').eq('email', emailLower).neq('id', id).maybeSingle()
+      if (existingStudentEmail) {
+        return NextResponse.json({ error: `Este e-mail já está sendo utilizado por outro aluno (${existingStudentEmail.nome})!` }, { status: 400 })
+      }
+    }
+
     // 1. Atualizar o aluno
     const { data: studentData, error: studentError } = await supabase
       .from('alunos')
@@ -658,6 +689,19 @@ export async function PUT(request: Request) {
           } else {
             respDataToSave[col] = resp[col]
           }
+        }
+      }
+      
+      // Verifica duplicidade de E-mail do Responsável
+      if (respDataToSave.email && respDataToSave.email.trim()) {
+        const emailLower = respDataToSave.email.trim().toLowerCase()
+        let query = supabase.from('responsaveis').select('id, nome').eq('email', emailLower)
+        if (!isNewResp && respDataToSave.id) {
+          query = query.neq('id', respDataToSave.id)
+        }
+        const { data: existingRespEmail } = await query.maybeSingle()
+        if (existingRespEmail) {
+          throw new Error(`Este e-mail já está sendo utilizado por outro responsável (${existingRespEmail.nome})!`)
         }
       }
       

@@ -247,8 +247,12 @@ export default function UsuariosPage() {
       const uDel = users.find(u => u.id === deleteUserId)
       try {
         const res = await fetch(`/api/configuracoes/usuarios/${deleteUserId}`, { method: 'DELETE' })
-        if (!res.ok) throw new Error('Falha no db')
-      } catch(e) { alert('Falha ao excluir online'); return; }
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Falha ao excluir o usuário.');
+        }
+      } catch(e: any) { alert(e.message || 'Falha ao excluir online'); return; }
+
 
       queryClient.invalidateQueries({ queryKey: ['usuarios'] })
       logSystemAction('Config (Usuários)', 'Exclusão', `Exclusão do usuário ${uDel?.nome}`, { registroId: deleteUserId, detalhesAntes: uDel })

@@ -43,7 +43,12 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
   const { data: userRow } = await supabase.from('system_users').select('email').eq('id', id).maybeSingle()
 
   const { error } = await supabase.from('system_users').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    if (error.code === '23503') {
+      return NextResponse.json({ error: 'Este usuário não pode ser excluído permanentemente porque possui registros vinculados a ele (como turmas, disciplinas, simulados, etc). Por favor, inative o usuário ao invés de excluí-lo.' }, { status: 400 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   const supabaseAdmin = require('@supabase/supabase-js').createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

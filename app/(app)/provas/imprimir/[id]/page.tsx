@@ -18,6 +18,7 @@ export default function ImprimirProvaPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [fontSize, setFontSize] = useState<number>(12) // base font size in px
   const [columns, setColumns] = useState<number>(2) // Layout de colunas
+  const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>('vertical')
   const [config, setConfig] = useState<any>(null)
 
   const defaultHeaderLayout = {
@@ -79,6 +80,38 @@ export default function ImprimirProvaPage() {
         qData.forEach((q: any) => {
           q.provas_alternativas?.sort((a: any, b: any) => a.letra.localeCompare(b.letra))
           q.simulados_alternativas = q.provas_alternativas
+          
+          // Extrair imagens embutidas no enunciado para q.imagens
+          if (q.enunciado && q.enunciado.includes('<img')) {
+            const tempDiv = document.createElement('div')
+            tempDiv.innerHTML = q.enunciado
+            const imgs = tempDiv.querySelectorAll('img')
+            const extractedImages = [...(q.imagens || [])]
+            
+            imgs.forEach(img => {
+              extractedImages.push(img.src)
+              let elToRemove: HTMLElement | null = img
+              
+              if (img.parentElement && img.parentElement.tagName === 'DIV' && 
+                 (img.parentElement.getAttribute('data-posicao') === 'inicio' || 
+                  img.parentElement.getAttribute('data-posicao') === 'final' || 
+                  img.parentElement.style.textAlign === 'center')) {
+                elToRemove = img.parentElement
+              }
+              
+              if (elToRemove && elToRemove.parentNode) {
+                elToRemove.parentNode.removeChild(elToRemove)
+              }
+            })
+            
+            // Limpa as quebras de linha (<br>) que ficavam em volta da imagem
+            let newHtml = tempDiv.innerHTML
+            newHtml = newHtml.replace(/^(<br\s*\/?>\s*)+/, '')
+            newHtml = newHtml.replace(/(<br\s*\/?>\s*)+$/, '')
+            
+            q.enunciado = newHtml
+            q.imagens = extractedImages
+          }
         })
         setQuestoes(qData)
         setSelectedIds(new Set(qData.map((q: any) => q.id)))
@@ -188,9 +221,40 @@ export default function ImprimirProvaPage() {
   const handleEditAlternativa = (qId: string, altId: string, newText: string) => {
     setQuestoes(prev => prev.map(q => {
       if (q.id === qId) {
+        const updated = q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, texto: newText } : a)
         return {
           ...q,
-          provas_alternativas: q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, texto: newText } : a)
+          provas_alternativas: updated,
+          simulados_alternativas: updated
+        }
+      }
+      return q
+    }))
+  }
+
+  const handleEditEnunciadoImage = (qId: string, imgIndex: number, newUrl: string) => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId && q.imagens) {
+        const newImagens = [...q.imagens]
+        if (!newUrl) {
+          newImagens.splice(imgIndex, 1)
+        } else {
+          newImagens[imgIndex] = newUrl
+        }
+        return { ...q, imagens: newImagens }
+      }
+      return q
+    }))
+  }
+
+  const handleEditAlternativaImage = (qId: string, altId: string, newUrl: string) => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId) {
+        const updated = q.provas_alternativas.map((a: any) => a.id === altId ? { ...a, imagem_url: newUrl || null } : a)
+        return {
+          ...q,
+          provas_alternativas: updated,
+          simulados_alternativas: updated
         }
       }
       return q
@@ -202,12 +266,14 @@ export default function ImprimirProvaPage() {
       if (q.id === qId) {
         const remaining = q.provas_alternativas.filter((a: any) => a.id !== altId)
         const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+        const updated = remaining.map((a: any, idx: number) => ({
+          ...a,
+          letra: letters[idx] || a.letra
+        }))
         return {
           ...q,
-          provas_alternativas: remaining.map((a: any, idx: number) => ({
-            ...a,
-            letra: letters[idx] || a.letra
-          }))
+          provas_alternativas: updated,
+          simulados_alternativas: updated
         }
       }
       return q
@@ -236,9 +302,28 @@ export default function ImprimirProvaPage() {
         if (delErr) throw delErr
       }
 
-      // 2. Update order of selected questions
+      // 2. Update questions and alternatives
       for (const q of selectedList) {
-        await supabase.from('provas_questoes').update({ ordem: q.ordem }).eq('id', q.id)
+        await supabase.from('provas_questoes').update({ 
+          ordem: q.ordem,
+          enunciado: q.enunciado,
+          imagens: q.imagens || []
+        }).eq('id', q.id)
+
+        const altIds = q.provas_alternativas.map((a: any) => a.id)
+        if (altIds.length > 0) {
+          await supabase.from('provas_alternativas').delete().eq('id_questao', q.id).not('id', 'in', `(${altIds.join(',')})`)
+        } else {
+          await supabase.from('provas_alternativas').delete().eq('id_questao', q.id)
+        }
+
+        for (const a of q.provas_alternativas) {
+          await supabase.from('provas_alternativas').update({
+            texto: a.texto,
+            imagem_url: a.imagem_url,
+            letra: a.letra
+          }).eq('id', a.id)
+        }
       }
 
       // Automatically trigger print after slight delay
@@ -430,6 +515,40 @@ export default function ImprimirProvaPage() {
 
           <div style={{ marginBottom: 32 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
+              <LayoutList size={16} color="#3b82f6" /> Layout das Alternativas
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <button
+                onClick={() => setAlternativasLayout('vertical')}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: alternativasLayout === 'vertical' ? '#3b82f6' : '#f8fafc',
+                  color: alternativasLayout === 'vertical' ? 'white' : '#475569',
+                  border: `1px solid ${alternativasLayout === 'vertical' ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                <LayoutList size={16} /> Vertical
+              </button>
+              <button
+                onClick={() => setAlternativasLayout('horizontal')}
+                style={{
+                  padding: '12px', borderRadius: 12,
+                  background: alternativasLayout === 'horizontal' ? '#3b82f6' : '#f8fafc',
+                  color: alternativasLayout === 'horizontal' ? 'white' : '#475569',
+                  border: `1px solid ${alternativasLayout === 'horizontal' ? '#3b82f6' : '#e2e8f0'}`,
+                  fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}
+              >
+                <Columns size={16} /> Horizontal
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
               <CheckSquare size={16} color="#10b981" /> Resumo de Seleção
             </label>
             <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
@@ -477,12 +596,15 @@ export default function ImprimirProvaPage() {
               config={config}
               simulado={prova}
               onEditEnunciado={handleEditEnunciado}
+              onEditEnunciadoImage={handleEditEnunciadoImage}
               onEditAlternativa={handleEditAlternativa}
+              onEditAlternativaImage={handleEditAlternativaImage}
               onRemoveAlternativa={handleRemoveAlternativa}
               onToggleQuestion={handleToggleQuestion}
               isEditHeaderMode={isEditHeaderMode}
               headerLayout={headerLayout}
               onUpdateHeaderField={handleUpdateHeaderField}
+              alternativasLayout={alternativasLayout}
               pageA4Ref={pageA4Ref}
             />
         </div>

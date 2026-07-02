@@ -226,15 +226,99 @@ export default function DisciplinasPage() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, background: 'hsl(var(--bg-surface))', padding: '16px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))', marginTop: 'auto' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <User size={16} color="hsl(var(--text-muted))" />
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                        {(() => {
-                          const profsIds = item.professores_ids || (item.id_professor ? [item.id_professor] : []);
-                          const profs = professores.filter(p => profsIds.includes(p.id));
-                          if (profs.length > 0) return profs.map(p => p.nome).join(', ');
-                          return item.system_users?.nome || 'Não vinculado';
-                        })()}
-                      </div>
+                      {(() => {
+                        const profsIds = item.professores_ids || (item.id_professor ? [item.id_professor] : []);
+                        const profs = professores.filter(p => profsIds.includes(p.id));
+                        
+                        if (profs.length === 0 && !item.system_users?.nome) {
+                          return (
+                            <>
+                              <User size={16} color="hsl(var(--text-muted))" />
+                              <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 600, fontStyle: 'italic' }}>Nenhum professor vinculado</div>
+                            </>
+                          )
+                        }
+
+                        const displayProfs = profs.length > 0 ? profs.map(p => p.nome) : [item.system_users?.nome];
+                        const maxVisible = 3;
+                        const visibleProfs = displayProfs.slice(0, maxVisible);
+                        const hiddenCount = displayProfs.length - maxVisible;
+
+                        const getInitials = (name: string) => {
+                          const parts = (name || '').trim().split(' ').filter(Boolean);
+                          if (parts.length === 0) return '?';
+                          if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+                          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                        }
+                        
+                        const getFirstName = (name: string) => (name || '').trim().split(' ')[0] || '';
+
+                        const gradients = [
+                          'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', // Blue
+                          'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', // Violet
+                          'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', // Amber
+                          'linear-gradient(135deg, #10b981 0%, #059669 100%)', // Emerald
+                          'linear-gradient(135deg, #ec4899 0%, #db2777 100%)'  // Pink
+                        ];
+
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              {visibleProfs.map((name, idx) => (
+                                <div 
+                                  key={idx}
+                                  title={name}
+                                  style={{
+                                    width: 32, height: 32, borderRadius: '50%',
+                                    background: gradients[idx % gradients.length],
+                                    color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 11, fontWeight: 800, letterSpacing: '0.5px',
+                                    border: '2px solid hsl(var(--bg-surface))',
+                                    marginLeft: idx > 0 ? -10 : 0,
+                                    zIndex: 10 - idx,
+                                    boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                                    transition: 'transform 0.2s ease, z-index 0s',
+                                    cursor: 'default'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px) scale(1.1)'; e.currentTarget.style.zIndex = '20'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.zIndex = (10 - idx).toString(); }}
+                                >
+                                  {getInitials(name)}
+                                </div>
+                              ))}
+                              {hiddenCount > 0 && (
+                                <div 
+                                  title={displayProfs.slice(maxVisible).join(', ')}
+                                  style={{
+                                    width: 32, height: 32, borderRadius: '50%',
+                                    background: 'hsl(var(--bg-secondary))',
+                                    color: 'hsl(var(--text-secondary))',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 11, fontWeight: 700,
+                                    border: '2px solid hsl(var(--bg-surface))',
+                                    marginLeft: -10,
+                                    zIndex: 1,
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                    cursor: 'help'
+                                  }}
+                                >
+                                  +{hiddenCount}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {visibleProfs.length === 1 ? getFirstName(visibleProfs[0]) : `${displayProfs.length} Docentes`}
+                              </span>
+                              <span style={{ fontSize: 11, fontWeight: 500, color: 'hsl(var(--text-muted))', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {visibleProfs.length === 1 ? 'Vinculado(a)' : 'Equipe vinculada'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <FileText size={16} color="hsl(var(--text-muted))" />

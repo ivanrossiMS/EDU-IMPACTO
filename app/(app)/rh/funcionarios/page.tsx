@@ -147,10 +147,23 @@ export default function FuncionariosPage() {
   const handleSave = async () => {
     if (!form.nome.trim() || isSaving) return
 
-    // Outer Guard
+    // Outer Guard - Name
     if (modal === 'add' && funcionarios.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase())) {
       alert('Já existe um funcionário com este nome!')
       return
+    }
+
+    // Outer Guard - Email
+    if (form.email.trim()) {
+      const emailLower = form.email.trim().toLowerCase();
+      const isDuplicateEmail = funcionarios.some(f => 
+        (modal === 'add' ? true : f.id !== editingId) && 
+        f.email && f.email.trim().toLowerCase() === emailLower
+      );
+      if (isDuplicateEmail) {
+        alert('Este e-mail já está sendo utilizado por outro funcionário!')
+        return
+      }
     }
 
     setIsSaving(true)
@@ -176,36 +189,8 @@ export default function FuncionariosPage() {
     // --- Auto-create / update system user if perfilSistema is selected ---
     const pSistema = (payload as any).perfilSistema
     if (pSistema && form.email.trim()) {
-      try {
-        const sysUserPayload = {
-          id: newId('U'),
-          nome: form.nome.trim(),
-          email: form.email.trim(),
-          cargo: form.cargo,
-          perfil: pSistema,
-          status: form.status || 'ativo',
-          twofa: false,
-          ultimoAcesso: 'Nunca'
-        }
-        const res = await fetch('/api/configuracoes/usuarios', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sysUserPayload)
-        })
-        if (res.ok) {
-          setUserCreateResult({ ok: true, msg: `✅ Acesso ao sistema configurado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
-          logSystemAction('RH (Funcionários)', modal === 'add' ? 'Cadastro' : 'Edição', `Acesso ao sistema atualizado para ${payload.nome}`, { registroId: sysUserPayload.id, nomeRelacionado: payload.nome, detalhesDepois: sysUserPayload })
-        } else {
-          const err = await res.json().catch(() => ({}))
-          if (res.status === 409 || err?.error?.toLowerCase?.().includes('duplicate') || err?.error?.toLowerCase?.().includes('already')) {
-            setUserCreateResult({ ok: true, msg: `✅ Acesso atualizado. E-mail ${form.email.trim()} já existente vinculado.` })
-          } else {
-            setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro ao configurar acesso: ${err?.error || res.status}` })
-          }
-        }
-      } catch (e: any) {
-        setUserCreateResult({ ok: false, msg: `⚠️ Funcionário salvo, mas erro de rede ao configurar acesso.` })
-      }
+      // Notification that access will be configured automatically by the background sync
+      setUserCreateResult({ ok: true, msg: `✅ Acesso ao sistema será sincronizado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
       setIsSaving(false)
       // Don't close modal immediately — show result to user
       return

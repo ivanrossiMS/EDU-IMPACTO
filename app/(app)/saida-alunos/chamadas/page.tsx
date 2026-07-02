@@ -315,6 +315,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     const list: { id: string; name: string; role: string; rfid?: string; proibido?: boolean; diasSemana?: string[] }[] = []
     const seen = new Set<string>()
 
+    // 1. Autorizados do módulo Saúde & Obs
     if (autorizados.length > 0) {
       autorizados.forEach((aut, i) => {
         const key = (aut.nome || '').toLowerCase().trim()
@@ -329,32 +330,33 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
           diasSemana: aut.diasSemana || [],
         })
       })
-    } else {
-      // Responsáveis from responsaveis array (Process first to get proibido and diasSemana!)
-      const resps: any[] = student.responsaveis || []
-      resps.forEach((r: any, i: number) => {
-        const key = (r.nome || '').toLowerCase().trim()
-        if (key && !seen.has(key)) {
-          seen.add(key)
-          list.push({ 
-            id: `resp-${i}`, 
-            name: r.nome, 
-            role: r.parentesco || 'Responsável',
-            proibido: r.proibido === true,
-            diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
-          })
-        }
-      })
-      // Fallback to ERP fields when no saude.autorizados configured
-      const erp: { name: string; role: string }[] = []
-      if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
-      if (student.responsavelFinanceiro?.trim()) erp.push({ name: student.responsavelFinanceiro.trim(), role: 'Financeiro' })
-      if (student.responsavelPedagogico?.trim()) erp.push({ name: student.responsavelPedagogico.trim(), role: 'Pedagógico' })
-      erp.forEach((c, i) => {
-        const key = c.name.toLowerCase().trim()
-        if (!seen.has(key)) { seen.add(key); list.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
-      })
     }
+    
+    // 2. Responsáveis cadastrados na aba Responsáveis
+    const resps: any[] = student.responsaveis || []
+    resps.forEach((r: any, i: number) => {
+      const key = (r.nome || '').toLowerCase().trim()
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        list.push({ 
+          id: `resp-${i}`, 
+          name: r.nome, 
+          role: r.parentesco || 'Responsável',
+          proibido: r.proibido === true,
+          diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
+        })
+      }
+    })
+
+    // 3. Fallback to ERP fields
+    const erp: { name: string; role: string }[] = []
+    if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
+    if (student.responsavelFinanceiro?.trim()) erp.push({ name: student.responsavelFinanceiro.trim(), role: 'Financeiro' })
+    if (student.responsavelPedagogico?.trim()) erp.push({ name: student.responsavelPedagogico.trim(), role: 'Pedagógico' })
+    erp.forEach((c, i) => {
+      const key = c.name.toLowerCase().trim()
+      if (!seen.has(key)) { seen.add(key); list.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
+    })
     return list
   }, [autorizados, student.responsaveis, student.responsavel, student.responsavelFinanceiro, student.responsavelPedagogico])
 

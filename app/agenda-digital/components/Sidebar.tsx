@@ -84,7 +84,9 @@ export function ADSidebar() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [canScrollRight, setCanScrollRight] = useState(true)
 
-  const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+  const p = (currentUser?.perfil || '').toLowerCase();
+  const c = (currentUser?.cargo || '').toLowerCase();
+  const isFamily = p.includes('família') || p.includes('familia') || c.includes('aluno') || c.includes('responsável') || c.includes('responsavel')
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

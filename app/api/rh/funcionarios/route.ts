@@ -109,8 +109,8 @@ export async function POST(request: Request) {
            } = rest as any
 
            return {
-             id: id || `F${Date.now()}-${Math.random().toString(36).substr(2,9)}`,
-             nome: nome || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
+             id: id && typeof id === 'string' && !id.startsWith('TEMP-') ? id : `F${Date.now()}-${Math.random().toString(36).substr(2,9)}`,
+             nome: (nome || '').trim() || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
              salario: salario || 0, status: status || 'ativo',
              email: email || '', admissao: admissao || '',
              unidade: unidade || '',
@@ -203,8 +203,8 @@ export async function POST(request: Request) {
     } = rest as any
 
     const row = {
-      id: id || `F${Date.now()}`,
-      nome: nome || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
+      id: id && typeof id === 'string' && !id.startsWith('TEMP-') ? id : `F${Date.now()}`,
+      nome: (nome || '').trim() || 'Sem Nome', cargo: cargo || '', departamento: departamento || '',
       salario: salario || 0, status: status || 'ativo',
       email: email || '', admissao: admissao || '',
       unidade: unidade || '',
@@ -298,7 +298,7 @@ export async function PUT(request: Request) {
     } = rest as any
 
     const { data, error } = await supabase.from('funcionarios').update({
-      nome, cargo: cargo || '', departamento: departamento || '',
+      nome: (nome || '').trim(), cargo: cargo || '', departamento: departamento || '',
       salario: salario || 0, status: status || 'ativo',
       email: email || '', admissao: admissao || '',
       unidade: unidade || '',

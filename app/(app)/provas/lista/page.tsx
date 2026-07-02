@@ -487,7 +487,7 @@ export default function SimuladosListaPage() {
                                                                 <span style={{ fontWeight: 800, fontSize: 13, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{discNome}</span>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'hsl(var(--text-secondary))', fontSize: 10, fontWeight: 600 }}>
                                                                   <User size={10} />
-                                                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName.split(' ')[0]}</span>
+                                                                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profName.trim().split(' ')[0]}</span>
                                                                 </div>
                                                               </div>
                                                               

@@ -24,8 +24,8 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
   
   const [isAiModalOpen, setIsAiModalOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [aiForm, setAiForm] = useState({ assunto: '', turma: '', detalhes: '', formato: 'padrao' })
-  const [aiDificuldade, setAiDificuldade] = useState('media')
+  const [aiForm, setAiForm] = useState({ assunto: '', turma: '', detalhes: '', formato: 'curto' })
+  const [aiDificuldade, setAiDificuldade] = useState('facil')
 
   const turmasDisponiveis = [
     '1º Ano Fundamental',

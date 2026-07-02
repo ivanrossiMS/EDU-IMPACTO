@@ -289,15 +289,20 @@ function MonitorContent() {
     }
   }, [])
 
-  // Fallback Polling 30s se o Supabase Realtime falhar ou desconectar
+  // Fallback Polling 60s se o Supabase Realtime falhar, desconectar ou perder evento
   useEffect(() => {
+    // A primeira chamada de refresh imediato (na montagem ou mudança de status)
+    // só é necessária se estivermos offline.
     if (realtimeStatus !== 'online') {
       refreshCalls()
-      const iv = setInterval(() => {
-        refreshCalls()
-      }, 30000)
-      return () => clearInterval(iv)
     }
+    
+    // O intervalo RODA SEMPRE, para auto-correção a cada 60s caso perca evento
+    const iv = setInterval(() => {
+      refreshCalls()
+    }, 60000)
+    
+    return () => clearInterval(iv)
   }, [realtimeStatus, refreshCalls])
 
   const handleUnlockAudio = () => {
