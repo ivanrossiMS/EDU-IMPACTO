@@ -38,7 +38,8 @@ export default function AdaptarProvaPage() {
     async function loadData() {
       if (!id) return
 
-      const { data: confData } = await supabase.from('simulados_configuracoes').select('*').eq('id', 'default').single()
+      const { data } = await supabase.from('simulados_configuracoes').select('*').eq('id', 'default').single()
+      const confData = data as any;
       if (confData) {
         setConfig({
           ...confData,
@@ -80,6 +81,38 @@ export default function AdaptarProvaPage() {
         qData.forEach((q: any) => {
           q.provas_alternativas?.sort((a: any, b: any) => a.letra.localeCompare(b.letra))
           q.simulados_alternativas = q.provas_alternativas
+
+          // Extrair imagens embutidas no enunciado para q.imagens
+          if (q.enunciado && q.enunciado.includes('<img')) {
+            const tempDiv = document.createElement('div')
+            tempDiv.innerHTML = q.enunciado
+            const imgs = tempDiv.querySelectorAll('img')
+            const extractedImages = [...(q.imagens || [])]
+            
+            imgs.forEach(img => {
+              extractedImages.push(img.src)
+              let elToRemove: HTMLElement | null = img
+              
+              if (img.parentElement && img.parentElement.tagName === 'DIV' && 
+                 (img.parentElement.getAttribute('data-posicao') === 'inicio' || 
+                  img.parentElement.getAttribute('data-posicao') === 'final' || 
+                  img.parentElement.style.textAlign === 'center')) {
+                elToRemove = img.parentElement
+              }
+              
+              if (elToRemove && elToRemove.parentNode) {
+                elToRemove.parentNode.removeChild(elToRemove)
+              }
+            })
+            
+            // Limpa as quebras de linha (<br>) que ficavam em volta da imagem
+            let newHtml = tempDiv.innerHTML
+            newHtml = newHtml.replace(/^(<br\s*\/?>\s*)+/, '')
+            newHtml = newHtml.replace(/(<br\s*\/?>\s*)+$/, '')
+            
+            q.enunciado = newHtml
+            q.imagens = extractedImages
+          }
         })
         setQuestoes(qData)
         setSelectedIds(new Set(qData.map((q: any) => q.id)))
@@ -209,6 +242,21 @@ export default function AdaptarProvaPage() {
           provas_alternativas: newAlts,
           simulados_alternativas: newAlts
         }
+      }
+      return q
+    }))
+  }
+
+  const handleEditEnunciadoImage = (qId: string, imgIndex: number, newUrl: string) => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId && q.imagens) {
+        const newImagens = [...q.imagens]
+        if (!newUrl) {
+          newImagens.splice(imgIndex, 1)
+        } else {
+          newImagens[imgIndex] = newUrl
+        }
+        return { ...q, imagens: newImagens }
       }
       return q
     }))
@@ -570,6 +618,7 @@ export default function AdaptarProvaPage() {
               config={config}
               simulado={prova}
               onEditEnunciado={handleEditEnunciado}
+              onEditEnunciadoImage={handleEditEnunciadoImage}
               onEditAlternativa={handleEditAlternativa}
               onEditAlternativaImage={handleEditAlternativaImage}
               onRemoveAlternativa={handleRemoveAlternativa}
