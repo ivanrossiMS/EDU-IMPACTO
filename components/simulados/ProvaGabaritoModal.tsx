@@ -29,7 +29,7 @@ export function ProvaGabaritoModal({ provaId, onClose }: ProvaGabaritoModalProps
       
       const disciplineOrder: string[] = []
       if (reqs) {
-        reqs.forEach(r => {
+        reqs.forEach((r: any) => {
           if (!disciplineOrder.includes(r.id_disciplina)) {
             disciplineOrder.push(r.id_disciplina)
           }
@@ -43,7 +43,7 @@ export function ProvaGabaritoModal({ provaId, onClose }: ProvaGabaritoModalProps
         .eq('id_prova', provaId)
 
       if (q) {
-        const sorted = [...q].sort((a, b) => {
+        const sorted = [...q].sort((a: any, b: any) => {
           const indexA = disciplineOrder.indexOf(a.id_disciplina)
           const indexB = disciplineOrder.indexOf(b.id_disciplina)
           

@@ -72,10 +72,10 @@ export default function DisciplinasPage() {
       const payload = { ...formData, professores_ids: JSON.stringify(formData.professores_ids) }
       
       if (editingId) {
-        const { error } = await supabase.from('simulados_disciplinas').update(payload).eq('id', editingId)
+        const { error } = await (supabase as any).from('simulados_disciplinas').update(payload).eq('id', editingId)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('simulados_disciplinas').insert([payload])
+        const { error } = await (supabase as any).from('simulados_disciplinas').insert([payload])
         if (error) throw error
       }
       await refresh()

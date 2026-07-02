@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Library, Plus, Search, Filter, BookOpen, Layers, User, MoreVertical, LayoutGrid, List, Trash2, X } from 'lucide-react'
+import { Library, Plus, Search, Filter, BookOpen, Layers, User, MoreVertical, LayoutGrid, List, Trash2, X, Sparkles, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -249,6 +249,11 @@ export default function BancoQuestoesPage() {
                 {filtered.map((item, index) => {
                   const matchTurma = item.enunciado.match(/<meta name="turma" content="(.*?)">/);
                   const questaoTurma = matchTurma ? matchTurma[1] : null;
+                  const isAiGenerated = item.enunciado.includes('<meta name="gerado_por_ia" content="true">');
+                  const matchAiAutor = item.enunciado.match(/<meta name="ia_autor_nome" content="(.*?)">/);
+                  const iaAutor = matchAiAutor ? matchAiAutor[1] : null;
+                  const matchAiProva = item.enunciado.match(/<meta name="ia_prova_titulo" content="(.*?)">/);
+                  const iaProva = matchAiProva ? matchAiProva[1] : null;
 
                   return (
                   <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: index * 0.05 }} key={item.id}>
@@ -291,6 +296,11 @@ export default function BancoQuestoesPage() {
                             {item.eh_adaptada && (
                               <div style={{ background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', padding: '6px 14px', borderRadius: 100, fontSize: 11, fontWeight: 900, letterSpacing: '0.05em' }}>ADAPTADA</div>
                             )}
+                            {isAiGenerated && (
+                              <div style={{ background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', border: '1px solid rgba(217,70,239,0.2)', color: '#d946ef', padding: '6px 14px', borderRadius: 100, fontSize: 11, fontWeight: 900, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <Sparkles size={12} /> IA
+                              </div>
+                            )}
                           </div>
                           
                           <button 
@@ -312,12 +322,20 @@ export default function BancoQuestoesPage() {
                           {stripHtml(item.enunciado)}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))', marginTop: 'auto' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
-                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <User size={12} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))', marginTop: 'auto', flexWrap: 'wrap', gap: 12 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <User size={12} />
+                              </div>
+                              <span>Por <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 700 }}>{item.simulados_professores?.nome || 'Sistema'}</span></span>
                             </div>
-                            <span>Por <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 700 }}>{item.simulados_professores?.nome || 'Sistema'}</span></span>
+                            {isAiGenerated && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'hsl(var(--text-secondary))', background: 'rgba(236,72,153,0.05)', padding: '6px 10px', borderRadius: 8, border: '1px dashed rgba(236,72,153,0.2)' }}>
+                                <Bot size={14} color="#d946ef" />
+                                <span>Gerado por: <strong style={{ color: 'hsl(var(--text-primary))' }}>{iaAutor || 'IA'}</strong> | Origem: <strong style={{ color: 'hsl(var(--text-primary))' }}>{iaProva || 'Desconhecida'}</strong></span>
+                              </div>
+                            )}
                           </div>
                           <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>
                             {new Date(item.created_at).toLocaleDateString('pt-BR')}

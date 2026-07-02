@@ -121,9 +121,9 @@ export function ComunicadoViewModal({
          if (data) {
             setCobranca(data); // Sempre salva a cobrança se existir
             
-            if (data.agenda_cobrancas_destinatarios && currentUserSlug && !isAdminMode) {
+            if ((data as any).agenda_cobrancas_destinatarios && currentUserSlug && !isAdminMode) {
                const cleanSlug = currentUserSlug.replace(/^(a_|_ALU)/, '');
-               const dest = data.agenda_cobrancas_destinatarios.find((d: any) => 
+               const dest = (data as any).agenda_cobrancas_destinatarios.find((d: any) => 
                   String(d.destinatario_id).replace(/^(a_|_ALU)/, '') === cleanSlug
                );
                if (dest) {

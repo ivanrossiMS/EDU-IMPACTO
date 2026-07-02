@@ -27,7 +27,7 @@ export default function ADAdminCobrancas() {
         
         if (gruposData) {
           const map: Record<string, string> = {};
-          gruposData.forEach(grupo => {
+          gruposData.forEach((grupo: any) => {
             if (grupo.dados?.alunosIds && Array.isArray(grupo.dados.alunosIds)) {
               grupo.dados.alunosIds.forEach((alunoId: string) => {
                 map[alunoId] = grupo.dados.nome;

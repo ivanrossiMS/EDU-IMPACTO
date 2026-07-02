@@ -160,10 +160,10 @@ export default function EditarQuestaoPage() {
         const { data: q, error } = await supabase.from('simulados_questoes').select('*').eq('id', id).single()
         if (error) throw error
         if (q) {
-          setDisciplinaId(q.id_disciplina || '')
-          setDificuldade(q.nivel_dificuldade || 'media')
+          setDisciplinaId((q as any).id_disciplina || '')
+          setDificuldade((q as any).nivel_dificuldade || 'media')
           
-          let cleanEnunciado = q.enunciado || ''
+          let cleanEnunciado = (q as any).enunciado || ''
           const matchTurma = cleanEnunciado.match(/<meta name="turma" content="(.*?)">/)
           if (matchTurma) {
             setTurma(matchTurma[1])
@@ -231,7 +231,7 @@ export default function EditarQuestaoPage() {
         ? `${enunciado}\n<meta name="turma" content="${turma}">`
         : enunciado
 
-      const { error: qErr } = await supabase.from('simulados_questoes').update({
+      const { error: qErr } = await (supabase as any).from('simulados_questoes').update({
         id_disciplina: disciplinaId,
         enunciado: finalEnunciado,
         nivel_dificuldade: dificuldade,
@@ -250,7 +250,7 @@ export default function EditarQuestaoPage() {
         eh_correta: a.correta
       }))
 
-      const { error: aErr } = await supabase.from('simulados_alternativas').insert(altsToInsert)
+      const { error: aErr } = await (supabase as any).from('simulados_alternativas').insert(altsToInsert)
       if (aErr) throw aErr
       
       alert('Questão atualizada com sucesso no Banco de Questões!')

@@ -49,8 +49,8 @@ export default function SimuladosDashboard() {
       if (isProfessor && currentUser) {
         // Professor Stats (Simulados)
         const { data: reqsSim } = await supabase.from('simulados_requisicoes').select('id, id_simulado, status').eq('id_professor', currentUser.id)
-        const totalPendentesSim = reqsSim?.filter(r => r.status === 'pendente').length || 0
-        const simIds = [...new Set(reqsSim?.map(r => r.id_simulado))]
+        const totalPendentesSim = reqsSim?.filter((r: any) => r.status === 'pendente').length || 0
+        const simIds = [...new Set(reqsSim?.map((r: any) => r.id_simulado))]
         
         const { count: cQuestSim } = await supabase.from('simulados_questoes').select('*', { count: 'exact', head: true }).eq('id_professor', currentUser.id)
         
@@ -78,7 +78,7 @@ export default function SimuladosDashboard() {
           ativas: cSim || 0,
           questoesBanco: cQuestSim || 0,
           requisicoesPendentes: cReqSim || 0,
-          bimestreAtual: bimSim?.nome || 'Não definido'
+          bimestreAtual: (bimSim as any)?.nome || 'Não definido'
         })
 
         const { data: recSim } = await supabase.from('simulados').select('id, titulo, status, data_aplicacao, simulados_bimestres(nome), turmas, simulados_questoes(id, id_professor, id_disciplina), simulados_requisicoes(id_professor, id_disciplina, quantidade_questoes, simulados_disciplinas(nome))').order('created_at', { ascending: false }).limit(5)
@@ -89,8 +89,8 @@ export default function SimuladosDashboard() {
       if (isProfessor && currentUser) {
         // Professor Stats (Provas)
         const { data: reqsProv } = await supabase.from('provas_requisicoes').select('id, id_prova, status').eq('id_professor', currentUser.id)
-        const totalPendentesProv = reqsProv?.filter(r => r.status === 'pendente').length || 0
-        const provIds = [...new Set(reqsProv?.map(r => r.id_prova))]
+        const totalPendentesProv = reqsProv?.filter((r: any) => r.status === 'pendente').length || 0
+        const provIds = [...new Set(reqsProv?.map((r: any) => r.id_prova))]
         
         setStatsProvas({
           ativas: provIds.length,
@@ -113,7 +113,7 @@ export default function SimuladosDashboard() {
         setStatsProvas({
           ativas: cProv || 0,
           requisicoesPendentes: cReqProv || 0,
-          bimestreAtual: bimProv?.nome || 'Não definido'
+          bimestreAtual: (bimProv as any)?.nome || 'Não definido'
         })
 
         const { data: recProv } = await supabase.from('provas').select('id, titulo, status, data_aplicacao, simulados_bimestres(nome), turmas, provas_questoes(id, id_professor, id_disciplina), provas_requisicoes(id_professor, id_disciplina, quantidade_questoes, simulados_disciplinas(nome))').order('created_at', { ascending: false }).limit(5)

@@ -26,14 +26,14 @@ export default function GerenciamentoSimuladosPage() {
     `).order('created_at', { ascending: false })
     
     if (data) {
-      let filteredData = data;
+      let filteredData: any[] = data as any[];
       if (currentUserPerfil === 'Professor') {
-         filteredData = data.filter(s => {
+         filteredData = (data as any[]).filter((s: any) => {
            return s.simulados_requisicoes?.some((r: any) => r.id_professor === currentUser.id);
          });
       }
 
-      const mapped = filteredData.map(s => {
+      const mapped = (filteredData as any[]).map((s: any) => {
         const questoesTotais = s.simulados_requisicoes?.reduce((acc: number, r: any) => acc + (r.quantidade_questoes || 0), 0) || 0
         const questoesCadastradas = s.simulados_questoes?.length || 0
         return {
@@ -74,7 +74,7 @@ export default function GerenciamentoSimuladosPage() {
     if (!confirm('Deseja realmente aprovar e publicar este simulado? Ele ficará visível aos alunos e professores.')) return
     
     try {
-      const { error } = await supabase.from('simulados').update({ status: 'publicado' }).eq('id', id)
+      const { error } = await (supabase as any).from('simulados').update({ status: 'publicado' }).eq('id', id)
       if (error) throw error
       
       loadData()

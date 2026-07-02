@@ -26,19 +26,19 @@ export default function GerenciamentoSimuladosPage() {
     `).eq('tipo', 'redacao_enem').order('created_at', { ascending: false })
     
     if (data) {
-      let filteredData = data;
+      let filteredData = data as any[];
       
       // Filtra para mostrar apenas provas que o usuário criou ou que ele é o professor vinculado,
       // exceto se for Administrador ou Diretor
       if (currentUserPerfil === 'Professor') {
-         filteredData = data.filter(s => {
+         filteredData = (data as any[]).filter((s: any) => {
            const isCreator = s.criado_por === currentUser.id;
            const isLinkedProfessor = s.provas_requisicoes?.some((r: any) => r.id_professor === currentUser.id);
            return isCreator || isLinkedProfessor;
          });
       }
 
-      const mapped = filteredData.map(s => {
+      const mapped = (filteredData as any[]).map((s: any) => {
         const questoesTotais = s.provas_requisicoes?.reduce((acc: number, r: any) => acc + (r.quantidade_questoes || 0), 0) || 0
         const questoesCadastradas = s.provas_questoes?.length || 0
         return {
@@ -79,7 +79,7 @@ export default function GerenciamentoSimuladosPage() {
     if (!confirm('Deseja realmente aprovar e publicar esta prova? Ela ficará visível aos alunos e professores.')) return
     
     try {
-      const { error } = await supabase.from('provas').update({ status: 'publicado' }).eq('id', id)
+      const { error } = await (supabase as any).from('provas').update({ status: 'publicado' }).eq('id', id)
       if (error) throw error
       
       loadData()

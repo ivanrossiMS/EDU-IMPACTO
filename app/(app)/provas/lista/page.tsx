@@ -60,7 +60,7 @@ export default function SimuladosListaPage() {
     
     const now = isApproving ? new Date().toISOString() : null
     
-    const { error } = await supabase.from('provas').update({ 
+    const { error } = await (supabase as any).from('provas').update({ 
       status: newStatus,
       ...(isApproving ? { aprovado_por: approverName, data_aprovacao: now } : { aprovado_por: null, data_aprovacao: null })
     }).eq('id', id)
@@ -68,7 +68,7 @@ export default function SimuladosListaPage() {
     if (!error) {
       setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
     } else {
-      const fallback = await supabase.from('provas').update({ status: newStatus }).eq('id', id)
+      const fallback = await (supabase as any).from('provas').update({ status: newStatus }).eq('id', id)
       
       if (!fallback.error) {
          setSimulados(prev => prev.map(s => s.id === id ? { ...s, status: newStatus, aprovado_por: approverName, data_aprovacao: now } : s))
@@ -130,7 +130,7 @@ export default function SimuladosListaPage() {
       } catch(e) {}
 
       if (data) {
-        let processedData = data
+        let processedData = data as any[]
 
         if (isProfessor && currentUser) {
           processedData = processedData.filter(s => {

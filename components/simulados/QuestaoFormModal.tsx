@@ -7,10 +7,11 @@ import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
 
-export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defaultDisciplinaId, onClose, onSave }: { simuladoId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, onClose: () => void, onSave: () => void }) {
+export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defaultDisciplinaId, tituloContexto, onClose, onSave }: { simuladoId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, tituloContexto?: string, onClose: () => void, onSave: () => void }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [isAiGenerated, setIsAiGenerated] = useState(false)
   const [disciplinas, setDisciplinas] = useState<any[]>([])
   
   const [idDisciplina, setIdDisciplina] = useState(questao?.id_disciplina || defaultDisciplinaId || '')
@@ -288,6 +289,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       }
 
       setAlternativas(updatedAlts)
+      setIsAiGenerated(true)
       setIsAiModalOpen(false)
     } catch (error: any) {
       alert('Erro ao gerar com IA: ' + error.message)
@@ -302,10 +304,28 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
     setLoading(true)
 
     try {
+      let finalEnunciado = getEnunciadoComImagens()
+      if (turma) finalEnunciado += `\n<meta name="turma" content="${turma}">`
+      
+      if (isAiGenerated && !questao?.id) {
+        // Fetch current user from session via API or context if needed, but we don't have direct access here 
+        // to `currentUserPerfil`, we can just fetch the professor's name since we usually have `defaultProfessorId`
+        let autorNome = 'Professor'
+        if (defaultProfessorId) {
+          const { data } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single()
+          const prof = data as any;
+          if (prof?.nome) autorNome = prof.nome
+        }
+        
+        finalEnunciado += `\n<meta name="gerado_por_ia" content="true">`
+        finalEnunciado += `\n<meta name="ia_autor_nome" content="${autorNome}">`
+        finalEnunciado += `\n<meta name="ia_prova_titulo" content="${tituloContexto || 'Simulado'}">`
+      }
+
       const questaoData: any = {
         id_simulado: simuladoId,
         id_disciplina: idDisciplina || null,
-        enunciado: turma ? `${getEnunciadoComImagens()}\n<meta name="turma" content="${turma}">` : getEnunciadoComImagens(),
+        enunciado: finalEnunciado,
         ordem: questao?.ordem || 0
       }
 
@@ -313,8 +333,9 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       if (defaultProfessorId && !questao?.id) {
         questaoData.id_professor = defaultProfessorId;
         // Garantir que o ID exista na tabela espelho (ignorar se já existir)
-        const { data: profData } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single();
-        const { error: upsertErr } = await supabase.from('simulados_professores').upsert({ 
+        const { data } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single();
+        const profData = data as any;
+        const { error: upsertErr } = await (supabase as any).from('simulados_professores').upsert({ 
           id: defaultProfessorId,
           nome: profData?.nome || 'Professor'
         }).select()
@@ -326,11 +347,11 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       let qId = questao?.id
 
       if (qId) {
-        await supabase.from('simulados_questoes').update(questaoData).eq('id', qId)
+        await (supabase as any).from('simulados_questoes').update(questaoData).eq('id', qId)
       } else {
-        const { data: newQ, error: errQ } = await supabase.from('simulados_questoes').insert(questaoData).select().single()
+        const { data: newQ, error: errQ } = await (supabase as any).from('simulados_questoes').insert(questaoData).select().single()
         if (errQ) throw errQ
-        qId = newQ.id
+        qId = (newQ as any).id
       }
 
       if (questao?.id) {
@@ -346,7 +367,7 @@ export function QuestaoFormModal({ simuladoId, questao, defaultProfessorId, defa
       }))
 
       if (altsData.length > 0) {
-        const { error: errA } = await supabase.from('simulados_alternativas').insert(altsData)
+        const { error: errA } = await (supabase as any).from('simulados_alternativas').insert(altsData)
         if (errA) throw errA
       }
 

@@ -51,16 +51,19 @@ export default function AdaptarProvaPage() {
         }
       }
 
-      const { data: simData } = await supabase.from('provas').select('*').eq('id', id).single()
+      const { data: pData } = await supabase.from('provas').select('*').eq('id', id).single()
+      const simData = pData as any;
 
-      const { data: reqs } = await supabase.from('provas_requisicoes').select('*').eq('id_prova', id).order('created_at', { ascending: true })
+      const { data: rData } = await supabase.from('provas_requisicoes').select('*').eq('id_prova', id).order('created_at', { ascending: true })
+      const reqs = rData as any;
       if (reqs) setRequisicoes(reqs)
 
-      const { data: qData } = await supabase.from('provas_questoes').select(`
+      const { data: qResult } = await supabase.from('provas_questoes').select(`
         *,
         simulados_disciplinas(nome),
         provas_alternativas(*)
       `).eq('id_prova', id)
+      const qData = qResult as any;
 
       if (qData) {
         const discOrder: Record<string, number> = {}
@@ -139,7 +142,7 @@ export default function AdaptarProvaPage() {
           }
         }
         
-        const discNames = Array.from(new Set((qData || []).map(q => q.simulados_disciplinas?.nome).filter(Boolean)))
+        const discNames = Array.from(new Set((qData || []).map((q: any) => q.simulados_disciplinas?.nome).filter(Boolean)))
         const dateStr = simData.data_aplicacao ? new Date(simData.data_aplicacao + 'T00:00:00').toLocaleDateString('pt-BR') : ''
         const seriesStr = (simData.turmas || []).join(', ')
 
@@ -301,7 +304,7 @@ export default function AdaptarProvaPage() {
         id_bimestre: prova.id_bimestre,
         status: 'rascunho',
         turmas: prova.turmas
-      }).select().single()
+      } as any).select().single()
 
       if (simErr) throw simErr
 
@@ -311,10 +314,10 @@ export default function AdaptarProvaPage() {
           const { id, created_at, updated_at, provas, simulados_disciplinas, ...restR } = r
           return {
             ...restR,
-            id_prova: newProva.id
+            id_prova: (newProva as any).id
           }
         })
-        const { error: rErr } = await supabase.from('provas_requisicoes').insert(newReqs)
+        const { error: rErr } = await supabase.from('provas_requisicoes').insert(newReqs as any)
         if (rErr) throw rErr
       }
 
@@ -325,22 +328,22 @@ export default function AdaptarProvaPage() {
         const { id, created_at, updated_at, simulados_disciplinas, provas_alternativas, simulados_alternativas, ...restQ } = q
         const { data: newQ, error: qErr } = await supabase.from('provas_questoes').insert({
           ...restQ,
-          id_prova: newProva.id,
+          id_prova: (newProva as any).id,
           eh_adaptada: true
-        }).select().single()
+        } as any).select().single()
 
         if (qErr) throw qErr
 
         const altsToClone = q.provas_alternativas || q.simulados_alternativas || []
         if (altsToClone.length > 0) {
           const newAlts = altsToClone.map((a: any) => ({
-            id_questao: newQ.id,
+            id_questao: (newQ as any).id,
             letra: a.letra,
             texto: a.texto,
             eh_correta: a.eh_correta,
             imagem_url: a.imagem_url
           }))
-          const { error: aErr } = await supabase.from('provas_alternativas').insert(newAlts)
+          const { error: aErr } = await supabase.from('provas_alternativas').insert(newAlts as any)
           if (aErr) throw aErr
         }
       }
@@ -362,7 +365,7 @@ export default function AdaptarProvaPage() {
     if (!config || !config.id) return
     setSaving(true)
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('simulados_configuracoes')
         .update({ provas_header_layout: headerLayout })
         .eq('id', config.id)

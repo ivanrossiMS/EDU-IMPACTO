@@ -46,12 +46,12 @@ export default function SimuladosConfiguracoesPage() {
       try {
         const { data, error } = await supabase.from('simulados_configuracoes').select('*').eq('id', 'default').single()
         if (data) {
-          if (data.modelo_pdf_url) setModeloCapaUrl(data.modelo_pdf_url)
-          if (data.modelo_pdf_outras_paginas_url) setModeloOutrasUrl(data.modelo_pdf_outras_paginas_url)
-          if (data.provas_modelo_pdf_url) setProvasModeloCapaUrl(data.provas_modelo_pdf_url)
-          if (data.provas_modelo_pdf_outras_paginas_url) setProvasModeloOutrasUrl(data.provas_modelo_pdf_outras_paginas_url)
-          if (data.redacao_enem_modelo_pdf_url) setRedacaoCapaUrl(data.redacao_enem_modelo_pdf_url)
-          if (data.redacao_enem_modelo_pdf_outras_paginas_url) setRedacaoOutrasUrl(data.redacao_enem_modelo_pdf_outras_paginas_url)
+          if ((data as any).modelo_pdf_url) setModeloCapaUrl((data as any).modelo_pdf_url)
+          if ((data as any).modelo_pdf_outras_paginas_url) setModeloOutrasUrl((data as any).modelo_pdf_outras_paginas_url)
+          if ((data as any).provas_modelo_pdf_url) setProvasModeloCapaUrl((data as any).provas_modelo_pdf_url)
+          if ((data as any).provas_modelo_pdf_outras_paginas_url) setProvasModeloOutrasUrl((data as any).provas_modelo_pdf_outras_paginas_url)
+          if ((data as any).redacao_enem_modelo_pdf_url) setRedacaoCapaUrl((data as any).redacao_enem_modelo_pdf_url)
+          if ((data as any).redacao_enem_modelo_pdf_outras_paginas_url) setRedacaoOutrasUrl((data as any).redacao_enem_modelo_pdf_outras_paginas_url)
 
         }
       } catch (e) {
@@ -115,7 +115,7 @@ export default function SimuladosConfiguracoesPage() {
         updated_at: new Date().toISOString() 
       }
       
-      const { error } = await supabase.from('simulados_configuracoes').upsert(payload)
+      const { error } = await (supabase as any).from('simulados_configuracoes').upsert(payload)
       
       if (error) {
         throw error

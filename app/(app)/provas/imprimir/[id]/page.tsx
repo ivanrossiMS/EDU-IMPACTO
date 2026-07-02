@@ -41,12 +41,12 @@ export default function ImprimirProvaPage() {
       const { data: confData } = await supabase.from('simulados_configuracoes').select('*').eq('id', 'default').single()
       if (confData) {
         setConfig({
-          ...confData,
-          modelo_pdf_url: confData.provas_modelo_pdf_url || '',
-          modelo_pdf_outras_paginas_url: confData.provas_modelo_pdf_outras_paginas_url || ''
+          ...(confData as any),
+          modelo_pdf_url: (confData as any).provas_modelo_pdf_url || '',
+          modelo_pdf_outras_paginas_url: (confData as any).provas_modelo_pdf_outras_paginas_url || ''
         })
-        if (confData.provas_header_layout) {
-          setHeaderLayout({ ...defaultHeaderLayout, ...confData.provas_header_layout })
+        if ((confData as any).provas_header_layout) {
+          setHeaderLayout({ ...defaultHeaderLayout, ...(confData as any).provas_header_layout })
         }
       }
 
@@ -138,12 +138,12 @@ export default function ImprimirProvaPage() {
           }
         }
         
-        const discNames = Array.from(new Set((qData || []).map(q => q.simulados_disciplinas?.nome).filter(Boolean)))
-        const dateStr = simData.data_aplicacao ? new Date(simData.data_aplicacao + 'T00:00:00').toLocaleDateString('pt-BR') : ''
-        const seriesStr = (simData.turmas || []).join(', ')
+        const discNames = Array.from(new Set((qData || []).map((q: any) => q.simulados_disciplinas?.nome).filter(Boolean)))
+        const dateStr = (simData as any).data_aplicacao ? new Date((simData as any).data_aplicacao + 'T00:00:00').toLocaleDateString('pt-BR') : ''
+        const seriesStr = ((simData as any).turmas || []).join(', ')
 
         setProva({ 
-          ...simData, 
+          ...(simData as any), 
           isProva: true,
           formattedProfessors: profNames.join(', '),
           formattedDisciplinas: discNames.join(', '),
@@ -304,7 +304,7 @@ export default function ImprimirProvaPage() {
 
       // 2. Update questions and alternatives
       for (const q of selectedList) {
-        await supabase.from('provas_questoes').update({ 
+        await (supabase as any).from('provas_questoes').update({ 
           ordem: q.ordem,
           enunciado: q.enunciado,
           imagens: q.imagens || []
@@ -318,7 +318,7 @@ export default function ImprimirProvaPage() {
         }
 
         for (const a of q.provas_alternativas) {
-          await supabase.from('provas_alternativas').update({
+          await (supabase as any).from('provas_alternativas').update({
             texto: a.texto,
             imagem_url: a.imagem_url,
             letra: a.letra
@@ -343,7 +343,7 @@ export default function ImprimirProvaPage() {
     if (!config || !config.id) return
     setSaving(true)
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('simulados_configuracoes')
         .update({ provas_header_layout: headerLayout })
         .eq('id', config.id)

@@ -116,13 +116,13 @@ export default function NovoSimuladoPage() {
         criado_por: currentUser?.id || null
       }
       
-      let { data: simData, error: simError } = await supabase.from('provas').insert([payload]).select().single()
+      let { data: simData, error: simError } = await (supabase as any).from('provas').insert([payload]).select().single()
 
       if (simError) {
         // Fallback if 'criado_por' column doesn't exist yet
         console.warn('Fallback: tentando criar sem criado_por. Erro anterior:', simError)
         delete (payload as any).criado_por;
-        const fallbackRes = await supabase.from('provas').insert([payload]).select().single()
+        const fallbackRes = await (supabase as any).from('provas').insert([payload]).select().single()
         simData = fallbackRes.data
         simError = fallbackRes.error
         if (!simError) {
@@ -140,7 +140,7 @@ export default function NovoSimuladoPage() {
           quantidade_questoes: r.qtdQuestoes,
           status: 'pendente'
         }))
-        const { error: reqError } = await supabase.from('provas_requisicoes').insert(reqs)
+        const { error: reqError } = await (supabase as any).from('provas_requisicoes').insert(reqs)
         if (reqError) throw reqError
       }
       

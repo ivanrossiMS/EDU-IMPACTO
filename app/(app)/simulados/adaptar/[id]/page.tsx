@@ -29,7 +29,7 @@ export default function AdaptarSimuladoPage() {
 
       const { data: simData } = await supabase.from('simulados').select('*').eq('id', id).single()
       if (simData) {
-        setSimulado({ ...simData, titulo: `${simData.titulo} (Adaptado)` })
+        setSimulado({ ...(simData as any), titulo: `${(simData as any).titulo} (Adaptado)` })
       }
 
       const { data: reqs } = await supabase.from('simulados_requisicoes').select('*').eq('id_simulado', id).order('created_at', { ascending: true })
@@ -173,7 +173,7 @@ export default function AdaptarSimuladoPage() {
 
     try {
       // 1. Clone Simulado
-      const { data: newSimulado, error: simErr } = await supabase.from('simulados').insert({
+      const { data: newSimulado, error: simErr } = await (supabase as any).from('simulados').insert({
         titulo: simulado.titulo,
         data_aplicacao: simulado.data_aplicacao,
         id_bimestre: simulado.id_bimestre,
@@ -189,10 +189,10 @@ export default function AdaptarSimuladoPage() {
           const { id, created_at, updated_at, simulados_disciplinas, ...restR } = r
           return {
             ...restR,
-            id_simulado: newSimulado.id
+            id_simulado: (newSimulado as any).id
           }
         })
-        const { error: rErr } = await supabase.from('simulados_requisicoes').insert(newReqs)
+        const { error: rErr } = await (supabase as any).from('simulados_requisicoes').insert(newReqs)
         if (rErr) throw rErr
       }
 
@@ -201,9 +201,9 @@ export default function AdaptarSimuladoPage() {
       
       for (const q of selectedList) {
         const { id, created_at, updated_at, simulados_disciplinas, simulados_alternativas, ...restQ } = q
-        const { data: newQ, error: qErr } = await supabase.from('simulados_questoes').insert({
+        const { data: newQ, error: qErr } = await (supabase as any).from('simulados_questoes').insert({
           ...restQ,
-          id_simulado: newSimulado.id,
+          id_simulado: (newSimulado as any).id,
           eh_adaptada: true
         }).select().single()
 
@@ -211,12 +211,12 @@ export default function AdaptarSimuladoPage() {
 
         if (q.simulados_alternativas && q.simulados_alternativas.length > 0) {
           const newAlts = q.simulados_alternativas.map((a: any) => ({
-            id_questao: newQ.id,
+            id_questao: (newQ as any).id,
             letra: a.letra,
             texto: a.texto,
             eh_correta: a.eh_correta
           }))
-          const { error: aErr } = await supabase.from('simulados_alternativas').insert(newAlts)
+          const { error: aErr } = await (supabase as any).from('simulados_alternativas').insert(newAlts)
           if (aErr) throw aErr
         }
       }

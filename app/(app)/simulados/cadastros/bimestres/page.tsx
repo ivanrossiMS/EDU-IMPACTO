@@ -40,9 +40,9 @@ export default function BimestresPage() {
     setIsSaving(true)
     try {
       if (editingId) {
-        await supabase.from('simulados_bimestres').update({ ...formData }).eq('id', editingId)
+        await (supabase as any).from('simulados_bimestres').update({ ...formData }).eq('id', editingId)
       } else {
-        await supabase.from('simulados_bimestres').insert([{ ...formData }])
+        await (supabase as any).from('simulados_bimestres').insert([{ ...formData }])
       }
       await refresh()
       setIsModalOpen(false)
@@ -56,7 +56,7 @@ export default function BimestresPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir?')) return
-    await supabase.from('simulados_bimestres').delete().eq('id', id)
+    await (supabase as any).from('simulados_bimestres').delete().eq('id', id)
     await refresh()
   }
 

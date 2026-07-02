@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Plus, Image as ImageIcon, CheckCircle, Circle, Edit2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Image as ImageIcon, CheckCircle, Circle, Edit2, Trash2, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -45,14 +45,14 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
     const disciplineOrder: string[] = []
     if (reqs) {
       setRequisicoesLimits(reqs)
-      reqs.forEach(r => {
+      reqs.forEach((r: any) => {
         if (!disciplineOrder.includes(r.id_disciplina)) {
           disciplineOrder.push(r.id_disciplina)
         }
       })
 
       if (isProfessor && currentUser) {
-        const myDisciplines = reqs.filter(r => r.id_professor === currentUser.id).map(r => r.id_disciplina)
+        const myDisciplines = reqs.filter((r: any) => r.id_professor === currentUser.id).map((r: any) => r.id_disciplina)
         setProfessorDisciplinas(myDisciplines)
       }
     }
@@ -66,7 +66,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
 
     if (q) {
       // Sort array according to discipline order
-      const sortedQ = q.sort((a, b) => {
+      const sortedQ = q.sort((a: any, b: any) => {
         const indexA = disciplineOrder.indexOf(a.id_disciplina)
         const indexB = disciplineOrder.indexOf(b.id_disciplina)
         if (indexA === -1) return 1
@@ -77,7 +77,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
       // If filtered by professor/disciplina, apply filter
       let finalQ = sortedQ
       if (professorFiltro && disciplinaFiltro) {
-        finalQ = finalQ.filter(questao => 
+        finalQ = finalQ.filter((questao: any) => 
           questao.id_professor === professorFiltro && 
           questao.id_disciplina === disciplinaFiltro
         )
@@ -239,6 +239,11 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                       {q.simulados_disciplinas?.nome || 'Sem Disciplina'}
                     </span>
+                    {q.enunciado?.includes('<meta name="gerado_por_ia" content="true">') && (
+                      <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12, background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', color: '#d946ef', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, border: '1px solid rgba(217,70,239,0.2)' }}>
+                        <Sparkles size={12} /> IA
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {(!isProfessor || professorDisciplinas.includes(q.id_disciplina)) && (
@@ -260,11 +265,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
                 </div>
 
                 <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-                  <div style={{ width: 32, height: 32, minWidth: 32, borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, marginTop: 2 }}>
-                    {index + 1}
-                  </div>
-                  <div 
-                    style={{ color: 'hsl(var(--text-primary))', fontSize: 15, lineHeight: 1.6, flex: 1, wordBreak: 'break-word', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'justify' }}
+                  <div style={{ color: 'hsl(var(--text-primary))', fontSize: 15, lineHeight: 1.6, flex: 1, wordBreak: 'break-word', fontFamily: 'system-ui, -apple-system, sans-serif', textAlign: 'justify' }}
                     dangerouslySetInnerHTML={{ __html: q.enunciado || '' }}
                   />
                 </div>
@@ -293,6 +294,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
         <QuestaoFormModal 
           simuladoId={id} 
           questao={editingQuestao} 
+          tituloContexto={simulado?.titulo}
           defaultProfessorId={isProfessor ? currentUser?.id : (professorFiltro || undefined)}
           defaultDisciplinaId={isProfessor && professorDisciplinas.length > 0 ? professorDisciplinas[0] : (disciplinaFiltro || undefined)}
           onClose={() => {

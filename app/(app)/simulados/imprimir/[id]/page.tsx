@@ -29,7 +29,7 @@ export default function ImprimirSimuladoPage() {
 
       const { data: simData } = await supabase.from('simulados').select('*').eq('id', id).single()
       if (simData) {
-        setSimulado({ ...simData })
+        setSimulado({ ...(simData as any) })
       }
 
       const { data: reqs } = await supabase.from('simulados_requisicoes').select('*').eq('id_simulado', id).order('created_at', { ascending: true })
@@ -183,7 +183,7 @@ export default function ImprimirSimuladoPage() {
 
       // 2. Update order of selected questions
       for (const q of selectedList) {
-        await supabase.from('simulados_questoes').update({ ordem: q.ordem }).eq('id', q.id)
+        await (supabase as any).from('simulados_questoes').update({ ordem: q.ordem }).eq('id', q.id)
       }
 
       // Automatically trigger print after slight delay

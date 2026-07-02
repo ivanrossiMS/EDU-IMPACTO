@@ -184,7 +184,7 @@ export default function NovaQuestaoBancoPage() {
     setLoading(true)
     try {
       if (currentUser?.id) {
-        const { error: upsertErr } = await supabase.from('simulados_professores').upsert({ 
+        const { error: upsertErr } = await (supabase as any).from('simulados_professores').upsert({ 
           id: currentUser.id,
           nome: currentUser.nome || 'Professor'
         }).select()
@@ -198,7 +198,7 @@ export default function NovaQuestaoBancoPage() {
         ? `${enunciado}\n<meta name="turma" content="${turma}">`
         : enunciado
 
-      const { data: qData, error: qErr } = await supabase.from('simulados_questoes').insert({
+      const { data: qData, error: qErr } = await (supabase as any).from('simulados_questoes').insert({
         id_disciplina: disciplinaId,
         enunciado: finalEnunciado,
         nivel_dificuldade: dificuldade,
@@ -210,13 +210,13 @@ export default function NovaQuestaoBancoPage() {
       if (qErr) throw qErr
 
       const altsToInsert = alternativas.map((a, i) => ({
-        id_questao: qData.id,
+        id_questao: (qData as any).id,
         texto: a.texto,
         letra: a.letra,
         eh_correta: a.correta
       }))
 
-      const { error: aErr } = await supabase.from('simulados_alternativas').insert(altsToInsert)
+      const { error: aErr } = await (supabase as any).from('simulados_alternativas').insert(altsToInsert)
       if (aErr) throw aErr
       
       alert('Questão salva com sucesso no Banco de Questões!')

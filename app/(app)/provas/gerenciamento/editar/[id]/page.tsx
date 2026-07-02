@@ -73,11 +73,12 @@ export default function EditarSimuladoPage({
       } catch (e) {}
 
       // Load existing prova
-      const { data: prova } = await supabase
+      const { data } = await supabase
         .from("provas")
         .select("*")
         .eq("id", id)
         .single();
+      const prova = data as any;
       if (prova) {
         setTitulo(prova.titulo);
         setDataAplicacao(prova.data_aplicacao || "");
@@ -87,13 +88,14 @@ export default function EditarSimuladoPage({
       }
 
       // Load existing requisicoes
-      const { data: reqs } = await supabase
+      const { data: rData } = await supabase
         .from("provas_requisicoes")
         .select("*")
         .eq("id_prova", id);
+      const reqs = rData as any[];
       if (reqs && reqs.length > 0) {
         setRequisicoes(
-          reqs.map((r) => ({
+          reqs.map((r: any) => ({
             id: r.id,
             disciplinaId: r.id_disciplina,
             professorId: r.id_professor,
@@ -181,7 +183,7 @@ export default function EditarSimuladoPage({
 
     setLoading(true);
     try {
-      const { error: simError } = await supabase
+      const { error: simError } = await (supabase as any)
         .from("provas")
         .update({
           titulo,
@@ -208,7 +210,7 @@ export default function EditarSimuladoPage({
           quantidade_questoes: r.qtdQuestoes,
           status: "pendente",
         }));
-        const { error: reqError } = await supabase
+        const { error: reqError } = await (supabase as any)
           .from("provas_requisicoes")
           .insert(reqs);
         if (reqError) throw reqError;

@@ -62,8 +62,8 @@ function AgendaDigitalIndexContent() {
               .limit(1)
               .single()
               
-            if (data && data.id) {
-              router.replace(`/agenda-digital/${data.id}/${redirect}${paramStr}`)
+            if (data && (data as any).id) {
+              router.replace(`/agenda-digital/${(data as any).id}/${redirect}${paramStr}`)
             } else {
               router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
             }

@@ -7,10 +7,11 @@ import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
 
-export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, defaultDisciplinaId, onClose, onSave }: { provaId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, onClose: () => void, onSave: () => void }) {
+export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, defaultDisciplinaId, tituloContexto, onClose, onSave }: { provaId: string, questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, tituloContexto?: string, onClose: () => void, onSave: () => void }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [isAiGenerated, setIsAiGenerated] = useState(false)
   const [disciplinas, setDisciplinas] = useState<any[]>([])
   
   const [idDisciplina, setIdDisciplina] = useState(questao?.id_disciplina || defaultDisciplinaId || '')
@@ -308,6 +309,7 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
       }
 
       setAlternativas(updatedAlts)
+      setIsAiGenerated(true)
       setIsAiModalOpen(false)
     } catch (error: any) {
       alert('Erro ao gerar com IA: ' + error.message)
@@ -329,6 +331,19 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
         savedEnunciado += `\n<meta name="estilo_espaco" content="${estiloEspaco}">`
       }
 
+      if (isAiGenerated && !questao?.id) {
+        let autorNome = 'Professor'
+        if (defaultProfessorId) {
+          const { data } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single()
+          const prof = data as any;
+          if (prof?.nome) autorNome = prof.nome
+        }
+        
+        savedEnunciado += `\n<meta name="gerado_por_ia" content="true">`
+        savedEnunciado += `\n<meta name="ia_autor_nome" content="${autorNome}">`
+        savedEnunciado += `\n<meta name="ia_prova_titulo" content="${tituloContexto || 'Prova'}">`
+      }
+
       const questaoData: any = {
         id_prova: provaId,
         id_disciplina: idDisciplina || defaultDisciplinaId,
@@ -341,8 +356,9 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
       if (defaultProfessorId && !questao?.id) {
         questaoData.id_professor = defaultProfessorId;
         // Garantir que o ID exista na tabela espelho (ignorar se já existir)
-        const { data: profData } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single();
-        const { error: upsertErr } = await supabase.from('simulados_professores').upsert({ 
+        const { data } = await supabase.from('system_users').select('nome').eq('id', defaultProfessorId).single();
+        const profData = data as any;
+        const { error: upsertErr } = await (supabase as any).from('simulados_professores').upsert({ 
           id: defaultProfessorId,
           nome: profData?.nome || 'Professor'
         }).select()
@@ -354,11 +370,11 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
       let qId = questao?.id
 
       if (qId) {
-        await supabase.from('provas_questoes').update(questaoData).eq('id', qId)
+        await (supabase as any).from('provas_questoes').update(questaoData).eq('id', qId)
       } else {
-        const { data: newQ, error: errQ } = await supabase.from('provas_questoes').insert(questaoData).select().single()
+        const { data: newQ, error: errQ } = await (supabase as any).from('provas_questoes').insert(questaoData).select().single()
         if (errQ) throw errQ
-        qId = newQ.id
+        qId = (newQ as any).id
       }
 
       if (questao?.id) {
@@ -374,11 +390,49 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
       })) : []
 
       if (altsData.length > 0) {
-        const { error: errA } = await supabase.from('provas_alternativas').insert(altsData)
+        const { error: errA } = await (supabase as any).from('provas_alternativas').insert(altsData)
         if (errA) throw errA
+      }
+      
+      // Duplicar a questão recém-criada por IA para o Banco de Questões global (simulados_questoes)
+      if (isAiGenerated && !questao?.id) {
+        try {
+          const questaoBancoData = {
+            id_simulado: '00000000-0000-0000-0000-000000000000', // ID neutro ou nulo se permitido. Se NOT NULL e FOREIGN KEY, podemos precisar de um UUID válido ou deixar o id_simulado solto.
+            id_disciplina: questaoData.id_disciplina,
+            id_professor: questaoData.id_professor,
+            enunciado: questaoData.enunciado,
+            ordem: questaoData.ordem,
+            nivel_dificuldade: questaoData.nivel_dificuldade,
+            // id_simulado não pode ser nulo se for restrito. Se falhar, tentamos omiti-lo se não for obrigatório.
+          };
+          
+          const { data: bancoQ, error: errBancoQ } = await (supabase as any).from('simulados_questoes').insert(questaoBancoData).select().single();
+          
+          if (!errBancoQ && bancoQ && altsData.length > 0) {
+            const altsBanco = altsData.map(a => ({ ...a, id_questao: (bancoQ as any).id }));
+            await (supabase as any).from('simulados_alternativas').insert(altsBanco);
+          } else if (errBancoQ) {
+            // Se falhou por causa do id_simulado foreign key constraints
+            if (errBancoQ.code === '23503') { 
+              // Removendo id_simulado para testar se insere sem vinculo
+              delete (questaoBancoData as any).id_simulado;
+              const { data: bancoQFallback, error: errBancoQFallback } = await (supabase as any).from('simulados_questoes').insert(questaoBancoData).select().single();
+              if (!errBancoQFallback && bancoQFallback && altsData.length > 0) {
+                const altsBanco = altsData.map(a => ({ ...a, id_questao: (bancoQFallback as any).id }));
+                await (supabase as any).from('simulados_alternativas').insert(altsBanco);
+              }
+            } else {
+               console.error('Erro ao duplicar para o banco de questões:', errBancoQ);
+            }
+          }
+        } catch (copyErr) {
+          console.error('Erro ao copiar para o banco:', copyErr);
+        }
       }
 
       onSave()
+      onClose()
     } catch (err: any) {
       console.error(err)
       alert('Erro ao salvar questão: ' + err.message)

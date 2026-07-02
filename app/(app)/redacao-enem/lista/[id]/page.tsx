@@ -45,14 +45,14 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
     const disciplineOrder: string[] = []
     if (reqs) {
       setRequisicoesLimits(reqs)
-      reqs.forEach(r => {
+      reqs.forEach((r: any) => {
         if (!disciplineOrder.includes(r.id_disciplina)) {
           disciplineOrder.push(r.id_disciplina)
         }
       })
 
       if (isProfessor && currentUser) {
-        const myDisciplines = reqs.filter(r => r.id_professor === currentUser.id).map(r => r.id_disciplina)
+        const myDisciplines = reqs.filter((r: any) => r.id_professor === currentUser.id).map((r: any) => r.id_disciplina)
         setProfessorDisciplinas(myDisciplines)
       }
     }
@@ -66,7 +66,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
 
     if (q) {
       // Sort array according to discipline order
-      const sortedQ = q.sort((a, b) => {
+      const sortedQ = q.sort((a: any, b: any) => {
         const indexA = disciplineOrder.indexOf(a.id_disciplina)
         const indexB = disciplineOrder.indexOf(b.id_disciplina)
         if (indexA === -1) return 1
@@ -77,7 +77,7 @@ export default function SimuladoQuestoesPage({ params }: { params: Promise<{ id:
       // If filtered by professor/disciplina, apply filter
       let finalQ = sortedQ
       if (professorFiltro && disciplinaFiltro) {
-        finalQ = finalQ.filter(questao => 
+        finalQ = finalQ.filter((questao: any) => 
           questao.id_professor === professorFiltro && 
           questao.id_disciplina === disciplinaFiltro
         )

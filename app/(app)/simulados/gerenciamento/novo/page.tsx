@@ -97,7 +97,7 @@ export default function NovoSimuladoPage() {
 
     setLoading(true)
     try {
-      const { data: simData, error: simError } = await supabase.from('simulados').insert([{
+      const { data: simData, error: simError } = await (supabase as any).from('simulados').insert([{
         titulo,
         data_aplicacao: dataAplicacao,
         id_bimestre: bimestreId || null,
@@ -109,13 +109,13 @@ export default function NovoSimuladoPage() {
 
       if (requisicoes.length > 0) {
         const reqs = requisicoes.map(r => ({
-          id_simulado: simData.id,
+          id_simulado: (simData as any).id,
           id_disciplina: r.disciplinaId,
           id_professor: r.professorId,
           quantidade_questoes: r.qtdQuestoes,
           status: 'pendente'
         }))
-        const { error: reqError } = await supabase.from('simulados_requisicoes').insert(reqs)
+        const { error: reqError } = await (supabase as any).from('simulados_requisicoes').insert(reqs)
         if (reqError) throw reqError
       }
       
