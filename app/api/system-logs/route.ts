@@ -13,11 +13,19 @@ export async function GET(request: Request) {
   const modulo = searchParams.get('modulo')
   const limit = parseInt(searchParams.get('limit') || '200')
 
-  let query = supabase.from('system_logs')
-    .select('*').order('data_hora', { ascending: false }).limit(limit)
+  let query = supabase.from('system_logs').select('*', { count: 'exact' })
+  
   if (modulo) query = query.eq('modulo', modulo)
 
-  const { data, error } = await query
+  // FIX C: Filtrar por data padrão (últimos 7 dias) para evitar varrer a tabela toda
+  // Caso precise de histórico completo, pode implementar paginação com data custom.
+  const sevenDaysAgo = new Date()
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  query = query.gte('data_hora', sevenDaysAgo.toISOString())
+
+  query = query.order('data_hora', { ascending: false }).limit(limit)
+
+  const { data, error, count } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   // Map snake_case back to camelCase for frontend
   return NextResponse.json((data || []).map(row => ({

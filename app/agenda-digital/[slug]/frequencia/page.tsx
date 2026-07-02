@@ -110,7 +110,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     if (!frequenciasDb || frequenciasDb.length === 0 || !resolvedParams.slug) return;
     
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
-    const currentReaderId = isFamily ? resolvedParams.slug : currentUser?.id;
+    const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
 
     const unreadIds = frequenciasDb

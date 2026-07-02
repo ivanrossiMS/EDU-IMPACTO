@@ -302,7 +302,7 @@ export default function DashboardPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
 
       {/* ═══ Top Row (4 KPIs) ══════════════════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+      <div className="dashboard-kpi-grid">
         {kpiCards.map((kpi) => (
           <div 
             key={kpi.label} 
@@ -348,7 +348,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Main Area Grid (3 Columns) ═══════════════════════════════════ */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, alignItems: 'start' }}>
+      <div className="dashboard-main-grid">
 
         {/* ── Coluna 1: Pedido de Livros ──────────────────────────── */}
         <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -362,7 +362,7 @@ export default function DashboardPage() {
             <Link href="/administrativo/pedidos-livros" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          <div className="dashboard-books-grid">
             <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
               <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
@@ -487,8 +487,8 @@ export default function DashboardPage() {
           </div>
 
           {/* Week View */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#8b5cf6', padding: '10px 14px', borderRadius: '20px', color: 'hsl(var(--bg-surface))', gap: 4, boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }} className="no-scrollbar">
+            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#8b5cf6', padding: '10px 14px', borderRadius: '20px', color: 'hsl(var(--bg-surface))', gap: 4, boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)' }}>
               <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' }}>Hoje</span>
               <span style={{ fontSize: '16px', fontWeight: 900 }}>{hoje.getDate().toString().padStart(2, '0')}</span>
             </div>
@@ -497,7 +497,7 @@ export default function DashboardPage() {
               d.setDate(hoje.getDate() + offset);
               const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
               return (
-                <div key={offset} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0' }}>
+                <div key={offset} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0' }}>
                   <span style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>{dayName}</span>
                   <div style={{ color: 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
                 </div>

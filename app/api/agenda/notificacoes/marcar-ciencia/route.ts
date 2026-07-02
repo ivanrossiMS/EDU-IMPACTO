@@ -19,7 +19,7 @@ export async function POST(request: Request) {
         isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
       }
     }
-    const readerId = isFamily ? alunoId : user.id
+    const readerId = user.id
 
     if (!tipo || !id || !readerId) {
       return NextResponse.json({ error: 'Parâmetros incompletos' }, { status: 400 })

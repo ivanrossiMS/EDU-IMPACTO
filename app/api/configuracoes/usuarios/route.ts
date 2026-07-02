@@ -6,6 +6,29 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
+// ── Cache em memória para lista de colaboradores (TTL = 2 minutos) ──────────
+// Evita N chamadas ao Supabase Auth por cada page mount nos 16+ locais do app.
+const _colaboradoresCache = new Map<string, { data: any; ts: number }>()
+const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutos
+
+function getCachedColaboradores(key: string) {
+  const entry = _colaboradoresCache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    _colaboradoresCache.delete(key)
+    return null
+  }
+  return entry.data
+}
+
+function setCachedColaboradores(key: string, data: any) {
+  _colaboradoresCache.set(key, { data, ts: Date.now() })
+}
+
+export function invalidateColaboradoresCache() {
+  _colaboradoresCache.clear()
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url)
@@ -22,25 +45,11 @@ export async function GET(req: Request) {
       return NextResponse.json({ masterExists: !!data })
     }
 
+    // FIX A: requireAuth() já valida o JWT — não chamar getUser() novamente
     const { user, errorResponse } = await requireAuth()
     if (errorResponse) return errorResponse
 
     const supabase = await createProtectedClient()
-    
-    let supabaseUser = null;
-    try {
-      const { data } = await supabase.auth.getUser()
-      supabaseUser = data.user;
-    } catch (err: any) {
-      if (err?.message?.includes('stole it') || err?.message?.includes('Lock')) {
-        try {
-          const retryRes = await supabase.auth.getUser()
-          supabaseUser = retryRes.data.user;
-        } catch (e) {}
-      }
-    }
-    
-    if (!supabaseUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const type = url.searchParams.get('type')
     const pageParam = url.searchParams.get('page')
@@ -53,23 +62,60 @@ export async function GET(req: Request) {
     const to = from + limit - 1
 
     if (type === 'colaboradores') {
-      let query = supabase.from('system_users').select('*', { count: 'exact' })
+      // FIX E: Modo "dropdown" — quando limit=1000, as páginas só precisam de id/nome/email/perfil
+      // para preencher selects. Retornar só dados da DB sem chamar o Supabase Auth.
+      const isDropdownMode = limit >= 500
+
+      // FIX D: Checar cache em memória (TTL 2min) para evitar N chamadas repetidas
+      // Cache só ativo no modo dropdown (sem search, sem paginação real)
+      const cacheKey = `colaboradores-dropdown`
+      if (isDropdownMode && !search) {
+        const cached = getCachedColaboradores(cacheKey)
+        if (cached) {
+          return NextResponse.json(cached)
+        }
+      }
+
+      let query = supabase.from('system_users').select(
+        isDropdownMode 
+          ? 'id, nome, email, cargo, perfil, status' // campos mínimos para dropdowns
+          : '*',
+        { count: 'exact' }
+      )
       if (search) {
         query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%`)
       }
       
-      const { data: sysUsers, count } = await query.order('nome').range(from, to)
+      const { data: sysUsers, count } = await query
+        .order('nome')
+        .range(from, isDropdownMode ? 999 : to)
 
-      // Busca dados do Auth APENAS para os usuários desta página (máx 20)
-      // Em vez de carregar 10.000 usuários para mapear localmente.
+      // FIX E: No modo dropdown, pular Auth queries — economiza N×HTTP round-trips
+      // Os dados de perfil já estão na coluna `perfil` da system_users
+      if (isDropdownMode) {
+        const mappedDropdown = (sysUsers || []).map((u: any) => ({
+          id: u.id,
+          nome: u.nome,
+          email: (u.email || '').trim().toLowerCase(),
+          cargo: u.cargo || 'Não definido',
+          perfil: u.perfil || 'Colaborador',
+          status: u.status || 'ativo',
+          ultimoAcesso: 'N/A'
+        }))
+        const result = { data: mappedDropdown, total: count || 0, page: 1, limit }
+        if (!search) setCachedColaboradores(cacheKey, result)
+        return NextResponse.json(result)
+      }
+
+      // Modo administração (limit <= 20): enriquecer com dados do Supabase Auth
       const supabaseAdmin = getAdminClient()
       const authMap = new Map<string, any>()
       if (sysUsers && sysUsers.length > 0) {
-        // Busca em paralelo apenas os usuários desta página pelo ID
+        // Busca em paralelo apenas os usuários desta página (máx 20 por vez)
         const authResults = await Promise.allSettled(
           sysUsers.map((u: any) => supabaseAdmin.auth.admin.getUserById(u.id))
         )
-        authResults.forEach((result, i) => {
+        authResults.forEach((result) => {
           if (result.status === 'fulfilled' && result.value.data?.user) {
             const au = result.value.data.user
             if (au.email) authMap.set(au.email.toLowerCase(), au)
@@ -82,16 +128,14 @@ export async function GET(req: Request) {
         const authUser = authMap.get(email)
 
         const sysProfile = authUser?.user_metadata?.profile_code
-        let perfilStr = 'Colaborador'
-        if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
-        else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
-        else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
-        else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
-        else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
-        else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
-
-        if (u.perfil && typeof u.perfil === 'string') {
-          perfilStr = u.perfil
+        let perfilStr = u.perfil || 'Colaborador'
+        if (!u.perfil) {
+          if (sysProfile === 'DIRECAO') perfilStr = 'Direção'
+          else if (sysProfile === 'SECRETARIA') perfilStr = 'Secretaria'
+          else if (sysProfile === 'FINANCEIRO') perfilStr = 'Financeiro'
+          else if (sysProfile === 'COORDENACAO') perfilStr = 'Coordenação'
+          else if (sysProfile === 'PROFESSOR') perfilStr = 'Professor'
+          else if (sysProfile === 'PORTARIA') perfilStr = 'Portaria'
         }
 
         return {

@@ -128,7 +128,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     if (!aluno?.id || ocorrenciasFiltradas.length === 0) return;
     
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
-    const currentReaderId = isFamily ? aluno.id : currentUser?.id;
+    const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
 
     const unreadIds = ocorrenciasFiltradas

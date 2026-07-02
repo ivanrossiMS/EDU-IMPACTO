@@ -551,7 +551,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const currentReaderId = (isFamily ? resolvedParams.slug : currentUser?.id) || '';
+            const currentReaderId = currentUser?.id || '';
             const isRead = !!(c.leituras || {})[currentReaderId];
             const isCiencia = !!(c.ciencias || {})[currentReaderId];
 

@@ -1,19 +1,9 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// Inicializa Supabase Admin para gravar logs independentemente do RLS ou auth state
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
-  }
-})
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getAdminClient()
     const logs = await req.json()
     if (!logs || !Array.isArray(logs) || logs.length === 0) {
       return NextResponse.json({ success: true, count: 0 })
