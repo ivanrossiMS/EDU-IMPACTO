@@ -113,6 +113,7 @@ export function DraggableHeaderField({
       className={`header-field ${isEditMode ? 'editable' : ''} ${isDragging ? 'dragging' : ''}`}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
+      onDragStart={(e) => e.preventDefault()}
       tabIndex={isEditMode ? 0 : -1}
       style={{
         position: 'absolute',
@@ -125,7 +126,8 @@ export function DraggableHeaderField({
         whiteSpace: 'nowrap',
         cursor: isEditMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
         pointerEvents: isEditMode ? 'auto' : 'none',
-        zIndex: isEditMode ? 10 : 2
+        zIndex: isEditMode ? 10 : 2,
+        userSelect: isEditMode ? 'none' : 'auto',
       }}
       title={isEditMode ? field.label : undefined}
     >

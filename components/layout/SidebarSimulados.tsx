@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Sparkles, Loader2
+  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Sparkles, Loader2, Upload
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -19,12 +19,9 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/simulados', icon: <LayoutDashboard size={18} /> },
-  { label: 'Gerenciar Simulados', href: '/simulados/gerenciamento', icon: <PenTool size={18} />, groupId: 'simulados' },
-  { label: 'Meus Simulados', href: '/simulados/lista', icon: <FileText size={18} />, groupId: 'simulados' },
-  { label: 'Gerenciar Provas', href: '/provas/gerenciamento', icon: <PenTool size={18} />, groupId: 'provas' },
-  { label: 'Minhas Provas', href: '/provas/lista', icon: <FileText size={18} />, groupId: 'provas' },
-  { label: 'Gerenciar Redação ENEM', href: '/redacao-enem/gerenciamento', icon: <PenTool size={18} />, groupId: 'redacao' },
-  { label: 'Minhas Redações ENEM', href: '/redacao-enem/lista', icon: <FileText size={18} />, groupId: 'redacao' },
+  { label: 'Provas via Upload', href: '/simulados/provas-upload', icon: <Upload size={18} />, groupId: 'upload-provas' },
+  { label: 'Simulados via Upload', href: '/simulados/simulados-upload', icon: <Upload size={18} />, groupId: 'upload-simulados' },
+  { label: 'Redação via Upload', href: '/simulados/redacao-upload', icon: <Upload size={18} />, groupId: 'upload-redacao' },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
 ]
@@ -60,16 +57,16 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Meus Simulados', 'Minhas Provas', 'Gerenciar Provas', 'Minhas Redações ENEM'].includes(item.label)
+      return ['Dashboard', 'Provas via Upload', 'Simulados via Upload', 'Redação via Upload'].includes(item.label)
     }
     return true
   }).map(item => {
-    if (!isProfessor) {
-      if (item.label === 'Meus Simulados') return { ...item, label: 'Todos Simulados' }
-      if (item.label === 'Minhas Provas') return { ...item, label: 'Todas Provas' }
-      if (item.label === 'Minhas Redações ENEM') return { ...item, label: 'Todas Redações ENEM' }
+    if (isProfessor) {
+      if (item.label === 'Provas via Upload') return { ...item, label: 'Minhas Provas' }
+      if (item.label === 'Simulados via Upload') return { ...item, label: 'Meus Simulados' }
+      if (item.label === 'Redação via Upload') return { ...item, label: 'Minhas Redações' }
     }
-    return item;
+    return item
   })
 
   // Force close on mobile default

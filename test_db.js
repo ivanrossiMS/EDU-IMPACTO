@@ -1,8 +1,14 @@
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-async function test() {
-  const { data, error } = await supabase.from('provas').select('*').limit(1);
-  console.log(data);
+const fs = require('fs');
+
+const envFile = fs.readFileSync('.env.local', 'utf-8');
+const urlMatch = envFile.match(/NEXT_PUBLIC_SUPABASE_URL=(.*)/);
+const keyMatch = envFile.match(/NEXT_PUBLIC_SUPABASE_ANON_KEY=(.*)/);
+
+if (urlMatch && keyMatch) {
+  const supabase = createClient(urlMatch[1], keyMatch[1]);
+  supabase.from('redacao_upload').select('data_limite_upload').limit(1).then(({data, error}) => {
+    if (error) console.error(error);
+    else console.log("Success");
+  });
 }
-test();

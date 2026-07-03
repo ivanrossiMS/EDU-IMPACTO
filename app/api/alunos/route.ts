@@ -471,7 +471,8 @@ export async function POST(request: Request) {
         }
         const { data: existingRespEmail } = await query.maybeSingle()
         if (existingRespEmail) {
-          throw new Error(`Este e-mail já está sendo utilizado por outro responsável (${existingRespEmail.nome})!`)
+          // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
+          respDataToSave.id = existingRespEmail.id
         }
       }
       
@@ -701,7 +702,8 @@ export async function PUT(request: Request) {
         }
         const { data: existingRespEmail } = await query.maybeSingle()
         if (existingRespEmail) {
-          throw new Error(`Este e-mail já está sendo utilizado por outro responsável (${existingRespEmail.nome})!`)
+          // Em vez de dar erro, vamos usar o responsável existente e atualizar os dados dele
+          respDataToSave.id = existingRespEmail.id
         }
       }
       

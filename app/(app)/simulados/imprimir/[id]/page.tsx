@@ -17,7 +17,7 @@ export default function ImprimirSimuladoPage() {
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [fontSize, setFontSize] = useState<number>(12) // base font size in px
-  const [columns, setColumns] = useState<number>(2) // Layout de colunas
+  const [columns, setColumns] = useState<number>(1) // Layout de colunas
   const [config, setConfig] = useState<any>(null)
 
   useEffect(() => {

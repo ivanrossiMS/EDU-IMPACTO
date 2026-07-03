@@ -156,10 +156,25 @@ export async function POST(request: Request) {
     
     let wasConfirmed = false
     if (existingRow?.dados) {
+      let existingDados: any = {}
       if (typeof existingRow.dados === 'string') {
-        try { wasConfirmed = JSON.parse(existingRow.dados).status === 'confirmed' } catch(e){}
+        try { existingDados = JSON.parse(existingRow.dados) } catch(e){}
       } else {
-        wasConfirmed = (existingRow.dados as any).status === 'confirmed'
+        existingDados = existingRow.dados
+      }
+      wasConfirmed = existingDados.status === 'confirmed'
+
+      // Race condition protection: Prevent delayed "waiting" calls from overwriting "confirmed"
+      // If existing is confirmed, and incoming is waiting/called, it's either a stale update OR a revert.
+      // A genuine revert has a new `calledAt` that is > `confirmedAt`.
+      if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called')) {
+        const incomingCalledAt = new Date(row.dados.calledAt || 0).getTime()
+        const existingConfirmedAt = new Date(existingDados.confirmedAt || 0).getTime()
+        // Se a "chamada" atual é mais antiga que a "confirmação" existente, é um POST atrasado (stale)
+        if (incomingCalledAt < existingConfirmedAt) {
+          console.warn(`[API Saida] Stale update prevented for call ${row.id}. Incoming status: ${row.dados.status}, Existing status: ${existingDados.status}`)
+          return NextResponse.json({ id: existingRow.id, ...(existingDados || {}) }, { status: 200 })
+        }
       }
     }
 

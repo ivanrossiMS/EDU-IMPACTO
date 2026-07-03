@@ -8,7 +8,8 @@ import { PageContent } from './PageContent';
 interface PaginationEngineProps {
   questoes: any[];
   columns: number;
-  fontSize: number;
+  enunciadoFontSize: number;
+  alternativasFontSize: number;
   config: any;
   simulado: any;
   onEditEnunciado: (qId: string, newText: string) => void;
@@ -25,6 +26,50 @@ interface PaginationEngineProps {
   forceExtraPage?: boolean;
 }
 
+export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
+  const parts: { type: 'text'|'img', content?: string, url?: string, index?: number }[] = [];
+  if (!enunciado) {
+    if (imagens && imagens.length > 0) {
+      imagens.forEach((url, i) => parts.push({ type: 'img', url, index: i }));
+    }
+    return parts;
+  }
+
+  let remaining = enunciado;
+  const regex = /\[IMAGEM\s+(\d+)\]/i;
+  
+  while (true) {
+    const match = remaining.match(regex);
+    if (!match) {
+      if (remaining.trim()) parts.push({ type: 'text', content: remaining });
+      break;
+    }
+    
+    const index = match.index!;
+    const textBefore = remaining.substring(0, index);
+    if (textBefore.trim()) {
+      parts.push({ type: 'text', content: textBefore });
+    }
+    
+    const imgIndex = parseInt(match[1], 10) - 1; 
+    if (imagens && imgIndex >= 0 && imgIndex < imagens.length) {
+      parts.push({ type: 'img', url: imagens[imgIndex], index: imgIndex });
+    }
+    
+    remaining = remaining.substring(index + match[0].length);
+  }
+  
+  if (imagens) {
+    const referencedIndices = parts.filter(p => p.type === 'img').map(p => p.index);
+    imagens.forEach((url, i) => {
+      if (!referencedIndices.includes(i)) {
+        parts.push({ type: 'img', url, index: i });
+      }
+    });
+  }
+  return parts;
+}
+
 const MM_TO_PX = 3.7795;
 const PAGE_H = 297 * MM_TO_PX;
 const HEADER_1 = 80 * MM_TO_PX; // Height of cover image header + margins
@@ -34,7 +79,7 @@ const BLOCK_SPACING = 24;
 const ALT_SPACING = 12;
 
 export function PaginationEngine({
-  questoes, columns, fontSize, config, simulado,
+  questoes, columns, enunciadoFontSize, alternativasFontSize, config, simulado,
   onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage
 }: PaginationEngineProps) {
@@ -63,8 +108,8 @@ export function PaginationEngine({
 
       const avail1El = shadow.querySelector('[data-measure-avail-1]');
       const availNEl = shadow.querySelector('[data-measure-avail-n]');
-      const avail1Px = avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 18) * 3.7795;
-      const availNPx = availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 18) * 3.7795;
+      const avail1Px = avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795;
+      const availNPx = availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795;
 
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);
@@ -107,12 +152,11 @@ export function PaginationEngine({
           questionMargin = BLOCK_SPACING; // Ensure margin between disc header and question
         }
 
-        const enunH = heights[`${q.id}-enunciado`] || 0;
-        let totalH = enunH;
-        
-        const imgsH = (q.imagens || []).map((img: string, i: number) => {
-          const h = heights[`${q.id}-img-${i}`] || 0;
-          totalH += h + ALT_SPACING;
+        const parsedParts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+        let totalH = 0;
+        const partHeights = parsedParts.map((part, pIdx) => {
+          const h = heights[part.type === 'text' ? `${q.id}-enun-txt-${pIdx}` : `${q.id}-img-${part.index}`] || 0;
+          totalH += h + (pIdx > 0 ? ALT_SPACING : 0);
           return h;
         });
 
@@ -147,10 +191,19 @@ export function PaginationEngine({
 
         if (currentY + questionMargin + totalH <= getAvailableHeight()) {
           pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, questionMargin);
+        } else if (alternativasLayout === 'horizontal' && totalH < 200) {
+          // Orphan protection: Only for horizontal layout.
+          // If it doesn't fit, don't split the question text from its horizontal alternatives.
+          advanceCol();
+          pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, 0);
         } else {
-          pushBlock({ type: 'part_enunciado', q, qIndex: idx }, enunH, questionMargin);
-          (q.imagens || []).forEach((img: string, i: number) => {
-             pushBlock({ type: 'part_img', q, imgUrl: img, imgIndex: i }, imgsH[i], ALT_SPACING);
+          parsedParts.forEach((part, pIdx) => {
+            const margin = pIdx === 0 ? questionMargin : ALT_SPACING;
+            if (part.type === 'text') {
+              pushBlock({ type: 'part_enun_txt', q, content: part.content, isFirst: pIdx === 0, qIndex: idx }, partHeights[pIdx], margin);
+            } else {
+              pushBlock({ type: 'part_img', q, imgUrl: part.url, imgIndex: part.index }, partHeights[pIdx], margin);
+            }
           });
           
           if (q.tipo_questao === 'descritiva') {
@@ -181,6 +234,11 @@ export function PaginationEngine({
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
+      // Se for uma redação, sempre adiciona uma página 2 (para o fundo "demais páginas")
+      if (simulado?.isRedacao && newPages.length === 1) {
+        newPages.push(Array.from({ length: columns }, () => []));
+      }
+
       if (forceExtraPage) {
         newPages.push(Array.from({ length: columns }, () => []));
       }
@@ -190,10 +248,10 @@ export function PaginationEngine({
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [questoes, columns, fontSize, trigger, forceExtraPage]);
+  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
-  const shadowColWidth = columns === 1 ? '180mm' : '84mm';
+  const shadowColWidth = columns === 1 ? '174mm' : '81mm';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
@@ -205,13 +263,13 @@ export function PaginationEngine({
           visibility: 'hidden', 
           top: 0, left: 0, 
           width: shadowColWidth,
-          fontSize: `${fontSize}px`, 
+          fontSize: `${enunciadoFontSize}px`, 
           lineHeight: 1.6, 
           zIndex: -1000 
         }}
       >
-        <div data-measure-avail-1 style={{ height: 'calc(297mm - 75mm - 18mm)' }} />
-        <div data-measure-avail-n style={{ height: 'calc(297mm - 18mm - 18mm)' }} />
+        <div data-measure-avail-1 style={{ height: 'calc(297mm - 75mm - 42mm)' }} />
+        <div data-measure-avail-n style={{ height: 'calc(297mm - 18mm - 42mm)' }} />
 
         {questoes.map((q, idx) => {
           const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
@@ -249,19 +307,23 @@ export function PaginationEngine({
                 {idx + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <HtmlContent html={q.enunciado} style={{ wordBreak: 'break-word', marginBottom: 12 }} />
+                {parseEnunciadoParts(q.enunciado, q.imagens || []).map((part, pIdx) => (
+                  part.type === 'text' ? (
+                    <div key={`txt-${pIdx}`} data-measure data-id={`${q.id}-enun-txt-${pIdx}`}>
+                      <HtmlContent html={part.content || ''} style={{ wordBreak: 'break-word' }} />
+                    </div>
+                  ) : (
+                    <img 
+                      key={`img-${part.index}`}
+                      data-measure 
+                      data-id={`${q.id}-img-${part.index}`} 
+                      src={part.url} 
+                      style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginTop: pIdx > 0 ? 12 : 0, display: 'block' }} 
+                    />
+                  )
+                ))}
               </div>
             </div>
-
-            {q.imagens?.map((img: string, i: number) => (
-              <img 
-                key={`shadow-img-${i}`}
-                data-measure 
-                data-id={`${q.id}-img-${i}`} 
-                src={img} 
-                style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginTop: 12, display: 'block' }} 
-              />
-            ))}
 
             {alternativasLayout === 'horizontal' ? (
               <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 }}>
@@ -303,21 +365,51 @@ export function PaginationEngine({
                 })()}
               </div>
             ) : (
-              q.simulados_alternativas?.map((a: any) => (
-                <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                    border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                  }}>
-                    {a.letra}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    {a.imagem_url && <img src={a.imagem_url} style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
-                    <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
-                  </div>
-                </div>
-              ))
+              (() => {
+                const imgWidths = q.simulados_alternativas
+                  ?.filter((a: any) => a.imagem_url)
+                  .map((a: any) => {
+                    const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
+                    const params = new URLSearchParams(hashStr);
+                    const wStr = params.get('w');
+                    return wStr ? parseInt(wStr) : 250;
+                  }) || [];
+                const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                return q.simulados_alternativas?.map((a: any) => {
+                  const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                  const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                  const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                  const params = new URLSearchParams(hashStr);
+                  const imgWidthStr = params.get('w');
+                  const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                  const imgAlign = params.get('a') || 'left';
+                  const justifyContent = imgAlign === 'center' ? 'center' : imgAlign === 'right' ? 'flex-end' : 'flex-start';
+                  const effectiveWidth = imgWidth || maxImgWidth;
+                  
+                  return (
+                    <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                        border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                      }}>
+                        {a.letra}
+                      </div>
+                      <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                        {a.imagem_url && (
+                          <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
+                            <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
+                              <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                            </div>
+                          </div>
+                        )}
+                        <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                      </div>
+                    </div>
+                  );
+                });
+              })()
             )}
           </div>
         )})}
@@ -343,7 +435,7 @@ export function PaginationEngine({
             }}
           >
             <PageContent 
-              page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
+              page={page} pIndex={pIndex} enunciadoFontSize={enunciadoFontSize} alternativasFontSize={alternativasFontSize} config={config} simulado={simulado} 
               onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
               onEditAlternativa={onEditAlternativa} 
               onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
@@ -368,7 +460,7 @@ export function PaginationEngine({
               }}
             >
               <PageContent 
-                page={page} pIndex={pIndex} fontSize={fontSize} config={config} simulado={simulado} 
+                page={page} pIndex={pIndex} enunciadoFontSize={enunciadoFontSize} alternativasFontSize={alternativasFontSize} config={config} simulado={simulado} 
                 onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
                 onEditAlternativa={onEditAlternativa} 
                 onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 

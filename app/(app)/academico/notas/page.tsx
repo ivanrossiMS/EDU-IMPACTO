@@ -164,22 +164,24 @@ export default function NotasPage() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>Importar Notas</h3>
                     <p style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>Copie o texto do PDF e cole no campo abaixo para processar.</p>
                     
-                    <textarea 
-                      id="paste-text"
-                      style={{ width: '100%', height: '200px', padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: 'monospace', resize: 'vertical' }}
-                      placeholder="Cole o texto do boletim aqui..."
-                    />
-                    
-                    <button 
-                      type="button" 
-                      style={{ marginTop: 12, height: '38px', padding: '0 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-                      onClick={() => {
-                        const text = (document.getElementById('paste-text') as HTMLTextAreaElement)?.value
-                        if (text) handleTextUpload(text)
-                      }}
-                    >
-                      Processar Texto
-                    </button>
+                    <div style={{ position: 'relative', width: '100%', height: '200px', padding: '12px', border: '2px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer', transition: 'all 0.2s' }}
+                         onMouseEnter={e => e.currentTarget.style.borderColor = '#2563eb'}
+                         onMouseLeave={e => e.currentTarget.style.borderColor = '#cbd5e1'}>
+                      <input 
+                        type="file" 
+                        accept="application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleFileUpload(file)
+                        }}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+                      />
+                      <Upload size={32} color="#94a3b8" />
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#334155' }}>Arraste ou clique para selecionar o PDF</div>
+                        <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>A Inteligência Artificial extrairá as notas automaticamente.</div>
+                      </div>
+                    </div>
 
                     {uploading && (
                       <div style={{ marginTop: 24 }}>
@@ -586,47 +588,38 @@ export default function NotasPage() {
     }
   }
 
-  async function handleTextUpload(text: string) {
+  async function handleFileUpload(file: File) {
     setUploading(true)
     setProgress(10)
     
     try {
-      const alunosDetectados = []
-      const blocos = text.split(/Boletim De Avaliação/i)
+      const formData = new FormData()
+      formData.append('file', file)
 
-      for (const bloco of blocos) {
-        if (!bloco.trim()) continue
+      const interval = setInterval(() => {
+        setProgress(p => p < 90 ? p + 5 : p)
+      }, 500)
 
-        const codigoMatch = bloco.match(/Código:\s*(\d+)/i)
-        const codigo = codigoMatch ? codigoMatch[1] : null
+      const response = await fetch('/api/boletins/extrair-pdf', {
+        method: 'POST',
+        body: formData
+      })
 
-        const alunoMatch = bloco.match(/Aluno:\s*([^\n\r]+)/i)
-        const nomeArquivo = alunoMatch ? alunoMatch[1].trim() : 'Aluno no Arquivo'
+      clearInterval(interval)
+      setProgress(95)
 
-        if (!codigo) continue
-
-        const disciplinas: any[] = []
-        const lineRegex = /^([A-ZÀ-Ú\s\-+]+?)\s+([\d,]+|Dez)\s+([\d,]+|Dez)\s+([\d,]+|Dez)\s+([\d,]+|Dez)$/gm
-        
-        let match
-        while ((match = lineRegex.exec(bloco)) !== null) {
-          disciplinas.push({
-            nome: match[1].trim(),
-            avm: match[2],
-            avb: match[3],
-            mediaF: match[4],
-            mediaG: match[5]
-          })
-        }
-
-        alunosDetectados.push({
-          codigo,
-          nomeArquivo,
-          disciplinas,
-          bimestre: '1º Bimestre',
-          ano: 2026
-        })
+      if (!response.ok) {
+        const err = await response.json()
+        throw new Error(err.error || 'Erro na leitura do PDF')
       }
+
+      const { data } = await response.json()
+      
+      if (!Array.isArray(data)) {
+         throw new Error('Formato de dados inválido retornado pela IA.')
+      }
+
+      const alunosDetectados = data
 
       setProgress(70)
       
@@ -658,7 +651,7 @@ export default function NotasPage() {
       }, 500)
 
     } catch (error: any) {
-      alert('Erro ao processar texto: ' + error.message)
+      alert('Erro ao processar PDF: ' + error.message)
       setUploading(false)
     }
   }

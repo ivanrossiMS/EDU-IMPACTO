@@ -101,23 +101,26 @@ function SimuladosLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: 'hsl(var(--bg-app))' }}>
       <SidebarSimulados />
-      <div 
-        style={{ 
-          flex: 1, 
-          height: '100vh', 
-          overflowY: 'auto', 
+      <div
+        style={{
+          flex: 1,
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
           position: 'relative',
           background: 'hsl(var(--bg-app))'
         }}
         className="no-scrollbar"
       >
-        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', minHeight: '100vh', paddingBottom: 60 }}>
+        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', minHeight: '100vh', paddingBottom: 60 }} className="simulados-content">
           {children}
         </div>
       </div>
       <style dangerouslySetInnerHTML={{__html: `
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .simulados-content * { max-width: 100%; box-sizing: border-box; word-break: break-word; overflow-wrap: anywhere; }
+        .simulados-content img { height: auto; }
       `}} />
     </div>
   )
