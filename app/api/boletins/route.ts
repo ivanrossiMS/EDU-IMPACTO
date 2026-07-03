@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       if (targetIds.length > 0) {
         const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data[0].aluno_id).single()
         const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-        sendAgendaPushNotification({
+        await sendAgendaPushNotification({
           type: 'notas',
           itemId: String(data[0].id),
           title: '🏆 Novas Notas Lançadas!',
