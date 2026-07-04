@@ -1230,7 +1230,7 @@ export function PageContent({
                             {a.imagem_url && (
                               <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
                                 <img src={imgBaseUrl} style={{ width: '100%', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                {onEditAlternativaImage && (
+                                {onEditAlternativaImage && !readOnly && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                     <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
                                       <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
@@ -1318,7 +1318,7 @@ export function PageContent({
                               </div>
                             )}
                             <HtmlContent editable={!readOnly} html={a.texto} onBlurHtml={(newHtml) => { onEditAlternativa(qId, a.id, newHtml); forceRepaginate(); }} style={{ wordBreak: 'break-word', outline: 'none' }} />
-                            {onEditAlternativaImage && (
+                            {onEditAlternativaImage && !readOnly && (
                               <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                 <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
                                 {imgMenuOpen === a.id && (
@@ -1330,7 +1330,7 @@ export function PageContent({
                               </div>
                             )}
                           </div>
-                          {onRemoveAlternativa && (
+                          {onRemoveAlternativa && !readOnly && (
                             <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ position: 'absolute', right: -30, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
                           )}
                         </div>
@@ -1468,7 +1468,7 @@ export function PageContent({
                                 onBlurHtml={(newHtml) => { onEditAlternativa(q.id, a.id, newHtml); forceRepaginate(); }}
                                 style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
                               />
-                              {onEditAlternativaImage && (
+                              {onEditAlternativaImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                   <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
                                   {imgMenuOpen === a.id && (
@@ -1483,17 +1483,19 @@ export function PageContent({
                           );
                         })()}
                       </div>
-                      <button
-                        className="no-print alt-delete-btn"
-                        onClick={() => {
-                          onRemoveAlternativa(q.id, a.id);
-                          forceRepaginate();
-                        }}
-                        style={{ position: 'absolute', right: -30, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                        title="Remover alternativa"
-                      >
-                        <X size={14} />
-                      </button>
+                      {!readOnly && onRemoveAlternativa && (
+                        <button
+                          className="no-print alt-delete-btn"
+                          onClick={() => {
+                            onRemoveAlternativa(q.id, a.id);
+                            forceRepaginate();
+                          }}
+                          style={{ position: 'absolute', right: -30, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          title="Remover alternativa"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
