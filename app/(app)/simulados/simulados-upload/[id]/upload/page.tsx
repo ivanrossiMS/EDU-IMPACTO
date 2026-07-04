@@ -94,7 +94,7 @@ export default function UploadSimuladoPage() {
         }
         
         if (qs.length > 0) {
-          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true })))
+          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
           setUploadStep('review')
         }
       }
@@ -128,7 +128,7 @@ export default function UploadSimuladoPage() {
         setUploadStep('idle')
         return
       }
-      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true }))
+      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 }))
       setQuestoes(parsed)
       setUploadStep('review')
     } catch (e: any) {
