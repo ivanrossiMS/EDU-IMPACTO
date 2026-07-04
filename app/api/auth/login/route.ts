@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     const { email: rawLogin, password, keepConnected } = await request.json()
     
     if (!rawLogin || !password) {
-      return NextResponse.json({ error: 'E-mail/matrícula e senha são obrigatórios' }, { status: 400 })
+      return NextResponse.json({ error: 'E-mail/matrícula e senha são obrigatórios' }, { status: 200 })
     }
 
     const loginInput = rawLogin.trim().toLowerCase()
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         resolvedEmail   = (responsavelRecord.email || '').trim().toLowerCase()
         userType        = 'responsavel'
         if (!resolvedEmail || !resolvedEmail.includes('@')) {
-          return NextResponse.json({ error: 'Responsável sem e-mail cadastrado. Faça o Primeiro Acesso primeiro.' }, { status: 401 })
+          return NextResponse.json({ error: 'Responsável sem e-mail cadastrado. Faça o Primeiro Acesso primeiro.' }, { status: 200 })
         }
       }
     } else {
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       if (!isAllowed) {
         return NextResponse.json({ 
           error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
-        }, { status: 403 })
+        }, { status: 200 })
       }
     }
 
@@ -215,9 +215,9 @@ export async function POST(request: NextRequest) {
 
       // Friendly messages per user type
       if (userType === 'aluno') {
-        return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 401 })
+        return NextResponse.json({ error: 'Matrícula ou senha incorreta. Se nunca acessou, clique em "Primeiro Acesso".' }, { status: 200 })
       }
-      return NextResponse.json({ error: 'Credenciais inválidas.' }, { status: 401 })
+      return NextResponse.json({ error: 'Credenciais inválidas.' }, { status: 200 })
     }
 
     // ── Enrich metadata & Database validation based on actual DB tables ──────────────────────────
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
             }
           )
           await supabaseSignOut.auth.signOut()
-          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 403 })
+          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
         }
         nome   = dbSystemUser.nome   || nome
         cargo  = dbSystemUser.cargo  || cargo
@@ -304,7 +304,7 @@ export async function POST(request: NextRequest) {
       )
       await supabaseSignOut.auth.signOut()
 
-      return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 403 })
+      return NextResponse.json({ error: 'Acesso não autorizado. Cadastro não encontrado no sistema escolar.' }, { status: 200 })
     }
 
     // Persist enriched metadata if changed

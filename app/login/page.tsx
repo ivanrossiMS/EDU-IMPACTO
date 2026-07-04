@@ -220,6 +220,9 @@ export default function LoginPage() {
       }
 
       const authData = await res.json()
+      if (authData.error) {
+        throw new Error(authData.error)
+      }
       
       // Update local context with enriched profile from system_users
       const meta = authData.user?.user_metadata || {}
