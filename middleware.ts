@@ -47,6 +47,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Permite checagem inicial de master/setup sem autenticação
+  if (pathname === '/api/configuracoes/usuarios' && request.nextUrl.searchParams.get('checkMaster') === 'true') {
+    return NextResponse.next()
+  }
+
   let response = NextResponse.next({
     request: { headers: request.headers },
   })
