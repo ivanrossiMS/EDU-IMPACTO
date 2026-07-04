@@ -188,7 +188,38 @@ export default function SimuladosDashboard() {
   // ==============================
   if (isProfessor) {
     return (
-      <div style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
+      <div className="simulados-dash-container" style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
+        <style>{`
+          @media (max-width: 768px) {
+            .simulados-dash-container {
+              padding: 16px !important;
+            }
+            .task-feed-card {
+              padding: 16px !important;
+              gap: 12px !important;
+            }
+            .task-feed-card > div:first-child {
+              gap: 12px !important;
+              min-width: 0 !important;
+            }
+            .task-feed-card-content {
+              min-width: 0 !important;
+            }
+            .task-feed-card-info {
+              flex-direction: column !important;
+              align-items: flex-start !important;
+              gap: 4px !important;
+            }
+            .task-feed-card-arrow {
+              display: none !important;
+            }
+            .task-feed-card h3 {
+              font-size: 16px !important;
+              word-break: break-word !important;
+              white-space: normal !important;
+            }
+          }
+        `}</style>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 1200, margin: '0 auto' }}>
           
           {/* Header */}
@@ -248,12 +279,13 @@ export default function SimuladosDashboard() {
                 {profTasks.map((task) => (
                   <Link href={task.link} key={task.id} style={{ textDecoration: 'none' }}>
                     <motion.div whileHover={{ scale: 1.01, x: 4 }} whileTap={{ scale: 0.99 }}
+                      className="task-feed-card"
                       style={{ background: 'hsl(var(--bg-surface))', border: `1px solid ${task.color}30`, borderRadius: 20, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, cursor: 'pointer', transition: 'all 0.2s', boxShadow: `0 4px 20px -10px ${task.color}20` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 20, minWidth: 0 }}>
                         <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg, ${task.color}20, ${task.color}05)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <task.icon size={24} color={task.color} />
                         </div>
-                        <div>
+                        <div className="task-feed-card-content" style={{ minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                             <span style={{ fontSize: 11, fontWeight: 800, color: task.color, background: `${task.color}15`, padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                               {task.type}
@@ -265,7 +297,7 @@ export default function SimuladosDashboard() {
                             )}
                           </div>
                           <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 4px' }}>{task.title}</h3>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 500 }}>
+                          <div className="task-feed-card-info" style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 500, flexWrap: 'wrap' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookMarked size={14} /> {task.disciplina}</span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: task.prazo && new Date(task.prazo) < new Date() ? '#ef4444' : 'inherit' }}>
                               <Calendar size={14} /> Prazo: {task.prazo ? task.prazo.split('-').reverse().join('/') : 'N/A'}
@@ -273,7 +305,7 @@ export default function SimuladosDashboard() {
                           </div>
                         </div>
                       </div>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div className="task-feed-card-arrow" style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <ArrowRight size={20} />
                       </div>
                     </motion.div>
