@@ -372,7 +372,7 @@ export default function DashboardPage() {
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.pendenteCount}</div>
             </div>
             <div style={{ background: 'hsl(var(--bg-surface))beb', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Em Preparo</div>
+              <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pedido Feito</div>
               <div style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.preparadoCount}</div>
             </div>
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '16px' }}>
