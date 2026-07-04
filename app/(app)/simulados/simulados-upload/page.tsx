@@ -511,7 +511,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                               <BookOpen size={16} /> Adaptar
                             </button>
                             
-                            <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
+                            <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`} style={{ textDecoration: 'none', display: 'block' }}>
                               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
                                 <Printer size={16} /> Imprimir

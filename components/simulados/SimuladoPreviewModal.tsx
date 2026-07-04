@@ -524,6 +524,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
           <PaginationEngine
             questoes={mappedQuestoes.filter(q => selectedIds.has(q.id))}
             columns={columns}
+            readOnly={true}
             enunciadoFontSize={enunciadoFontSize}
             alternativasFontSize={alternativasFontSize}
             config={config}
