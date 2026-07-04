@@ -100,7 +100,7 @@ export default function UploadProvaPage() {
       }
       
       if (searchParams.get('print') === 'true') {
-        setShowPreviewIsolated(true)
+        setShowPreview(true)
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
