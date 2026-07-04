@@ -292,8 +292,8 @@ export default function UploadSimuladoPage() {
               setShowPreview(true);
             }}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+              <Printer size={16} color="white" /> Pré-visualizar A4
             </motion.button>
             {!isProfessorViewAll && (
               <>
