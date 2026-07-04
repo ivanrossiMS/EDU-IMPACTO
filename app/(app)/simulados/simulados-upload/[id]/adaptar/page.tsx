@@ -25,7 +25,7 @@ export default function UploadSimuladoPage() {
   const { currentUser } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const isProfessorViewAll = currentUser?.perfil === 'Professor'
+  const isProfessorViewAll = false;
 
   const [simulado, setSimulado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
