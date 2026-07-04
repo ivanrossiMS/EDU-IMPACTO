@@ -145,7 +145,7 @@ export default function UploadSimuladoPage() {
   }
 
 
-  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar') => {
+  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
     const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
@@ -184,6 +184,10 @@ export default function UploadSimuladoPage() {
         questoes_json: finalQToSave,
         questoes_count: finalQToSave.length,
         updated_at: new Date().toISOString(),
+      }
+
+      if (config_estudio) {
+        updatePayload.config_estudio = config_estudio
       }
 
       if (actionType === 'aprovar') {
@@ -558,7 +562,7 @@ export default function UploadSimuladoPage() {
             }}
             config={simConfig}
             onClose={() => setShowPreview(false)}
-            onSave={handleSave}
+            onSave={(qs, config) => handleSave(qs, undefined, config)}
             saving={saving}
           />
         )}

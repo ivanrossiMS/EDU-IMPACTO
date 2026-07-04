@@ -197,29 +197,146 @@ export function PaginationEngine({
           advanceCol();
           pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, 0);
         } else {
+          // Orphan Protection: Abandon small remaining space if the whole question fits in a new column.
+          const remainingSpace = getAvailableHeight() - currentY - questionMargin;
+          const fifteenPercent = getAvailableHeight() * 0.15;
+          
+          if (remainingSpace < fifteenPercent && totalH <= getAvailableHeight()) {
+             advanceCol();
+             pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, 0);
+             return; // go to next question
+          }
+
+          // Build generic render blocks for this question
+          let renderBlocks: any[] = [];
+          
           parsedParts.forEach((part, pIdx) => {
-            const margin = pIdx === 0 ? questionMargin : ALT_SPACING;
             if (part.type === 'text') {
-              pushBlock({ type: 'part_enun_txt', q, content: part.content, isFirst: pIdx === 0, qIndex: idx }, partHeights[pIdx], margin);
+              renderBlocks.push({ item: { type: 'part_enun_txt', q, content: part.content, isFirst: pIdx === 0, qIndex: idx }, h: partHeights[pIdx], margin: pIdx === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_text' });
             } else {
-              pushBlock({ type: 'part_img', q, imgUrl: part.url, imgIndex: part.index }, partHeights[pIdx], margin);
+              renderBlocks.push({ item: { type: 'part_img', q, imgUrl: part.url, imgIndex: part.index }, h: partHeights[pIdx], margin: pIdx === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
             }
           });
-          
+
           if (q.tipo_questao === 'descritiva') {
-             for (let i = 0; i < linhasResposta; i++) {
-                const lineH = 28;
-                const margin = i === 0 ? ALT_SPACING : 0;
-                pushBlock({ type: 'part_descritiva_line', q, estiloEspaco }, lineH, margin);
+             for (let j = 0; j < linhasResposta; j++) {
+                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco }, h: 28, margin: j === 0 ? ALT_SPACING : 0, category: 'descritiva_line' });
              }
           } else {
             if (alternativasLayout === 'horizontal') {
-              pushBlock({ type: 'part_alts_container', q }, altsH[0], ALT_SPACING);
+              renderBlocks.push({ item: { type: 'part_alts_container', q }, h: altsH[0], margin: ALT_SPACING, category: 'alternativas_container' });
             } else {
-              (q.simulados_alternativas || []).forEach((a: any, i: number) => {
-                 pushBlock({ type: 'part_alt', q, alt: a }, altsH[i], ALT_SPACING);
+              (q.simulados_alternativas || []).forEach((a: any, j: number) => {
+                 renderBlocks.push({ item: { type: 'part_alt', q, alt: a }, h: altsH[j], margin: ALT_SPACING, category: 'alternativa' });
               });
             }
+          }
+
+          // Iterate and push with Heuristics
+          let i = 0;
+          while (i < renderBlocks.length) {
+            const block = renderBlocks[i];
+            const nextBlock = i + 1 < renderBlocks.length ? renderBlocks[i + 1] : null;
+
+            // Heuristic A: Enunciado Text + Img indivisible if they fit together on a new page
+            if (block.category === 'enunciado_text' && nextBlock?.category === 'enunciado_img') {
+               const combinedH = block.h + block.margin + nextBlock.h + nextBlock.margin;
+               if (currentY + combinedH > getAvailableHeight()) {
+                  if (combinedH <= getAvailableHeight()) {
+                     advanceCol();
+                  }
+               }
+            }
+
+            // Heuristic B: Alternativas "Rule of Minimum 2"
+            if (block.category === 'alternativa') {
+               const altsRemaining = renderBlocks.slice(i).filter(b => b.category === 'alternativa');
+               const N = altsRemaining.length;
+               
+               if (N > 2) { 
+                 let fitCount = 0;
+                 let tempY = currentY;
+                 for (let j = 0; j < N; j++) {
+                    const margin = j === 0 ? block.margin : ALT_SPACING;
+                    if (tempY + margin + altsRemaining[j].h <= getAvailableHeight() || tempY === 0) {
+                       fitCount++;
+                       tempY += margin + altsRemaining[j].h;
+                    } else {
+                       break;
+                    }
+                 }
+                 
+                 let K = fitCount;
+                 if (K > 0 && K < N) {
+                    if (K === 1) {
+                       K = 0;
+                    } else if (K === N - 1 && N >= 3) {
+                       K = N - 2;
+                    }
+                 }
+                 
+                 if (K === 0 && currentY > 0) {
+                    advanceCol();
+                    continue; 
+                 }
+                 
+                 if (K > 0 && K < N) {
+                   for (let j = 0; j < K; j++) {
+                      pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
+                   }
+                   i += K;
+                   advanceCol();
+                   continue;
+                 }
+               }
+            }
+
+            // Heuristic C: Descritiva lines "Rule of Minimum 3"
+            if (block.category === 'descritiva_line') {
+               const linesRemaining = renderBlocks.slice(i).filter(b => b.category === 'descritiva_line');
+               const N = linesRemaining.length;
+               
+               if (N > 3) {
+                 let fitCount = 0;
+                 let tempY = currentY;
+                 for (let j = 0; j < N; j++) {
+                    const margin = j === 0 ? block.margin : 0;
+                    if (tempY + margin + linesRemaining[j].h <= getAvailableHeight() || tempY === 0) {
+                       fitCount++;
+                       tempY += margin + linesRemaining[j].h;
+                    } else {
+                       break;
+                    }
+                 }
+                 
+                 let K = fitCount;
+                 if (K > 0 && K < N) {
+                    if (K < 3) {
+                       K = 0;
+                    } else if (K > N - 3) {
+                       K = N - 3;
+                    }
+                 }
+                 
+                 if (K === 0 && currentY > 0) {
+                    advanceCol();
+                    continue; 
+                 }
+                 
+                 if (K > 0 && K < N) {
+                   for (let j = 0; j < K; j++) {
+                      pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
+                   }
+                   i += K;
+                   advanceCol();
+                   continue;
+                 }
+               }
+            }
+
+            // Default push
+            pushBlock(block.item, block.h, block.margin);
+            i++;
           }
         }
       });

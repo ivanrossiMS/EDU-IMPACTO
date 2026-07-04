@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
+import { motion, Reorder } from 'framer-motion'
 import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
@@ -27,16 +27,18 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   simulado: any
   config: any
   onClose: () => void
-  onSave?: (updated?: Questao[]) => void
+  onSave?: (updated?: Questao[], config_estudio?: any) => void
   saving?: boolean
   isReadOnly?: boolean
   printOnMount?: boolean
 }) {
-  const [columns, setColumns] = useState<number>(1)
-  const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(14)
-  const [alternativasFontSize, setAlternativasFontSize] = useState<number>(12)
-  const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>('vertical')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(questoes.map((_, i) => `q-preview-${i}`)))
+  const [columns, setColumns] = useState<number>(simulado?.config_estudio?.config_colunas || 1)
+  const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_enunciado || 14)
+  const [alternativasFontSize, setAlternativasFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_alternativa || 12)
+  const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>(simulado?.config_estudio?.config_layout_alternativas || 'vertical')
+  const initialLocal = questoes.map(q => ({ ...q, _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9) }))
+  const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.map(q => q._internalId)))
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
@@ -58,7 +60,6 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
   const [showBackModal, setShowBackModal] = useState(false)
-  const [localQuestoes, setLocalQuestoes] = useState<Questao[]>(questoes)
 
   const handleSaveHeaderLayout = async () => {
     if (!config || !config.id) return
@@ -119,7 +120,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     enunciadoHtml = enunciadoHtml.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
 
     return {
-      id: `q-preview-${idx}`,
+      id: q._internalId,
       ordem: idx,
       tipo_questao: q.tipo_questao || 'multipla_escolha',
       enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
@@ -371,6 +372,26 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </div>
           </div>
 
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
+              <Move size={16} color="#f59e0b" /> Ordem das Questões
+            </label>
+            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>Arraste para reordenar (afeta a numeração final).</p>
+            <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {localQuestoes.map((q: any, idx) => (
+                <Reorder.Item key={q._internalId} value={q} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'grab', userSelect: 'none' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 800 }}>
+                     {idx + 1}
+                   </div>
+                   <div style={{ flex: 1, fontSize: 12, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                     {q.enunciado ? q.enunciado.replace(/<[^>]+>/g, '') : 'Questão com Imagem'}
+                   </div>
+                   <Move size={14} color="#cbd5e1" />
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          </div>
+
         </div>
 
         <div style={{ padding: '20px 24px', borderTop: '1px solid rgba(226, 232, 240, 0.8)', background: 'rgba(248, 250, 252, 0.9)', backdropFilter: 'blur(10px)', display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -406,7 +427,12 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               disabled={saving}
               onClick={async () => {
                 setQuestoes(localQuestoes)
-                if (onSave) await onSave(localQuestoes)
+                if (onSave) await onSave(localQuestoes, {
+                  config_fonte_enunciado: enunciadoFontSize,
+                  config_fonte_alternativa: alternativasFontSize,
+                  config_colunas: columns,
+                  config_layout_alternativas: alternativasLayout
+                })
                 onClose()
               }} 
               style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 12, border: 'none', cursor: saving ? 'wait' : 'pointer', transition: 'all 0.2s', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}
@@ -454,9 +480,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             onUpdateHeaderField={handleUpdateHeaderField}
             pageA4Ref={pageA4Ref}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
-              const qIdx = parseInt(qId.replace('q-preview-', ''))
-              setLocalQuestoes(prev => prev.map((q, i) => {
-                if (i !== qIdx) return q
+              setLocalQuestoes(prev => prev.map(q => {
+                if (q._internalId !== qId) return q
                 
                 // Remove the wrapper div if it exists so we don't nest it indefinitely
                 let cleanedText = newText
@@ -468,28 +493,25 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               }))
             }}
             onEditAlternativa={isReadOnly ? () => {} : (qId, aId, text) => {
-              const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
-              setLocalQuestoes(prev => prev.map((q, i) => {
-                if (i !== qIdx) return q
+              setLocalQuestoes(prev => prev.map(q => {
+                if (q._internalId !== qId) return q
                 const newAlts = [...q.alternativas]
                 newAlts[aIdx] = { ...newAlts[aIdx], text }
                 return { ...q, alternativas: newAlts }
               }))
             }}
             onRemoveAlternativa={isReadOnly ? () => {} : (qId, aId) => {
-              const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
-              setLocalQuestoes(prev => prev.map((q, i) => {
-                if (i !== qIdx) return q
+              setLocalQuestoes(prev => prev.map(q => {
+                if (q._internalId !== qId) return q
                 return { ...q, alternativas: q.alternativas.filter((_, ai) => ai !== aIdx) }
               }))
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
-              const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
-              setLocalQuestoes(prev => prev.map((q, i) => {
-                if (i !== qIdx) return q
+              setLocalQuestoes(prev => prev.map(q => {
+                if (q._internalId !== qId) return q
                 const newAlts = [...q.alternativas]
                 newAlts[aIdx] = { ...newAlts[aIdx], imagem_url: url } as any // Need to store it somewhere in our preview model
                 return { ...q, alternativas: newAlts }

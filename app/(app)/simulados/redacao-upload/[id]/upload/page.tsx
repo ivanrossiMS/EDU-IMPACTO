@@ -145,7 +145,7 @@ export default function UploadRedaçãoPage() {
   }
 
 
-  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aredacaor') => {
+  const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aredacaor', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
     const myAssignment = redacao?.redacao_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
@@ -184,6 +184,10 @@ export default function UploadRedaçãoPage() {
         questoes_json: finalQToSave,
         questoes_count: finalQToSave.length,
         updated_at: new Date().toISOString(),
+      }
+
+      if (config_estudio) {
+        updatePayload.config_estudio = config_estudio
       }
 
       if (actionType === 'aredacaor') {
@@ -558,7 +562,7 @@ export default function UploadRedaçãoPage() {
             }}
             config={simConfig}
             onClose={() => router.push('/simulados/redacao-upload')}
-            onSave={handleSave}
+            onSave={(qs, config) => handleSave(qs, undefined, config)}
             saving={saving}
           />
         )}
