@@ -748,7 +748,7 @@ export function PaginationEngine({
             >
               <PageContent 
                 page={page} 
-                pIndex={pIndex + 1} // starts after valid pages
+                pIndex={pIndex}
                 enunciadoFontSize={enunciadoFontSize} 
                 alternativasFontSize={alternativasFontSize} 
                 config={config} 
