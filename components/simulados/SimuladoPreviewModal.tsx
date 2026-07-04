@@ -21,7 +21,7 @@ export interface Questao {
   linhas_resposta?: number
 }
 
-export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, onClose, onSave, saving, isReadOnly = false, printOnMount }: {
+export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, onClose, onSave, saving, isReadOnly = false, printOnMount, isolatedMode = false }: {
   questoes: Questao[]
   setQuestoes: React.Dispatch<React.SetStateAction<Questao[]>>
   simulado: any
