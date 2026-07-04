@@ -14,6 +14,7 @@ export function DraggableHeaderField({
   pageRef: React.RefObject<HTMLDivElement>;
 }) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [localPos, setLocalPos] = useState({ x: field.x, y: field.y });
   const fieldRef = useRef<HTMLDivElement>(null);
 
@@ -83,6 +84,41 @@ export function DraggableHeaderField({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleResizeMouseDown = (e: React.MouseEvent) => {
+    if (!isEditMode || !pageRef.current) return;
+    
+    e.stopPropagation();
+    setIsResizing(true);
+
+    const startX = e.clientX;
+    const initialWidthPercent = field.width || 10;
+    
+    const pageRect = pageRef.current.getBoundingClientRect();
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaXPercent = (deltaX / pageRect.width) * 100;
+      let newWidth = initialWidthPercent + deltaXPercent;
+      newWidth = Math.max(2, Math.min(newWidth, 100 - field.x)); // Min 2%, max available space
+      onChange(fieldKey, { ...field, width: newWidth });
+    };
+
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      setIsResizing(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      
+      const deltaX = upEvent.clientX - startX;
+      const deltaXPercent = (deltaX / pageRect.width) * 100;
+      let newWidth = initialWidthPercent + deltaXPercent;
+      newWidth = Math.max(2, Math.min(newWidth, 100 - field.x));
+      onChange(fieldKey, { ...field, width: newWidth });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!isEditMode) return;
     
@@ -110,7 +146,7 @@ export function DraggableHeaderField({
   return (
     <div
       ref={fieldRef}
-      className={`header-field ${isEditMode ? 'editable' : ''} ${isDragging ? 'dragging' : ''}`}
+      className={`header-field ${isEditMode ? 'editable' : ''} ${isDragging ? 'dragging' : ''} ${isResizing ? 'resizing' : ''}`}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       onDragStart={(e) => e.preventDefault()}
@@ -137,6 +173,32 @@ export function DraggableHeaderField({
         </div>
       )}
       {field.value}
+      {isEditMode && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          style={{
+            position: 'absolute',
+            right: -6,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 12,
+            height: '100%',
+            cursor: 'ew-resize',
+            zIndex: 11
+          }}
+        >
+          <div style={{
+            position: 'absolute',
+            right: 2,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 4,
+            height: 16,
+            background: '#2563eb',
+            borderRadius: 2
+          }} />
+        </div>
+      )}
     </div>
   );
 }
