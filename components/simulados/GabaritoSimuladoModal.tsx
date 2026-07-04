@@ -9,6 +9,7 @@ import {
   ChevronUp, Loader2, CheckCircle, XCircle, BarChart3, BookOpen, Trash2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 interface GabaritoSimuladoModalProps {
   simuladoUploadId: string
@@ -27,6 +28,7 @@ interface Correcao {
 }
 
 export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSimuladoModalProps) {
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(true)
   const [simulado, setSimulado] = useState<any>(null)
   const [questoes, setQuestoes] = useState<any[]>([])
@@ -213,35 +215,53 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
         style={{ background: '#ffffff', width: '100%', maxWidth: 960, height: '90vh', borderRadius: 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 64px rgba(0,0,0,0.3)', border: '1px solid #e2e8f0' }}
       >
         {/* Header */}
-        <div className="no-print" style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
-              <CheckSquare size={20} color="white" />
+        <div className="no-print" style={{ 
+          padding: isMobile ? '16px' : '20px 24px', 
+          borderBottom: '1px solid #e2e8f0', 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'stretch' : 'center', 
+          justifyContent: 'space-between', 
+          background: '#f8fafc',
+          gap: isMobile ? 12 : 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                <CheckSquare size={20} color="white" />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Gabarito & Correções</h2>
+                <p style={{ color: '#64748b', margin: '2px 0 0', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{simulado?.titulo || 'Carregando...'}</p>
+              </div>
             </div>
-            <div>
-              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>Gabarito & Correções</h2>
-              <p style={{ color: '#64748b', margin: '2px 0 0', fontSize: 13 }}>{simulado?.titulo || 'Carregando...'}</p>
-            </div>
+            {isMobile && (
+              <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, flexShrink: 0, borderRadius: 10, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
             {activeTab === 'gabarito' && (
-              <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#10b981', color: 'white', padding: '10px 16px', borderRadius: 10, border: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
+              <button onClick={() => window.print()} style={{ flex: isMobile ? 1 : 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, background: '#10b981', color: 'white', padding: '10px 16px', borderRadius: 10, border: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
                 <Printer size={16} /> Imprimir
               </button>
             )}
             {activeTab === 'correcoes' && (
-              <button onClick={() => setShowUploadModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', padding: '10px 18px', borderRadius: 10, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13, boxShadow: '0 4px 16px rgba(99,102,241,0.35)' }}>
-                <ScanLine size={16} /> Corrigir Gabarito com IA
+              <button onClick={() => setShowUploadModal(true)} style={{ flex: isMobile ? 1 : 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: 'white', padding: '10px 18px', borderRadius: 10, border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: 13, boxShadow: '0 4px 16px rgba(99,102,241,0.35)' }}>
+                <ScanLine size={16} /> {isMobile ? 'Corrigir c/ IA' : 'Corrigir Gabarito com IA'}
               </button>
             )}
-            <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer' }}>
-              <X size={20} />
-            </button>
+            {!isMobile && (
+              <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="no-print" style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+        <div className="no-print" style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', padding: isMobile ? '8px' : 0, gap: isMobile ? 8 : 0 }}>
           {[
             { key: 'gabarito', label: 'Gabarito Oficial', icon: CheckSquare },
             { key: 'correcoes', label: `Correções por IA ${correcoes.length > 0 ? `(${correcoes.length})` : ''}`, icon: ScanLine }
@@ -253,7 +273,9 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                 key={key}
                 onClick={() => setActiveTab(key as any)}
                 style={{
-                  padding: isAI ? '8px 16px' : '14px 24px', 
+                  flex: isMobile ? 1 : 'none',
+                  justifyContent: 'center',
+                  padding: isAI ? '10px 16px' : (isMobile ? '12px' : '14px 24px'), 
                   border: 'none', 
                   cursor: 'pointer', 
                   fontWeight: isActive ? 700 : 600, 
@@ -267,7 +289,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                     : (isActive ? '#6366f1' : '#64748b'),
                   borderBottom: isAI ? 'none' : (isActive ? '2px solid #6366f1' : '2px solid transparent'),
                   borderRadius: isAI ? '12px' : '0',
-                  margin: isAI ? '6px 16px' : '0',
+                  margin: isAI && !isMobile ? '6px 16px' : '0',
                   boxShadow: isAI && isActive ? '0 8px 20px rgba(168, 85, 247, 0.35)' : 'none',
                   textShadow: isAI && isActive ? '0 0 10px rgba(255,255,255,0.3)' : 'none',
                   transform: isAI && isActive ? 'translateY(-2px)' : 'none'
@@ -345,7 +367,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
             <div style={{ padding: '24px 28px' }}>
               {/* Stats bar */}
               {correcoes.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
                   {[
                     { label: 'Alunos Corrigidos', value: correcoes.length, icon: Users, color: '#6366f1', bg: 'rgba(99,102,241,0.08)' },
                     { label: 'Média da Turma', value: `${parseFloat(averageScore.toFixed(1))}%`, icon: BarChart3, color: getScoreColor(averageScore), bg: `${getScoreColor(averageScore)}14` },
