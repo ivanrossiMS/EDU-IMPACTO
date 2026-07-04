@@ -101,7 +101,7 @@ export default function UploadSimuladoPage() {
       }
       
       if (searchParams.get('print') === 'true') {
-        setShowPreview(true)
+        setShowPreviewIsolated(true)
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
