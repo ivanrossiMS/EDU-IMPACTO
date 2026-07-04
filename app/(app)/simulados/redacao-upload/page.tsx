@@ -84,8 +84,48 @@ export default function UploadRedaçõesGerenciamentoPage() {
     setDeleteConfirmId(null)
   }
 
-  const handleAdaptar = (redacao: any) => {
-    window.location.href = `/simulados/redacao-upload/nova?adaptar_de=${redacao.id}`
+  const handleAdaptar = async (redacao: any) => {
+    if (redacao.titulo?.includes('ADAPTADO')) return;
+    
+    setLoading(true)
+    try {
+      const payload = { ...redacao }
+      delete payload.id
+      delete payload.created_at
+      delete payload.redacao_upload_requisicoes
+      payload.titulo = `${redacao.titulo || 'Redação'} ADAPTADO`
+      payload.updated_at = new Date().toISOString()
+      
+      const { data: newRedacao, error: simError } = await (supabase as any)
+        .from('redacao_upload')
+        .insert([payload])
+        .select()
+        .single()
+        
+      if (simError) throw simError
+
+      if (redacao.redacao_upload_requisicoes && redacao.redacao_upload_requisicoes.length > 0) {
+        const reqsPayload = redacao.redacao_upload_requisicoes.map((r: any) => {
+          const newReq = { ...r }
+          delete newReq.id
+          delete newReq.created_at
+          newReq.id_redacao_upload = newRedacao.id
+          return newReq
+        })
+        const { error: reqError } = await (supabase as any)
+          .from('redacao_upload_requisicoes')
+          .insert(reqsPayload)
+          
+        if (reqError) throw reqError
+      }
+      
+      await loadData()
+    } catch (e: any) {
+      console.error(e)
+      alert('Erro ao adaptar redação: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const isProfView = currentUserPerfil === 'Professor'
@@ -424,6 +464,8 @@ export default function UploadRedaçõesGerenciamentoPage() {
                           {redacao.redacao_upload_requisicoes && redacao.redacao_upload_requisicoes.length > 0 ? redacao.redacao_upload_requisicoes.map((req: any) => {
 
                             const isMyCard = req.id_professor === currentUser?.id;
+                            const isAdaptado = redacao.titulo?.includes('ADAPTADO');
+                            const canClick = isMyCard || isCoord || isAdaptado;
                             
                             const formatName = (name: string) => {
                               if (!name) return '';

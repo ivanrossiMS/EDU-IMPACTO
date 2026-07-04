@@ -84,8 +84,48 @@ export default function UploadSimuladosGerenciamentoPage() {
     setDeleteConfirmId(null)
   }
 
-  const handleAdaptar = (simulado: any) => {
-    window.location.href = `/simulados/simulados-upload/nova?adaptar_de=${simulado.id}`
+  const handleAdaptar = async (simulado: any) => {
+    if (simulado.titulo?.includes('ADAPTADO')) return;
+    
+    setLoading(true)
+    try {
+      const payload = { ...simulado }
+      delete payload.id
+      delete payload.created_at
+      delete payload.simulados_upload_requisicoes
+      payload.titulo = `${simulado.titulo || 'Simulado'} ADAPTADO`
+      payload.updated_at = new Date().toISOString()
+      
+      const { data: newSimulado, error: simError } = await (supabase as any)
+        .from('simulados_upload')
+        .insert([payload])
+        .select()
+        .single()
+        
+      if (simError) throw simError
+
+      if (simulado.simulados_upload_requisicoes && simulado.simulados_upload_requisicoes.length > 0) {
+        const reqsPayload = simulado.simulados_upload_requisicoes.map((r: any) => {
+          const newReq = { ...r }
+          delete newReq.id
+          delete newReq.created_at
+          newReq.id_simulado_upload = newSimulado.id
+          return newReq
+        })
+        const { error: reqError } = await (supabase as any)
+          .from('simulados_upload_requisicoes')
+          .insert(reqsPayload)
+          
+        if (reqError) throw reqError
+      }
+      
+      await loadData()
+    } catch (e: any) {
+      console.error(e)
+      alert('Erro ao adaptar simulado: ' + e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const isProfView = currentUserPerfil === 'Professor'
@@ -444,7 +484,8 @@ export default function UploadSimuladosGerenciamentoPage() {
                               return `${first} ${middle ? middle + ' ' : ''}${last}`;
                             }
                             
-                            const canClick = isMyCard || isCoord;
+                            const isAdaptado = simulado.titulo?.includes('ADAPTADO');
+                            const canClick = isMyCard || isCoord || isAdaptado;
                             const cardContent = (
                               <div key={req.id} style={{ 
                                 background: 'hsl(var(--bg-surface))', 
@@ -507,9 +548,11 @@ export default function UploadSimuladosGerenciamentoPage() {
                               <CheckSquare size={16} /> Gabarito
                             </button>
                             
-                            <button onClick={() => handleAdaptar(simulado)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
-                              <BookOpen size={16} /> Adaptar
-                            </button>
+                            {!simulado.titulo?.includes('ADAPTADO') && (
+                              <button onClick={() => handleAdaptar(simulado)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
+                                <BookOpen size={16} /> Adaptar
+                              </button>
+                            )}
                             
                             <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
                               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
