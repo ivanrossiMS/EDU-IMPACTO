@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -57,6 +57,24 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
     return layout
   })
   const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
+  const [showMargins, setShowMargins] = useState(true)
+  const [leftMarginOffset, setLeftMarginOffset] = useState<number>((prova as any)?.config_estudio?.config_margin_left || 0);
+  const [rightMarginOffset, setRightMarginOffset] = useState<number>((prova as any)?.config_estudio?.config_margin_right || 0);
+  const [topMarginOffset, setTopMarginOffset] = useState<number>((prova as any)?.config_estudio?.config_margin_top || 0);
+  const [bottomMarginOffset, setBottomMarginOffset] = useState<number>((prova as any)?.config_estudio?.config_margin_bottom || 0);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('simulador_margins_padrao')
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (parsed.left !== undefined) setLeftMarginOffset(parsed.left)
+        if (parsed.right !== undefined) setRightMarginOffset(parsed.right)
+        if (parsed.top !== undefined) setTopMarginOffset(parsed.top)
+        if (parsed.bottom !== undefined) setBottomMarginOffset(parsed.bottom)
+      } catch(e) {}
+    }
+  }, [])
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
   const [showBackModal, setShowBackModal] = useState(false)
@@ -85,10 +103,12 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
   }
 
   const handleToggleQuestion = (qId: string) => {
-    const next = new Set(selectedIds)
-    if (next.has(qId)) next.delete(qId)
-    else next.add(qId)
-    setSelectedIds(next)
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(qId)) next.delete(qId)
+      else next.add(qId)
+      return next
+    })
   }
 
   const handlePrint = () => {
@@ -124,8 +144,8 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
       ordem: idx,
       tipo_questao: q.tipo_questao || 'multipla_escolha',
       enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
-      imagens: q.imagens?.map(img => img.src) || [],
-      simulados_alternativas: q.alternativas.map((alt, i) => ({
+      imagens: q.imagens?.map((img: any) => img.src) || [],
+      simulados_alternativas: q.alternativas.map((alt: any, i: number) => ({
         id: `alt-preview-${i}`,
         letra: alt.letter,
         texto: alt.text,
@@ -332,9 +352,35 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                 }}
               >
-                {isEditHeaderMode ? <X size={16} /> : <Move size={16} />}
-                {isEditHeaderMode ? 'Sair da Edição' : 'Editar Posições'}
+                <FileEdit size={16} />
+                {isEditHeaderMode ? 'Sair Edição Cabeçalho' : 'Editar Cabeçalho'}
               </button>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setShowMargins(!showMargins)}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
+                </button>
+                {showMargins && (
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('simulador_margins_padrao', JSON.stringify({
+                        left: leftMarginOffset,
+                        right: rightMarginOffset,
+                        top: topMarginOffset,
+                        bottom: bottomMarginOffset
+                      }))
+                      alert('Padrão de margens salvo com sucesso!')
+                    }}
+                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}
+                    title="Salvar como padrão para os próximos"
+                  >
+                    Salvar Padrão
+                  </button>
+                )}
+              </div>
 
               {isEditHeaderMode && (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -378,17 +424,27 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             </label>
             <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>Arraste para reordenar (afeta a numeração final).</p>
             <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {localQuestoes.map((q: any, idx) => (
-                <Reorder.Item key={q._internalId} value={q} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'grab', userSelect: 'none' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 800 }}>
+              {localQuestoes.map((q: any, idx) => {
+                const isSelected = selectedIds.has(q._internalId);
+                return (
+                <Reorder.Item key={q._internalId} value={q} style={{ background: isSelected ? '#f8fafc' : '#f1f5f9', border: `1px solid ${isSelected ? '#e2e8f0' : '#cbd5e1'}`, opacity: isSelected ? 1 : 0.6, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'grab', userSelect: 'none' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: isSelected ? '#e2e8f0' : '#cbd5e1', color: '#475569', fontSize: 11, fontWeight: 800 }}>
                      {idx + 1}
                    </div>
-                   <div style={{ flex: 1, fontSize: 12, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                   <div style={{ flex: 1, fontSize: 12, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isSelected ? 'none' : 'line-through' }}>
                      {q.enunciado ? q.enunciado.replace(/<[^>]+>/g, '') : 'Questão com Imagem'}
                    </div>
+                   <button 
+                     onClick={(e) => { e.stopPropagation(); handleToggleQuestion(q._internalId); }}
+                     style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 4, display: 'flex' }}
+                     title={isSelected ? 'Excluir questão' : 'Incluir questão'}
+                   >
+                     {isSelected ? <Trash2 size={14} color="#ef4444" /> : <RotateCcw size={14} color="#10b981" />}
+                   </button>
                    <Move size={14} color="#cbd5e1" />
                 </Reorder.Item>
-              ))}
+                )
+              })}
             </Reorder.Group>
           </div>
 
@@ -479,9 +535,18 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             headerLayout={headerLayout}
             onUpdateHeaderField={handleUpdateHeaderField}
             pageA4Ref={pageA4Ref}
+            showMargins={showMargins}
+            topMarginOffset={topMarginOffset}
+            onTopMarginOffsetChange={setTopMarginOffset}
+            bottomMarginOffset={bottomMarginOffset}
+            onBottomMarginOffsetChange={setBottomMarginOffset}
+            leftMarginOffset={leftMarginOffset}
+            onLeftMarginOffsetChange={setLeftMarginOffset}
+            rightMarginOffset={rightMarginOffset}
+            onRightMarginOffsetChange={setRightMarginOffset}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {
-                if (q._internalId !== qId) return q
+                if ((q._internalId || q.id) !== qId) return q
                 
                 // Remove the wrapper div if it exists so we don't nest it indefinitely
                 let cleanedText = newText
@@ -495,7 +560,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             onEditAlternativa={isReadOnly ? () => {} : (qId, aId, text) => {
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map(q => {
-                if (q._internalId !== qId) return q
+                if ((q._internalId || q.id) !== qId) return q
                 const newAlts = [...q.alternativas]
                 newAlts[aIdx] = { ...newAlts[aIdx], text }
                 return { ...q, alternativas: newAlts }
@@ -504,28 +569,27 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
             onRemoveAlternativa={isReadOnly ? () => {} : (qId, aId) => {
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map(q => {
-                if (q._internalId !== qId) return q
-                return { ...q, alternativas: q.alternativas.filter((_, ai) => ai !== aIdx) }
+                if ((q._internalId || q.id) !== qId) return q
+                return { ...q, alternativas: q.alternativas.filter((_: any, ai: number) => ai !== aIdx) }
               }))
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map(q => {
-                if (q._internalId !== qId) return q
+                if ((q._internalId || q.id) !== qId) return q
                 const newAlts = [...q.alternativas]
                 newAlts[aIdx] = { ...newAlts[aIdx], imagem_url: url } as any // Need to store it somewhere in our preview model
                 return { ...q, alternativas: newAlts }
               }))
             }}
             onEditEnunciadoImage={isReadOnly ? () => {} : (qId, imgIndex, newUrl) => {
-              const qIdx = parseInt(qId.replace('q-preview-', ''))
-              setLocalQuestoes(prev => prev.map((q, i) => {
-                if (i !== qIdx) return q
+              setLocalQuestoes(prev => prev.map((q) => {
+                if ((q._internalId || q.id) !== qId) return q
                 const newImagens = [...(q.imagens || [])]
                 if (!newUrl) {
-                  newImagens.splice(imgIndex, 1)
+                  newImagens[imgIndex] = { ...newImagens[imgIndex], src: '' } as any 
                 } else {
-                  newImagens[imgIndex] = { ...newImagens[imgIndex], src: newUrl } // since preview maps src to string
+                  newImagens[imgIndex] = { ...newImagens[imgIndex], src: newUrl } as any
                 }
                 return { ...q, imagens: newImagens }
               }))

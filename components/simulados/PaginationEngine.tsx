@@ -24,10 +24,19 @@ interface PaginationEngineProps {
   alternativasLayout?: 'horizontal' | 'vertical';
   onEditAlternativaImage?: (qId: string, altId: string, url: string) => void;
   forceExtraPage?: boolean;
+  showMargins?: boolean;
+  topMarginOffset?: number;
+  onTopMarginOffsetChange?: (offset: number) => void;
+  bottomMarginOffset?: number;
+  onBottomMarginOffsetChange?: (offset: number) => void;
+  leftMarginOffset?: number;
+  onLeftMarginOffsetChange?: (offset: number) => void;
+  rightMarginOffset?: number;
+  onRightMarginOffsetChange?: (offset: number) => void;
 }
 
 export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
-  const parts: { type: 'text'|'img', content?: string, url?: string, index?: number }[] = [];
+  const parts: { type: 'text'|'img'|'lines', content?: string, url?: string, index?: number, count?: number, style?: 'pautado'|'branco' }[] = [];
   if (!enunciado) {
     if (imagens && imagens.length > 0) {
       imagens.forEach((url, i) => parts.push({ type: 'img', url, index: i }));
@@ -36,7 +45,39 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
   }
 
   let remaining = enunciado;
-  const regex = /\[IMAGEM\s+(\d+)\]/i;
+  
+  if (imagens && imagens.length > 0) {
+    // Remove HTML comments that might contain old img tags
+    remaining = remaining.replace(/<!--[\s\S]*?-->/g, '');
+    
+    // Replace raw <img ...> with [IMAGEM N] if it matches a known image
+    remaining = remaining.replace(/<img[^>]+src=(?:["']([^"']+)["']|([^ >]+))[^>]*>/gi, (match, src1, src2) => {
+      let src = src1 || src2;
+      if (!src) return match;
+      
+      let cleanSrc = src.split('#')[0].split('?')[0].replace(/&amp;/g, '&');
+      try { cleanSrc = decodeURIComponent(cleanSrc); } catch(e) {}
+      
+      const idx = imagens.findIndex((imgUrl: string) => {
+         if (!imgUrl) return false;
+         let cleanImg = imgUrl.split('#')[0].split('?')[0].replace(/&amp;/g, '&');
+         try { cleanImg = decodeURIComponent(cleanImg); } catch(e) {}
+         
+         const filename1 = cleanSrc.split('/').pop();
+         const filename2 = cleanImg.split('/').pop();
+         if (filename1 && filename2 && filename1 === filename2 && filename1.length > 5) return true;
+         
+         return cleanImg.includes(cleanSrc) || cleanSrc.includes(cleanImg);
+      });
+      
+      if (idx !== -1) {
+        return `[IMAGEM ${idx + 1}]`;
+      }
+      return match;
+    });
+  }
+
+  const regex = /(\[IMAGEM\s+\d+\]|\[LINHAS_PAUTADAS\s*:\s*\d+\]|\[ESPACO_BRANCO\s*:\s*\d+\])/i;
   
   while (true) {
     const match = remaining.match(regex);
@@ -46,14 +87,31 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
     }
     
     const index = match.index!;
-    const textBefore = remaining.substring(0, index);
+    let textBefore = remaining.substring(0, index);
+    textBefore = textBefore.replace(/(<br\s*\/?>\s*)+$/i, '').replace(/(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+$/i, '');
     if (textBefore.trim()) {
       parts.push({ type: 'text', content: textBefore });
     }
     
-    const imgIndex = parseInt(match[1], 10) - 1; 
-    if (imagens && imgIndex >= 0 && imgIndex < imagens.length) {
-      parts.push({ type: 'img', url: imagens[imgIndex], index: imgIndex });
+    const tag = match[0].toUpperCase();
+    if (tag.startsWith('[IMAGEM')) {
+      const imgMatch = tag.match(/\d+/);
+      if (imgMatch) {
+        const imgIndex = parseInt(imgMatch[0], 10) - 1; 
+        if (imagens && imgIndex >= 0 && imgIndex < imagens.length) {
+          parts.push({ type: 'img', url: imagens[imgIndex], index: imgIndex });
+        }
+      }
+    } else if (tag.startsWith('[LINHAS')) {
+      const countMatch = tag.match(/\d+/);
+      if (countMatch) {
+        parts.push({ type: 'lines', count: parseInt(countMatch[0], 10), style: 'pautado' });
+      }
+    } else if (tag.startsWith('[ESPACO')) {
+      const countMatch = tag.match(/\d+/);
+      if (countMatch) {
+        parts.push({ type: 'lines', count: parseInt(countMatch[0], 10), style: 'branco' });
+      }
     }
     
     remaining = remaining.substring(index + match[0].length);
@@ -75,13 +133,15 @@ const PAGE_H = 297 * MM_TO_PX;
 const HEADER_1 = 80 * MM_TO_PX; // Height of cover image header + margins
 const HEADER_OTHER = 25 * MM_TO_PX;
 const BOTTOM = 25 * MM_TO_PX;
-const BLOCK_SPACING = 24; 
-const ALT_SPACING = 12;
+const BLOCK_SPACING = 12; 
+const ALT_SPACING = 8;
 
 export function PaginationEngine({
   questoes, columns, enunciadoFontSize, alternativasFontSize, config, simulado,
   onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
-  isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage
+  isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage,
+  showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
+  leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -108,8 +168,8 @@ export function PaginationEngine({
 
       const avail1El = shadow.querySelector('[data-measure-avail-1]');
       const availNEl = shadow.querySelector('[data-measure-avail-n]');
-      const avail1Px = avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795;
-      const availNPx = availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795;
+      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (bottomMarginOffset || 0) - (topMarginOffset || 0);
+      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (bottomMarginOffset || 0) - (topMarginOffset || 0);
 
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);
@@ -153,11 +213,35 @@ export function PaginationEngine({
         }
 
         const parsedParts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+        const groupedParts: any[] = [];
+        parsedParts.forEach((part, pIdx) => {
+          const p = { ...part, originalIndex: pIdx };
+          if (p.type === 'text') {
+            groupedParts.push(p);
+          } else if (p.type === 'lines') {
+            groupedParts.push(p);
+          } else {
+            const last = groupedParts[groupedParts.length - 1];
+            if (last && last.type === 'img_group') {
+              last.images.push(p);
+            } else {
+              groupedParts.push({ type: 'img_group', images: [p] });
+            }
+          }
+        });
+
         let totalH = 0;
-        const partHeights = parsedParts.map((part, pIdx) => {
-          const h = heights[part.type === 'text' ? `${q.id}-enun-txt-${pIdx}` : `${q.id}-img-${part.index}`] || 0;
-          totalH += h + (pIdx > 0 ? ALT_SPACING : 0);
-          return h;
+        groupedParts.forEach((group, gIdx) => {
+          let h = 0;
+          if (group.type === 'text') {
+            h = heights[`${q.id}-enun-txt-${group.originalIndex}`] || 0;
+          } else if (group.type === 'lines') {
+            h = group.count * 28; // Each line is 28px tall
+          } else {
+            h = heights[`${q.id}-img-group-${gIdx}`] || 0;
+          }
+          const margin = gIdx > 0 ? (group.type === 'lines' ? 8 : ALT_SPACING) : 0;
+          totalH += h + margin;
         });
 
         let altsH: number[] = [];
@@ -207,27 +291,34 @@ export function PaginationEngine({
              return; // go to next question
           }
 
+
           // Build generic render blocks for this question
           let renderBlocks: any[] = [];
           
-          parsedParts.forEach((part, pIdx) => {
-            if (part.type === 'text') {
-              renderBlocks.push({ item: { type: 'part_enun_txt', q, content: part.content, isFirst: pIdx === 0, qIndex: idx }, h: partHeights[pIdx], margin: pIdx === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_text' });
+          groupedParts.forEach((group, gIdx) => {
+            if (group.type === 'text') {
+              const h = heights[`${q.id}-enun-txt-${group.originalIndex}`] || 0;
+              renderBlocks.push({ item: { type: 'part_enun_txt', q, content: group.content, originalIndex: group.originalIndex, isFirst: group.originalIndex === 0, qIndex: idx }, h, margin: group.originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_text' });
+            } else if (group.type === 'lines') {
+              for (let j = 0; j < group.count; j++) {
+                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex: idx, style: group.style }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
+              }
             } else {
-              renderBlocks.push({ item: { type: 'part_img', q, imgUrl: part.url, imgIndex: part.index }, h: partHeights[pIdx], margin: pIdx === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
+              const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
+              renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex: idx }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
             }
           });
 
           if (q.tipo_questao === 'descritiva') {
              for (let j = 0; j < linhasResposta; j++) {
-                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco }, h: 28, margin: j === 0 ? ALT_SPACING : 0, category: 'descritiva_line' });
+                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco }, h: 28, margin: j === 0 ? 8 : 0, category: 'descritiva_line' });
              }
           } else {
             if (alternativasLayout === 'horizontal') {
-              renderBlocks.push({ item: { type: 'part_alts_container', q }, h: altsH[0], margin: ALT_SPACING, category: 'alternativas_container' });
+              renderBlocks.push({ item: { type: 'part_alts_container', q }, h: altsH[0], margin: 8, category: 'alternativas_container' });
             } else {
               (q.simulados_alternativas || []).forEach((a: any, j: number) => {
-                 renderBlocks.push({ item: { type: 'part_alt', q, alt: a }, h: altsH[j], margin: ALT_SPACING, category: 'alternativa' });
+                 renderBlocks.push({ item: { type: 'part_alt', q, alt: a }, h: altsH[j], margin: 8, category: 'alternativa' });
               });
             }
           }
@@ -424,21 +515,68 @@ export function PaginationEngine({
                 {idx + 1}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {parseEnunciadoParts(q.enunciado, q.imagens || []).map((part, pIdx) => (
-                  part.type === 'text' ? (
-                    <div key={`txt-${pIdx}`} data-measure data-id={`${q.id}-enun-txt-${pIdx}`}>
-                      <HtmlContent html={part.content || ''} style={{ wordBreak: 'break-word' }} />
-                    </div>
-                  ) : (
-                    <img 
-                      key={`img-${part.index}`}
-                      data-measure 
-                      data-id={`${q.id}-img-${part.index}`} 
-                      src={part.url} 
-                      style={{ maxWidth: '100%', height: 'auto', borderRadius: 8, marginTop: pIdx > 0 ? 12 : 0, display: 'block' }} 
-                    />
-                  )
-                ))}
+                {(() => {
+                  const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+                  const groupedParts: any[] = [];
+                  parts.forEach((part, pIdx) => {
+                    const p = { ...part, originalIndex: pIdx };
+                    if (p.type === 'text' || p.type === 'lines') {
+                      groupedParts.push(p);
+                    } else {
+                      const last = groupedParts[groupedParts.length - 1];
+                      if (last && last.type === 'img_group') {
+                        last.images.push(p);
+                      } else {
+                        groupedParts.push({ type: 'img_group', images: [p] });
+                      }
+                    }
+                  });
+
+                  return groupedParts.map((group, gIdx) => (
+                    group.type === 'text' ? (
+                      <div key={`txt-${group.originalIndex}`} data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`}>
+                        <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
+                      </div>
+                    ) : group.type === 'lines' ? (
+                      null
+                    ) : (
+                      (() => {
+                        const firstImg = group.images[0];
+                        const firstHashIndex = firstImg.url ? firstImg.url.indexOf('#') : -1;
+                        const firstHashStr = firstHashIndex >= 0 ? firstImg.url.substring(firstHashIndex + 1) : '';
+                        const firstParams = new URLSearchParams(firstHashStr);
+                        const firstAlign = firstParams.get('a') || 'center';
+                        const groupJustify = firstAlign === 'left' ? 'flex-start' : firstAlign === 'right' ? 'flex-end' : 'center';
+
+                        return (
+                          <div 
+                            key={`img-group-${gIdx}`} 
+                            data-measure 
+                            data-id={`${q.id}-img-group-${gIdx}`} 
+                            style={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, marginTop: gIdx > 0 ? 12 : 0 }}
+                          >
+                            {group.images.map((imgPart: any) => {
+                          const hashIndex = imgPart.url ? imgPart.url.indexOf('#') : -1;
+                          const imgBaseUrl = hashIndex >= 0 ? imgPart.url?.substring(0, hashIndex) : (imgPart.url || '');
+                          const hashStr = hashIndex >= 0 ? imgPart.url?.substring(hashIndex + 1) : '';
+                          const params = new URLSearchParams(hashStr || '');
+                          const imgWidthStr = params.get('w');
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : 600;
+
+                          return (
+                            <img 
+                              key={`img-${imgPart.index}-${imgPart.originalIndex}`}
+                              src={imgBaseUrl} 
+                              style={{ width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} 
+                            />
+                          );
+                        })}
+                          </div>
+                        );
+                      })()
+                    )
+                  ));
+                })()}
               </div>
             </div>
 
@@ -532,7 +670,7 @@ export function PaginationEngine({
         )})}
       </div>
 
-      {isPaginating && (
+      {isPaginating && pages.length === 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 20, background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', borderRadius: 12, marginBottom: 20 }}>
           <Loader2 className="animate-spin" size={24} />
           <span style={{ fontWeight: 600 }}>Paginando documento...</span>
@@ -540,9 +678,16 @@ export function PaginationEngine({
       )}
 
       {/* Screen Preview */}
-      <div className="no-print" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {!isPaginating && pages.map((page, pIndex) => (
-          <div 
+      <div className="no-print" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+        {isPaginating && pages.length > 0 && (
+          <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50, background: 'rgba(59,130,246,0.9)', color: 'white', padding: '8px 16px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+            <Loader2 className="animate-spin" size={16} />
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Atualizando...</span>
+          </div>
+        )}
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isPaginating ? 0.6 : 1, transition: 'opacity 0.2s' }}>
+          {pages.map((page, pIndex) => (
+            <div 
             key={`preview-page-${pIndex}`} 
             className="preview-area" 
             style={{ 
@@ -558,9 +703,15 @@ export function PaginationEngine({
               onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
               isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField} pageA4Ref={pageA4Ref}
               alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
+              showMargins={showMargins}
+              topMarginOffset={topMarginOffset} onTopMarginOffsetChange={onTopMarginOffsetChange}
+              bottomMarginOffset={bottomMarginOffset} onBottomMarginOffsetChange={onBottomMarginOffsetChange}
+              leftMarginOffset={leftMarginOffset} onLeftMarginOffsetChange={onLeftMarginOffsetChange}
+              rightMarginOffset={rightMarginOffset} onRightMarginOffsetChange={onRightMarginOffsetChange}
             />
           </div>
         ))}
+        </div>
       </div>
 
       {/* Print Root Portal */}
@@ -583,6 +734,11 @@ export function PaginationEngine({
                 onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
                 isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField}
                 alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
+                showMargins={showMargins}
+                topMarginOffset={topMarginOffset} onTopMarginOffsetChange={onTopMarginOffsetChange}
+                bottomMarginOffset={bottomMarginOffset} onBottomMarginOffsetChange={onBottomMarginOffsetChange}
+                leftMarginOffset={leftMarginOffset} onLeftMarginOffsetChange={onLeftMarginOffsetChange}
+                rightMarginOffset={rightMarginOffset} onRightMarginOffsetChange={onRightMarginOffsetChange}
               />
             </div>
           ))}

@@ -1376,6 +1376,18 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Remove leaking p margins in rich text rendering to fix pagination engine calculations */
+.html-content > p:first-child {
+  margin-top: 0 !important;
+}
+.html-content > p:last-child {
+  margin-bottom: 0 !important;
+}
 
 /* Dashboard Responsive Grids */
 .dashboard-kpi-grid {

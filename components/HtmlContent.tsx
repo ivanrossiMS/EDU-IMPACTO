@@ -168,6 +168,8 @@ export function HtmlContent({ html, onBlurHtml, editable, ...props }: HtmlConten
     <>
       <div 
         ref={containerRef}
+        className={`html-content ${props.className || ''}`}
+        style={{ display: 'flow-root', ...props.style }}
         contentEditable={editable}
         suppressContentEditableWarning={editable}
         onBlur={editable ? handleBlur : undefined}
