@@ -486,7 +486,7 @@ export default function UploadProvasGerenciamentoPage() {
                       </div>
 
                       {/* Box 2: Instruções */}
-                        <div style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
+                        <div className="neon-aura-purple-card" style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                             <Info size={14} /> INSTRUÇÕES PARA OS PROFESSORES
                           </div>

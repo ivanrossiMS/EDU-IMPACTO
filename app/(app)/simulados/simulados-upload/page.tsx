@@ -488,7 +488,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                       {/* Right Column: Instruções and Ações */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         {/* Box 2: Instruções */}
-                        <div style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
+                        <div className="neon-aura-purple-card" style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                             <Info size={14} /> INSTRUÇÕES PARA OS PROFESSORES
                           </div>
@@ -511,7 +511,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                               <BookOpen size={16} /> Adaptar
                             </button>
                             
-                            <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`} style={{ textDecoration: 'none', display: 'block' }}>
+                            <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
                               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
                                 <Printer size={16} /> Imprimir
