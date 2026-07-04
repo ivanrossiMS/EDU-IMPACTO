@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
-  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap
+  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +23,7 @@ export default function UploadProvasGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
 
   const seriesOptions = ['1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF', '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF', '1ª Série EM', '2ª Série EM', '3ª Série EM']
@@ -146,6 +147,33 @@ export default function UploadProvasGerenciamentoPage() {
       return matchSearch && matchStatus && matchBimestre && matchSerie && isAssigned
     })
   }, [provas, search, filterStatus, filterBimestre, filterSerie, isProfView, currentUser?.id])
+
+  const groupedProvas = useMemo(() => {
+    const groups: Record<string, any[]> = {}
+    filtered.forEach(item => {
+      const sList = Array.isArray(item.series) ? item.series : (item.series ? [item.series] : ['Sem Turma'])
+      if (sList.length === 0) {
+         if (!groups['Sem Turma']) groups['Sem Turma'] = []
+         groups['Sem Turma'].push(item)
+      } else {
+         sList.forEach((s: string) => {
+           if (!groups[s]) groups[s] = []
+           groups[s].push(item)
+         })
+      }
+    })
+
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'Sem Turma') return 1;
+      if (b === 'Sem Turma') return -1;
+      const idxA = seriesOptions.indexOf(a);
+      const idxB = seriesOptions.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [filtered])
 
   const isCoord = currentUserPerfil !== 'Professor'
 
@@ -396,9 +424,44 @@ export default function UploadProvasGerenciamentoPage() {
             </p>
           </motion.div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             <AnimatePresence>
-              {filtered.map((prova, i) => {
+              {groupedProvas.map(([serie, items]) => (
+                <div key={serie} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, marginBottom: 24, overflow: 'hidden' }}>
+                  <div 
+                    onClick={() => setCollapsedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
+                    style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: collapsedGroups[serie] ? 'none' : '1px solid hsl(var(--border-subtle))' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}>
+                        <Users size={24} color="#fff" />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
+                          <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>{items.length} provas</span>
+                        </div>
+                        <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe as provas aplicadas e programadas para esta turma.</span>
+                      </div>
+                    </div>
+                    <motion.button 
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none' }}
+                    >
+                      {collapsedGroups[serie] ? 'Expandir' : 'Recolher'}
+                      <ChevronUp size={16} style={{ transform: collapsedGroups[serie] ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                    </motion.button>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {!collapsedGroups[serie] && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }} 
+                        animate={{ height: 'auto', opacity: 1 }} 
+                        exit={{ height: 0, opacity: 0 }}
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {items.map((prova, i) => {
                 const allRevisoes = prova.provas_upload_requisicoes || []
                 let computedStatus = prova.status
                 if (computedStatus !== 'concluido' && computedStatus !== 'cancelado') {
@@ -614,7 +677,13 @@ export default function UploadProvasGerenciamentoPage() {
                       </div>
                   </motion.div>
                 )
-              })}
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              ))}
             </AnimatePresence>
           </div>
         )}
