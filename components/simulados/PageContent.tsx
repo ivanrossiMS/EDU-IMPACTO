@@ -28,7 +28,8 @@ export function PageContent({
   topMarginOffset = 0, onTopMarginOffsetChange,
   bottomMarginOffset = 0, onBottomMarginOffsetChange,
   leftMarginOffset = 0, onLeftMarginOffsetChange,
-  rightMarginOffset = 0, onRightMarginOffsetChange
+  rightMarginOffset = 0, onRightMarginOffsetChange,
+  readOnly = false
 }: any) {
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
   const [mainImgMenuOpen, setMainImgMenuOpen] = useState<string | null>(null);
@@ -602,7 +603,7 @@ export function PageContent({
                                               <ImageIcon size={12} /> Imagem
                                             </button>
                                             {mainImgMenuOpen === `${q.id}-${part.index}` && (
-                                              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                              <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                                 <button onClick={() => handleMainImageAction(q.id, part.index, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
                                                   <Upload size={14} /> Fazer Upload
                                                 </button>
@@ -680,7 +681,7 @@ export function PageContent({
                                       <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
                                         <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
                                           <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                          {onEditAlternativaImage && (
+                                          {onEditAlternativaImage && !readOnly && (
                                             <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
@@ -717,6 +718,7 @@ export function PageContent({
                                                   }}
                                                   onMouseUp={(e) => {
                                                     setAltWidth(parseInt(e.currentTarget.value));
+                                                    onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
                                                     const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
                                                     if (menu) {
                                                       menu.style.position = menu.dataset.oldPosition || 'absolute';
@@ -742,6 +744,7 @@ export function PageContent({
                                                   }}
                                                   onTouchEnd={(e) => {
                                                     setAltWidth(parseInt(e.currentTarget.value));
+                                                    onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
                                                     const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
                                                     if (menu) {
                                                       menu.style.position = menu.dataset.oldPosition || 'absolute';
@@ -768,7 +771,7 @@ export function PageContent({
                                     )}
                                   
                                   <HtmlContent 
-                                    editable={true}
+                                    editable={!readOnly}
                                     html={a.texto}
                                     onBlurHtml={(newHtml) => {
                                       onEditAlternativa(q.id, a.id, newHtml);
@@ -777,7 +780,7 @@ export function PageContent({
                                     style={{ wordBreak: 'break-word', outline: 'none', fontSize: `${alternativasFontSize}px` }}
                                   />
 
-                                {onEditAlternativaImage && (
+                                {onEditAlternativaImage && !readOnly && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === `${q.id}-${a.id}` ? 1 : undefined, pointerEvents: imgMenuOpen === `${q.id}-${a.id}` ? 'auto' : undefined }}>
                                     <button 
                                       onClick={() => setImgMenuOpen(imgMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`)}
@@ -786,7 +789,7 @@ export function PageContent({
                                       <ImageIcon size={12} /> Imagem
                                     </button>
                                     {imgMenuOpen === `${q.id}-${a.id}` && (
-                                      <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                      <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                         <button onClick={() => handleImageAction(q.id, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
                                           <Upload size={14} /> Fazer Upload
                                         </button>
@@ -799,7 +802,7 @@ export function PageContent({
                                 )}
                               </div>
 
-                              {onRemoveAlternativa && (
+                              {onRemoveAlternativa && !readOnly && (
                                 <button
                                   className="no-print alt-delete-btn"
                                   onClick={() => {
@@ -831,8 +834,8 @@ export function PageContent({
                           })})()}
                         </div>
                         
-                        {(!q.simulados_alternativas || q.simulados_alternativas.length === 0) && (
-                          <div className="no-print" style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 10 }}>
+                        {(!q.simulados_alternativas || q.simulados_alternativas.length === 0) && !readOnly && (
+                          <div className="no-print" style={{ position: 'absolute', right: 0, top: 4, zIndex: 10 }}>
                              <button onClick={() => {
                                const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
                                const hasLines = parts.some((p: any) => p.type === 'lines');
@@ -894,7 +897,7 @@ export function PageContent({
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <HtmlContent 
-                        editable={true}
+                        editable={!readOnly}
                         html={block.content || ''}
                         onBlurHtml={(newHtml) => {
                           const parts = parseEnunciadoParts(block.q.enunciado, block.q.imagens || []);
@@ -1158,7 +1161,7 @@ export function PageContent({
                                       <ImageIcon size={12} /> Imagem
                                     </button>
                                     {mainImgMenuOpen === menuKey && (
-                                      <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                      <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                         <button onClick={() => handleMainImageAction(q.id, i, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
                                         <button onClick={() => handleMainImageAction(q.id, i, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
                                       </div>
@@ -1314,12 +1317,12 @@ export function PageContent({
                                 )}
                               </div>
                             )}
-                            <HtmlContent editable={true} html={a.texto} onBlurHtml={(newHtml) => { onEditAlternativa(qId, a.id, newHtml); forceRepaginate(); }} style={{ wordBreak: 'break-word', outline: 'none' }} />
+                            <HtmlContent editable={!readOnly} html={a.texto} onBlurHtml={(newHtml) => { onEditAlternativa(qId, a.id, newHtml); forceRepaginate(); }} style={{ wordBreak: 'break-word', outline: 'none' }} />
                             {onEditAlternativaImage && (
                               <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                 <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
                                 {imgMenuOpen === a.id && (
-                                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                  <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                     <button onClick={() => handleImageAction(qId, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
                                     <button onClick={() => handleImageAction(qId, a.id, 'ai', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
                                   </div>
@@ -1374,17 +1377,93 @@ export function PageContent({
                               {a.imagem_url && (
                                 <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
                                   <img src={imgBaseUrl} style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                  {onEditAlternativaImage && (
-                                    <div className="no-print alt-img-actions" style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 4 }}>
-                                      <button onClick={() => onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${imgWidth ? Math.min(800, imgWidth + 50) : 350}`)} style={{ background: 'rgba(59,130,246,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Aumentar"><ZoomIn size={12} /></button>
-                                      <button onClick={() => onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${imgWidth ? Math.max(100, imgWidth - 50) : 250}`)} style={{ background: 'rgba(59,130,246,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Diminuir"><ZoomOut size={12} /></button>
-                                      <button onClick={() => onEditAlternativaImage(q.id, a.id, '')} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover"><Trash2 size={12} /></button>
+                                  {onEditAlternativaImage && !readOnly && (
+                                    <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
+                                      <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
+                                        <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                        <input 
+                                          type="range" 
+                                          min="100" 
+                                          max="800" 
+                                          step="10"
+                                          defaultValue={effectiveWidth || 300}
+                                          onMouseDown={(e) => {
+                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            if (menu) {
+                                              const rect = menu.getBoundingClientRect();
+                                              menu.dataset.oldLeft = menu.style.left;
+                                              menu.dataset.oldBottom = menu.style.bottom;
+                                              menu.dataset.oldPosition = menu.style.position;
+                                              menu.style.position = 'fixed';
+                                              menu.style.left = `${rect.left}px`;
+                                              menu.style.top = `${rect.top}px`;
+                                              menu.style.bottom = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                          }}
+                                          onChange={(e) => {
+                                            const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
+                                            if (groupEl) {
+                                              groupEl.style.width = 'auto';
+                                              groupEl.style.flex = '0 0 auto';
+                                            }
+                                            const wrapperEl = e.currentTarget.closest('.alt-hover-group > div:nth-child(2) > div > div') as HTMLElement;
+                                            if (wrapperEl) {
+                                              wrapperEl.style.width = `${e.currentTarget.value}px`;
+                                            }
+                                          }}
+                                          onMouseUp={(e) => {
+                                            onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
+                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            if (menu) {
+                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                              menu.style.left = menu.dataset.oldLeft || '4px';
+                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                              menu.style.top = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                          }}
+                                          onTouchStart={(e) => {
+                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            if (menu) {
+                                              const rect = menu.getBoundingClientRect();
+                                              menu.dataset.oldLeft = menu.style.left;
+                                              menu.dataset.oldBottom = menu.style.bottom;
+                                              menu.dataset.oldPosition = menu.style.position;
+                                              menu.style.position = 'fixed';
+                                              menu.style.left = `${rect.left}px`;
+                                              menu.style.top = `${rect.top}px`;
+                                              menu.style.bottom = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                          }}
+                                          onTouchEnd={(e) => {
+                                            onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
+                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            if (menu) {
+                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                              menu.style.left = menu.dataset.oldLeft || '4px';
+                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                              menu.style.top = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                          }}
+                                          style={{ width: 80, cursor: 'ew-resize' }}
+                                        />
+                                      </div>
+                                      <button
+                                        onClick={() => onEditAlternativaImage(q.id, a.id, '')}
+                                        style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+                                        title="Remover Imagem"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
                                     </div>
                                   )}
                                 </div>
                               )}
                               <HtmlContent 
-                                editable={true}
+                                editable={!readOnly}
                                 html={a.texto}
                                 onBlurHtml={(newHtml) => { onEditAlternativa(q.id, a.id, newHtml); forceRepaginate(); }}
                                 style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
@@ -1393,7 +1472,7 @@ export function PageContent({
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                   <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
                                   {imgMenuOpen === a.id && (
-                                    <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                    <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                       <button onClick={() => handleImageAction(q.id, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
                                       <button onClick={() => handleImageAction(q.id, a.id, 'ai', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}><Sparkles size={14} /> Gerar com IA</button>
                                     </div>

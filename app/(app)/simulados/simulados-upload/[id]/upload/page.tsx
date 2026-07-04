@@ -24,6 +24,8 @@ export default function UploadSimuladoPage() {
   const simuladoId = params.id as string
   const { currentUser } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  const isProfessorViewAll = currentUser?.perfil === 'Professor' && searchParams.get('all') === 'true'
 
   const [simulado, setSimulado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -274,14 +276,16 @@ export default function UploadSimuladoPage() {
         {uploadStep === 'review' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
 
-            <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
-            </motion.button>
+            {!isProfessorViewAll && (
+              <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
+              </motion.button>
+            )}
             <motion.button onClick={() => {
               const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-              if (currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
                 setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
                 return;
               }
@@ -291,24 +295,28 @@ export default function UploadSimuladoPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
               <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
             </motion.button>
-            <motion.button onClick={() => handleSave()} disabled={saving}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
-              {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
-            </motion.button>
-            
-            {currentUser?.perfil === 'Professor' ? (
-              <motion.button onClick={() => handleSave(undefined, 'enviar_revisao')} disabled={saving}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-                {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
-              </motion.button>
-            ) : (
-              <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
-                {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aprovar</>}
-              </motion.button>
+            {!isProfessorViewAll && (
+              <>
+                <motion.button onClick={() => handleSave()} disabled={saving}
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+                  {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
+                </motion.button>
+                
+                {currentUser?.perfil === 'Professor' ? (
+                  <motion.button onClick={() => handleSave(undefined, 'enviar_revisao')} disabled={saving}
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                    {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
+                  </motion.button>
+                ) : (
+                  <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                    {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aprovar</>}
+                  </motion.button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -411,16 +419,18 @@ export default function UploadSimuladoPage() {
             setQuestoes={setQuestoes} 
             defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
+            readOnly={isProfessorViewAll}
           />
 
-          {/* Bottom Save */}
-          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', paddingBottom: 40 }}>
-            <motion.button onClick={() => handleSave()} disabled={saving}
-              whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: 'white', border: 'none', fontSize: 16, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 8px 24px rgba(139,92,246,0.3)' }}>
-              {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Simulado</>}
-            </motion.button>
-          </div>
+          {!isProfessorViewAll && (
+            <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', paddingBottom: 40 }}>
+              <motion.button onClick={() => handleSave()} disabled={saving}
+                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: 'white', border: 'none', fontSize: 16, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 8px 24px rgba(139,92,246,0.3)' }}>
+                {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Simulado</>}
+              </motion.button>
+            </div>
+          )}
         </motion.div>
       )}
       </div>

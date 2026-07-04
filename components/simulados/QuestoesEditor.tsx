@@ -16,9 +16,10 @@ interface QuestoesEditorProps {
   showAddQuestao?: boolean
   defaultDisciplinaId?: string
   defaultProfessorId?: string
+  readOnly?: boolean
 }
 
-export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, defaultDisciplinaId, defaultProfessorId }: QuestoesEditorProps) {
+export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, defaultDisciplinaId, defaultProfessorId, readOnly = false }: QuestoesEditorProps) {
   const [generatingAiFor, setGeneratingAiFor] = useState<number | null>(null)
 
   const updateQuestao = (idx: number, field: string, value: any) => {
@@ -231,7 +232,7 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
             </div>
           ))}
         </div>
-        {showAddQuestao && (
+        {!readOnly && showAddQuestao && (
           <motion.button onClick={() => { setEditingIndex(null); setIsModalOpen(true); }} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             <Plus size={16} /> Adicionar Questão
@@ -269,10 +270,12 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                   title="Editar Questão no Modal">
                   <Edit size={14} />
                 </motion.button>
-                <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }} onClick={e => { e.stopPropagation(); removeQuestao(qIdx) }}
-                  style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <Trash2 size={14} />
-                </motion.button>
+                {!readOnly && (
+                  <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }} onClick={e => { e.stopPropagation(); removeQuestao(qIdx) }}
+                    style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                    <Trash2 size={14} />
+                  </motion.button>
+                )}
                 {q.expandido !== false ? <ChevronUp size={18} color="hsl(var(--text-secondary))" /> : <ChevronDown size={18} color="hsl(var(--text-secondary))" />}
               </div>
             </div>
@@ -288,7 +291,7 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                     <div>
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Enunciado da Questão</label>
                       <HtmlContent
-                        editable={true}
+                        editable={!readOnly}
                         html={q.enunciado || ''}
                         onBlurHtml={(newHtml: string) => updateQuestao(qIdx, 'enunciado', newHtml)}
                         style={{ width: '100%', minHeight: 120, padding: '16px 20px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, lineHeight: 1.6, outline: 'none', whiteSpace: 'pre-wrap' }}
@@ -301,16 +304,18 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                         <label style={{ display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           <ImageIcon size={12} style={{ marginRight: 4 }} />Imagens de Apoio ({(q.imagens || []).length})
                         </label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => handleUploadQuestaoImagem(qIdx)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
-                            <Upload size={12} /> Upload
-                          </button>
-                          <button onClick={() => handleGenerateQuestaoImagemAi(qIdx, q.enunciado || '')} disabled={generatingAiFor === qIdx}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: 'none', fontSize: 11, fontWeight: 600, cursor: generatingAiFor === qIdx ? 'not-allowed' : 'pointer', opacity: generatingAiFor === qIdx ? 0.6 : 1 }}>
-                            {generatingAiFor === qIdx ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Gerar IA
-                          </button>
-                        </div>
+                        {!readOnly && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => handleUploadQuestaoImagem(qIdx)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+                              <Upload size={12} /> Upload
+                            </button>
+                            <button onClick={() => handleGenerateQuestaoImagemAi(qIdx, q.enunciado || '')} disabled={generatingAiFor === qIdx}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: 'none', fontSize: 11, fontWeight: 600, cursor: generatingAiFor === qIdx ? 'not-allowed' : 'pointer', opacity: generatingAiFor === qIdx ? 0.6 : 1 }}>
+                              {generatingAiFor === qIdx ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Gerar IA
+                            </button>
+                          </div>
+                        )}
                       </div>
                       
                       {(q.imagens || []).length > 0 && (
@@ -321,19 +326,23 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                               <div style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
                                 [IMAGEM {imgIdx + 1}]
                               </div>
-                              <div style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4 }}>
-                                <button onClick={() => handleResizeQuestaoImagem(qIdx, imgIdx, 50)} title="Aumentar" style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                  <ZoomIn size={12} />
-                                </button>
-                                <button onClick={() => handleResizeQuestaoImagem(qIdx, imgIdx, -50)} title="Diminuir" style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                  <ZoomOut size={12} />
-                                </button>
-                              </div>
-                              <button onClick={() => {
-                                setQuestoes(prev => prev.map((qq, qi) => qi !== qIdx ? qq : { ...qq, imagens: (qq.imagens || []).filter((_, ii) => ii !== imgIdx) }))
-                              }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(239,68,68,0.9)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                <X size={12} />
-                              </button>
+                              {!readOnly && (
+                                <>
+                                  <div style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4 }}>
+                                    <button onClick={() => handleResizeQuestaoImagem(qIdx, imgIdx, 50)} title="Aumentar" style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                      <ZoomIn size={12} />
+                                    </button>
+                                    <button onClick={() => handleResizeQuestaoImagem(qIdx, imgIdx, -50)} title="Diminuir" style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                      <ZoomOut size={12} />
+                                    </button>
+                                  </div>
+                                  <button onClick={() => {
+                                    setQuestoes(prev => prev.map((qq, qi) => qi !== qIdx ? qq : { ...qq, imagens: (qq.imagens || []).filter((_, ii) => ii !== imgIdx) }))
+                                  }} style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(239,68,68,0.9)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                    <X size={12} />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -347,35 +356,37 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                         <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Alternativas</label>
-                        <button onClick={() => addAlternativa(qIdx)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.15)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                          <Plus size={12} /> Add alternativa
-                        </button>
+                        {!readOnly && (
+                          <button onClick={() => addAlternativa(qIdx)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.15)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            <Plus size={12} /> Add alternativa
+                          </button>
+                        )}
                       </div>
 
                       {!(q.alternativas || []).length ? (
                         <div style={{ padding: '16px', borderRadius: 10, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Questão Descritiva</div>
-                            <div style={{ display: 'flex', gap: 6 }}>
                                <button 
-                                 onClick={() => updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', estilo_espaco: 'pautado' })}
-                                 style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid', 
+                                 onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', estilo_espaco: 'pautado' })}
+                                 style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: readOnly ? 'default' : 'pointer', border: '1px solid', 
                                           background: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'pautado' ? 'rgba(59,130,246,0.1)' : 'transparent',
                                           color: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'pautado' ? '#3b82f6' : 'hsl(var(--text-secondary))',
-                                          borderColor: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'pautado' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))' }}>
+                                          borderColor: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'pautado' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))',
+                                          opacity: readOnly && (q.tipo_questao !== 'descritiva' || q.estilo_espaco !== 'pautado') ? 0.5 : 1 }}>
                                  Linhas Pautadas
                                </button>
                                <button 
-                                 onClick={() => updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', estilo_espaco: 'em_branco' })}
-                                 style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid',
+                                 onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', estilo_espaco: 'em_branco' })}
+                                 style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: readOnly ? 'default' : 'pointer', border: '1px solid',
                                           background: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'em_branco' ? 'rgba(59,130,246,0.1)' : 'transparent',
                                           color: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'em_branco' ? '#3b82f6' : 'hsl(var(--text-secondary))',
-                                          borderColor: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'em_branco' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))' }}>
+                                          borderColor: q.tipo_questao === 'descritiva' && q.estilo_espaco === 'em_branco' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))',
+                                          opacity: readOnly && (q.tipo_questao !== 'descritiva' || q.estilo_espaco !== 'em_branco') ? 0.5 : 1 }}>
                                  Espaço em Branco
                                </button>
                             </div>
-                          </div>
                           
                           {q.tipo_questao === 'descritiva' && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
@@ -384,14 +395,15 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                                 {[3, 5, 10, 15, 20].map(n => (
                                   <button
                                     key={n}
-                                    onClick={() => updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', linhas_resposta: n })}
+                                    onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', linhas_resposta: n })}
                                     style={{
                                       width: 32, height: 32, borderRadius: 8, border: '1px solid',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: readOnly ? 'default' : 'pointer',
                                       background: (q.linhas_resposta || 5) === n ? '#8b5cf6' : 'transparent',
                                       color: (q.linhas_resposta || 5) === n ? 'white' : 'hsl(var(--text-secondary))',
                                       borderColor: (q.linhas_resposta || 5) === n ? '#8b5cf6' : 'hsl(var(--border-subtle))',
-                                      transition: 'all 0.2s'
+                                      transition: 'all 0.2s',
+                                      opacity: readOnly && (q.linhas_resposta || 5) !== n ? 0.5 : 1
                                     }}
                                   >
                                     {n}
@@ -416,21 +428,23 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                                 {alt.letter}
                               </div>
                               <HtmlContent
-                                editable={true}
+                                editable={!readOnly}
                                 html={alt.text || ''}
                                 onBlurHtml={(newHtml: string) => updateAlternativa(qIdx, aIdx, 'text', newHtml)}
                                 style={{ flex: 1, border: 'none', background: 'transparent', color: alt.correct ? '#1e293b' : 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', width: '100%', minHeight: 24 }}
                               />
-                              <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                                <button onClick={() => updateAlternativa(qIdx, aIdx, 'correct', !alt.correct)} title={alt.correct ? 'Remover gabarito' : 'Marcar como correta'}
-                                  style={{ width: 28, height: 28, borderRadius: 7, background: alt.correct ? 'rgba(16,185,129,0.15)' : 'transparent', border: `1px solid ${alt.correct ? '#10b981' : 'hsl(var(--border-subtle))'}`, color: alt.correct ? '#10b981' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
-                                  <CheckCircle size={14} />
-                                </button>
-                                <button onClick={() => removeAlternativa(qIdx, aIdx)}
-                                  style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: '1px solid hsl(var(--border-subtle))', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                  <X size={13} />
-                                </button>
-                              </div>
+                              {!readOnly && (
+                                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                  <button onClick={() => updateAlternativa(qIdx, aIdx, 'correct', !alt.correct)} title={alt.correct ? 'Remover gabarito' : 'Marcar como correta'}
+                                    style={{ width: 28, height: 28, borderRadius: 7, background: alt.correct ? 'rgba(16,185,129,0.15)' : 'transparent', border: `1px solid ${alt.correct ? '#10b981' : 'hsl(var(--border-subtle))'}`, color: alt.correct ? '#10b981' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                    <CheckCircle size={14} />
+                                  </button>
+                                  <button onClick={() => removeAlternativa(qIdx, aIdx)}
+                                    style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: '1px solid hsl(var(--border-subtle))', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

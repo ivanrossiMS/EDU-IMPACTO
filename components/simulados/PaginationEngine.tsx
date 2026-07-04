@@ -22,6 +22,7 @@ interface PaginationEngineProps {
   onUpdateHeaderField?: (key: string, newField: any) => void;
   pageA4Ref?: React.RefObject<HTMLDivElement | null>;
   alternativasLayout?: 'horizontal' | 'vertical';
+  readOnly?: boolean;
   onEditAlternativaImage?: (qId: string, altId: string, url: string) => void;
   forceExtraPage?: boolean;
   showMargins?: boolean;
@@ -141,7 +142,8 @@ export function PaginationEngine({
   onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage,
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
-  leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange
+  leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
+  readOnly = false
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -697,17 +699,34 @@ export function PaginationEngine({
             }}
           >
             <PageContent 
-              page={page} pIndex={pIndex} enunciadoFontSize={enunciadoFontSize} alternativasFontSize={alternativasFontSize} config={config} simulado={simulado} 
-              onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
+              page={page} 
+              pIndex={pIndex} 
+              enunciadoFontSize={enunciadoFontSize} 
+              alternativasFontSize={alternativasFontSize} 
+              config={config} 
+              simulado={simulado} 
+              onEditEnunciado={onEditEnunciado} 
+              onEditEnunciadoImage={onEditEnunciadoImage}
               onEditAlternativa={onEditAlternativa} 
-              onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
-              isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField} pageA4Ref={pageA4Ref}
-              alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
+              onRemoveAlternativa={onRemoveAlternativa} 
+              onToggleQuestion={onToggleQuestion} 
+              forceRepaginate={forceRepaginate} 
+              isEditHeaderMode={isEditHeaderMode} 
+              headerLayout={headerLayout} 
+              onUpdateHeaderField={onUpdateHeaderField} 
+              pageA4Ref={pIndex === 0 ? pageA4Ref : undefined}
+              alternativasLayout={alternativasLayout} 
+              onEditAlternativaImage={onEditAlternativaImage}
               showMargins={showMargins}
-              topMarginOffset={topMarginOffset} onTopMarginOffsetChange={onTopMarginOffsetChange}
-              bottomMarginOffset={bottomMarginOffset} onBottomMarginOffsetChange={onBottomMarginOffsetChange}
-              leftMarginOffset={leftMarginOffset} onLeftMarginOffsetChange={onLeftMarginOffsetChange}
-              rightMarginOffset={rightMarginOffset} onRightMarginOffsetChange={onRightMarginOffsetChange}
+              topMarginOffset={topMarginOffset} 
+              onTopMarginOffsetChange={onTopMarginOffsetChange}
+              bottomMarginOffset={bottomMarginOffset} 
+              onBottomMarginOffsetChange={onBottomMarginOffsetChange}
+              leftMarginOffset={leftMarginOffset} 
+              onLeftMarginOffsetChange={onLeftMarginOffsetChange}
+              rightMarginOffset={rightMarginOffset} 
+              onRightMarginOffsetChange={onRightMarginOffsetChange}
+              readOnly={readOnly}
             />
           </div>
         ))}
@@ -728,17 +747,33 @@ export function PaginationEngine({
               }}
             >
               <PageContent 
-                page={page} pIndex={pIndex} enunciadoFontSize={enunciadoFontSize} alternativasFontSize={alternativasFontSize} config={config} simulado={simulado} 
-                onEditEnunciado={onEditEnunciado} onEditEnunciadoImage={onEditEnunciadoImage}
+                page={page} 
+                pIndex={pIndex + 1} // starts after valid pages
+                enunciadoFontSize={enunciadoFontSize} 
+                alternativasFontSize={alternativasFontSize} 
+                config={config} 
+                simulado={simulado} 
+                onEditEnunciado={onEditEnunciado} 
+                onEditEnunciadoImage={onEditEnunciadoImage}
                 onEditAlternativa={onEditAlternativa} 
-                onRemoveAlternativa={onRemoveAlternativa} onToggleQuestion={onToggleQuestion} forceRepaginate={forceRepaginate} 
-                isEditHeaderMode={isEditHeaderMode} headerLayout={headerLayout} onUpdateHeaderField={onUpdateHeaderField}
-                alternativasLayout={alternativasLayout} onEditAlternativaImage={onEditAlternativaImage}
+                onRemoveAlternativa={onRemoveAlternativa} 
+                onToggleQuestion={onToggleQuestion} 
+                forceRepaginate={forceRepaginate} 
+                isEditHeaderMode={isEditHeaderMode} 
+                headerLayout={headerLayout} 
+                onUpdateHeaderField={onUpdateHeaderField}
+                alternativasLayout={alternativasLayout} 
+                onEditAlternativaImage={onEditAlternativaImage}
                 showMargins={showMargins}
-                topMarginOffset={topMarginOffset} onTopMarginOffsetChange={onTopMarginOffsetChange}
-                bottomMarginOffset={bottomMarginOffset} onBottomMarginOffsetChange={onBottomMarginOffsetChange}
-                leftMarginOffset={leftMarginOffset} onLeftMarginOffsetChange={onLeftMarginOffsetChange}
-                rightMarginOffset={rightMarginOffset} onRightMarginOffsetChange={onRightMarginOffsetChange}
+                topMarginOffset={topMarginOffset} 
+                onTopMarginOffsetChange={onTopMarginOffsetChange}
+                bottomMarginOffset={bottomMarginOffset} 
+                onBottomMarginOffsetChange={onBottomMarginOffsetChange}
+                leftMarginOffset={leftMarginOffset} 
+                onLeftMarginOffsetChange={onLeftMarginOffsetChange}
+                rightMarginOffset={rightMarginOffset} 
+                onRightMarginOffsetChange={onRightMarginOffsetChange}
+                readOnly={readOnly}
               />
             </div>
           ))}
