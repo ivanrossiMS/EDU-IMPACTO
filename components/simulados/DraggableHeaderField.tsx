@@ -123,7 +123,7 @@ export function DraggableHeaderField({
         fontSize: `${field.fontSize}pt`,
         textAlign: field.align as any,
         transform: 'translateY(-50%)',
-        whiteSpace: 'nowrap',
+        whiteSpace: field.whiteSpace || 'nowrap',
         cursor: isEditMode ? (isDragging ? 'grabbing' : 'grab') : 'default',
         pointerEvents: isEditMode ? 'auto' : 'none',
         zIndex: isEditMode ? 10 : 2,
