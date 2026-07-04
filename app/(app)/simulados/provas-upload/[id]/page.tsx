@@ -87,7 +87,7 @@ export default function VerProvaUploadPage() {
   }
 
   const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-    aguardando: { label: 'Aguardando Upload', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
+    aguardando: { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
     em_revisao: { label: 'Em Revisão', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
     aprovado: { label: 'Aprovado', color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
     reprovado: { label: 'Reprovado', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },

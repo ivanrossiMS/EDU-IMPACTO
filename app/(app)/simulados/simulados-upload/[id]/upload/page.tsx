@@ -214,6 +214,7 @@ export default function UploadSimuladoPage() {
 
       if (error) throw error
 
+      await loadSimulado()
       setSuccessModal(true)
     } catch (e: any) {
       alert('Erro ao salvar: ' + e.message)

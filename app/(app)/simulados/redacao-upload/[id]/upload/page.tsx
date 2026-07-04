@@ -211,6 +211,7 @@ export default function UploadRedaçãoPage() {
 
       if (error) throw error
 
+      await loadRedação()
       setSuccessModal(true)
     } catch (e: any) {
       alert('Erro ao salvar: ' + e.message)

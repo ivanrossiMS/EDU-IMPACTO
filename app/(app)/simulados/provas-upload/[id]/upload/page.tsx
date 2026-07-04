@@ -213,6 +213,7 @@ export default function UploadProvaPage() {
 
       if (error) throw error
 
+      await loadProva()
       setSuccessModal(true)
     } catch (e: any) {
       alert('Erro ao salvar: ' + e.message)

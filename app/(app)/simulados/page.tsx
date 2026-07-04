@@ -324,7 +324,7 @@ export default function SimuladosDashboard() {
   // ==============================
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'aguardando': return { c: '#f59e0b', b: 'rgba(245,158,11,0.15)', l: 'Aguardando Upload' }
+      case 'aguardando': return { c: '#f59e0b', b: 'rgba(245,158,11,0.15)', l: 'Aguardando' }
       case 'em_revisao': return { c: '#3b82f6', b: 'rgba(59,130,246,0.15)', l: 'Em Revisão' }
       case 'publicado': return { c: '#8b5cf6', b: 'rgba(139,92,246,0.15)', l: 'Publicado' }
       default: return { c: '#10b981', b: 'rgba(16,185,129,0.15)', l: status }

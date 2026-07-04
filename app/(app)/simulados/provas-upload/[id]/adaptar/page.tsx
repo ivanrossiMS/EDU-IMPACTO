@@ -254,13 +254,7 @@ export default function UploadProvaPage() {
         {uploadStep === 'review' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
 
-            {!isProfessorViewAll && (
-              <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
-              </motion.button>
-            )}
+
             <motion.button onClick={() => setShowPreview(true)}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>

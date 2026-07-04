@@ -150,7 +150,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
   const isCoord = currentUserPerfil !== 'Professor'
 
   const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-    aguardando: { label: 'Aguardando Upload', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: Clock },
+    aguardando: { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: Clock },
     em_revisao: { label: 'Em Revisão', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', icon: Eye },
     aredacaodo: { label: 'Aredacaodo', color: '#10b981', bg: 'rgba(16,185,129,0.1)', icon: CheckCircle },
     reredacaodo: { label: 'Reredacaodo', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', icon: XCircle },
@@ -269,7 +269,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
           <div className="responsive-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
             {[
               { label: 'Total de Redações', sub: 'Todas criadas', value: stats.total, color: '#8b5cf6', iconBg: 'rgba(139,92,246,0.06)', icon: Layers },
-              { label: 'Aguardando Upload', sub: 'Enviadas pelos professores', value: stats.aguardando, color: '#f59e0b', iconBg: 'rgba(245,158,11,0.06)', icon: Clock },
+              { label: 'Aguardando', sub: 'Enviadas pelos professores', value: stats.aguardando, color: '#f59e0b', iconBg: 'rgba(245,158,11,0.06)', icon: Clock },
               { label: 'Em Revisão', sub: 'Aguardando correção', value: stats.em_revisao, color: '#3b82f6', iconBg: 'rgba(59,130,246,0.06)', icon: Eye },
               { label: 'Aprovadas', sub: 'Prontas para análise', value: stats.aredacaodo, color: '#10b981', iconBg: 'rgba(16,185,129,0.06)', icon: CheckCircle },
             ].map((s, i) => (
@@ -365,7 +365,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
                 onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
               >
                 <option value="todos">Todos os Status</option>
-                <option value="aguardando">Aguardando Upload</option>
+                <option value="aguardando">Aguardando</option>
                 <option value="em_revisao">Em Revisão</option>
                 <option value="aredacaodo">Aprovado</option>
                 <option value="reredacaodo">Rejeitado</option>
@@ -399,7 +399,13 @@ export default function UploadRedaçõesGerenciamentoPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <AnimatePresence>
               {filtered.map((redacao, i) => {
-                const sc = statusConfig[redacao.status] || statusConfig['aguardando']
+                const allRevisoes = redacao.redacao_upload_requisicoes || []
+                let computedStatus = redacao.status
+                if (computedStatus !== 'concluido' && computedStatus !== 'cancelado') {
+                  const hasPendente = allRevisoes.length === 0 || allRevisoes.some((r: any) => r.status === 'pendente' || !r.status)
+                  computedStatus = hasPendente ? 'aguardando' : 'em_revisao'
+                }
+                const sc = statusConfig[computedStatus] || statusConfig['aguardando']
                 const Icon = sc.icon
                 const isProfView = currentUserPerfil === 'Professor'
                 const myAssignment = (redacao.redacao_upload_requisicoes || []).find((r: any) => r.id_professor === currentUser?.id)
@@ -412,10 +418,19 @@ export default function UploadRedaçõesGerenciamentoPage() {
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                     transition={{ delay: i * 0.04 }}
                     className="responsive-card"
-                    style={{ position: 'relative', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '24px', display: 'flex', flexDirection: 'column', gap: 24, transition: 'all 0.2s' }}
+                    style={{ position: 'relative', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '24px', display: 'flex', flexDirection: 'column', gap: 24, transition: 'all 0.2s', marginTop: redacao.titulo?.includes('ADAPTADO') ? 16 : 0 }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf655'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(139,92,246,0.1)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'hsl(var(--border-subtle))'; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
                   >
+                    {redacao.titulo?.includes('ADAPTADO') && (
+                      <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'absolute', top: 8, left: -6, width: 16, height: 16, background: '#6d28d9', borderRadius: 3, transform: 'rotate(45deg)', zIndex: -1 }} />
+                        <div style={{ position: 'absolute', top: 8, right: -6, width: 16, height: 16, background: '#6d28d9', borderRadius: 3, transform: 'rotate(45deg)', zIndex: -1 }} />
+                        <div style={{ background: 'linear-gradient(135deg, #a855f7, #8b5cf6)', color: 'white', fontWeight: 900, fontSize: 13, letterSpacing: '0.05em', padding: '6px 32px', borderRadius: 8, boxShadow: '0 4px 12px rgba(139,92,246,0.4)', zIndex: 2 }}>
+                          ADAPTADO
+                        </div>
+                      </div>
+                    )}
                     {/* Header Section */}
                     <div className="responsive-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                       <div style={{ display: 'flex', gap: 16, flex: 1, minWidth: 0 }}>
@@ -492,9 +507,22 @@ export default function UploadRedaçõesGerenciamentoPage() {
                                 border: '1px solid hsl(var(--border-subtle))',
                                 transition: 'all 0.2s'
                               }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                                  <span style={{ fontSize: 16, fontWeight: 900, color: isMyCard ? '#8b5cf6' : 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>{formatName(req.professor_nome)}</span>
-                                  <span style={{ padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 12, fontWeight: 800 }}>{req.disciplina_nome}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <span style={{ fontSize: 16, fontWeight: 900, color: isMyCard ? '#8b5cf6' : 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>{formatName(req.professor_nome)}</span>
+                                    <span style={{ padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 12, fontWeight: 800 }}>{req.disciplina_nome}</span>
+                                  </div>
+                                  {(() => {
+                                    const st = req.status || 'pendente';
+                                    const badgeColors: any = {
+                                      pendente: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', label: 'Pendente' },
+                                      enviado: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', label: 'Em Revisão' },
+                                      aprovado: { bg: 'rgba(16,185,129,0.1)', text: '#10b981', label: 'Aprovado' },
+                                      concluido: { bg: 'rgba(16,185,129,0.1)', text: '#10b981', label: 'Concluído' }
+                                    };
+                                    const b = badgeColors[st] || badgeColors['pendente'];
+                                    return <span style={{ padding: '4px 8px', borderRadius: 6, background: b.bg, color: b.text, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{b.label}</span>
+                                  })()}
                                 </div>
 
                               </div>
