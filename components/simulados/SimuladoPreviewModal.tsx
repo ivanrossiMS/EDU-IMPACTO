@@ -539,6 +539,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             headerLayout={headerLayout}
             onUpdateHeaderField={handleUpdateHeaderField}
             pageA4Ref={pageA4Ref}
+            readOnly={isReadOnly || isolatedMode}
             showMargins={showMargins}
             topMarginOffset={topMarginOffset}
             onTopMarginOffsetChange={setTopMarginOffset}
