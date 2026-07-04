@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { searchParams } = new URL(request.url)
-  const simuladoIds = searchParams.get('simuladoIds')
+  const body = await request.json().catch(() => ({}))
+  const { simuladoIds } = body
 
   let query = supabase.from('simulados_upload_requisicoes').select('*')
-  if (simuladoIds) {
-    query = query.in('id_simulado_upload', simuladoIds.split(','))
+  if (simuladoIds && Array.isArray(simuladoIds) && simuladoIds.length > 0) {
+    query = query.in('id_simulado_upload', simuladoIds)
   }
 
   const { data, error } = await query

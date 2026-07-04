@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
@@ -17,6 +17,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
   const [redacoes, setRedações] = useState<any[]>([])
   const [bimestres, setBimestres] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('todos')
   const [filterBimestre, setFilterBimestre] = useState('todos')
@@ -29,6 +30,11 @@ export default function UploadRedaçõesGerenciamentoPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchTerm), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   const loadData = async () => {
     setLoading(true)
@@ -43,7 +49,11 @@ export default function UploadRedaçõesGerenciamentoPage() {
       // Fetch requisitions via API to bypass RLS so professors can see all cards
       if (redacoesData.length > 0) {
         try {
-          const reqsRes = await fetch(`/api/redacao-upload/requisicoes?redacaoIds=${redacoesData.map((p: any) => p.id).join(',')}`)
+          const reqsRes = await fetch(`/api/redacao-upload/requisicoes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ redacaoIds: redacoesData.map((p: any) => p.id) })
+          })
           if (reqsRes.ok) {
             const reqsData = await reqsRes.json()
             redacoesData = redacoesData.map((p: any) => ({
@@ -80,17 +90,19 @@ export default function UploadRedaçõesGerenciamentoPage() {
 
   const isProfView = currentUserPerfil === 'Professor'
 
-  const filtered = redacoes.filter(p => {
-    const matchSearch = !search || p.titulo?.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = filterStatus === 'todos' || p.status === filterStatus
-    const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
-    const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
-    
-    // O professor logado só pode ver as redacoes em que ele está vinculado
-    const isAssigned = !isProfView || (p.redacao_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
-    
-    return matchSearch && matchStatus && matchBimestre && matchSerie && isAssigned
-  })
+  const filtered = useMemo(() => {
+    return redacoes.filter(p => {
+      const matchSearch = !search || p.titulo?.toLowerCase().includes(search.toLowerCase())
+      const matchStatus = filterStatus === 'todos' || p.status === filterStatus
+      const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
+      const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
+      
+      // O professor logado só pode ver as redacoes em que ele está vinculado
+      const isAssigned = !isProfView || (p.redacao_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
+      
+      return matchSearch && matchStatus && matchBimestre && matchSerie && isAssigned
+    })
+  }, [redacoes, search, filterStatus, filterBimestre, filterSerie, isProfView, currentUser?.id])
 
   const isCoord = currentUserPerfil !== 'Professor'
 
@@ -102,12 +114,14 @@ export default function UploadRedaçõesGerenciamentoPage() {
     publicado: { label: 'Publicado', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', icon: BookOpen },
   }
 
-  const stats = {
-    total: redacoes.length,
-    aguardando: redacoes.filter(p => p.status === 'aguardando').length,
-    em_revisao: redacoes.filter(p => p.status === 'em_revisao').length,
-    aredacaodo: redacoes.filter(p => p.status === 'aredacaodo' || p.status === 'publicado').length,
-  }
+  const stats = useMemo(() => {
+    return {
+      total: redacoes.length,
+      aguardando: redacoes.filter(p => p.status === 'aguardando').length,
+      em_revisao: redacoes.filter(p => p.status === 'em_revisao').length,
+      aredacaodo: redacoes.filter(p => p.status === 'aredacaodo' || p.status === 'publicado').length,
+    }
+  }, [redacoes])
 
   return (
     <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
@@ -258,8 +272,8 @@ export default function UploadRedaçõesGerenciamentoPage() {
           <div className="responsive-search" style={{ flex: '1 1 280px', position: 'relative' }}>
             <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))' }} />
             <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
               placeholder="Buscar por título da redação..."
               style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
               onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
