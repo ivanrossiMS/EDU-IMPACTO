@@ -19,7 +19,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('todos')
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -136,33 +135,21 @@ export default function UploadRedaçõesGerenciamentoPage() {
   const filtered = useMemo(() => {
     return redacoes.filter(p => {
       const matchSearch = !search || p.titulo?.toLowerCase().includes(search.toLowerCase())
-      const matchStatus = filterStatus === 'todos' || p.status === filterStatus
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
       
       // O professor logado só pode ver as redacoes em que ele está vinculado
       const isAssigned = !isProfView || (p.redacao_upload_requisicoes || []).some((r: any) => r.id_professor === currentUser?.id)
       
-      return matchSearch && matchStatus && matchBimestre && matchSerie && isAssigned
+      return matchSearch && matchBimestre && matchSerie && isAssigned
     })
-  }, [redacoes, search, filterStatus, filterBimestre, filterSerie, isProfView, currentUser?.id])
+  }, [redacoes, search, filterBimestre, filterSerie, isProfView, currentUser?.id])
 
   const isCoord = currentUserPerfil !== 'Professor'
 
-  const statusConfig: Record<string, { label: string; color: string; bg: string; icon: any }> = {
-    aguardando: { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', icon: Clock },
-    em_revisao: { label: 'Em Revisão', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', icon: Eye },
-    aredacaodo: { label: 'Aredacaodo', color: '#10b981', bg: 'rgba(16,185,129,0.1)', icon: CheckCircle },
-    reredacaodo: { label: 'Reredacaodo', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', icon: XCircle },
-    publicado: { label: 'Publicado', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', icon: BookOpen },
-  }
-
   const stats = useMemo(() => {
     return {
-      total: redacoes.length,
-      aguardando: redacoes.filter(p => p.status === 'aguardando').length,
-      em_revisao: redacoes.filter(p => p.status === 'em_revisao').length,
-      aredacaodo: redacoes.filter(p => p.status === 'aredacaodo' || p.status === 'publicado').length,
+      total: redacoes.length
     }
   }, [redacoes])
 
@@ -266,12 +253,9 @@ export default function UploadRedaçõesGerenciamentoPage() {
 
         {/* Stats */}
         {isCoord && (
-          <div className="responsive-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+          <div className="responsive-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: 16, marginBottom: 32 }}>
             {[
-              { label: 'Total de Redações', sub: 'Todas criadas', value: stats.total, color: '#8b5cf6', iconBg: 'rgba(139,92,246,0.06)', icon: Layers },
-              { label: 'Aguardando', sub: 'Enviadas pelos professores', value: stats.aguardando, color: '#f59e0b', iconBg: 'rgba(245,158,11,0.06)', icon: Clock },
-              { label: 'Em Revisão', sub: 'Aguardando correção', value: stats.em_revisao, color: '#3b82f6', iconBg: 'rgba(59,130,246,0.06)', icon: Eye },
-              { label: 'Aprovadas', sub: 'Prontas para análise', value: stats.aredacaodo, color: '#10b981', iconBg: 'rgba(16,185,129,0.06)', icon: CheckCircle },
+              { label: 'Total de Redações', sub: 'Todas criadas', value: stats.total, color: '#8b5cf6', iconBg: 'rgba(139,92,246,0.06)', icon: Layers }
             ].map((s, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
                 style={{ 
@@ -355,24 +339,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
               <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
             </div>
 
-            <div style={{ position: 'relative', flex: '1 1 180px' }}>
-              <Filter size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
-              <select
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-                style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
-                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
-              >
-                <option value="todos">Todos os Status</option>
-                <option value="aguardando">Aguardando</option>
-                <option value="em_revisao">Em Revisão</option>
-                <option value="aredacaodo">Aprovado</option>
-                <option value="reredacaodo">Rejeitado</option>
-                <option value="publicado">Publicado</option>
-              </select>
-              <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
-            </div>
           </div>
         </div>
 
@@ -400,13 +366,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
             <AnimatePresence>
               {filtered.map((redacao, i) => {
                 const allRevisoes = redacao.redacao_upload_requisicoes || []
-                let computedStatus = redacao.status
-                if (computedStatus !== 'concluido' && computedStatus !== 'cancelado') {
-                  const hasPendente = allRevisoes.length === 0 || allRevisoes.some((r: any) => r.status === 'pendente' || !r.status)
-                  computedStatus = hasPendente ? 'aguardando' : 'em_revisao'
-                }
-                const sc = statusConfig[computedStatus] || statusConfig['aguardando']
-                const Icon = sc.icon
                 const isProfView = currentUserPerfil === 'Professor'
                 const myAssignment = (redacao.redacao_upload_requisicoes || []).find((r: any) => r.id_professor === currentUser?.id)
                 const showUploadBtn = isProfView && myAssignment && myAssignment.status === 'pendente'
@@ -466,9 +425,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
                           </div>
                         </div>
                       </div>
-                      <motion.div className="responsive-card-badge" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1, boxShadow: [`0 0 0px ${sc.color}00`, `0 0 15px ${sc.color}99`, `0 0 0px ${sc.color}00`] }} style={{ padding: '6px 16px', borderRadius: 100, border: `1px solid ${sc.color}40`, color: sc.color, background: `${sc.color}15`, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                        <Icon size={14} strokeWidth={3} /> {sc.label}
-                      </motion.div>
                     </div>
 
                     {/* Bottom Grid Section */}
@@ -512,17 +468,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
                                     <span style={{ fontSize: 16, fontWeight: 900, color: isMyCard ? '#8b5cf6' : 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>{formatName(req.professor_nome)}</span>
                                     <span style={{ padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 12, fontWeight: 800 }}>{req.disciplina_nome}</span>
                                   </div>
-                                  {(() => {
-                                    const st = req.status || 'pendente';
-                                    const badgeColors: any = {
-                                      pendente: { bg: 'rgba(245,158,11,0.1)', text: '#f59e0b', label: 'Pendente' },
-                                      enviado: { bg: 'rgba(59,130,246,0.1)', text: '#3b82f6', label: 'Em Revisão' },
-                                      aprovado: { bg: 'rgba(16,185,129,0.1)', text: '#10b981', label: 'Aprovado' },
-                                      concluido: { bg: 'rgba(16,185,129,0.1)', text: '#10b981', label: 'Concluído' }
-                                    };
-                                    const b = badgeColors[st] || badgeColors['pendente'];
-                                    return <span style={{ padding: '4px 8px', borderRadius: 6, background: b.bg, color: b.text, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{b.label}</span>
-                                  })()}
                                 </div>
 
                               </div>
