@@ -79,10 +79,18 @@ export default function BimestresPage() {
   const sortedYears = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
   return (
-    <div style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="bimestres-container" style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .bimestres-container { padding: 16px !important; margin: 0 !important; }
+          .responsive-header { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; padding: 20px !important; }
+          .responsive-header h1 { font-size: 24px !important; }
+          .responsive-btn { width: 100% !important; justify-content: center !important; }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         
-        <div style={{ 
+        <div className="responsive-header" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
@@ -104,6 +112,7 @@ export default function BimestresPage() {
           </div>
           
           <motion.button 
+            className="responsive-btn"
             whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => handleOpen()}

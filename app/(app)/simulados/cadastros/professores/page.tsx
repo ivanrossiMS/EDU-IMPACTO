@@ -31,8 +31,17 @@ export default function ProfessoresPage() {
   const filtered = data?.filter(item => item.nome.toLowerCase().includes(search.toLowerCase())) || []
 
   return (
-    <div style={{ padding: '40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+    <div className="professores-container" style={{ padding: '40px' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .professores-container { padding: 16px !important; margin: 0 !important; }
+          .responsive-header { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
+          .responsive-btn { width: 100% !important; justify-content: center !important; }
+          .responsive-header a { width: 100% !important; }
+          .responsive-list-item { flex-direction: column !important; align-items: flex-start !important; gap: 12px !important; }
+        }
+      `}</style>
+      <div className="responsive-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, rgba(244,63,94,0.1), rgba(190,18,60,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(244,63,94,0.2)' }}>
             <Users size={24} color="#f43f5e" />
@@ -42,8 +51,9 @@ export default function ProfessoresPage() {
             <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0', fontSize: 14 }}>Autores das questões e provas (Sincronizado com Usuários)</p>
           </div>
         </div>
-        <Link href="/configuracoes/usuarios">
+        <Link href="/configuracoes/usuarios" style={{ width: 'auto' }}>
           <button 
+            className="responsive-btn"
             style={{ background: 'linear-gradient(135deg, #f43f5e, #be123c)', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
           >
             <Plus size={18} /> Cadastrar no Sistema
@@ -80,7 +90,7 @@ export default function ProfessoresPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {filtered.map(item => (
-              <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
+              <div key={item.id} className="responsive-list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 20, background: 'hsl(var(--bg-app))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(100, 116, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-primary))', fontWeight: 800, fontSize: 18 }}>
                     {item.nome.charAt(0).toUpperCase()}

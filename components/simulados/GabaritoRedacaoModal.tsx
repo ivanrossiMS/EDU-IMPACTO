@@ -17,13 +17,14 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: p, error } = await supabase.from('provas_upload').select('*').eq('id', provaUploadId).single()
+        const { data, error } = await supabase.from('provas_upload').select('*').eq('id', provaUploadId).single()
+        const p = data as any
         if (error) throw error
 
         let bimestreNome = 'Sem Bimestre'
         if (p?.id_bimestre) {
           const { data: b } = await supabase.from('simulados_bimestres').select('nome').eq('id', p.id_bimestre).single()
-          if (b) bimestreNome = b.nome
+          if (b) bimestreNome = (b as any).nome
         }
 
         if (p) {

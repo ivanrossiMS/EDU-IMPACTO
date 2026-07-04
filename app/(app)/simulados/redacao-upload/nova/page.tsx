@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 
 export default function NovaRedaçãoUploadPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const adaptarDe = searchParams.get('adaptar_de')
   const { currentUser } = useApp()
   const [loading, setLoading] = useState(false)
   const [successModal, setSuccessModal] = useState(false)
@@ -53,9 +55,34 @@ export default function NovaRedaçãoUploadPage() {
           setProfessores(data.filter((u: any) => u.perfil === 'Professor' && u.status === 'ativo'))
         }
       } catch (e) {}
+
+      if (adaptarDe) {
+        const { data: oldRedacao } = await (supabase as any).from('redacao_upload').select('*').eq('id', adaptarDe).single()
+        if (oldRedacao) {
+          setTitulo((oldRedacao.titulo || '') + ' - Adaptado')
+          if (oldRedacao.descricao) setDescricao(oldRedacao.descricao)
+          if (oldRedacao.data_aplicacao) setDataAplicacao(oldRedacao.data_aplicacao)
+          if (oldRedacao.id_bimestre) setBimestreId(oldRedacao.id_bimestre)
+          if (oldRedacao.series) setSeries(Array.isArray(oldRedacao.series) ? oldRedacao.series : [oldRedacao.series])
+          if (oldRedacao.data_limite_upload) setDataLimiteUpload(oldRedacao.data_limite_upload)
+          if (oldRedacao.valor) setValor(oldRedacao.valor.toString())
+          
+          const { data: reqs } = await (supabase as any).from('redacao_upload_requisicoes').select('*').eq('id_redacao_upload', adaptarDe)
+          if (reqs && reqs.length > 0) {
+            setAssignments(reqs.map((r: any) => ({
+              id: Date.now().toString() + Math.random(),
+              disciplinaId: r.id_disciplina || '',
+              disciplinaNome: r.disciplina_nome || '',
+              professorId: r.id_professor || '',
+              professorNome: r.professor_nome || '',
+              qtdQuestoes: r.qtd_questoes || 10
+            })))
+          }
+        }
+      }
     }
     load()
-  }, [])
+  }, [adaptarDe])
 
   const toggleSerie = (s: string) => setSeries(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
 
@@ -274,7 +301,11 @@ export default function NovaRedaçãoUploadPage() {
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
-                      {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      {disciplinas.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>

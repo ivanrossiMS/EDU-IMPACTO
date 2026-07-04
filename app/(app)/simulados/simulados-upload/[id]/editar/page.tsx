@@ -8,7 +8,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 
-export default function EditarProvaUploadPage() {
+export default function EditarSimuladoUploadPage() {
   const router = useRouter()
   const params = useParams() as { id: string }
   const { currentUser } = useApp()
@@ -82,7 +82,7 @@ export default function EditarProvaUploadPage() {
         }
       } catch (e) {
         console.error(e)
-        alert('Erro ao carregar dados da prova.')
+        alert('Erro ao carregar dados do simulado.')
       } finally {
         setInitialLoading(false)
       }
@@ -139,7 +139,7 @@ export default function EditarProvaUploadPage() {
   }
 
   const handleSave = async () => {
-    if (!titulo.trim()) { alert('Informe o título da prova.'); return }
+    if (!titulo.trim()) { alert('Informe o título do simulado.'); return }
     if (series.length === 0) { alert('Selecione ao menos uma série.'); return }
     if (assignments.some(a => !a.disciplinaId || !a.professorId)) {
       alert('Preencha disciplina e professor em todas as atribuições.'); return
@@ -184,7 +184,7 @@ export default function EditarProvaUploadPage() {
       // Update or Insert
       for (const a of assignments) {
         const reqPayload = {
-          id_prova_upload: params.id,
+          id_simulado_upload: params.id,
           id_disciplina: a.disciplinaId,
           disciplina_nome: a.disciplinaNome,
           id_professor: a.professorId,
@@ -202,14 +202,14 @@ export default function EditarProvaUploadPage() {
       setSuccessModal(true)
     } catch (e: any) {
       console.error(e)
-      alert('Erro ao atualizar prova: ' + e.message)
+      alert('Erro ao atualizar simulado: ' + e.message)
     } finally {
       setLoading(false)
     }
   }
 
   if (initialLoading) {
-    return <div style={{ padding: 40, textAlign: 'center' }}>Carregando dados da prova...</div>
+    return <div style={{ padding: 40, textAlign: 'center' }}>Carregando dados do simulado...</div>
   }
 
   const inputStyle: React.CSSProperties = {
@@ -230,12 +230,12 @@ export default function EditarProvaUploadPage() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Link href="/simulados/provas-upload"
+            <Link href="/simulados/simulados-upload"
               style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(100,116,139,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-primary))', textDecoration: 'none' }}>
               <ArrowLeft size={20} />
             </Link>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Editar Prova</h1>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>Editar Simulado</h1>
               <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 14 }}>Atualize as configurações e atribuições</p>
             </div>
           </div>
@@ -251,11 +251,11 @@ export default function EditarProvaUploadPage() {
         {/* ── Section 1: Basic Info ── */}
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32, marginBottom: 24 }}>
           <h3 style={{ color: 'hsl(var(--text-primary))', fontSize: 16, fontWeight: 700, margin: '0 0 24px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BookOpen size={18} color="#8b5cf6" /> Informações da Prova
+            <BookOpen size={18} color="#8b5cf6" /> Informações do Simulado
           </h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Título da Prova *</label>
+              <label style={labelStyle}>Título do Simulado *</label>
               <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Simulado Geral — 2º Bimestre 2025" style={inputStyle} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -271,7 +271,7 @@ export default function EditarProvaUploadPage() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Valor da Prova (Nota)</label>
+              <label style={labelStyle}>Valor do Simulado (Nota)</label>
               <input type="text" value={valor} onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ''))} placeholder="Ex: 10,0" style={inputStyle} />
             </div>
             <div>
@@ -343,7 +343,11 @@ export default function EditarProvaUploadPage() {
                       disabled={isDisabled}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, opacity: isDisabled ? 0.8 : 1 }}>
                       <option value="" disabled>Selecionar...</option>
-                      {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      {disciplinas.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -394,12 +398,12 @@ export default function EditarProvaUploadPage() {
                 <CheckCircle size={32} color="#10b981" />
               </div>
               
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px' }}>Prova Atualizada!</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px' }}>Simulado Atualizado!</h2>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, lineHeight: 1.5, margin: '0 0 32px' }}>
-                As informações e atribuições da prova foram salvas com sucesso.
+                As informações e atribuições do simulado foram salvas com sucesso.
               </p>
               
-              <motion.button onClick={() => router.push('/simulados/provas-upload')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+              <motion.button onClick={() => router.push('/simulados/simulados-upload')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 style={{ width: '100%', padding: '14px 0', borderRadius: 14, background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(16,185,129,0.3)' }}>
                 Continuar
               </motion.button>

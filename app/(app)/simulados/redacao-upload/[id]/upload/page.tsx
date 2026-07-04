@@ -411,7 +411,7 @@ export default function UploadRedaçãoPage() {
 
           {/* Bottom Save */}
           <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', paddingBottom: 40 }}>
-            <motion.button onClick={handleSave} disabled={saving}
+            <motion.button onClick={() => handleSave()} disabled={saving}
               whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: 'white', border: 'none', fontSize: 16, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 8px 24px rgba(139,92,246,0.3)' }}>
               {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Redação</>}
@@ -557,7 +557,7 @@ export default function UploadRedaçãoPage() {
               }))).filter(Boolean).join(', ')
             }}
             config={simConfig}
-            onClose={() => setShowPreview(false)}
+            onClose={() => router.push('/simulados/redacao-upload')}
             onSave={handleSave}
             saving={saving}
           />

@@ -114,10 +114,18 @@ export default function DisciplinasPage() {
   });
 
   return (
-    <div style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="disciplinas-container" style={{ padding: '40px', maxWidth: 1200, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .disciplinas-container { padding: 16px !important; margin: 0 !important; }
+          .responsive-header { flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; padding: 20px !important; }
+          .responsive-header h1 { font-size: 24px !important; }
+          .responsive-btn { width: 100% !important; justify-content: center !important; }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         
-        <div style={{ 
+        <div className="responsive-header" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
@@ -139,6 +147,7 @@ export default function DisciplinasPage() {
           </div>
           
           <motion.button 
+            className="responsive-btn"
             whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => handleOpen()}
@@ -211,7 +220,12 @@ export default function DisciplinasPage() {
                       <div style={{ width: 44, height: 44, borderRadius: 12, background: item.cor ? item.cor + '15' : 'rgba(59,130,246,0.1)', color: item.cor || '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <BookOpen size={20} />
                       </div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>{item.nome}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {item.nome}
+                        {(item.segmento || 'Sem Segmento') !== 'Sem Segmento' && (
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>- {item.segmento}</span>
+                        )}
+                      </div>
                     </div>
                     
                     <div style={{ display: 'flex', gap: 8 }}>

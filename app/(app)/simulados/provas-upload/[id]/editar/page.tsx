@@ -343,7 +343,11 @@ export default function EditarProvaUploadPage() {
                       disabled={isDisabled}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, opacity: isDisabled ? 0.8 : 1 }}>
                       <option value="" disabled>Selecionar...</option>
-                      {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      {disciplinas.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>

@@ -4,12 +4,14 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 
 export default function NovaProvaUploadPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const adaptarDe = searchParams.get('adaptar_de')
   const { currentUser } = useApp()
   const [loading, setLoading] = useState(false)
   const [successModal, setSuccessModal] = useState(false)
@@ -53,9 +55,34 @@ export default function NovaProvaUploadPage() {
           setProfessores(data.filter((u: any) => u.perfil === 'Professor' && u.status === 'ativo'))
         }
       } catch (e) {}
+
+      if (adaptarDe) {
+        const { data: oldProva } = await (supabase as any).from('provas_upload').select('*').eq('id', adaptarDe).single()
+        if (oldProva) {
+          setTitulo((oldProva.titulo || '') + ' - Adaptado')
+          if (oldProva.descricao) setDescricao(oldProva.descricao)
+          if (oldProva.data_aplicacao) setDataAplicacao(oldProva.data_aplicacao)
+          if (oldProva.id_bimestre) setBimestreId(oldProva.id_bimestre)
+          if (oldProva.series) setSeries(Array.isArray(oldProva.series) ? oldProva.series : [oldProva.series])
+          if (oldProva.data_limite_upload) setDataLimiteUpload(oldProva.data_limite_upload)
+          if (oldProva.valor) setValor(oldProva.valor.toString())
+          
+          const { data: reqs } = await (supabase as any).from('provas_upload_requisicoes').select('*').eq('id_prova_upload', adaptarDe)
+          if (reqs && reqs.length > 0) {
+            setAssignments(reqs.map((r: any) => ({
+              id: Date.now().toString() + Math.random(),
+              disciplinaId: r.id_disciplina || '',
+              disciplinaNome: r.disciplina_nome || '',
+              professorId: r.id_professor || '',
+              professorNome: r.professor_nome || '',
+              qtdQuestoes: r.qtd_questoes || 10
+            })))
+          }
+        }
+      }
     }
     load()
-  }, [])
+  }, [adaptarDe])
 
   const toggleSerie = (s: string) => setSeries(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
 
@@ -277,7 +304,11 @@ export default function NovaProvaUploadPage() {
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
-                      {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      {disciplinas.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>

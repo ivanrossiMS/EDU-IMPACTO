@@ -29,13 +29,13 @@ A marcação correta é um círculo completamente preenchido/pintado/sombreado.
 Sua tarefa:
 1. Identifique qual alternativa o aluno marcou em cada questão (a mais escura/preenchida).
 2. Se uma questão não tiver nenhuma marcação clara, use null.
-3. Se houver rasura ou múltiplas marcações, escolha a que parece ser a intenção final do aluno.
+3. Se houver mais de uma alternativa marcada claramente para a mesma questão, você DEVE retornar "ANULADA".
 
 Responda APENAS com um JSON válido no seguinte formato, sem nenhum texto adicional:
 {
   "respostas": [
     { "numero": 1, "resposta": "B" },
-    { "numero": 2, "resposta": "A" },
+    { "numero": 2, "resposta": "ANULADA" },
     ...
   ]
 }
@@ -78,16 +78,22 @@ Retorne exatamente ${totalQuestoes} itens no array, um para cada questão.`
 
     // Score the answers
     let acertos = 0
+    let anuladas = 0
     const resultadoDetalhado = gabaritoOficial.map((q: any) => {
       const respostaAluno = respostasAluno.find((r) => r.numero === q.numero)
       const respostaStr = respostaAluno?.resposta?.toUpperCase() || null
-      const correto = respostaStr === q.resposta?.toUpperCase()
+      const isAnulada = respostaStr === 'ANULADA'
+      const correto = !isAnulada && respostaStr === q.resposta?.toUpperCase()
+      
       if (correto) acertos++
+      if (isAnulada) anuladas++
+
       return {
         numero: q.numero,
         respostaAluno: respostaStr,
         respostaCorreta: q.resposta?.toUpperCase(),
-        correto
+        correto,
+        anulada: isAnulada
       }
     })
 
@@ -98,6 +104,7 @@ Retorne exatamente ${totalQuestoes} itens no array, um para cada questão.`
       resultadoDetalhado,
       totalQuestoes,
       totalAcertos: acertos,
+      totalAnuladas: anuladas,
       percentual
     })
   } catch (err: any) {

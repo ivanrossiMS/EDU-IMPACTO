@@ -1417,3 +1417,49 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   }
 }
 
+
+/* --- Simulados Responsive Fixes --- */
+@media (max-width: 768px) {
+  .responsive-card-bottom-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .responsive-card-header {
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  .responsive-card-badge {
+    align-self: flex-start !important;
+  }
+  .responsive-card-actions {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .responsive-filters {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .responsive-search {
+    flex: none !important;
+    width: 100% !important;
+  }
+  .responsive-filters-selects {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+  .responsive-filters-selects > div {
+    flex: none !important;
+    width: 100% !important;
+  }
+  .responsive-card-info {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px 8px !important;
+  }
+  .responsive-card-title-wrap {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .responsive-card-series {
+    flex-wrap: wrap !important;
+  }
+}

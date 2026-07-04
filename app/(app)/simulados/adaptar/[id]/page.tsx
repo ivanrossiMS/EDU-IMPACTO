@@ -369,7 +369,8 @@ export default function AdaptarSimuladoPage() {
           <PaginationEngine 
             questoes={questoes.filter(q => selectedIds.has(q.id))}
             columns={columns}
-            fontSize={fontSize}
+            enunciadoFontSize={fontSize}
+            alternativasFontSize={fontSize}
             config={config}
             simulado={simulado}
             onEditEnunciado={handleEditEnunciado}

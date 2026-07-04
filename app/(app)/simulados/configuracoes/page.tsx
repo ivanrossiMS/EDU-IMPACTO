@@ -136,7 +136,13 @@ export default function SimuladosConfiguracoesPage() {
   }
 
   return (
-    <div style={{ padding: '40px 32px', maxWidth: 900, margin: '0 auto' }}>
+    <div className="config-container" style={{ padding: '40px 32px', maxWidth: 900, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .config-container { padding: 16px !important; }
+          .subpage-wrapper { margin: -16px !important; }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -177,9 +183,9 @@ export default function SimuladosConfiguracoesPage() {
           ))}
         </div>
 
-        {activeTab === 'professores' && <div style={{ margin: '-40px -32px' }}><ProfessoresPage /></div>}
-        {activeTab === 'disciplinas' && <div style={{ margin: '-40px -32px' }}><DisciplinasPage /></div>}
-        {activeTab === 'bimestres' && <div style={{ margin: '-40px -32px' }}><BimestresPage /></div>}
+        {activeTab === 'professores' && <div className="subpage-wrapper" style={{ margin: '-40px -32px' }}><ProfessoresPage /></div>}
+        {activeTab === 'disciplinas' && <div className="subpage-wrapper" style={{ margin: '-40px -32px' }}><DisciplinasPage /></div>}
+        {activeTab === 'bimestres' && <div className="subpage-wrapper" style={{ margin: '-40px -32px' }}><BimestresPage /></div>}
         
         <div style={{ display: activeTab === 'fundos' ? 'block' : 'none' }}>
 

@@ -173,7 +173,7 @@ export async function POST(request: Request) {
         // Se a "chamada" atual é mais antiga que a "confirmação" existente, é um POST atrasado (stale)
         if (incomingCalledAt < existingConfirmedAt) {
           console.warn(`[API Saida] Stale update prevented for call ${row.id}. Incoming status: ${row.dados.status}, Existing status: ${existingDados.status}`)
-          return NextResponse.json({ id: existingRow.id, ...(existingDados || {}) }, { status: 200 })
+          return NextResponse.json({ id: row.id, ...(existingDados || {}) }, { status: 200 })
         }
       }
     }

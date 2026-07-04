@@ -89,10 +89,43 @@ export default function BancoQuestoesPage() {
   }
 
   return (
-    <div style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
+    <div className="banco-container" style={{ padding: '40px', maxWidth: 1400, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .banco-container { padding: 16px !important; }
+          .responsive-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 16px !important;
+            padding: 20px !important;
+          }
+          .responsive-header h1 { font-size: 24px !important; }
+          .responsive-header a, .responsive-header a button { width: 100% !important; justify-content: center !important; }
+          
+          .responsive-search-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+          }
+          .responsive-search-row > button { width: 100% !important; justify-content: center !important; }
+          .responsive-view-toggles { display: none !important; }
+          
+          .responsive-filters-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+            padding: 16px !important;
+          }
+          
+          .responsive-card-badges {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 8px !important;
+          }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         
-        <div style={{ 
+        <div className="responsive-header" style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
@@ -126,7 +159,7 @@ export default function BancoQuestoesPage() {
 
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: '24px 32px' }}>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: isFilterOpen ? 24 : 32 }}>
+          <div className="responsive-search-row" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: isFilterOpen ? 24 : 32 }}>
             <div style={{ flex: 1, position: 'relative' }}>
               <Search size={20} color="hsl(var(--text-muted))" style={{ position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)' }} />
               <input 
@@ -146,7 +179,7 @@ export default function BancoQuestoesPage() {
             >
               <Filter size={18} /> {isFilterOpen ? 'Ocultar Filtros' : 'Filtros Avançados'}
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', background: 'hsl(var(--bg-app))', borderRadius: 12, padding: 4, border: '1px solid hsl(var(--border-subtle))' }}>
+            <div className="responsive-view-toggles" style={{ display: 'flex', alignItems: 'center', background: 'hsl(var(--bg-app))', borderRadius: 12, padding: 4, border: '1px solid hsl(var(--border-subtle))' }}>
               <div onClick={() => setViewMode('list')} style={{ width: 44, height: 40, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: viewMode === 'list' ? 'hsl(var(--bg-surface))' : 'transparent', color: viewMode === 'list' ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))', boxShadow: viewMode === 'list' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none' }}>
                 <List size={18} />
               </div>
@@ -164,7 +197,7 @@ export default function BancoQuestoesPage() {
                 exit={{ height: 0, opacity: 0 }}
                 style={{ overflow: 'hidden', marginBottom: 32 }}
               >
-                <div style={{ background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 20 }}>
+                <div className="responsive-filters-grid" style={{ background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 20 }}>
                   <div>
                     <label style={{ display: 'block', color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Disciplina</label>
                     <select 
@@ -242,7 +275,7 @@ export default function BancoQuestoesPage() {
           ) : (
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(400px, 1fr))' : '1fr', 
+              gridTemplateColumns: viewMode === 'grid' ? 'repeat(auto-fill, minmax(min(100%, 350px), 1fr))' : '1fr', 
               gap: 20 
             }}>
               <AnimatePresence>

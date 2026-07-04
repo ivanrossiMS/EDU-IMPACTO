@@ -350,7 +350,7 @@ export default function NovaQuestaoBancoPage() {
               >
                 <option value="" disabled>Selecione a disciplina</option>
                 {disciplinas.map(d => (
-                  <option key={d.id} value={d.id}>{d.nome}</option>
+                  <option key={d.id} value={d.id}>{d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}</option>
                 ))}
               </select>
             </div>
@@ -459,7 +459,7 @@ export default function NovaQuestaoBancoPage() {
                     >
                       <option value="" disabled>Selecione...</option>
                       {disciplinas.map(d => (
-                        <option key={d.id} value={d.id}>{d.nome}</option>
+                        <option key={d.id} value={d.id}>{d.nome} {(d.segmento && d.segmento !== 'Sem Segmento') ? `— ${d.segmento}` : ''}</option>
                       ))}
                     </select>
                   </div>

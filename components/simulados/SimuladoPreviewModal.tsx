@@ -64,7 +64,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     if (!config || !config.id) return
     setSavingHeader(true)
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('simulados_configuracoes')
         .update({ provas_header_layout: headerLayout })
         .eq('id', config.id)
@@ -129,7 +129,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         letra: alt.letter,
         texto: alt.text,
         eh_correta: alt.correct,
-        imagem_url: alt.imagem_url
+        imagem_url: (alt as any).imagem_url
       })),
       id_disciplina: null
     }
@@ -453,7 +453,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             headerLayout={headerLayout}
             onUpdateHeaderField={handleUpdateHeaderField}
             pageA4Ref={pageA4Ref}
-            onEditEnunciado={isReadOnly ? undefined : (qId, newText) => {
+            onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               const qIdx = parseInt(qId.replace('q-preview-', ''))
               setLocalQuestoes(prev => prev.map((q, i) => {
                 if (i !== qIdx) return q
@@ -467,7 +467,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 return { ...q, enunciado: cleanedText }
               }))
             }}
-            onEditAlternativa={isReadOnly ? undefined : (qId, aId, text) => {
+            onEditAlternativa={isReadOnly ? () => {} : (qId, aId, text) => {
               const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map((q, i) => {
@@ -477,7 +477,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 return { ...q, alternativas: newAlts }
               }))
             }}
-            onRemoveAlternativa={isReadOnly ? undefined : (qId, aId) => {
+            onRemoveAlternativa={isReadOnly ? () => {} : (qId, aId) => {
               const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map((q, i) => {
@@ -485,17 +485,17 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 return { ...q, alternativas: q.alternativas.filter((_, ai) => ai !== aIdx) }
               }))
             }}
-            onEditAlternativaImage={isReadOnly ? undefined : (qId, aId, url) => {
+            onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
               const qIdx = parseInt(qId.replace('q-preview-', ''))
               const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map((q, i) => {
                 if (i !== qIdx) return q
                 const newAlts = [...q.alternativas]
-                newAlts[aIdx] = { ...newAlts[aIdx], imagem_url: url } // Need to store it somewhere in our preview model
+                newAlts[aIdx] = { ...newAlts[aIdx], imagem_url: url } as any // Need to store it somewhere in our preview model
                 return { ...q, alternativas: newAlts }
               }))
             }}
-            onEditEnunciadoImage={isReadOnly ? undefined : (qId, imgIndex, newUrl) => {
+            onEditEnunciadoImage={isReadOnly ? () => {} : (qId, imgIndex, newUrl) => {
               const qIdx = parseInt(qId.replace('q-preview-', ''))
               setLocalQuestoes(prev => prev.map((q, i) => {
                 if (i !== qIdx) return q

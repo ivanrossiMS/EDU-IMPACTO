@@ -391,6 +391,17 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                               <span style={{ fontSize: 13, color: '#64748b' }}>
                                 {c.total_acertos} de {c.total_questoes} acertos
                               </span>
+                              {(() => {
+                                const anuladasCount = (c.respostas_aluno || []).filter((r: any) => r.resposta === 'ANULADA').length
+                                if (anuladasCount > 0) {
+                                  return (
+                                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                                      {anuladasCount} anulada{anuladasCount > 1 ? 's' : ''}
+                                    </span>
+                                  )
+                                }
+                                return null
+                              })()}
                               <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${color}15`, color }}>
                                 {getScoreLabel(c.percentual_acerto)}
                               </span>

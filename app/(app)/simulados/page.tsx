@@ -49,9 +49,9 @@ export default function SimuladosDashboard() {
           
           // Buscar requisições pendentes do professor
           const [resProvas, resSimulados, resRedacao] = await Promise.all([
-            (supabase as any).from('provas_upload_requisicoes').select('*, provas_upload(*)').eq('id_professor', currentUser.id),
-            (supabase as any).from('simulados_upload_requisicoes').select('*, simulados_upload(*)').eq('id_professor', currentUser.id),
-            (supabase as any).from('redacao_upload_requisicoes').select('*, redacao_upload(*)').eq('id_professor', currentUser.id)
+            (supabase as any).from('provas_upload_requisicoes').select('*, provas_upload(*)').eq('id_professor', currentUser?.id),
+            (supabase as any).from('simulados_upload_requisicoes').select('*, simulados_upload(*)').eq('id_professor', currentUser?.id),
+            (supabase as any).from('redacao_upload_requisicoes').select('*, redacao_upload(*)').eq('id_professor', currentUser?.id)
           ])
 
           const pReq = resProvas.data || []

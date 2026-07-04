@@ -54,7 +54,7 @@ export default function TurmasPage() {
     capacidade: '30'
   })
 
-  const [itensPorPagina, setItensPorPagina] = useState(10)
+  const [itensPorPagina, setItensPorPagina] = useState(50)
 
   // Query para buscar turmas (Cache via React Query)
   const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ data: any[], total: number }>(

@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
-  Upload, BookOpen, Users, ChevronRight, AlertCircle, Trash2,
-  FileText, Calendar, Layers, Edit, CheckSquare, Printer
+  Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
+  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -74,62 +74,8 @@ export default function UploadProvasGerenciamentoPage() {
     setDeleteConfirmId(null)
   }
 
-  const handleAdaptar = async (prova: any) => {
-    try {
-      const newTitle = prova.titulo + ' - Adaptado'
-      const { data: newProva, error } = await (supabase as any).from('provas_upload').insert({
-        titulo: newTitle,
-        id_bimestre: prova.id_bimestre,
-        series: prova.series,
-        data_aplicacao: prova.data_aplicacao,
-        data_limite_upload: prova.data_limite_upload,
-        questoes_json: prova.questoes_json || [],
-        questoes_count: prova.questoes_count || 0,
-        status: 'em_revisao'
-      }).select().single()
-  
-      if (error || !newProva) {
-        alert('Erro ao adaptar prova')
-        return
-      }
-  
-      // Clonar requisicoes
-      if (prova.provas_upload_requisicoes && prova.provas_upload_requisicoes.length > 0) {
-        let reqsToClone = prova.provas_upload_requisicoes;
-        if (currentUserPerfil === 'Professor') {
-           reqsToClone = reqsToClone.filter((r: any) => r.id_professor === currentUser?.id);
-        }
-        
-        if (reqsToClone.length > 0) {
-           const insertReqs = reqsToClone.map((r: any) => ({
-             id_prova_upload: newProva.id,
-             id_professor: r.id_professor,
-             professor_nome: r.professor_nome,
-             id_disciplina: r.id_disciplina,
-             disciplina_nome: r.disciplina_nome,
-             qtd_questoes: r.qtd_questoes,
-             status: 'enviado'
-           }))
-           await (supabase as any).from('provas_upload_requisicoes').insert(insertReqs)
-        }
-      } else if (currentUserPerfil === 'Professor') {
-        // Fallback
-        await (supabase as any).from('provas_upload_requisicoes').insert({
-          id_prova_upload: newProva.id,
-          id_professor: currentUser?.id,
-          professor_nome: currentUser?.nome,
-          id_disciplina: null,
-          disciplina_nome: 'Geral',
-          qtd_questoes: prova.questoes_count || 0,
-          status: 'enviado'
-        })
-      }
-  
-      // Redirect to edit
-      window.location.href = `/simulados/provas-upload/${newProva.id}/upload`
-    } catch (e: any) {
-      alert('Erro ao adaptar prova: ' + e.message)
-    }
+  const handleAdaptar = (prova: any) => {
+    window.location.href = `/simulados/provas-upload/nova?adaptar_de=${prova.id}`
   }
 
   const isProfView = currentUserPerfil === 'Professor'
@@ -164,22 +110,80 @@ export default function UploadProvasGerenciamentoPage() {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .simulados-upload-container {
+            padding: 16px !important;
+          }
+          .responsive-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 16px !important;
+            margin-bottom: 24px !important;
+          }
+          .responsive-header > div:first-child h1 {
+            font-size: 20px !important;
+          }
+          .responsive-header > div:first-child p {
+            font-size: 13px !important;
+          }
+          .responsive-stats {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+            margin-bottom: 24px !important;
+          }
+          .responsive-stats > div {
+            padding: 12px !important;
+            gap: 10px !important;
+          }
+          .responsive-stats > div > div:first-child {
+            width: 32px !important;
+            height: 32px !important;
+          }
+          .responsive-stats > div > div:last-child > div:first-child {
+            font-size: 20px !important;
+          }
+          .responsive-filters {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            margin-bottom: 24px !important;
+            gap: 12px !important;
+          }
+          .responsive-search {
+            width: 100% !important;
+            flex: none !important;
+          }
+          .responsive-filters-selects {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+          }
+          .responsive-filters-selects select {
+            width: 100% !important;
+            padding: 12px !important;
+            font-size: 13px !important;
+          }
+          .responsive-filters-selects select:nth-child(3) {
+            grid-column: span 2 !important;
+          }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32 }}>
+        <div className="responsive-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(139,92,246,0.3)' }}>
-                <Upload size={22} color="white" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(139,92,246,0.3)' }}>
+                <Upload size={28} color="white" />
               </div>
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>
+                <h1 style={{ fontSize: 32, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>
                   Provas por Upload
                 </h1>
-                <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 14 }}>
-                  {isCoord ? 'Crie e gerencie provas que serão enviadas por professores' : 'Visualize e envie suas provas em formato DOCX ou PDF'}
+                <p style={{ color: 'hsl(var(--text-secondary))', margin: '4px 0 0 0', fontSize: 15 }}>
+                  {isCoord ? 'Crie e gerencie provas que serão enviadas por professores.' : 'Visualize e envie suas provas em formato DOCX ou PDF.'}
                 </p>
               </div>
             </div>
@@ -205,78 +209,113 @@ export default function UploadProvasGerenciamentoPage() {
 
         {/* Stats */}
         {isCoord && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+          <div className="responsive-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
             {[
-              { label: 'Total de Provas', value: stats.total, color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)', icon: Layers },
-              { label: 'Aguardando Upload', value: stats.aguardando, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', icon: Clock },
-              { label: 'Em Revisão', value: stats.em_revisao, color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', icon: Eye },
-              { label: 'Aprovadas', value: stats.aprovado, color: '#10b981', bg: 'rgba(16,185,129,0.08)', icon: CheckCircle },
+              { label: 'Total de Provas', sub: 'Todas as provas criadas', value: stats.total, color: '#8b5cf6', iconBg: 'rgba(139,92,246,0.06)', icon: Layers },
+              { label: 'Aguardando Upload', sub: 'Enviadas pelos professores', value: stats.aguardando, color: '#f59e0b', iconBg: 'rgba(245,158,11,0.06)', icon: Clock },
+              { label: 'Em Revisão', sub: 'Aguardando correção', value: stats.em_revisao, color: '#3b82f6', iconBg: 'rgba(59,130,246,0.06)', icon: Eye },
+              { label: 'Aprovadas', sub: 'Prontas para análise', value: stats.aprovado, color: '#10b981', iconBg: 'rgba(16,185,129,0.06)', icon: CheckCircle },
             ].map((s, i) => (
               <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-                style={{ background: s.bg, border: `1px solid ${s.color}22`, borderRadius: 16, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: `${s.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <s.icon size={18} color={s.color} />
+                style={{ 
+                  position: 'relative',
+                  background: 'hsl(var(--bg-surface))', 
+                  border: '1px solid hsl(var(--border-subtle))', 
+                  borderRadius: 16, 
+                  padding: '24px', 
+                  display: 'flex', 
+                  alignItems: 'flex-start', 
+                  gap: 16,
+                  overflow: 'hidden',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: s.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <s.icon size={24} color={s.color} />
                 </div>
-                <div>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 3, fontWeight: 600 }}>{s.label}</div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: s.color, lineHeight: 1, marginBottom: 4 }}>{s.value}</div>
+                  <div style={{ fontSize: 13, color: 'hsl(var(--text-primary))', fontWeight: 800 }}>{s.label}</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: 2 }}>{s.sub}</div>
                 </div>
+                
+                <div style={{ 
+                  position: 'absolute', 
+                  bottom: 0, 
+                  left: 24,
+                  width: '60%',
+                  height: 4, 
+                  borderRadius: '4px 4px 0 0',
+                  background: `linear-gradient(90deg, ${s.color} 0%, transparent 100%)`,
+                  opacity: 0.8
+                }} />
               </motion.div>
             ))}
           </div>
         )}
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 280px', position: 'relative' }}>
-            <Search size={18} style={{ position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))' }} />
+        <div className="responsive-filters" style={{ display: 'flex', gap: 16, marginBottom: 32, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="responsive-search" style={{ flex: '1 1 280px', position: 'relative' }}>
+            <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))' }} />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar por título da prova..."
-              style={{ width: '100%', padding: '14px 20px 14px 48px', borderRadius: 16, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+              style={{ width: '100%', padding: '14px 16px 14px 44px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
               onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
               onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
             />
           </div>
           
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <select
-              value={filterBimestre}
-              onChange={e => setFilterBimestre(e.target.value)}
-              style={{ padding: '14px 20px', borderRadius: 16, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', appearance: 'none', minWidth: 160 }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
-              onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
-            >
-              <option value="todos">Todos os Bimestres</option>
-              {bimestres.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}
-            </select>
+          <div className="responsive-filters-selects" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 180px' }}>
+              <Calendar size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+              <select
+                value={filterBimestre}
+                onChange={e => setFilterBimestre(e.target.value)}
+                style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
+              >
+                <option value="todos">Todos os Bimestres</option>
+                {bimestres.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}
+              </select>
+              <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+            </div>
 
-            <select
-              value={filterSerie}
-              onChange={e => setFilterSerie(e.target.value)}
-              style={{ padding: '14px 20px', borderRadius: 16, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', appearance: 'none', minWidth: 160 }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
-              onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
-            >
-              <option value="todas">Todas as Séries</option>
-              {seriesOptions.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <div style={{ position: 'relative', flex: '1 1 180px' }}>
+              <GraduationCap size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+              <select
+                value={filterSerie}
+                onChange={e => setFilterSerie(e.target.value)}
+                style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
+              >
+                <option value="todas">Todas as Séries</option>
+                {seriesOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+            </div>
 
-            <select
-              value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value)}
-              style={{ padding: '14px 20px', borderRadius: 16, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)', appearance: 'none', minWidth: 160 }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
-              onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
-            >
-              <option value="todos">Todos os Status</option>
-              <option value="aguardando">Aguardando Upload</option>
-              <option value="em_revisao">Em Revisão</option>
-              <option value="aprovado">Aprovado</option>
-              <option value="reprovado">Reprovado</option>
-              <option value="publicado">Publicado</option>
-            </select>
+            <div style={{ position: 'relative', flex: '1 1 180px' }}>
+              <Filter size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+              <select
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value)}
+                style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
+              >
+                <option value="todos">Todos os Status</option>
+                <option value="aguardando">Aguardando Upload</option>
+                <option value="em_revisao">Em Revisão</option>
+                <option value="aprovado">Aprovado</option>
+                <option value="reprovado">Reprovado</option>
+                <option value="publicado">Publicado</option>
+              </select>
+              <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+            </div>
           </div>
         </div>
 
@@ -315,92 +354,68 @@ export default function UploadProvasGerenciamentoPage() {
                   <motion.div key={prova.id}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                     transition={{ delay: i * 0.04 }}
-                    style={{ position: 'relative', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 20, transition: 'all 0.2s' }}
+                    className="responsive-card"
+                    style={{ position: 'relative', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '24px', display: 'flex', flexDirection: 'column', gap: 24, transition: 'all 0.2s' }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf655'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(139,92,246,0.1)' }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'hsl(var(--border-subtle))'; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
                   >
-                    {/* Neon Badge */}
-                    <motion.div
-                      animate={{ 
-                        boxShadow: [
-                          `0 0 0px ${sc.color}00`, 
-                          `0 0 15px ${sc.color}99`, 
-                          `0 0 0px ${sc.color}00`
-                        ] 
-                      }}
-                      transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                      style={{
-                        position: 'absolute',
-                        top: -10,
-                        right: -10,
-                        background: 'hsl(var(--bg-surface))',
-                        border: `2px solid ${sc.color}`,
-                        color: sc.color,
-                        padding: '4px 12px',
-                        borderRadius: 100,
-                        fontSize: 10,
-                        fontWeight: 900,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        zIndex: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}
-                    >
-                      <Icon size={12} strokeWidth={3} />
-                      {sc.label}
-                    </motion.div>
-
-                    {/* Icon */}
-                    <div style={{ width: 48, height: 48, borderRadius: 14, background: sc.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <FileText size={22} color={sc.color} />
+                    {/* Header Section */}
+                    <div className="responsive-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                      <div style={{ display: 'flex', gap: 16, flex: 1, minWidth: 0 }}>
+                        <div className="responsive-card-icon" style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)', flexShrink: 0 }}>
+                          <FileText size={28} color="#fff" />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 2, minWidth: 0, width: '100%' }}>
+                          <div className="responsive-card-title-wrap" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{ fontSize: 20, fontWeight: 900, color: 'hsl(var(--text-primary))', textTransform: 'uppercase', letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prova.titulo}</span>
+                            {prova.series && prova.series.length > 0 && (
+                              <div className="responsive-card-series" style={{ display: 'flex', gap: 6 }}>
+                                {(Array.isArray(prova.series) ? prova.series : [prova.series]).map((s: string) => (
+                                  <span key={s} style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', whiteSpace: 'nowrap' }}>{s}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <div className="responsive-card-info" style={{ display: 'flex', flexWrap: 'wrap', gap: 24, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600 }}>
+                            {prova.id_bimestre && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <BookOpen size={14} /> {bimestres.find(b => b.id === prova.id_bimestre)?.nome || 'Bimestre'}
+                              </span>
+                            )}
+                            {prova.data_aplicacao && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Calendar size={14} /> Aplicação: {prova.data_aplicacao.split('-').reverse().join('/')}
+                              </span>
+                            )}
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: prova.data_limite_upload && new Date(prova.data_limite_upload) < new Date() ? '#ef4444' : 'inherit' }}>
+                              <Clock size={14} /> Prazo: {prova.data_limite_upload ? prova.data_limite_upload.split('-').reverse().join('/') : 'Não definido'}
+                            </span>
+                            {(totalRequested > 0 || totalUploaded > 0) && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Layers size={14} /> {totalUploaded}/{totalRequested} questões
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <motion.div className="responsive-card-badge" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1, boxShadow: [`0 0 0px ${sc.color}00`, `0 0 15px ${sc.color}99`, `0 0 0px ${sc.color}00`] }} style={{ padding: '6px 16px', borderRadius: 100, border: `1px solid ${sc.color}40`, color: sc.color, background: `${sc.color}15`, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <Icon size={14} strokeWidth={3} /> {sc.label}
+                      </motion.div>
                     </div>
 
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                        <span style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prova.titulo}</span>
-                        {prova.series && prova.series.length > 0 && (
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {(Array.isArray(prova.series) ? prova.series : [prova.series]).map((s: string) => (
-                              <span key={s} style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)', flexShrink: 0 }}>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                      </div>
-                      <div style={{ display: 'flex', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 12, marginBottom: 12 }}>
-                        {prova.id_bimestre && (
-                           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                             <BookOpen size={12} /> {bimestres.find(b => b.id === prova.id_bimestre)?.nome || 'Bimestre'}
-                           </span>
-                        )}
-                        {prova.data_aplicacao && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={12} /> Aplicação: {prova.data_aplicacao.split('-').reverse().join('/')}
-                          </span>
-                        )}
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: prova.data_limite_upload && new Date(prova.data_limite_upload) < new Date() ? '#ef4444' : 'inherit' }}>
-                          <Clock size={12} /> Prazo: {prova.data_limite_upload ? prova.data_limite_upload.split('-').reverse().join('/') : 'Não definido'}
-                        </span>
-                        {(totalRequested > 0 || totalUploaded > 0) && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Layers size={12} /> {totalUploaded}/{totalRequested} questões
-                          </span>
-                        )}
-                      </div>
-                      
-                      {prova.provas_upload_requisicoes && prova.provas_upload_requisicoes.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                          {prova.provas_upload_requisicoes.map((req: any) => {
-                            const uploaded = Array.isArray(prova.questoes_json) 
-                              ? prova.questoes_json.filter((q: any) => q.id_professor === req.id_professor).length 
-                              : 0;
+                    {/* Bottom Grid Section */}
+                    <div className="responsive-card-bottom-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                      {/* Box 1: Professor Responsável */}
+                      <div style={{ border: '1px solid rgba(59,130,246,0.15)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 16, background: 'rgba(59,130,246,0.03)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <User size={14} /> PROFESSOR(A) RESPONSÁVEL
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, flex: 1, alignContent: 'start' }}>
+                          {prova.provas_upload_requisicoes && prova.provas_upload_requisicoes.length > 0 ? prova.provas_upload_requisicoes.map((req: any) => {
+                            const uploaded = Array.isArray(prova.questoes_json) ? prova.questoes_json.filter((q: any) => q.id_professor === req.id_professor).length : 0;
                             const pct = Math.min(100, Math.round((uploaded / req.qtd_questoes) * 100));
                             const statusColor = uploaded >= req.qtd_questoes ? '#10b981' : '#f59e0b';
+                            const isMyCard = req.id_professor === currentUser?.id;
                             
                             const formatName = (name: string) => {
                               if (!name) return '';
@@ -414,84 +429,103 @@ export default function UploadProvasGerenciamentoPage() {
                               }).filter(Boolean).join(' ');
                               return `${first} ${middle ? middle + ' ' : ''}${last}`;
                             }
-
-                            const isMyCard = req.id_professor === currentUser?.id;
+                            
                             const canClick = isMyCard || isCoord;
                             const cardContent = (
-                              <>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
-                                  <span><span style={{ fontWeight: 700, color: isMyCard ? '#8b5cf6' : 'hsl(var(--text-primary))' }} title={req.professor_nome}>{formatName(req.professor_nome)}</span> ({req.disciplina_nome})</span>
-                                  <span style={{ color: statusColor, fontWeight: 800 }}>{uploaded}/{req.qtd_questoes} q.</span>
+                              <div key={req.id} style={{ 
+                                background: 'hsl(var(--bg-surface))', 
+                                borderRadius: 12, 
+                                padding: 16, 
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02)',
+                                border: '1px solid hsl(var(--border-subtle))',
+                                transition: 'all 0.2s'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                  <span style={{ fontSize: 16, fontWeight: 900, color: isMyCard ? '#8b5cf6' : 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>{formatName(req.professor_nome)}</span>
+                                  <span style={{ padding: '4px 10px', borderRadius: 8, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 12, fontWeight: 800 }}>{req.disciplina_nome}</span>
                                 </div>
-                                <div style={{ height: 6, borderRadius: 3, background: 'rgba(100,116,139,0.1)', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${pct}%`, background: statusColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, fontWeight: 800, marginBottom: 6 }}>
+                                    <span style={{ color: 'hsl(var(--text-secondary))', textTransform: 'uppercase' }}>PROGRESSO</span>
+                                    <span style={{ color: statusColor }}>{uploaded}/{req.qtd_questoes} questões</span>
+                                  </div>
+                                  <div style={{ height: 6, borderRadius: 3, background: 'rgba(100,116,139,0.1)', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${pct}%`, background: statusColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                                  </div>
                                 </div>
-                              </>
+                              </div>
                             );
-
-                            const cardStyle = { display: 'flex', flexDirection: 'column', gap: 6, background: isMyCard ? 'rgba(139,92,246,0.08)' : 'rgba(100,116,139,0.05)', padding: '8px 12px', borderRadius: 8, border: `1px solid ${isMyCard ? 'rgba(139,92,246,0.3)' : 'hsl(var(--border-subtle))'}`, minWidth: 160, cursor: canClick ? 'pointer' : 'default', transition: 'all 0.2s', textDecoration: 'none' };
-                            const hoverProps = canClick ? {
-                              onMouseEnter: (e: any) => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' },
-                              onMouseLeave: (e: any) => { e.currentTarget.style.borderColor = isMyCard ? 'rgba(139,92,246,0.3)' : 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = 'none' }
-                            } : {};
 
                             if (canClick) {
                               return (
-                                <Link key={req.id} href={`/simulados/provas-upload/${prova.id}/upload?prof=${req.id_professor}`} style={cardStyle as any} {...hoverProps}>
+                                <Link key={req.id} href={`/simulados/provas-upload/${prova.id}/upload?prof=${req.id_professor}`} style={{ textDecoration: 'none', display: 'block' }} onMouseEnter={e => { const child = e.currentTarget.firstChild as HTMLElement; if(child) { child.style.transform = 'translateY(-2px)'; child.style.boxShadow = '0 8px 16px rgba(0,0,0,0.06), 0 4px 8px rgba(0,0,0,0.04)'; child.style.borderColor = 'rgba(139,92,246,0.3)'; } }} onMouseLeave={e => { const child = e.currentTarget.firstChild as HTMLElement; if(child) { child.style.transform = 'none'; child.style.boxShadow = '0 4px 12px rgba(0,0,0,0.04), 0 2px 4px rgba(0,0,0,0.02)'; child.style.borderColor = 'hsl(var(--border-subtle))'; } }}>
                                   {cardContent}
                                 </Link>
                               )
                             }
 
-                            return (
-                              <div key={req.id} style={cardStyle as any} {...hoverProps}>
-                                {cardContent}
-                              </div>
-                            )
-                          })}
+                            return cardContent;
+                          }) : (
+                            <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>Nenhum professor atribuído.</span>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      </div>
 
-                    {/* Actions */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, flexShrink: 0 }}>
-                      <button onClick={() => setGabaritoModalId(prova.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
-                        <CheckSquare size={14} /> Gabarito
-                      </button>
-                      
-                      <button onClick={() => handleAdaptar(prova)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', fontSize: 13, fontWeight: 600, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer' }}>
-                        <BookOpen size={14} /> Adaptar
-                      </button>
-                      
-                      <Link href={`/simulados/provas-upload/${prova.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
-                        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
-                          <Printer size={14} /> Imprimir
-                        </motion.button>
-                      </Link>
+                      {/* Box 2: Instruções */}
+                        <div style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                            <Info size={14} /> INSTRUÇÕES PARA OS PROFESSORES
+                          </div>
+                          <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                            {prova.descricao || 'Nenhuma instrução informada.'}
+                          </p>
+                        </div>
 
-                      <Link href={`/simulados/provas-upload/${prova.id}/upload?all=true`} style={{ textDecoration: 'none', display: 'block' }}>
-                        <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
-                          <Eye size={14} /> Ver Questões
-                        </motion.button>
-                      </Link>
-                      {isCoord && (
-                        <>
-                          <Link href={`/simulados/provas-upload/${prova.id}/editar`} style={{ textDecoration: 'none', display: 'block' }}>
-                            <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                              style={{ width: '100%', padding: '8px 16px', borderRadius: 10, background: 'rgba(139,92,246,0.08)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
-                              <Edit size={14} /> Editar
-                            </motion.button>
-                          </Link>
-                          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                            onClick={() => setDeleteConfirmId(prova.id)}
-                            style={{ width: '100%', padding: '8px 16px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 600 }}>
-                            <Trash2 size={14} /> Excluir
-                          </motion.button>
-                        </>
-                      )}
-                    </div>
+                        {/* Box 3: Ações */}
+                        <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, padding: 16, background: 'hsl(var(--bg-app))' }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 12 }}>
+                            AÇÕES
+                          </div>
+                          <div className="responsive-card-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                            <button onClick={() => setGabaritoModalId(prova.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', width: '100%' }}>
+                              <CheckSquare size={16} /> Gabarito
+                            </button>
+                            
+                            <button onClick={() => handleAdaptar(prova)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
+                              <BookOpen size={16} /> Adaptar
+                            </button>
+                            
+                            <Link href={`/simulados/provas-upload/${prova.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
+                              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
+                                <Printer size={16} /> Imprimir
+                              </motion.button>
+                            </Link>
+
+                            <Link href={`/simulados/provas-upload/${prova.id}/upload?all=true`} style={{ textDecoration: 'none', display: 'block' }}>
+                              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 700, border: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
+                                <Eye size={16} /> Questões
+                              </motion.button>
+                            </Link>
+                            {isCoord && (
+                              <>
+                                <Link href={`/simulados/provas-upload/${prova.id}/editar`} style={{ textDecoration: 'none', display: 'block' }}>
+                                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(139,92,246,0.05)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                                    <Edit size={16} /> Editar
+                                  </motion.button>
+                                </Link>
+                                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                                  onClick={() => setDeleteConfirmId(prova.id)}
+                                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.05)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                                  <Trash2 size={16} /> Excluir
+                                </motion.button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                   </motion.div>
                 )
               })}
