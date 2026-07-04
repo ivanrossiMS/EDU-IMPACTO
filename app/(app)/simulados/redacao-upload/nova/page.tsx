@@ -19,6 +19,7 @@ export default function NovaRedaçãoUploadPage() {
   // Form state
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
+  const [orientacoesAlunos, setOrientacoesAlunos] = useState('')
   const [dataAplicacao, setDataAplicacao] = useState('')
   const [bimestreId, setBimestreId] = useState('')
   const [series, setSeries] = useState<string[]>([])
@@ -133,6 +134,7 @@ export default function NovaRedaçãoUploadPage() {
       const payload = {
         titulo: titulo.trim(),
         descricao: descricao.trim() || null,
+        instrucoes: orientacoesAlunos.trim() || null,
         data_aplicacao: dataAplicacao || null,
         data_limite_upload: dataLimiteUpload || null,
         id_bimestre: bimestreId || null,
@@ -224,7 +226,12 @@ export default function NovaRedaçãoUploadPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Instruções para os Professores</label>
-              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Envie questões com alternativas de A a E. Inclua as imagens dentro do documento..." rows={3}
+              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Envie temas para a redação..." rows={3}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Orientações para os Alunos</label>
+              <textarea value={orientacoesAlunos} onChange={e => setOrientacoesAlunos(e.target.value)} placeholder="Ex: Preencha o cabeçalho, use caneta azul ou preta..." rows={3}
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div>
