@@ -499,7 +499,7 @@ export function PageContent({
                                   return (
                                     <div key={`img-${part.index}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
                                       <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                      {onEditEnunciadoImage && (
+                                      {onEditEnunciadoImage && !readOnly && (
                                         <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 4, gap: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
                                             <button onClick={() => movePart('up')} disabled={pIdx === 0} style={{ background: 'transparent', color: pIdx === 0 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx === 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={14} /></button>
@@ -1058,7 +1058,7 @@ export function PageContent({
                             <div key={`img-${i}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
                               <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                               
-                              {onEditEnunciadoImage && (
+                              {onEditEnunciadoImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                   <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 4, gap: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
                                     <button onClick={() => movePart('up')} disabled={pIdx <= 0} style={{ background: 'transparent', color: pIdx <= 0 ? '#cbd5e1' : '#475569', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: pIdx <= 0 ? 'default' : 'pointer' }} title="Mover para cima"><ArrowUp size={14} /></button>
