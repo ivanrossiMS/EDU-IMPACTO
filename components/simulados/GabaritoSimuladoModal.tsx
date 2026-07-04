@@ -245,21 +245,45 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
           {[
             { key: 'gabarito', label: 'Gabarito Oficial', icon: CheckSquare },
             { key: 'correcoes', label: `Correções por IA ${correcoes.length > 0 ? `(${correcoes.length})` : ''}`, icon: ScanLine }
-          ].map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key as any)}
-              style={{
-                padding: '14px 24px', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14,
-                display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s',
-                background: activeTab === key ? '#ffffff' : 'transparent',
-                color: activeTab === key ? '#6366f1' : '#64748b',
-                borderBottom: activeTab === key ? '2px solid #6366f1' : '2px solid transparent',
-              }}
-            >
-              <Icon size={16} /> {label}
-            </button>
-          ))}
+          ].map(({ key, label, icon: Icon }) => {
+            const isAI = key === 'correcoes'
+            const isActive = activeTab === key
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key as any)}
+                style={{
+                  padding: isAI ? '8px 16px' : '14px 24px', 
+                  border: 'none', 
+                  cursor: 'pointer', 
+                  fontWeight: isActive ? 700 : 600, 
+                  fontSize: 14,
+                  display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  background: isAI 
+                    ? (isActive ? 'linear-gradient(135deg, #a855f7, #6366f1)' : 'rgba(168, 85, 247, 0.1)') 
+                    : (isActive ? '#ffffff' : 'transparent'),
+                  color: isAI 
+                    ? (isActive ? '#ffffff' : '#9333ea') 
+                    : (isActive ? '#6366f1' : '#64748b'),
+                  borderBottom: isAI ? 'none' : (isActive ? '2px solid #6366f1' : '2px solid transparent'),
+                  borderRadius: isAI ? '12px' : '0',
+                  margin: isAI ? '6px 16px' : '0',
+                  boxShadow: isAI && isActive ? '0 8px 20px rgba(168, 85, 247, 0.35)' : 'none',
+                  textShadow: isAI && isActive ? '0 0 10px rgba(255,255,255,0.3)' : 'none',
+                  transform: isAI && isActive ? 'translateY(-2px)' : 'none'
+                }}
+                className={isAI && !isActive ? "animate-pulse-glow" : ""}
+              >
+                <Icon size={16} /> {label}
+                {isAI && !isActive && (
+                  <span style={{ 
+                    position: 'absolute', top: 4, right: 4, width: 8, height: 8, 
+                    background: '#ef4444', borderRadius: '50%', border: '2px solid #f8fafc' 
+                  }} />
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Content */}
@@ -324,8 +348,15 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
                   {[
                     { label: 'Alunos Corrigidos', value: correcoes.length, icon: Users, color: '#6366f1', bg: 'rgba(99,102,241,0.08)' },
-                    { label: 'Média da Turma', value: `${averageScore.toFixed(1)}%`, icon: BarChart3, color: getScoreColor(averageScore), bg: `${getScoreColor(averageScore)}14` },
-                    { label: 'Melhor Resultado', value: `${Math.max(...correcoes.map(c => c.percentual_acerto)).toFixed(1)}%`, icon: Trophy, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
+                    { label: 'Média da Turma', value: `${parseFloat(averageScore.toFixed(1))}%`, icon: BarChart3, color: getScoreColor(averageScore), bg: `${getScoreColor(averageScore)}14` },
+                    { label: 'Melhor Resultado', value: (
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                        <span>{parseFloat(Math.max(...correcoes.map(c => c.percentual_acerto)).toFixed(1))}%</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', opacity: 0.9 }}>
+                          ({Math.max(...correcoes.map(c => c.total_acertos))} de {correcoes[0]?.total_questoes})
+                        </span>
+                      </div>
+                    ), icon: Trophy, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
                   ].map(({ label, value, icon: Icon, color, bg }) => (
                     <div key={label} style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 16, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
                       <div style={{ width: 44, height: 44, borderRadius: 12, background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -410,7 +441,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
 
                           {/* Score */}
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                            <div style={{ fontSize: 26, fontWeight: 900, color, letterSpacing: '-0.03em' }}>{c.percentual_acerto.toFixed(0)}%</div>
+                            <div style={{ fontSize: 26, fontWeight: 900, color, letterSpacing: '-0.03em' }}>{parseFloat(c.percentual_acerto.toFixed(1))}%</div>
                             {/* Mini progress bar */}
                             <div style={{ width: 70, height: 5, background: '#ffffff', borderRadius: 99, overflow: 'hidden', marginTop: 4 }}>
                               <div style={{ height: '100%', width: `${c.percentual_acerto}%`, background: color, borderRadius: 99, transition: 'width 0.8s ease' }} />
