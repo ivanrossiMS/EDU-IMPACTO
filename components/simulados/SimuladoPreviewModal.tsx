@@ -31,6 +31,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   saving?: boolean
   isReadOnly?: boolean
   printOnMount?: boolean
+  isolatedMode?: boolean
 }) {
   const [columns, setColumns] = useState<number>(simulado?.config_estudio?.config_colunas || 1)
   const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_enunciado || 14)
@@ -80,6 +81,11 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const [showBackModal, setShowBackModal] = useState(false)
 
   const handleSaveHeaderLayout = async () => {
+    if (isolatedMode) {
+      alert('Posições do cabeçalho alteradas apenas para esta pré-visualização (Modo Isolado).')
+      setIsEditHeaderMode(false)
+      return
+    }
     if (!config || !config.id) return
     setSavingHeader(true)
     try {
@@ -361,7 +367,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 >
                   {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
                 </button>
-                {showMargins && (
+                {showMargins && !isolatedMode && (
                   <button
                     onClick={() => {
                       localStorage.setItem('simulador_margins_padrao', JSON.stringify({
@@ -524,7 +530,6 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
           <PaginationEngine
             questoes={mappedQuestoes.filter(q => selectedIds.has(q.id))}
             columns={columns}
-            readOnly={true}
             enunciadoFontSize={enunciadoFontSize}
             alternativasFontSize={alternativasFontSize}
             config={config}

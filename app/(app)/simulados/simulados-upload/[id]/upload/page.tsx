@@ -39,7 +39,7 @@ export default function UploadSimuladoPage() {
   const [dragOver, setDragOver] = useState(false)
   const [fileName, setFileName] = useState('')
   const [showPreview, setShowPreview] = useState(false)
-  const [showPreviewReadOnly, setShowPreviewReadOnly] = useState(false)
+  const [showPreviewIsolated, setShowPreviewIsolated] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
 
   useEffect(() => {
@@ -296,20 +296,18 @@ export default function UploadSimuladoPage() {
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
               <Printer size={16} color="white" /> Pré-visualizar A4
             </motion.button>
-            {currentUser?.perfil === 'Professor' && (
-              <motion.button onClick={() => {
-                const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-                if (!isProfessorViewAll && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                  setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
-                  return;
-                }
-                setShowPreviewReadOnly(true);
-              }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #a855f7, #7e22ce)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(168,85,247,0.3)' }}>
-                <Eye size={16} color="white" /> Pré-visualização
-              </motion.button>
-            )}
+            <motion.button onClick={() => {
+              const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
+                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
+                return;
+              }
+              setShowPreviewIsolated(true);
+            }}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+              <Printer size={16} color="#8b5cf6" /> Pré-visualizar Professor
+            </motion.button>
             {!isProfessorViewAll && (
               <>
                 <motion.button onClick={() => handleSave()} disabled={saving}
@@ -568,6 +566,19 @@ export default function UploadSimuladoPage() {
       </div>
     </div>
 
+      {/* ─── ISOLATED PREVIEW MODAL ─── */}
+      {showPreviewIsolated && (
+        <SimuladoPreviewModal
+          questoes={questoes}
+          setQuestoes={setQuestoes}
+          simulado={simulado}
+          config={simConfig}
+          onClose={() => setShowPreviewIsolated(false)}
+          isolatedMode={true}
+          isReadOnly={isProfessorViewAll}
+        />
+      )}
+      
       {/* ─── A4 PREVIEW MODAL ─── */}
       <AnimatePresence>
         {showPreview && (
@@ -587,31 +598,6 @@ export default function UploadSimuladoPage() {
             }}
             config={simConfig}
             onClose={() => setShowPreview(false)}
-            onSave={(qs, config) => handleSave(qs, undefined, config)}
-            saving={saving}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showPreviewReadOnly && (
-          <SimuladoPreviewModal
-            isReadOnly={true}
-            questoes={questoes}
-            setQuestoes={setQuestoes}
-            simulado={{ 
-              ...simulado, 
-              isSimulado: true,
-              formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '',
-              formattedSeries: simulado?.series?.join(', ') || '',
-              formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
-              formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
-                const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
-              }))).filter(Boolean).join(', ')
-            }}
-            config={simConfig}
-            onClose={() => setShowPreviewReadOnly(false)}
             onSave={(qs, config) => handleSave(qs, undefined, config)}
             saving={saving}
           />
