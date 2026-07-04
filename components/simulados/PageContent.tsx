@@ -235,6 +235,7 @@ export function PageContent({
                 else if (key === 'turma') value = simulado?.formattedSeries || '';
                 else if (key === 'valor') value = simulado?.valor || '';
                 else if (key === 'nota') value = ''; // Nota fica em branco para o professor preencher à mão
+                else if (key === 'orientacoes') value = simulado?.instrucoes || '';
 
                 return (
                   <DraggableHeaderField

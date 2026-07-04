@@ -47,10 +47,13 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
     data: { label: "Data", x: 59.5, y: 11.4, fontSize: 8, width: 15, align: "left" },
     turma: { label: "Turma", x: 81.9, y: 11.4, fontSize: 8, width: 10, align: "left" },
     valor: { label: "Valor", x: 75.8, y: 16.5, fontSize: 8, width: 10, align: "left" },
-    nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" }
+    nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" },
+    orientacoes: { label: "Orientações Aluno", x: 60, y: 22.0, fontSize: 10, width: 35, align: "left" }
   }
   const [headerLayout, setHeaderLayout] = useState<any>(() => {
-    const layout = config?.redacao_enem_header_layout || defaultHeaderLayout
+    let layout = config?.redacao_enem_header_layout || defaultHeaderLayout
+    // Merge missing fields from default
+    layout = { ...defaultHeaderLayout, ...layout }
     if (layout && layout.title) {
       layout.title.fontSize = 13
     }
