@@ -367,7 +367,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 >
                   {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
                 </button>
-                {showMargins && !isolatedMode && (
+                {showMargins && (
                   <button
                     onClick={() => {
                       localStorage.setItem('simulador_margins_padrao', JSON.stringify({
