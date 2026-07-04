@@ -370,7 +370,7 @@ export function PageContent({
                             group.type === 'text' ? (
                               <div key={`txt-${group.originalIndex}`} data-height-id={`${q.id}-enun-txt-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: gIdx > 0 ? 8 : 0 }}>
                                 <HtmlContent 
-                                  editable={true}
+                                  editable={!readOnly}
                                   html={group.content || ''}
                                   onBlurHtml={(newHtml) => {
                                     const metaRegex = /(<meta[^>]+>)/ig;
@@ -1483,7 +1483,7 @@ export function PageContent({
                           );
                         })()}
                       </div>
-                      {!readOnly && onRemoveAlternativa && (
+                      {onRemoveAlternativa && !readOnly && (
                         <button
                           className="no-print alt-delete-btn"
                           onClick={() => {
