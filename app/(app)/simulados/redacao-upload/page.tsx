@@ -85,7 +85,10 @@ export default function UploadRedaçõesGerenciamentoPage() {
   }
 
   const handleAdaptar = async (redacao: any) => {
-    if (redacao.titulo?.includes('ADAPTADO')) return;
+    if (redacao.titulo?.includes('ADAPTADO')) {
+      window.location.href = `/simulados/redacao-upload/${redacao.id}/upload?all=true`;
+      return;
+    }
     
     setLoading(true)
     try {

@@ -85,7 +85,10 @@ export default function UploadProvasGerenciamentoPage() {
   }
 
   const handleAdaptar = async (prova: any) => {
-    if (prova.titulo?.includes('ADAPTADO')) return;
+    if (prova.titulo?.includes('ADAPTADO')) {
+      window.location.href = `/simulados/provas-upload/${prova.id}/upload?all=true`;
+      return;
+    }
     
     setLoading(true)
     try {
@@ -546,11 +549,9 @@ export default function UploadProvasGerenciamentoPage() {
                               <CheckSquare size={16} /> Gabarito
                             </button>
                             
-                            {!prova.titulo?.includes('ADAPTADO') && (
-                              <button onClick={() => handleAdaptar(prova)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
-                                <BookOpen size={16} /> Adaptar
-                              </button>
-                            )}
+                            <button onClick={() => handleAdaptar(prova)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
+                              <BookOpen size={16} /> Adaptar
+                            </button>
                             
                             <Link href={`/simulados/provas-upload/${prova.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
                               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}

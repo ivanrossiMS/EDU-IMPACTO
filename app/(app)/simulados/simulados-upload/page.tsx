@@ -85,7 +85,10 @@ export default function UploadSimuladosGerenciamentoPage() {
   }
 
   const handleAdaptar = async (simulado: any) => {
-    if (simulado.titulo?.includes('ADAPTADO')) return;
+    if (simulado.titulo?.includes('ADAPTADO')) {
+      window.location.href = `/simulados/simulados-upload/${simulado.id}/upload?all=true`;
+      return;
+    }
     
     setLoading(true)
     try {
@@ -548,11 +551,9 @@ export default function UploadSimuladosGerenciamentoPage() {
                               <CheckSquare size={16} /> Gabarito
                             </button>
                             
-                            {!simulado.titulo?.includes('ADAPTADO') && (
-                              <button onClick={() => handleAdaptar(simulado)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
-                                <BookOpen size={16} /> Adaptar
-                              </button>
-                            )}
+                            <button onClick={() => handleAdaptar(simulado)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10, background: 'transparent', color: '#3b82f6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(59,130,246,0.2)', cursor: 'pointer', width: '100%' }}>
+                              <BookOpen size={16} /> Adaptar
+                            </button>
                             
                             <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true`} style={{ textDecoration: 'none', display: 'block' }}>
                               <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
