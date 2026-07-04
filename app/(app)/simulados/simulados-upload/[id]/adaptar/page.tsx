@@ -25,7 +25,7 @@ export default function UploadSimuladoPage() {
   const { currentUser } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const isProfessorViewAll = currentUser?.perfil === 'Professor' && searchParams.get('all') === 'true'
+  const isProfessorViewAll = currentUser?.perfil === 'Professor'
 
   const [simulado, setSimulado] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -83,16 +83,7 @@ export default function UploadSimuladoPage() {
       if (simuladoData?.questoes_json && simuladoData.questoes_json.length > 0) {
         let qs = simuladoData.questoes_json
         
-        const showAll = searchParams.get('all') === 'true'
-        const targetProf = searchParams.get('prof')
-        
-        if (!showAll) {
-          if (targetProf) {
-            qs = qs.filter((q: any) => q.id_professor === targetProf)
-          } else if (currentUser?.perfil === 'Professor') {
-            qs = qs.filter((q: any) => q.id_professor === currentUser.id)
-          }
-        }
+        const showAll = true;
         
         if (qs.length > 0) {
           setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
@@ -163,25 +154,12 @@ export default function UploadSimuladoPage() {
       const { data: dbData } = await (supabase as any).from('simulados_upload').select('questoes_json').eq('id', simuladoId).single()
       const dbQuestions = dbData?.questoes_json || []
 
-      const targetProf = searchParams.get('prof')
-      const showAll = searchParams.get('all') === 'true'
-
-      // 2. Filter out questions we are NOT editing
-      let otherQuestions = []
-      if (currentUser?.perfil === 'Professor') {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== currentUser.id)
-      } else if (targetProf && !showAll) {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== targetProf)
-      }
-
-      // 3. Prepare our questions
-      const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => ({ 
+      // 2. Since we are adapting, we edit ALL questions and don't preserve any hidden ones.
+      // 3. Prepare our questions (keep their original id_professor if they have one)
+      const finalQToSave = currentQs.map(({ expandido, ...q }) => ({ 
         ...q, 
-        id_professor: currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor 
+        id_professor: q.id_professor || currentUser?.id 
       }))
-
-      // 4. Merge
-      const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
@@ -284,7 +262,6 @@ export default function UploadSimuladoPage() {
                 <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
               </motion.button>
             )}
-            {currentUser?.perfil !== 'Professor' && (
               <motion.button onClick={() => {
                 const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
                 if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
@@ -297,7 +274,6 @@ export default function UploadSimuladoPage() {
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
                 <Printer size={16} color="white" /> Pré-visualizar A4
               </motion.button>
-            )}
             <motion.button onClick={() => {
               const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
               if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {

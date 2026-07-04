@@ -86,7 +86,7 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   const handleAdaptar = async (simulado: any) => {
     if (simulado.titulo?.includes('ADAPTADO')) {
-      window.location.href = `/simulados/simulados-upload/${simulado.id}/upload?all=true`;
+      window.location.href = `/simulados/simulados-upload/${simulado.id}/adaptar`;
       return;
     }
     

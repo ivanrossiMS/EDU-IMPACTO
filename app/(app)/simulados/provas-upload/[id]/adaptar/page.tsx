@@ -15,19 +15,19 @@ import { useApp } from '@/lib/context'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
-import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
+import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
-export default function UploadSimuladoPage() {
+export default function UploadProvaPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
-  const simuladoId = params.id as string
+  const provaId = params.id as string
   const { currentUser } = useApp()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  const isProfessorViewAll = currentUser?.perfil === 'Professor' && searchParams.get('all') === 'true'
+  const isProfessorViewAll = currentUser?.perfil === 'Professor'
 
-  const [simulado, setSimulado] = useState<any>(null)
+  const [prova, setProva] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -39,26 +39,25 @@ export default function UploadSimuladoPage() {
   const [dragOver, setDragOver] = useState(false)
   const [fileName, setFileName] = useState('')
   const [showPreview, setShowPreview] = useState(false)
-  const [showPreviewIsolated, setShowPreviewIsolated] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
 
   useEffect(() => {
-    loadSimulado()
+    loadProva()
     loadConfig()
-  }, [simuladoId])
+  }, [provaId])
 
   const loadConfig = async () => {
     const { data } = await (supabase as any).from('simulados_configuracoes').select('*').eq('id', 'default').single()
     if (data) setSimConfig(data)
   }
 
-  const loadSimulado = async () => {
+  const loadProva = async () => {
     setLoading(true)
     try {
-      const { data, error } = await (supabase as any).from('simulados_upload').select('*').eq('id', simuladoId).single()
+      const { data, error } = await (supabase as any).from('provas_upload').select('*').eq('id', provaId).single()
       if (error) throw error
 
-      const { data: reqs } = await (supabase as any).from('simulados_upload_requisicoes').select('*').eq('id_simulado_upload', simuladoId)
+      const { data: reqs } = await (supabase as any).from('provas_upload_requisicoes').select('*').eq('id_prova_upload', provaId)
       
       const formattedDisciplinas = Array.from(new Set(reqs?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
       const formattedProfessors = Array.from(new Set(reqs?.map((r: any) => {
@@ -68,40 +67,31 @@ export default function UploadSimuladoPage() {
       const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : ''
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
 
-      const simuladoData = { 
+      const provaData = { 
         ...data, 
-        simulados_upload_requisicoes: reqs || [],
+        provas_upload_requisicoes: reqs || [],
         formattedDisciplinas,
         formattedProfessors,
         formattedDate,
         formattedSeries,
-        isSimulado: true
+        isProva: true
       }
-      setSimulado(simuladoData)
+      setProva(provaData)
 
       // If questions already exist, load them for review
-      if (simuladoData?.questoes_json && simuladoData.questoes_json.length > 0) {
-        let qs = simuladoData.questoes_json
+      if (provaData?.questoes_json && provaData.questoes_json.length > 0) {
+        let qs = provaData.questoes_json
         
-        const showAll = searchParams.get('all') === 'true'
-        const targetProf = searchParams.get('prof')
-        
-        if (!showAll) {
-          if (targetProf) {
-            qs = qs.filter((q: any) => q.id_professor === targetProf)
-          } else if (currentUser?.perfil === 'Professor') {
-            qs = qs.filter((q: any) => q.id_professor === currentUser.id)
-          }
-        }
+        const showAll = true;
         
         if (qs.length > 0) {
-          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
+          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true })))
           setUploadStep('review')
         }
       }
       
       if (searchParams.get('print') === 'true') {
-        setShowPreviewIsolated(true)
+        setShowPreview(true)
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -122,14 +112,14 @@ export default function UploadSimuladoPage() {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch('/api/simulados-upload/parse', { method: 'POST', body: fd })
+      const res = await fetch('/api/provas-upload/parse', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok || data.error) {
         setParseError(data.error || 'Erro ao processar arquivo.')
         setUploadStep('idle')
         return
       }
-      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 }))
+      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true }))
       setQuestoes(parsed)
       setUploadStep('review')
     } catch (e: any) {
@@ -151,37 +141,24 @@ export default function UploadSimuladoPage() {
   const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
-    const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
+    const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
     if (currentUser?.perfil === 'Professor' && myAssignment && currentQs.length > myAssignment.qtd_questoes) {
-      setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para prosseguir.` });
+      setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para prosseguir.` });
       return;
     }
 
     setSaving(true)
     try {
       // 1. Fetch current DB state to avoid overwriting other professors
-      const { data: dbData } = await (supabase as any).from('simulados_upload').select('questoes_json').eq('id', simuladoId).single()
+      const { data: dbData } = await (supabase as any).from('provas_upload').select('questoes_json').eq('id', provaId).single()
       const dbQuestions = dbData?.questoes_json || []
 
-      const targetProf = searchParams.get('prof')
-      const showAll = searchParams.get('all') === 'true'
-
-      // 2. Filter out questions we are NOT editing
-      let otherQuestions = []
-      if (currentUser?.perfil === 'Professor') {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== currentUser.id)
-      } else if (targetProf && !showAll) {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== targetProf)
-      }
-
-      // 3. Prepare our questions
-      const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => ({ 
+      // 2. Since we are adapting, we edit ALL questions and don't preserve any hidden ones.
+      // 3. Prepare our questions (keep their original id_professor if they have one)
+      const finalQToSave = currentQs.map(({ expandido, ...q }) => ({ 
         ...q, 
-        id_professor: currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor 
+        id_professor: q.id_professor || currentUser?.id 
       }))
-
-      // 4. Merge
-      const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
@@ -199,17 +176,17 @@ export default function UploadSimuladoPage() {
         updatePayload.status = 'em_revisao'
       }
 
-      const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', simuladoId)
+      const { error } = await (supabase as any).from('provas_upload').update(updatePayload).eq('id', provaId)
 
       if (actionType === 'enviar_revisao' && myAssignment) {
-         await (supabase as any).from('simulados_upload_requisicoes').update({
+         await (supabase as any).from('provas_upload_requisicoes').update({
            status: 'enviado',
            enviado_em: new Date().toISOString()
          }).eq('id', myAssignment.id)
       } else if (actionType === 'aprovar') {
-         await (supabase as any).from('simulados_upload_requisicoes').update({
+         await (supabase as any).from('provas_upload_requisicoes').update({
            status: 'aprovado'
-         }).eq('id_simulado_upload', simuladoId)
+         }).eq('id_prova_upload', provaId)
       }
 
       if (error) throw error
@@ -244,7 +221,7 @@ export default function UploadSimuladoPage() {
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Link href="/simulados/simulados-upload"
+          <Link href="/simulados/provas-upload"
             style={{ width: 44, height: 44, borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', textDecoration: 'none', flexShrink: 0, transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
             onMouseEnter={e => { e.currentTarget.style.color = '#8b5cf6'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)' }}
             onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))' }}>
@@ -253,21 +230,21 @@ export default function UploadSimuladoPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>
-                {simulado?.titulo || 'Envio de Simulado'}
+                {prova?.titulo || 'Envio de Prova'}
               </h1>
             </div>
             
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {simulado?.data_aplicacao ? (
+              {prova?.data_aplicacao ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                  <Calendar size={14} color="#8b5cf6" /> Aplicação: {simulado.data_aplicacao.split('-').reverse().join('/')}
+                  <Calendar size={14} color="#8b5cf6" /> Aplicação: {prova.data_aplicacao.split('-').reverse().join('/')}
                 </div>
               ) : (
                 <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 13 }}>Faça upload do arquivo DOCX ou PDF com as questões elaboradas</p>
               )}
-              {simulado?.data_limite_upload && (
+              {prova?.data_limite_upload && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                  <Clock size={14} color="#f59e0b" /> Prazo: {simulado.data_limite_upload.split('-').reverse().join('/')}
+                  <Clock size={14} color="#f59e0b" /> Prazo: {prova.data_limite_upload.split('-').reverse().join('/')}
                 </div>
               )}
             </div>
@@ -284,37 +261,23 @@ export default function UploadSimuladoPage() {
                 <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
               </motion.button>
             )}
-            {currentUser?.perfil !== 'Professor' && (
-              <motion.button onClick={() => {
-                const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-                if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                  setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
-                  return;
-                }
-                setShowPreview(true);
-              }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-                <Printer size={16} color="white" /> Pré-visualizar A4
-              </motion.button>
-            )}
             <motion.button onClick={() => {
-              const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
+              const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
               if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
+                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para acessar.` });
                 return;
               }
-              setShowPreviewIsolated(true);
+              setShowPreview(true);
             }}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-              <Printer size={16} color="white" /> Pré-visualizar Professor
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+              <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
             </motion.button>
             {!isProfessorViewAll && (
               <>
                 <motion.button onClick={() => handleSave()} disabled={saving}
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #34d399, #10b981)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(52,211,153,0.3)' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
                   {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
                 </motion.button>
                 
@@ -432,7 +395,7 @@ export default function UploadSimuladoPage() {
           <QuestoesEditor 
             questoes={questoes} 
             setQuestoes={setQuestoes} 
-            defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
+            defaultDisciplinaId={prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
             readOnly={isProfessorViewAll}
           />
@@ -442,7 +405,7 @@ export default function UploadSimuladoPage() {
               <motion.button onClick={() => handleSave()} disabled={saving}
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: 'white', border: 'none', fontSize: 16, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 8px 24px rgba(139,92,246,0.3)' }}>
-                {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Simulado</>}
+                {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Prova</>}
               </motion.button>
             </div>
           )}
@@ -454,20 +417,20 @@ export default function UploadSimuladoPage() {
       <div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
           
-          {simulado?.descricao && (
+          {prova?.descricao && (
             <motion.div 
               animate={{ 
                 boxShadow: ['0 0 0px rgba(236, 72, 153, 0)', '0 0 30px rgba(236, 72, 153, 0.7)', '0 0 0px rgba(236, 72, 153, 0)'],
                 borderColor: ['rgba(236, 72, 153, 0.2)', 'rgba(236, 72, 153, 0.8)', 'rgba(236, 72, 153, 0.2)']
               }}
               transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-              style={{ background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.2)', borderRadius: 20, padding: 24 }}
+              style={{ background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.2)', borderRadius: 20, padding: 24, marginBottom: 24 }}
             >
-              <h4 style={{ color: '#ec4899', fontSize: 15, fontWeight: 700, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <h4 style={{ color: '#db2777', fontSize: 15, fontWeight: 700, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Sparkles size={16} /> Instruções para os Professores
               </h4>
               <p style={{ color: 'hsl(var(--text-primary))', fontSize: 13, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {simulado.descricao}
+                {prova.descricao}
               </p>
             </motion.div>
           )}
@@ -477,16 +440,16 @@ export default function UploadSimuladoPage() {
               <Users size={16} color="#8b5cf6" /> Atribuições
             </h4>
 
-          {!simulado?.simulados_upload_requisicoes || simulado.simulados_upload_requisicoes.length === 0 ? (
+          {!prova?.provas_upload_requisicoes || prova.provas_upload_requisicoes.length === 0 ? (
             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, textAlign: 'center' }}>Sem atribuições cadastradas.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {simulado.simulados_upload_requisicoes.map((req: any, i: number) => {
+              {prova.provas_upload_requisicoes.map((req: any, i: number) => {
                 const reqStatuses: Record<string, { color: string; label: string }> = {
                   pendente: { color: '#f59e0b', label: 'Pendente' },
                   enviado: { color: '#3b82f6', label: 'Enviado' },
                   aprovado: { color: '#10b981', label: 'Aprovado' },
-                  resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
+                  reprovado: { color: '#ef4444', label: 'Reprovado' },
                 }
                 const rs = reqStatuses[req.status] || reqStatuses['pendente']
                 return (
@@ -502,11 +465,11 @@ export default function UploadSimuladoPage() {
                       
                       let otherQuestions = []
                       if (currentUser?.perfil === 'Professor') {
-                        otherQuestions = (simulado.questoes_json || []).filter((q: any) => q.id_professor !== currentUser.id)
+                        otherQuestions = (prova.questoes_json || []).filter((q: any) => q.id_professor !== currentUser.id)
                       } else if (targetProf && !showAll) {
-                        otherQuestions = (simulado.questoes_json || []).filter((q: any) => q.id_professor !== targetProf)
+                        otherQuestions = (prova.questoes_json || []).filter((q: any) => q.id_professor !== targetProf)
                       } else if (!showAll) {
-                        otherQuestions = (simulado.questoes_json || [])
+                        otherQuestions = (prova.questoes_json || [])
                       }
                       
                       const myLiveQs = questoes.map((q) => ({
@@ -550,15 +513,15 @@ export default function UploadSimuladoPage() {
               <div style={{ fontSize: 13, color: 'hsl(var(--text-primary))' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Total questões:</span>
-                  <span style={{ fontWeight: 700 }}>{simulado.questoes_count || 0}</span>
+                  <span style={{ fontWeight: 700 }}>{prova.questoes_count || 0}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Atribuições:</span>
-                  <span style={{ fontWeight: 700 }}>{simulado.simulados_upload_requisicoes.length}</span>
+                  <span style={{ fontWeight: 700 }}>{prova.provas_upload_requisicoes.length}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Enviadas:</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>{simulado.simulados_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aprovado').length}</span>
+                  <span style={{ fontWeight: 700, color: '#10b981' }}>{prova.provas_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aprovado').length}</span>
                 </div>
               </div>
             </div>
@@ -568,35 +531,19 @@ export default function UploadSimuladoPage() {
       </div>
     </div>
 
-      {/* ─── ISOLATED PREVIEW MODAL ─── */}
-      {showPreviewIsolated && (
-        <SimuladoPreviewModal
-          questoes={questoes}
-          setQuestoes={setQuestoes}
-          simulado={simulado}
-          config={simConfig}
-          onClose={() => {
-            setShowPreviewIsolated(false)
-            router.push(`/simulados/simulados-upload/${simuladoId}/upload?all=true`)
-          }}
-          isolatedMode={true}
-          isReadOnly={isProfessorViewAll}
-        />
-      )}
-      
       {/* ─── A4 PREVIEW MODAL ─── */}
       <AnimatePresence>
         {showPreview && (
-          <SimuladoPreviewModal
+          <ProvaPreviewModal
             questoes={questoes}
             setQuestoes={setQuestoes}
-            simulado={{ 
-              ...simulado, 
-              isSimulado: true,
-              formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '',
-              formattedSeries: simulado?.series?.join(', ') || '',
-              formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
-              formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
+            prova={{ 
+              ...prova, 
+              isProva: true,
+              formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '',
+              formattedSeries: Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || ''),
+              formattedDisciplinas: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
+              formattedProfessors: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
                 return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
               }))).filter(Boolean).join(', ')
@@ -622,15 +569,15 @@ export default function UploadSimuladoPage() {
                 <CheckCircle size={32} color="#10b981" />
               </div>
               
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px' }}>Simulado Salva!</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 12px' }}>Prova Salva!</h2>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 15, lineHeight: 1.5, margin: '0 0 32px' }}>
-                {simulado?.titulo?.endsWith('- Adaptado')
-                  ? 'Sua novo simulado foi criada e salva na lista com o sufixo "- Adaptado". Você pode continuar editando se precisar, ou voltar para a lista.'
+                {prova?.titulo?.endsWith('- Adaptado')
+                  ? 'Sua nova prova foi criada e salva na lista com o sufixo "- Adaptado". Você pode continuar editando se precisar, ou voltar para a lista.'
                   : 'Suas questões foram salvas com sucesso. Você pode continuar editando se precisar, ou voltar para a lista.'}
               </p>
               
               <div style={{ display: 'flex', gap: 12 }}>
-                <motion.button onClick={() => router.push('/simulados/simulados-upload')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                <motion.button onClick={() => router.push('/simulados/provas-upload')} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   style={{ flex: 1, padding: '14px 0', borderRadius: 14, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', fontSize: 15, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(245,158,11,0.3)' }}>
                   Ir para Lista
                 </motion.button>

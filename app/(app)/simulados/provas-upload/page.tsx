@@ -86,7 +86,7 @@ export default function UploadProvasGerenciamentoPage() {
 
   const handleAdaptar = async (prova: any) => {
     if (prova.titulo?.includes('ADAPTADO')) {
-      window.location.href = `/simulados/provas-upload/${prova.id}/upload?all=true`;
+      window.location.href = `/simulados/provas-upload/${prova.id}/adaptar`;
       return;
     }
     
