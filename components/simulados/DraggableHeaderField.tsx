@@ -168,8 +168,26 @@ export function DraggableHeaderField({
       title={isEditMode ? field.label : undefined}
     >
       {isEditMode && (
-        <div className="field-label-tag">
-          {field.label}
+        <div className="field-label-tag" style={{ display: 'flex', alignItems: 'center', gap: 6, pointerEvents: 'auto', zIndex: 20 }}>
+          <span>{field.label}</span>
+          <div style={{ display: 'flex', gap: 2 }}>
+            <button 
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onChange(fieldKey, { ...field, fontSize: Math.max(4, (field.fontSize || 10) - 1) });
+              }}
+              title="Diminuir fonte"
+              style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: 2, width: 16, height: 16, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+            >-</button>
+            <button 
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                onChange(fieldKey, { ...field, fontSize: (field.fontSize || 10) + 1 });
+              }}
+              title="Aumentar fonte"
+              style={{ background: 'rgba(255,255,255,0.2)', color: 'white', border: 'none', borderRadius: 2, width: 16, height: 16, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+            >+</button>
+          </div>
         </div>
       )}
       {field.value}
