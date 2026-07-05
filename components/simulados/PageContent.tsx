@@ -623,13 +623,13 @@ export function PageContent({
                          )
                        ))}
                               {!readOnly && (
-                                <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, bottom: -14, zIndex: 10, display: 'flex', gap: 8, transform: 'translateY(100%)' }}>
+                                <div className="no-print alt-actions" style={{ position: 'absolute', right: -36, top: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                                    <div style={{ position: 'relative' }}>
-                                     <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-add` ? null : `${q.id}-add`)} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '6px 12px', borderRadius: 8, fontSize: 12, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                       <ImageIcon size={14} /> Inserir Imagem
+                                     <button title="Inserir Imagem" onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-add` ? null : `${q.id}-add`)} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                       <ImageIcon size={14} />
                                      </button>
                                      {mainImgMenuOpen === `${q.id}-add` && (
-                                       <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                       <div style={{ position: 'absolute', top: '0', right: '100%', zIndex: 9999, marginRight: 8, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                          <button onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
                                            <Upload size={14} /> Fazer Upload
                                          </button>
@@ -639,7 +639,7 @@ export function PageContent({
                                        </div>
                                      )}
                                    </div>
-                                   <button onClick={() => {
+                                   <button title="Adicionar Espaço / Linhas" onClick={() => {
                                      const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
                                      const hasLines = parts.some((p: any) => p.type === 'lines');
                                      if (hasLines) {
@@ -649,8 +649,8 @@ export function PageContent({
                                      setLinesCount(5);
                                      setLinesType('pautado');
                                      setLinesModalOpen({ qId: q._internalId || q.id, parts, defaultCount: 5, q });
-                                   }} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '6px 12px', borderRadius: 8, fontSize: 12, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                     <Plus size={14} /> Adicionar Espaço / Linhas
+                                   }} style={{ background: '#f8fafc', border: '1px solid #cbd5e1', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                     <Plus size={14} />
                                    </button>
                                 </div>
                               )}
