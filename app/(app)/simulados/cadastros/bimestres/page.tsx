@@ -43,15 +43,17 @@ export default function BimestresPage() {
     setIsSaving(true)
     try {
       if (editingId) {
-        await (supabase as any).from('simulados_bimestres').update({ ...formData }).eq('id', editingId)
+        const { error } = await (supabase as any).from('simulados_bimestres').update({ ...formData }).eq('id', editingId)
+        if (error) throw error
       } else {
-        await (supabase as any).from('simulados_bimestres').insert([{ ...formData }])
+        const { error } = await (supabase as any).from('simulados_bimestres').insert([{ ...formData }])
+        if (error) throw error
       }
       await refresh()
       setIsModalOpen(false)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert('Erro ao salvar')
+      alert('Erro ao salvar: ' + (e.message || 'Desconhecido'))
     } finally {
       setIsSaving(false)
     }
