@@ -203,12 +203,12 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
       
       {pIndex === 0 && config?.modelo_pdf_url && (
         <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, margin: 0, padding: 0 }}>
-          <img src={config.modelo_pdf_url} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img src={config.modelo_pdf_url || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
       {pIndex > 0 && config?.modelo_pdf_outras_paginas_url && (
         <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, margin: 0, padding: 0 }}>
-          <img src={config.modelo_pdf_outras_paginas_url} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img src={config.modelo_pdf_outras_paginas_url || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
 

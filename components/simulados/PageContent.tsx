@@ -211,12 +211,12 @@ export function PageContent({
       `}</style>
       {pIndex === 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url)) && (
         <div className="print-cover-image" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img src={simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)) || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
       {pIndex > 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url)) && (
         <div className="print-repeating-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img src={simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url)} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url)) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
 
@@ -499,7 +499,7 @@ export function PageContent({
 
                                   return (
                                     <div key={`img-${part.index}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
-                                      <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                      <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                       {onEditEnunciadoImage && !readOnly && (
                                         <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: 4, gap: 4, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
@@ -681,7 +681,7 @@ export function PageContent({
                                     {a.imagem_url && (
                                       <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
                                         <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
-                                          <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                          <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                           {onEditAlternativaImage && !readOnly && (
                                             <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
@@ -1057,7 +1057,7 @@ export function PageContent({
 
                           return (
                             <div key={`img-${i}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
-                              <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                              <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                               
                               {onEditEnunciadoImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
@@ -1230,7 +1230,7 @@ export function PageContent({
                           <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto' }}>
                             {a.imagem_url && (
                               <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
-                                <img src={imgBaseUrl} style={{ width: '100%', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                <img src={imgBaseUrl || undefined} style={{ width: '100%', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                 {onEditAlternativaImage && !readOnly && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                     <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
@@ -1377,7 +1377,7 @@ export function PageContent({
                             <div style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto' }}>
                               {a.imagem_url && (
                                 <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
-                                  <img src={imgBaseUrl} style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                  <img src={imgBaseUrl || undefined} style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                   {onEditAlternativaImage && !readOnly && (
                                     <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                       <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
