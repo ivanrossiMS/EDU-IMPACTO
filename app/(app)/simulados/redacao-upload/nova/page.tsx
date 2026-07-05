@@ -19,7 +19,11 @@ export default function NovaRedaçãoUploadPage() {
   // Form state
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
-  const [orientacoesAlunos, setOrientacoesAlunos] = useState('')
+  const [orientacoesAlunos, setOrientacoesAlunos] = useState(`Atenção às orientações:
+• Deve ser realizada exclusivamente a caneta azul ou preta.
+• Preencha corretamente nome completo.
+• Não é permitido o uso de corretivo, celular ou outros dispositivos.
+• Respostas ilegíveis ou com rasuras poderão ser desconsideradas.`)
   const [dataAplicacao, setDataAplicacao] = useState('')
   const [bimestreId, setBimestreId] = useState('')
   const [series, setSeries] = useState<string[]>([])
