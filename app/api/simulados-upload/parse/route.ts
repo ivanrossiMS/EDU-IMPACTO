@@ -401,10 +401,20 @@ export async function POST(request: Request) {
     let text = ''
     let imageMap = new Map<string, any>()
 
-    if (filename.endsWith('.docx')) {
-      const r = await parseDocx(buffer)
-      text = r.text
-      imageMap = r.imageMap
+    if (filename.endsWith('.docx') || filename.endsWith('.doc')) {
+      try {
+        const r = await parseDocx(buffer)
+        text = r.text
+        imageMap = r.imageMap
+      } catch (err: any) {
+        if (err.message && (err.message.includes('End of data reached') || err.message.includes('signature not found'))) {
+          return NextResponse.json(
+            { error: 'O arquivo .DOC enviado é de um formato antigo (Word 97-2003). Por favor, abra-o no Word e salve como .DOCX para importar.' },
+            { status: 400 }
+          )
+        }
+        throw err
+      }
     } else if (filename.endsWith('.pdf')) {
       const r = await parsePdf(buffer)
       text = r.text

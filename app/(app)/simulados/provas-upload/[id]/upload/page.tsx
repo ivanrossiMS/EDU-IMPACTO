@@ -347,7 +347,7 @@ export default function UploadProvaPage() {
               background: dragOver ? 'rgba(139,92,246,0.05)' : 'hsl(var(--bg-surface))',
               cursor: 'pointer', transition: 'all 0.25s', marginBottom: 24,
             }}>
-            <input ref={fileInputRef} type="file" accept=".docx" style={{ display: 'none' }}
+            <input ref={fileInputRef} type="file" accept=".doc,.docx" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
 
             <motion.div animate={{ y: dragOver ? -8 : 0 }} transition={{ type: 'spring', stiffness: 300 }}>
