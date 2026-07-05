@@ -10,6 +10,7 @@ import {
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 import { GabaritoRedacaoModal } from '@/components/simulados/GabaritoRedacaoModal'
 
 export default function UploadRedaçõesGerenciamentoPage() {
@@ -22,12 +23,18 @@ export default function UploadRedaçõesGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
+  
+  const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
 
   const seriesOptions = ['1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF', '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF', '1ª Série EM', '2ª Série EM', '3ª Série EM']
 
   useEffect(() => {
+    setIsClient(true)
+    const stored = localStorage.getItem('simulados_ano_letivo')
+    if (stored) setSelectedAnoLetivo(stored)
     loadData()
   }, [])
 
@@ -133,8 +140,11 @@ export default function UploadRedaçõesGerenciamentoPage() {
 
   const isProfView = currentUserPerfil === 'Professor'
 
+  const bimsInYear = useMemo(() => bimestres.filter(b => b.ano_letivo === selectedAnoLetivo).map(b => b.id), [bimestres, selectedAnoLetivo])
+  const redacoesInYear = useMemo(() => redacoes.filter(p => bimsInYear.includes(p.id_bimestre)), [redacoes, bimsInYear])
+
   const filtered = useMemo(() => {
-    return redacoes.filter(p => {
+    return redacoesInYear.filter(p => {
       const matchSearch = !search || p.titulo?.toLowerCase().includes(search.toLowerCase())
       const matchBimestre = filterBimestre === 'todos' || p.id_bimestre === filterBimestre
       const matchSerie = filterSerie === 'todas' || (p.series && (Array.isArray(p.series) ? p.series.includes(filterSerie) : p.series === filterSerie))
@@ -144,7 +154,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
       
       return matchSearch && matchBimestre && matchSerie && isAssigned
     })
-  }, [redacoes, search, filterBimestre, filterSerie, isProfView, currentUser?.id])
+  }, [redacoesInYear, search, filterBimestre, filterSerie, isProfView, currentUser?.id])
 
   const groupedRedacoes = useMemo(() => {
     const groups: Record<string, any[]> = {}
@@ -177,12 +187,16 @@ export default function UploadRedaçõesGerenciamentoPage() {
 
   const stats = useMemo(() => {
     return {
-      total: redacoes.length
+      total: redacoesInYear.length
     }
-  }, [redacoes])
+  }, [redacoesInYear])
+
+  if (!isClient) return null
 
   return (
-    <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto' }}>
+    <>
+      {!selectedAnoLetivo && <AnoLetivoModal onSelect={setSelectedAnoLetivo} />}
+      <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto', display: selectedAnoLetivo ? 'block' : 'none' }}>
       <style>{`
         @media (max-width: 768px) {
           .simulados-upload-container {
@@ -346,9 +360,11 @@ export default function UploadRedaçõesGerenciamentoPage() {
                 onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
                 onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
               >
-                <option value="todos">Todos os Bimestres</option>
-                {bimestres.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}
-              </select>
+                <option value="todos">Todos os bimestres</option>
+                  {bimestres.filter(b => b.ano_letivo === selectedAnoLetivo).map(bim => (
+                    <option key={bim.id} value={bim.id}>{bim.nome}</option>
+                  ))}
+                </select>
               <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
             </div>
 
@@ -395,8 +411,8 @@ export default function UploadRedaçõesGerenciamentoPage() {
               {groupedRedacoes.map(([serie, items]) => (
                 <div key={serie} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, marginBottom: 24, overflow: 'hidden' }}>
                   <div 
-                    onClick={() => setCollapsedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
-                    style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: collapsedGroups[serie] ? 'none' : '1px solid hsl(var(--border-subtle))' }}
+                    onClick={() => setExpandedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
+                    style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: expandedGroups[serie] ? '1px solid hsl(var(--border-subtle))' : 'none' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}>
@@ -413,13 +429,13 @@ export default function UploadRedaçõesGerenciamentoPage() {
                     <motion.button 
                       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none' }}
                     >
-                      {collapsedGroups[serie] ? 'Expandir' : 'Recolher'}
-                      <ChevronUp size={16} style={{ transform: collapsedGroups[serie] ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                      {expandedGroups[serie] ? 'Recolher' : 'Expandir'}
+                      <ChevronUp size={16} style={{ transform: expandedGroups[serie] ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
                     </motion.button>
                   </div>
                   
                   <AnimatePresence>
-                    {!collapsedGroups[serie] && (
+                    {expandedGroups[serie] && (
                       <motion.div 
                         initial={{ height: 0, opacity: 0 }} 
                         animate={{ height: 'auto', opacity: 1 }} 
@@ -642,5 +658,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
         />
       )}
     </div>
+    </>
   )
 }
