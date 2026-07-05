@@ -145,12 +145,14 @@ function parseQuestionsFromText(text: string, imageMap: Map<string, any>): any[]
     }
   }
 
-  // Deduplicate: keep only first occurrence of each question number
-  const seen = new Set<number>()
-  const unique = headers.filter(h => {
-    if (seen.has(h.num)) return false
-    seen.add(h.num)
-    return true
+  // Handle duplicate question numbers (e.g. when Word restarts list numbering at 1, or manual typos)
+  let lastNum = 0
+  const unique = headers.map(h => {
+    if (h.num <= lastNum) {
+      h.num = lastNum + 1
+    }
+    lastNum = h.num
+    return h
   })
 
   for (let i = 0; i < unique.length; i++) {
