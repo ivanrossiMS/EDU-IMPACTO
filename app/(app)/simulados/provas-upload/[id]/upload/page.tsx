@@ -151,9 +151,15 @@ export default function UploadProvaPage() {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
     const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-    if (currentUser?.perfil === 'Professor' && myAssignment && currentQs.length > myAssignment.qtd_questoes) {
-      setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para prosseguir.` });
-      return;
+    if (currentUser?.perfil === 'Professor' && myAssignment) {
+      if (currentQs.length > myAssignment.qtd_questoes) {
+        setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para prosseguir.` });
+        return;
+      }
+      if (actionType === 'enviar_revisao' && currentQs.length < myAssignment.qtd_questoes) {
+        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQs.length} questões.` });
+        return;
+      }
     }
 
     setSaving(true)
