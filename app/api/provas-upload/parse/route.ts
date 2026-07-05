@@ -203,20 +203,23 @@ async function parseDocx(originalBuffer: Buffer): Promise<{ text: string; imageM
     const zip = await JSZip.loadAsync(buffer)
     
     // 1. Extract numbering formats
-    let numIdToFormat: Record<string, string> = {}
+    let numIdToFormat: Record<string, Record<string, string>> = {}
     try {
       const numXml = await zip.file('word/numbering.xml')?.async('string')
       if (numXml) {
-        const abstractMap: Record<string, string> = {}
+        const abstractMap: Record<string, Record<string, string>> = {}
         const abstractRe = /<w:abstractNum\s+w:abstractNumId="(\d+)"[\s\S]*?<\/w:abstractNum>/g
         let mAbstract
         while ((mAbstract = abstractRe.exec(numXml)) !== null) {
           const absId = mAbstract[1]
           const absContent = mAbstract[0]
-          const lvl0Match = absContent.match(/<w:lvl\s+w:ilvl="0"[\s\S]*?<\/w:lvl>/)
-          if (lvl0Match) {
-            const numFmtMatch = lvl0Match[0].match(/<w:numFmt\s+w:val="([^"]+)"/)
-            if (numFmtMatch) abstractMap[absId] = numFmtMatch[1]
+          abstractMap[absId] = {}
+          const lvlRe = /<w:lvl\s+w:ilvl="(\d+)"[\s\S]*?<\/w:lvl>/g
+          let mLvl
+          while ((mLvl = lvlRe.exec(absContent)) !== null) {
+            const ilvl = mLvl[1]
+            const numFmtMatch = mLvl[0].match(/<w:numFmt\s+w:val="([^"]+)"/)
+            if (numFmtMatch) abstractMap[absId][ilvl] = numFmtMatch[1]
           }
         }
         const numRe = /<w:num\s+w:numId="(\d+)"[\s\S]*?<\/w:num>/g
@@ -246,21 +249,28 @@ async function parseDocx(originalBuffer: Buffer): Promise<{ text: string; imageM
           if (ilvlMatch && numIdMatch) {
             const ilvl = ilvlMatch[1]
             const numId = numIdMatch[1]
-            if (ilvl === "0") {
-              const format = numIdToFormat[numId] || 'decimal'
-              if (format === 'decimal' || format === 'lowerLetter' || format === 'upperLetter') {
-                if (!listCounters[numId]) listCounters[numId] = 0
-                listCounters[numId]++
-                let numStr = listCounters[numId].toString()
-                if (format === 'lowerLetter') numStr = String.fromCharCode(96 + listCounters[numId])
-                else if (format === 'upperLetter') numStr = String.fromCharCode(64 + listCounters[numId])
-                
-                const injectedRun = `<w:r><w:t>${numStr}) </w:t></w:r>`
-                const pPrEnd = pMatch.indexOf('</w:pPr>')
-                if (pPrEnd !== -1) {
-                  modified = true
-                  return pMatch.substring(0, pPrEnd + 8) + injectedRun + pMatch.substring(pPrEnd + 8)
+            const format = numIdToFormat[numId]?.[ilvl] || (ilvl === '0' ? 'decimal' : 'lowerLetter')
+            
+            if (format === 'decimal' || format === 'lowerLetter' || format === 'upperLetter') {
+              const counterKey = `${numId}_${ilvl}`
+              
+              Object.keys(listCounters).forEach(k => {
+                if (k.startsWith(`${numId}_`) && parseInt(k.split('_')[1]) > parseInt(ilvl)) {
+                   listCounters[k] = 0
                 }
+              })
+              
+              if (!listCounters[counterKey]) listCounters[counterKey] = 0
+              listCounters[counterKey]++
+              let numStr = listCounters[counterKey].toString()
+              if (format === 'lowerLetter') numStr = String.fromCharCode(96 + listCounters[counterKey])
+              else if (format === 'upperLetter') numStr = String.fromCharCode(64 + listCounters[counterKey])
+              
+              const injectedRun = `<w:r><w:t>${numStr}) </w:t></w:r>`
+              const pPrEnd = pMatch.indexOf('</w:pPr>')
+              if (pPrEnd !== -1) {
+                modified = true
+                return pMatch.substring(0, pPrEnd + 8) + injectedRun + pMatch.substring(pPrEnd + 8)
               }
             }
           }
