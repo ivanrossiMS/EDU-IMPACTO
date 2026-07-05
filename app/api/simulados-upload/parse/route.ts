@@ -30,12 +30,13 @@ function parseBlock(block: string): ParsedBlock {
   // Capture group 1 = optional leading char, group 2 = the letter
   // We use a simpler approach without lookbehind for max compatibility:
   // match includes an optional non-word prefix char and optional formatting tags
+  const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
   const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[biu]>)*([a-eA-E])(?:<\/[biu]>)*\s*\)(?:<\/[biu]>)*\s+/gm
 
   const found: AltMarker[] = []
   let m: RegExpExecArray | null
 
-  while ((m = markerRe.exec(block)) !== null) {
+  while ((m = markerRe.exec(spaceBlock)) !== null) {
     const letter = m[2].toUpperCase()
     // m[0] = full match e.g. "\na) "
     // m[1] = prefix char e.g. "\n" (or empty at start)
@@ -101,11 +102,18 @@ function parseBlock(block: string): ParsedBlock {
     const start = bestSeq[i].end
     const end = i + 1 < bestSeq.length ? bestSeq[i + 1].pos : block.length
     
-    let text = block.slice(start, end)
+    const markerStart = bestSeq[i].pos
+    const markerText = block.slice(markerStart, start)
+    const textPart = block.slice(start, end)
+    
+    const fullAltText = markerText + textPart
+    const correct = fullAltText.includes('[[GABARITO]]')
+    
+    let text = textPart
+      .replace(/\[\[GABARITO\]\]/g, '')
       .trim()
       .replace(/\s+/g, ' ') // collapse whitespace/newlines within alt text
       
-    let correct = false
     alternatives.push({ letter: bestSeq[i].letter, text, correct })
   }
 
@@ -185,8 +193,46 @@ function parseQuestionsFromText(text: string, imageMap: Map<string, any>): any[]
 // because stripping <img src="[[IMAGE:img_1]]"> would destroy the marker.
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function parseDocx(buffer: Buffer): Promise<{ text: string; imageMap: Map<string, any> }> {
+async function parseDocx(originalBuffer: Buffer): Promise<{ text: string; imageMap: Map<string, any> }> {
   const mammoth = (await import('mammoth')).default
+
+  // Pre-process DOCX to inject [[GABARITO]] for red text
+  let buffer = originalBuffer
+  try {
+    const JSZip = (await import('jszip')).default || await import('jszip')
+    const zip = await JSZip.loadAsync(buffer)
+    let docXml = await zip.file('word/document.xml')?.async('string')
+    if (docXml) {
+      let modified = false
+      docXml = docXml.replace(/<w:r\b[^>]*>.*?<\/w:r>/g, (run) => {
+        const colorMatch = run.match(/<w:color\s+w:val="([^"]+)"/)
+        if (colorMatch) {
+          const hex = colorMatch[1]
+          let isRed = false
+          if (hex && hex.length === 6 && hex.toUpperCase() !== 'AUTO') {
+            const r = parseInt(hex.substring(0, 2), 16)
+            const g = parseInt(hex.substring(2, 4), 16)
+            const b = parseInt(hex.substring(4, 6), 16)
+            if (r > 150 && g < 100 && b < 100) isRed = true
+          }
+          if (isRed) {
+            modified = true
+            return run.replace(/<w:t( [^>]*)?>([^<]*)<\/w:t>/g, (match, attrs, text) => {
+              return `<w:t${attrs || ''}>${text}[[GABARITO]]</w:t>`
+            })
+          }
+        }
+        return run
+      })
+      if (modified) {
+        zip.file('word/document.xml', docXml)
+        const newBuf = await zip.generateAsync({ type: 'nodebuffer' })
+        buffer = newBuf as Buffer
+      }
+    }
+  } catch (e) {
+    console.error('Error injecting GABARITO:', e)
+  }
 
   const imageMap = new Map<string, any>()
   let imgIndex = 0
