@@ -99,10 +99,10 @@ export default function UploadSimuladoPage() {
   }
 
   const handleFile = async (file: File) => {
-    const allowed = ['.docx']
+    const allowed = ['.doc', '.docx']
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!allowed.includes(ext)) {
-      setParseError('Formato não suportado. Use apenas .docx')
+      setParseError('Formato não suportado. Use apenas .doc ou .docx')
       return
     }
     setFileName(file.name)
@@ -247,7 +247,7 @@ export default function UploadSimuladoPage() {
                   <Calendar size={14} color="#8b5cf6" /> Aplicação: {simulado.data_aplicacao.split('-').reverse().join('/')}
                 </div>
               ) : (
-                <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 13 }}>Faça upload do arquivo DOCX ou PDF com as questões elaboradas</p>
+                <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 13 }}>Faça upload do arquivo DOC ou DOCX com as questões elaboradas</p>
               )}
               {simulado?.data_limite_upload && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
@@ -323,10 +323,10 @@ export default function UploadSimuladoPage() {
                 {dragOver ? 'Solte o arquivo aqui!' : 'Arraste ou clique para enviar'}
               </h3>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: '0 0 20px' }}>
-                Suportamos arquivos <strong>.DOCX</strong> (Word) com questões e alternativas
+                Suportamos arquivos <strong>.DOC ou .DOCX</strong> (Word) com questões e alternativas
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                {[{ icon: FileText, label: '.DOCX — Word', color: '#3b82f6' }].map((t, i) => (
+                {[{ icon: FileText, label: '.DOC/DOCX — Word', color: '#3b82f6' }].map((t, i) => (
                   <div key={i} style={{ padding: '8px 16px', borderRadius: 10, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <t.icon size={14} color={t.color} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
@@ -353,7 +353,7 @@ export default function UploadSimuladoPage() {
               {[
                 { emoji: '🔢', title: 'Numere as questões', desc: 'Use "1.", "2.", "Questão 1", etc.' },
                 { emoji: '🅰️', title: 'Alternativas padrão', desc: 'Formato: a) texto ou A) texto' },
-                { emoji: '🖼️', title: 'Imagens no DOCX', desc: 'Insira imagens direto no Word — elas serão importadas automaticamente' },
+                { emoji: '🖼️', title: 'Imagens no arquivo', desc: 'Insira imagens direto no Word — elas serão importadas automaticamente' },
                 { emoji: '📄', title: 'Texto claro', desc: 'Evite cabeçalhos muito grandes antes da primeira questão' },
               ].map((tip, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
