@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Redação via Upload', href: '/simulados/redacao-upload', icon: <Upload size={18} />, groupId: 'upload-redacao' },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
+  { label: 'Ajuda', href: '/ajuda', icon: <BookOpen size={18} /> },
 ]
 
 export function SidebarSimulados() {
@@ -57,7 +58,7 @@ export function SidebarSimulados() {
 
   const activeNavItems = NAV_ITEMS.filter(item => {
     if (isProfessor) {
-      return ['Dashboard', 'Provas via Upload', 'Simulados via Upload', 'Redação via Upload'].includes(item.label)
+      return ['Dashboard', 'Provas via Upload', 'Simulados via Upload', 'Redação via Upload', 'Ajuda'].includes(item.label)
     }
     return true
   }).map(item => {
