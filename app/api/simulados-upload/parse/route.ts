@@ -407,7 +407,7 @@ export async function POST(request: Request) {
         text = r.text
         imageMap = r.imageMap
       } catch (err: any) {
-        if (err.message && (err.message.includes('End of data reached') || err.message.includes('signature not found'))) {
+        if (err.message && (err.message.includes('End of data reached') || err.message.includes('signature not found') || err.message.includes("Can't find end of central directory") || err.message.includes('is this a zip file'))) {
           return NextResponse.json(
             { error: 'O arquivo .DOC enviado é de um formato antigo (Word 97-2003). Por favor, abra-o no Word e salve como .DOCX para importar.' },
             { status: 400 }
