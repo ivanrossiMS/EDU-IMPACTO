@@ -26,7 +26,7 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
   const handleConfirm = () => {
     if (!selectedAno) return
     setIsOpen(false)
-    setTimeout(() => onSelect(selectedAno), 300)
+    setTimeout(() => onSelect(String(selectedAno)), 300)
   }
 
   if (!isOpen) return null
