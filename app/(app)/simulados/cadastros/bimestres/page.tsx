@@ -4,15 +4,17 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Layers, Plus, Trash2, Edit2, Search, Calendar, CheckCircle2, XCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useData } from '@/lib/dataContext'
 
 export default function BimestresPage() {
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ nome: '', data_inicio: '', data_fim: '', status: 'ativo' })
+  const [formData, setFormData] = useState({ nome: '', data_inicio: '', data_fim: '', status: 'ativo', ano_letivo: '' })
   const [search, setSearch] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const { cfgCalendarioLetivo = [] } = useData()
 
   const refresh = async () => {
     setLoading(true)
@@ -27,10 +29,11 @@ export default function BimestresPage() {
   const handleOpen = (item?: any) => {
     if (item) {
       setEditingId(item.id)
-      setFormData({ nome: item.nome, data_inicio: item.data_inicio || '', data_fim: item.data_fim || '', status: item.status })
+      setFormData({ nome: item.nome, data_inicio: item.data_inicio || '', data_fim: item.data_fim || '', status: item.status, ano_letivo: item.ano_letivo || '' })
     } else {
       setEditingId(null)
-      setFormData({ nome: '', data_inicio: '', data_fim: '', status: 'ativo' })
+      const anoAtivo = cfgCalendarioLetivo.find((a: any) => a.status === 'Aberto')?.ano || ''
+      setFormData({ nome: '', data_inicio: '', data_fim: '', status: 'ativo', ano_letivo: anoAtivo })
     }
     setIsModalOpen(true)
   }
@@ -63,6 +66,7 @@ export default function BimestresPage() {
   const filtered = data?.filter(item => item.nome.toLowerCase().includes(search.toLowerCase())) || []
 
   const getYear = (item: any) => {
+    if (item.ano_letivo) return item.ano_letivo;
     const match = item.nome.match(/\b(20\d{2})\b/);
     if (match) return match[1];
     if (item.data_inicio) return item.data_inicio.substring(0, 4);
@@ -231,6 +235,15 @@ export default function BimestresPage() {
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div>
+                  <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Ano Letivo</label>
+                  <select value={formData.ano_letivo} onChange={e => setFormData({...formData, ano_letivo: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'16\' height=\'16\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center' }} onFocus={e => e.target.style.borderColor = '#f43f5e'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'}>
+                    <option value="">Selecione um ano letivo</option>
+                    {cfgCalendarioLetivo.map((ano: any) => (
+                      <option key={ano.id} value={ano.ano}>{ano.ano}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label style={{ display: 'block', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Nome (Ex: 1º Bimestre)</label>
                   <input value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} style={{ width: '100%', padding: '14px 16px', borderRadius: 14, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 15, outline: 'none', transition: 'border-color 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }} onFocus={e => e.target.style.borderColor = '#f43f5e'} onBlur={e => e.target.style.borderColor = 'hsl(var(--border-subtle))'} />
