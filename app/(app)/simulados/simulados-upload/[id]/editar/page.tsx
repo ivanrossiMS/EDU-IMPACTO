@@ -270,10 +270,7 @@ export default function EditarSimuladoUploadPage() {
                 {bimestres.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}
               </select>
             </div>
-            <div>
-              <label style={labelStyle}>Valor do Simulado (Nota)</label>
-              <input type="text" value={valor} onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ''))} placeholder="Ex: 10,0" style={inputStyle} />
-            </div>
+
             <div>
               <label style={labelStyle}>Data de Aplicação</label>
               <input type="date" value={dataAplicacao} onChange={e => setDataAplicacao(e.target.value)} style={inputStyle} />
