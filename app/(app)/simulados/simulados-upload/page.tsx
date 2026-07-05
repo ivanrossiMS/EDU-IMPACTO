@@ -10,11 +10,13 @@ import {
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { useData } from '@/lib/dataContext'
 import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
 export default function UploadSimuladosGerenciamentoPage() {
   const { currentUser, currentUserPerfil } = useApp()
+  const { cfgCalendarioLetivo = [] } = useData()
   const [simulados, setSimulados] = useState<any[]>([])
   const [bimestres, setBimestres] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -365,6 +367,25 @@ export default function UploadSimuladosGerenciamentoPage() {
           </div>
           
           <div className="responsive-filters-selects" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: '1 1 140px' }}>
+              <Calendar size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+              <select
+                value={selectedAnoLetivo || ''}
+                onChange={e => {
+                  setSelectedAnoLetivo(e.target.value);
+                  setFilterBimestre('todos');
+                }}
+                style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(139,92,246,0.15)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)' }}
+              >
+                {[...cfgCalendarioLetivo].sort((a: any, b: any) => parseInt(b.ano) - parseInt(a.ano)).map((item: any) => (
+                  <option key={item.id} value={item.ano}>{item.ano}</option>
+                ))}
+              </select>
+              <ChevronDown size={16} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
+            </div>
+
             <div style={{ position: 'relative', flex: '1 1 180px' }}>
               <Calendar size={16} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
               <select
