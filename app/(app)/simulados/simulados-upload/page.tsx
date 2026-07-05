@@ -37,6 +37,8 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   useEffect(() => {
     setIsClient(true)
+    const saved = sessionStorage.getItem('selectedAnoLetivo')
+    if (saved) setSelectedAnoLetivo(saved)
     loadData()
   }, [])
 
@@ -213,7 +215,7 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   return (
     <>
-      {!selectedAnoLetivo && <AnoLetivoModal onSelect={setSelectedAnoLetivo} />}
+      {!selectedAnoLetivo && <AnoLetivoModal onSelect={(ano) => { setSelectedAnoLetivo(ano); sessionStorage.setItem('selectedAnoLetivo', ano) }} />}
       <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1200, margin: '0 auto', display: selectedAnoLetivo ? 'block' : 'none' }}>
       <style>{`
         @media (max-width: 768px) {
@@ -378,6 +380,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                 value={selectedAnoLetivo || ''}
                 onChange={e => {
                   setSelectedAnoLetivo(e.target.value);
+                  sessionStorage.setItem('selectedAnoLetivo', e.target.value);
                   setFilterBimestre('todos');
                 }}
                 style={{ width: '100%', padding: '14px 36px 14px 42px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}
