@@ -156,7 +156,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         eh_correta: alt.correct,
         imagem_url: (alt as any).imagem_url
       })),
-      id_disciplina: null
+      id_disciplina: q.id_professor && simulado?.simulados_upload_requisicoes ? simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.id_disciplina : null,
+      simulados_disciplinas: q.id_professor && simulado?.simulados_upload_requisicoes ? { nome: simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.simulados_disciplinas?.nome || simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.disciplina_nome } : null
     }
   })
 

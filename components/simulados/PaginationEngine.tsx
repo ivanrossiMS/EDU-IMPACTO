@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HtmlContent } from '../HtmlContent';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, X, BookOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { PageContent } from './PageContent';
 
@@ -490,22 +490,19 @@ export function PaginationEngine({
                   data-measure 
                   data-id={`disc-${q.id_disciplina || 'unknown'}-${idx}`}
                   style={{
-                    padding: '8px 16px',
-                    borderLeft: '4px solid #3b82f6',
-                    background: 'linear-gradient(90deg, #e0f2fe 0%, #f8fafc 100%)',
-                    borderRadius: '0 8px 8px 0',
-                    fontWeight: 800,
-                    fontSize: '11pt',
-                    color: '#1e293b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                    marginBottom: 16,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8
+                    gap: 16,
+                    width: '100%',
+                    breakInside: 'avoid'
                   }}
                 >
-                  {q.simulados_disciplinas.nome}
+                  <div style={{ flexShrink: 0, padding: '6px 16px', background: '#1e293b', color: 'white', borderRadius: 24, fontSize: '10pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <BookOpen size={14} color="#38bdf8" />
+                    {q.simulados_disciplinas.nome}
+                  </div>
+                  <div style={{ flex: 1, height: 2, background: 'linear-gradient(to right, #cbd5e1, transparent)' }} />
                 </div>
               )}
               <div data-measure data-id={`${q.id}-enunciado`} style={{ display: 'flex', gap: 10 }}>

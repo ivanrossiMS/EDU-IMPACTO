@@ -309,24 +309,18 @@ export function PageContent({
                     style={{
                       marginTop: block.renderMarginTop || 0,
                       marginBottom: 16,
-                      padding: '8px 16px',
-                      borderLeft: '4px solid #3b82f6',
-                      background: 'linear-gradient(90deg, #e0f2fe 0%, #f8fafc 100%)',
-                      borderRadius: '0 8px 8px 0',
-                      fontWeight: 800,
-                      fontSize: '11pt',
-                      color: '#1e293b',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 8,
+                      gap: 16,
+                      width: '100%',
                       breakInside: 'avoid'
                     }}
                   >
-                    <BookOpen size={16} color="#3b82f6" style={{ marginTop: '-1px' }} />
-                    {block.discName}
+                    <div style={{ flexShrink: 0, padding: '6px 16px', background: '#1e293b', color: 'white', borderRadius: 24, fontSize: '10pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <BookOpen size={14} color="#38bdf8" />
+                      {block.discName}
+                    </div>
+                    <div style={{ flex: 1, height: 2, background: 'linear-gradient(to right, #cbd5e1, transparent)' }} />
                   </div>
                 );
               }
