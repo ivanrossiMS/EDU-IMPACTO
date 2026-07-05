@@ -33,7 +33,7 @@ export function PageContent({
 }: any) {
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
   const [mainImgMenuOpen, setMainImgMenuOpen] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [linesCount, setLinesCount] = useState<number>(5);
   const [linesType, setLinesType] = useState<'pautado' | 'branco'>('pautado');
   const [linesModalOpen, setLinesModalOpen] = useState<{qId: string, parts: any[], defaultCount: number, q: any} | null>(null);
@@ -43,7 +43,7 @@ export function PageContent({
     if (!onEditEnunciadoImage) return;
 
     if (action === 'ai') {
-      setIsGenerating(true);
+      setIsGenerating('ai');
       try {
         const res = await fetch('/api/ai/gerar-imagem', {
           method: 'POST', body: JSON.stringify({ enunciado: altText, disciplina: 'Geral' }),
@@ -59,7 +59,7 @@ export function PageContent({
         console.error(err);
         alert('Erro ao gerar imagem por IA.');
       }
-      setIsGenerating(false);
+      setIsGenerating(null);
     } else {
       const input = document.createElement('input');
       input.type = 'file';
@@ -67,7 +67,7 @@ export function PageContent({
       input.onchange = async (e) => {
         const file = (e.target as any).files[0];
         if (!file) return;
-        setIsGenerating(true);
+        setIsGenerating('upload');
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -77,7 +77,7 @@ export function PageContent({
         } catch (err) {
           console.error(err);
         }
-        setIsGenerating(false);
+        setIsGenerating(null);
       };
       input.click();
     }
@@ -88,7 +88,7 @@ export function PageContent({
     if (!onEditAlternativaImage) return;
 
     if (action === 'ai') {
-      setIsGenerating(true);
+      setIsGenerating('ai');
       try {
         const res = await fetch('/api/ai/gerar-imagem', {
           method: 'POST', body: JSON.stringify({ enunciado: altText, disciplina: 'Geral' }),
@@ -104,7 +104,7 @@ export function PageContent({
         console.error(err);
         alert('Erro ao gerar imagem por IA.');
       }
-      setIsGenerating(false);
+      setIsGenerating(null);
     } else {
       const input = document.createElement('input');
       input.type = 'file';
@@ -112,7 +112,7 @@ export function PageContent({
       input.onchange = async (e) => {
         const file = (e.target as any).files[0];
         if (!file) return;
-        setIsGenerating(true);
+        setIsGenerating('upload');
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -122,7 +122,7 @@ export function PageContent({
         } catch (err) {
           console.error(err);
         }
-        setIsGenerating(false);
+        setIsGenerating(null);
       };
       input.click();
     }
@@ -1656,8 +1656,17 @@ export function PageContent({
       {isGenerating && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(255,255,255,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: 'white', padding: '24px 40px', borderRadius: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Sparkles size={32} color="#8b5cf6" className="animate-pulse" />
-            <span style={{ fontWeight: 700, color: '#334155' }}>Gerando imagem ilustrativa...</span>
+            {isGenerating === 'ai' ? (
+              <>
+                <Sparkles size={32} color="#8b5cf6" className="animate-pulse" />
+                <span style={{ fontWeight: 700, color: '#334155' }}>Gerando imagem ilustrativa...</span>
+              </>
+            ) : (
+              <>
+                <Upload size={32} color="#3b82f6" className="animate-bounce" />
+                <span style={{ fontWeight: 700, color: '#334155' }}>Enviando imagem...</span>
+              </>
+            )}
           </div>
         </div>
       )}
