@@ -39,7 +39,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>(simulado?.config_estudio?.config_layout_alternativas || 'vertical')
   const initialLocal = questoes.map(q => ({ ...q, _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9) }))
   const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.map(q => q._internalId)))
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.filter(q => !q.excluida).map(q => q._internalId)))
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
@@ -111,9 +111,16 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
 
   const handleToggleQuestion = (qId: string) => {
     const next = new Set(selectedIds)
+    const isNowSelected = !next.has(qId)
+    
     if (next.has(qId)) next.delete(qId)
     else next.add(qId)
+    
     setSelectedIds(next)
+    
+    setLocalQuestoes(prev => prev.map(q => 
+      q._internalId === qId ? { ...q, excluida: !isNowSelected } : q
+    ))
   }
 
   const handlePrint = () => {
