@@ -133,8 +133,8 @@ function parseQuestionsFromText(text: string, imageMap: Map<string, any>): any[]
     .replace(/\n{3,}/g, '\n\n')
 
   // Question headers: number at start of line followed by . or ) and a space.
-  // Uses ^(?:<[biu]>)*(\d{1,3}) with multiline to support bold headers.
-  const headerRe = /^(?:<[biu]>)*(\d{1,3})(?:<\/[biu]>)*\s*[\.\)](?:<\/[biu]>)*\s+/gm
+  // Uses ^[ \t]*(?:<[biu]>)*(\d{1,3}) with multiline to support bold headers and leading spaces.
+  const headerRe = /^[ \t]*(?:<[biu]>)*(\d{1,3})(?:<\/[biu]>)*\s*[\.\)](?:<\/[biu]>)*\s+/gm
   const headers: { index: number; num: number; end: number }[] = []
   let hm: RegExpExecArray | null
 
