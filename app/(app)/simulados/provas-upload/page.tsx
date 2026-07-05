@@ -267,7 +267,7 @@ export default function UploadProvasGerenciamentoPage() {
           }
           .responsive-filters-selects select {
             width: 100% !important;
-            padding: 12px !important;
+            padding: 12px 32px 12px 36px !important;
             font-size: 13px !important;
           }
           .responsive-filters-selects select:nth-child(3) {
@@ -488,7 +488,7 @@ export default function UploadProvasGerenciamentoPage() {
                       </div>
                     </div>
                     <motion.button 
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                     >
                       {expandedGroups[serie] ? 'Recolher' : 'Expandir'}
                       <ChevronUp size={16} style={{ transform: expandedGroups[serie] ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
