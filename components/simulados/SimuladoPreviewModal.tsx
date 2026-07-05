@@ -91,7 +91,12 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         .eq('id', config.id)
       
       if (error) throw error
-      alert('Posições do cabeçalho salvas com sucesso!')
+      
+      // Update config in memory so it persists if the modal is closed and reopened without a full page reload
+      if (config) {
+        config.provas_header_layout = headerLayout
+      }
+      
       setIsEditHeaderMode(false)
     } catch (e: any) {
       alert('Erro ao salvar: ' + e.message)
@@ -343,18 +348,26 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button
-                onClick={() => setIsEditHeaderMode(!isEditHeaderMode)}
+                onClick={() => {
+                  if (isEditHeaderMode) {
+                    handleSaveHeaderLayout()
+                  } else {
+                    setIsEditHeaderMode(true)
+                  }
+                }}
+                disabled={savingHeader}
                 style={{
                   padding: '12px', borderRadius: 12,
                   background: isEditHeaderMode ? '#ef4444' : '#f8fafc',
                   color: isEditHeaderMode ? 'white' : '#475569',
                   border: `1px solid ${isEditHeaderMode ? '#ef4444' : '#e2e8f0'}`,
                   fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', fontSize: 14,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: savingHeader ? 0.7 : 1
                 }}
               >
-                <FileEdit size={16} />
-                {isEditHeaderMode ? 'Sair Edição Cabeçalho' : 'Editar Cabeçalho'}
+                {savingHeader ? <Loader2 size={16} className="animate-spin" /> : <FileEdit size={16} />}
+                {isEditHeaderMode ? (savingHeader ? 'Salvando...' : 'Sair Edição Cabeçalho') : 'Editar Cabeçalho'}
               </button>
 
               <div style={{ display: 'flex', gap: 8 }}>
