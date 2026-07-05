@@ -361,8 +361,10 @@ export function PageContent({
                             }
                           });
 
-                          return groupedParts.map((group: any, gIdx: number) => (
-                            group.type === 'text' ? (
+                          return (
+                            <div className="alt-hover-group" style={{ position: 'relative' }}>
+                              {groupedParts.map((group: any, gIdx: number) => (
+                                group.type === 'text' ? (
                               <div key={`txt-${group.originalIndex}`} data-height-id={`${q.id}-enun-txt-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: gIdx > 0 ? 8 : 0 }}>
                                 <HtmlContent 
                                   editable={!readOnly}
@@ -616,10 +618,44 @@ export function PageContent({
                                   );
                                 })}
                               </div>
-                            );
-                          })()
-                        )
-                      ));
+                             );
+                           })()
+                         )
+                       ))}
+                              {!readOnly && (
+                                <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, bottom: -14, zIndex: 10, display: 'flex', gap: 8, transform: 'translateY(100%)' }}>
+                                   <div style={{ position: 'relative' }}>
+                                     <button onClick={() => setMainImgMenuOpen(mainImgMenuOpen === `${q.id}-add` ? null : `${q.id}-add`)} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '6px 12px', borderRadius: 8, fontSize: 12, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                       <ImageIcon size={14} /> Inserir Imagem
+                                     </button>
+                                     {mainImgMenuOpen === `${q.id}-add` && (
+                                       <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
+                                         <button onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'upload', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}>
+                                           <Upload size={14} /> Fazer Upload
+                                         </button>
+                                         <button onClick={() => handleMainImageAction(q.id, q.imagens?.length || 0, 'ai', q.enunciado)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#8b5cf6', cursor: 'pointer', borderRadius: 4, textAlign: 'left', fontWeight: 600 }}>
+                                           <Sparkles size={14} /> Gerar com IA
+                                         </button>
+                                       </div>
+                                     )}
+                                   </div>
+                                   <button onClick={() => {
+                                     const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
+                                     const hasLines = parts.some((p: any) => p.type === 'lines');
+                                     if (hasLines) {
+                                       alert("Esta questão já possui linhas/espaço. Você pode ajustar a quantidade nos botões + e - que aparecem ao passar o mouse.");
+                                       return;
+                                     }
+                                     setLinesCount(5);
+                                     setLinesType('pautado');
+                                     setLinesModalOpen({ qId: q._internalId || q.id, parts, defaultCount: 5, q });
+                                   }} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '6px 12px', borderRadius: 8, fontSize: 12, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                     <Plus size={14} /> Adicionar Espaço / Linhas
+                                   </button>
+                                </div>
+                              )}
+                            </div>
+                          );
                         })()}
                         <div style={alternativasLayout === 'horizontal' ? { display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 4 } : { marginTop: 4 }}>
                           {(() => {
@@ -831,23 +867,7 @@ export function PageContent({
                           })})()}
                         </div>
                         
-                        {(!q.simulados_alternativas || q.simulados_alternativas.length === 0) && !readOnly && (
-                          <div className="no-print" style={{ position: 'absolute', right: 0, top: 4, zIndex: 10 }}>
-                             <button onClick={() => {
-                               const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
-                               const hasLines = parts.some((p: any) => p.type === 'lines');
-                               if (hasLines) {
-                               alert("Esta questão já possui linhas/espaço. Você pode ajustar a quantidade nos botões + e - que aparecem ao passar o mouse.");
-                               return;
-                             }
-                             setLinesCount(5);
-                             setLinesType('pautado');
-                             setLinesModalOpen({ qId: q._internalId || q.id, parts, defaultCount: 5, q });
-                           }} style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', padding: '6px 12px', borderRadius: 8, fontSize: 12, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                             <Plus size={14} /> Adicionar Espaço / Linhas
-                           </button>
-                          </div>
-                        )}
+                        {/* Old button removed */}
                         {q.tipo_questao === 'descritiva' && (
                           block.estiloEspaco === 'pautado' ? (
                             <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column' }}>
