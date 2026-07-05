@@ -518,15 +518,16 @@ export default function UploadSimuladosGerenciamentoPage() {
                 const showUploadBtn = isProfView && myAssignment && myAssignment.status === 'pendente'
                 const totalRequested = (simulado.simulados_upload_requisicoes || []).reduce((acc: number, req: any) => acc + (req.qtd_questoes || 0), 0)
                 const totalUploaded = Array.isArray(simulado.questoes_json) ? simulado.questoes_json.length : (simulado.questoes_count || 0)
+                const isAdaptado = simulado.titulo?.includes('ADAPTADO')
 
                 return (
                   <motion.div key={simulado.id}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
                     transition={{ delay: i * 0.04 }}
                     className="responsive-card"
-                    style={{ position: 'relative', background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '24px', display: 'flex', flexDirection: 'column', gap: 24, transition: 'all 0.2s', marginTop: simulado.titulo?.includes('ADAPTADO') ? 16 : 0 }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf655'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(139,92,246,0.1)' }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'hsl(var(--border-subtle))'; (e.currentTarget as HTMLElement).style.boxShadow = 'none' }}
+                    style={{ position: 'relative', background: isAdaptado ? 'linear-gradient(145deg, rgba(139, 92, 246, 0.05), rgba(124, 58, 237, 0.01))' : 'hsl(var(--bg-surface))', border: isAdaptado ? '1px solid rgba(139, 92, 246, 0.25)' : '1px solid hsl(var(--border-subtle))', borderRadius: 16, padding: '24px', display: 'flex', flexDirection: 'column', gap: 24, transition: 'all 0.2s', marginTop: isAdaptado ? 16 : 0, boxShadow: isAdaptado ? '0 12px 32px -12px rgba(139, 92, 246, 0.15)' : 'none' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#8b5cf655'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 24px rgba(139,92,246,0.15)' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = isAdaptado ? 'rgba(139, 92, 246, 0.25)' : 'hsl(var(--border-subtle))'; (e.currentTarget as HTMLElement).style.boxShadow = isAdaptado ? '0 12px 32px -12px rgba(139, 92, 246, 0.15)' : 'none' }}
                   >
                     {simulado.titulo?.includes('ADAPTADO') && (
                       <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', zIndex: 10, display: 'flex', alignItems: 'center' }}>
