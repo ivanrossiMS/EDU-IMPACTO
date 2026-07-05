@@ -378,10 +378,9 @@ export default function UploadRedaçãoPage() {
             </h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
-                { emoji: '🔢', title: 'Numere as questões', desc: 'Use "1.", "2.", "Questão 1", etc.' },
-                { emoji: '🅰️', title: 'Alternativas padrão', desc: 'Formato: a) texto ou A) texto' },
-                { emoji: '🖼️', title: 'Imagens no arquivo', desc: 'Insira imagens direto no Word — elas serão importadas automaticamente' },
-                { emoji: '📄', title: 'Texto claro', desc: 'Evite cabeçalhos muito grandes antes da primeira questão' },
+                { emoji: '🔢', title: 'Numere as questões', desc: 'Use "1.", "1-", "1)"' },
+                { emoji: '📄', title: 'Texto claro', desc: 'Evite cabeçalhos muito grandes antes do tema' },
+                { emoji: '🖼️', title: 'Imagens no arquivo', desc: 'Insira imagens direto no Word — importação automática' },
               ].map((tip, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
                   <span style={{ fontSize: 24 }}>{tip.emoji}</span>

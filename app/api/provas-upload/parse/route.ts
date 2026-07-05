@@ -31,7 +31,7 @@ function parseBlock(block: string): ParsedBlock {
   // We use a simpler approach without lookbehind for max compatibility:
   // match includes an optional non-word prefix char and optional formatting tags
   const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
-  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[biu]>)*([a-eA-E])(?:<\/[biu]>)*\s*\)(?:<\/[biu]>)*\s+/gm
+  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[biu]>)*([a-eA-E])(?:<\/[biu]>)*\s*[\.\-\)](?:<\/[biu]>)*\s+/gm
 
   const found: AltMarker[] = []
   let m: RegExpExecArray | null
@@ -134,7 +134,7 @@ function parseQuestionsFromText(text: string, imageMap: Map<string, any>): any[]
 
   // Question headers: number at start of line followed by . or ) and a space.
   // Uses ^[ \t]*(?:<[biu]>)*(\d{1,3}) with multiline to support bold headers and leading spaces.
-  const headerRe = /^[ \t]*(?:<[biu]>)*(\d{1,3})(?:<\/[biu]>)*\s*[\.\)](?:<\/[biu]>)*\s+/gm
+  const headerRe = /^[ \t]*(?:<[biu]>)*(\d{1,3})(?:<\/[biu]>)*\s*[\.\-\)](?:<\/[biu]>)*\s+/gm
   const headers: { index: number; num: number; end: number }[] = []
   let hm: RegExpExecArray | null
 
