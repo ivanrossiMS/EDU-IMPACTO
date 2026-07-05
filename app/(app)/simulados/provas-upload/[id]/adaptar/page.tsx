@@ -350,10 +350,10 @@ export default function UploadProvaPage() {
             </h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
-                { emoji: '🔢', title: 'Numere as questões', desc: 'Use "1.", "1-", "1)"' },
-                { emoji: '🅰️', title: 'Alternativas', desc: 'Formato: "a.", "a-", "a)"' },
-                { emoji: '✅', title: 'Gabarito automático', desc: 'Alternativas em vermelho serão reconhecidas como corretas' },
-                { emoji: '🖼️', title: 'Imagens no arquivo', desc: 'Insira imagens direto no Word — importação automática' },
+                { emoji: '🧠', title: 'Listas Inteligentes', desc: 'Use numeração manual ("1.", "1-", "1)") ou listas automáticas do Word. O sistema entende tudo!' },
+                { emoji: '🅰️', title: 'Alternativas Flexíveis', desc: 'Formatos aceitos: "a.", "a-", "a)", listas manuais ou automáticas em múltiplos níveis.' },
+                { emoji: '🎯', title: 'Gabarito Automático', desc: 'Pinte o texto da alternativa correta de vermelho (qualquer tom) no Word.' },
+                { emoji: '🖼️', title: 'Imagens Nativas', desc: 'Cole imagens diretamente no arquivo DOCX e elas serão importadas automaticamente.' },
               ].map((tip, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
                   <span style={{ fontSize: 24 }}>{tip.emoji}</span>
