@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles, Upload, Brain, Layers } from 'lucide-react'
+import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles, Upload, Brain, Layers, PenTool } from 'lucide-react'
 import { useApp } from '@/lib/context'
 
 export default function AjudaPage() {
@@ -269,7 +269,7 @@ function ProfessorContent({ search }: { search: string }) {
         <StepList steps={[
           '<strong>Questões:</strong> Abre o resumo de todas as questões inseridas até agora. Aqui você pode: <br/> - Editar enunciados e alternativas.<br/> - Inserir fotos diretamente no texto.<br/> - Excluir questões ou selecionar a alternativa correta.',
           '<strong>Questões Descritivas:</strong> O sistema permite adicionar <strong>Linhas Pautadas</strong> automáticas ou um <strong>Espaço em Branco</strong> para o aluno responder.',
-          '<strong>Gabarito:</strong> Exibe automaticamente as respostas corretas de todas as questões objetivas cadastradas.',
+          '<strong>Gabarito e Correção por Foto:</strong> Além de exibir as respostas corretas, aqui você pode usar a <strong>Correção Automática</strong>! Basta clicar para tirar uma foto ou enviar a imagem do gabarito preenchido do aluno, adicionar o nome dele, e o sistema corrigirá tudo sozinho. Ele mostrará o total de acertos em numeral e a porcentagem (%). Um alívio para o trabalho manual!',
           '<strong>Imprimir:</strong> Uma visão super enxuta apenas para mandar para a impressora. Sem menus laterais ou estúdios.'
         ]} />
         <VideoPlaceholder title="Painel de Questões e Gabarito" />
@@ -303,6 +303,16 @@ function ProfessorContent({ search }: { search: string }) {
           '<strong>Provas Múltiplas:</strong> Quando uma prova adaptada for criada, você pode clicar em Adaptar novamente nela mesma caso precise de mais cópias para editar!'
         ]} />
         <VideoPlaceholder title="Criando e Editando uma Prova Adaptada" />
+      </Section>
+
+      <Section title="Criação de Folhas de Redação" icon={PenTool} search={search}>
+        <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>Tanto o Professor quanto a Coordenação podem gerar rapidamente as Folhas de Redação oficiais para os alunos, sem dor de cabeça.</p>
+        <StepList steps={[
+          '<strong>Preenchendo os Dados:</strong> Vá na área de Redações e clique para criar uma nova. Insira apenas as informações gerais (Título, Turma, Data, Bimestre).',
+          '<strong>Não precisa inserir questões:</strong> Ao contrário da prova comum, a redação não exige inclusão de itens ou alternativas. O sistema pegará todos os dados preenchidos e montará um cabeçalho perfeito automaticamente.',
+          '<strong>Pronto para Imprimir:</strong> Após salvar, a folha pautada oficial com o cabeçalho completo e diagramado já estará pronta. É só clicar e mandar para a impressora!'
+        ]} />
+        <VideoPlaceholder title="Gerando Folhas de Redação" />
       </Section>
     </>
   )
