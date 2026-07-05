@@ -14,7 +14,6 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
   const [isOpen, setIsOpen] = useState(true)
 
   const handleSelect = (ano: string) => {
-    localStorage.setItem('simulados_ano_letivo', ano)
     setIsOpen(false)
     setTimeout(() => onSelect(ano), 300)
   }

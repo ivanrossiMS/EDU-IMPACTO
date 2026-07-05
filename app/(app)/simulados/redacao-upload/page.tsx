@@ -33,8 +33,6 @@ export default function UploadRedaçõesGerenciamentoPage() {
 
   useEffect(() => {
     setIsClient(true)
-    const stored = localStorage.getItem('simulados_ano_letivo')
-    if (stored) setSelectedAnoLetivo(stored)
     loadData()
   }, [])
 
