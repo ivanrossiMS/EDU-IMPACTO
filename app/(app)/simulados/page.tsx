@@ -334,7 +334,31 @@ export default function SimuladosDashboard() {
   }
 
   return (
-    <div style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
+    <div className="simulados-dash-container" style={{ padding: '48px', minHeight: '100vh', background: 'hsl(var(--bg-base))' }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .simulados-dash-container {
+            padding: 16px !important;
+          }
+          .quick-actions-container {
+            flex-wrap: wrap !important;
+            width: 100% !important;
+          }
+          .quick-actions-container > a {
+            flex: 1 1 calc(33.333% - 8px);
+            min-width: 100px;
+          }
+          .quick-action-btn {
+            width: 100% !important;
+            padding: 12px 4px !important;
+            font-size: 12px !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            gap: 6px !important;
+            text-align: center !important;
+          }
+        }
+      `}</style>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ maxWidth: 1200, margin: '0 auto' }}>
         
         {/* Header & Quick Actions */}
@@ -348,21 +372,24 @@ export default function SimuladosDashboard() {
             </p>
           </div>
           
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="quick-actions-container" style={{ display: 'flex', gap: 12 }}>
             <Link href="/simulados/provas-upload/nova" style={{ textDecoration: 'none' }}>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                className="quick-action-btn"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#10b981', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(16,185,129,0.4)' }}>
                 <PlusCircle size={18} /> Nova Prova
               </motion.button>
             </Link>
             <Link href="/simulados/simulados-upload/nova" style={{ textDecoration: 'none' }}>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                className="quick-action-btn"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(59,130,246,0.4)' }}>
                 <PlusCircle size={18} /> Novo Simulado
               </motion.button>
             </Link>
             <Link href="/simulados/redacao-upload/nova" style={{ textDecoration: 'none' }}>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                className="quick-action-btn"
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 14, background: '#f43f5e', color: '#fff', fontSize: 14, fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 8px 16px -4px rgba(244,63,94,0.4)' }}>
                 <PlusCircle size={18} /> Nova Redação
               </motion.button>
