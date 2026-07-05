@@ -817,9 +817,10 @@ export function PageContent({
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === `${q.id}-${a.id}` ? 1 : undefined, pointerEvents: imgMenuOpen === `${q.id}-${a.id}` ? 'auto' : undefined }}>
                                     <button 
                                       onClick={() => setImgMenuOpen(imgMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`)}
-                                      style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}
+                                      style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}
+                                      title="Adicionar/Editar Imagem"
                                     >
-                                      <ImageIcon size={12} /> Imagem
+                                      <ImageIcon size={12} />
                                     </button>
                                     {imgMenuOpen === `${q.id}-${a.id}` && (
                                       <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
@@ -1341,7 +1342,7 @@ export function PageContent({
                             <HtmlContent editable={!readOnly} html={a.texto} onBlurHtml={(newHtml) => { onEditAlternativa(qId, a.id, newHtml); forceRepaginate(); }} style={{ wordBreak: 'break-word', outline: 'none' }} />
                             {onEditAlternativaImage && !readOnly && (
                               <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
-                                <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
+                                <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
                                 {imgMenuOpen === a.id && (
                                   <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                     <button onClick={() => handleImageAction(qId, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
@@ -1491,7 +1492,7 @@ export function PageContent({
                               />
                               {onEditAlternativaImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
-                                  <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: 12, padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }}><ImageIcon size={12} /> Imagem</button>
+                                  <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
                                   {imgMenuOpen === a.id && (
                                     <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 9999, marginTop: 4, background: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: 4, display: 'flex', flexDirection: 'column', gap: 2, width: 140 }}>
                                       <button onClick={() => handleImageAction(q.id, a.id, 'upload', a.texto)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'transparent', border: 'none', fontSize: 12, color: '#334155', cursor: 'pointer', borderRadius: 4, textAlign: 'left' }}><Upload size={14} /> Fazer Upload</button>
