@@ -196,14 +196,79 @@ function parseQuestionsFromText(text: string, imageMap: Map<string, any>): any[]
 async function parseDocx(originalBuffer: Buffer): Promise<{ text: string; imageMap: Map<string, any> }> {
   const mammoth = (await import('mammoth')).default
 
-  // Pre-process DOCX to inject [[GABARITO]] for red text
+  // Pre-process DOCX to inject list numbering and [[GABARITO]] for red text
   let buffer = originalBuffer
   try {
     const JSZip = (await import('jszip')).default || await import('jszip')
     const zip = await JSZip.loadAsync(buffer)
+    
+    // 1. Extract numbering formats
+    let numIdToFormat: Record<string, string> = {}
+    try {
+      const numXml = await zip.file('word/numbering.xml')?.async('string')
+      if (numXml) {
+        const abstractMap: Record<string, string> = {}
+        const abstractRe = /<w:abstractNum\s+w:abstractNumId="(\d+)"[\s\S]*?<\/w:abstractNum>/g
+        let mAbstract
+        while ((mAbstract = abstractRe.exec(numXml)) !== null) {
+          const absId = mAbstract[1]
+          const absContent = mAbstract[0]
+          const lvl0Match = absContent.match(/<w:lvl\s+w:ilvl="0"[\s\S]*?<\/w:lvl>/)
+          if (lvl0Match) {
+            const numFmtMatch = lvl0Match[0].match(/<w:numFmt\s+w:val="([^"]+)"/)
+            if (numFmtMatch) abstractMap[absId] = numFmtMatch[1]
+          }
+        }
+        const numRe = /<w:num\s+w:numId="(\d+)"[\s\S]*?<\/w:num>/g
+        let mNum
+        while ((mNum = numRe.exec(numXml)) !== null) {
+          const numId = mNum[1]
+          const numContent = mNum[0]
+          const absIdMatch = numContent.match(/<w:abstractNumId\s+w:val="(\d+)"/)
+          if (absIdMatch && abstractMap[absIdMatch[1]]) {
+            numIdToFormat[numId] = abstractMap[absIdMatch[1]]
+          }
+        }
+      }
+    } catch(e) {}
+
     let docXml = await zip.file('word/document.xml')?.async('string')
     if (docXml) {
       let modified = false
+      
+      // 2. Inject list numbers as actual text so Mammoth doesn't drop them
+      let listCounters: Record<string, number> = {}
+      docXml = docXml.replace(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g, (pMatch, pContentInner) => {
+        const numPrMatch = pMatch.match(/<w:numPr>[\s\S]*?<\/w:numPr>/)
+        if (numPrMatch) {
+          const ilvlMatch = numPrMatch[0].match(/<w:ilvl\s+w:val="(\d+)"/)
+          const numIdMatch = numPrMatch[0].match(/<w:numId\s+w:val="(\d+)"/)
+          if (ilvlMatch && numIdMatch) {
+            const ilvl = ilvlMatch[1]
+            const numId = numIdMatch[1]
+            if (ilvl === "0") {
+              const format = numIdToFormat[numId] || 'decimal'
+              if (format === 'decimal' || format === 'lowerLetter' || format === 'upperLetter') {
+                if (!listCounters[numId]) listCounters[numId] = 0
+                listCounters[numId]++
+                let numStr = listCounters[numId].toString()
+                if (format === 'lowerLetter') numStr = String.fromCharCode(96 + listCounters[numId])
+                else if (format === 'upperLetter') numStr = String.fromCharCode(64 + listCounters[numId])
+                
+                const injectedRun = `<w:r><w:t>${numStr}) </w:t></w:r>`
+                const pPrEnd = pMatch.indexOf('</w:pPr>')
+                if (pPrEnd !== -1) {
+                  modified = true
+                  return pMatch.substring(0, pPrEnd + 8) + injectedRun + pMatch.substring(pPrEnd + 8)
+                }
+              }
+            }
+          }
+        }
+        return pMatch
+      })
+
+      // 3. Inject [[GABARITO]]
       docXml = docXml.replace(/<w:r\b[^>]*>.*?<\/w:r>/g, (run) => {
         const colorMatch = run.match(/<w:color\s+w:val="([^"]+)"/)
         if (colorMatch) {
