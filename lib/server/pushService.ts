@@ -176,8 +176,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     // Agendamento
     ...(params.sendAfter && { send_after: params.sendAfter }),
     // Ícone (usa o ícone do app por padrão)
-    chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'}/logo-impacto.png`,
-    adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'}/logo-impacto.png`,
+    chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
+    adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     ...(params.smallIcon && { small_icon: params.smallIcon }),
     ...(params.largeIcon && { large_icon: params.largeIcon }),
     ...(params.imageUrl && { big_picture: params.imageUrl, ios_attachments: { id1: params.imageUrl } }),

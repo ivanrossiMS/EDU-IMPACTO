@@ -22,7 +22,7 @@ from datetime import datetime, timezone, date
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURAÇÕES
 # ══════════════════════════════════════════════════════════════
-NETLIFY_URL   = "https://resilient-cuchufli-2b4125.netlify.app"
+NETLIFY_URL   = "https://impacto-edu.net"
 CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
