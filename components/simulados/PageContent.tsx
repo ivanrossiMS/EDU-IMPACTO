@@ -485,6 +485,7 @@ export function PageContent({
                                     
                                     const newFullHtml = newParts.map((p: any) => {
                                       if (p.type === 'text') return (p.content || '').replace(metaRegex, '');
+                                      if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                                       return `[IMAGEM ${p.index + 1}]`;
                                     }).join('');
                                     
@@ -581,6 +582,7 @@ export function PageContent({
                                               const metaTags = (q.enunciado || '').match(metaRegex) || [];
                                               const newFullHtml = parts.map((p: any) => {
                                                 if (p.type === 'text') return (p.content || '').replace(metaRegex, '');
+                                                if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                                                 if (p.index === part.index) return '';
                                                 if (p.index > part.index) return `[IMAGEM ${p.index}]`;
                                                 return `[IMAGEM ${p.index + 1}]`;
@@ -1044,6 +1046,7 @@ export function PageContent({
                             } else return;
                             const newFullHtml = newParts.map((p: any) => {
                               if (p.type === 'text') return (p.content || '').replace(metaRegex, '');
+                              if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                               return `[IMAGEM ${p.index + 1}]`;
                             }).join('');
                             onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
@@ -1141,10 +1144,13 @@ export function PageContent({
                                       const metaTags = (q.enunciado || '').match(metaRegex) || [];
                                       const newFullHtml = parts.map((p: any) => {
                                         if (p.type === 'text') return (p.content || '').replace(metaRegex, '');
+                                        if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                                         if (p.index === i) return '';
+                                        if (p.index > i) return `[IMAGEM ${p.index}]`;
                                         return `[IMAGEM ${p.index + 1}]`;
                                       }).join('');
                                       onEditEnunciado(q.id, metaTags.join('\n') + (metaTags.length > 0 ? '\n' : '') + newFullHtml);
+                                      onEditEnunciadoImage?.(q.id, i, '');
                                     }}
                                     style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
                                     title="Remover Imagem"
