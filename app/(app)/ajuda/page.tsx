@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles, Upload, Brain } from 'lucide-react'
+import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles, Upload, Brain, Layers } from 'lucide-react'
 import { useApp } from '@/lib/context'
 
 export default function AjudaPage() {
@@ -179,6 +179,17 @@ function CoordenadorContent({ search }: { search: string }) {
         ]} />
         <VideoPlaceholder title="Fluxo de Revisão e Aprovação" />
       </Section>
+
+      <Section title="Criação e Gestão de Simulados" icon={Layers} search={search}>
+        <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>O fluxo dos Simulados é bem parecido com o das provas, mas com uma pegada mais multidisciplinar guiada pelo Coordenador.</p>
+        <StepList steps={[
+          '<strong>A Criação:</strong> O Coordenador inicia o Simulado e insere todas as disciplinas participantes. Para cada disciplina, ele seleciona os professores responsáveis e exata <strong>quantidade de questões</strong> que cada um deve incluir.',
+          '<strong>Inclusão pelos Professores:</strong> Cada professor acessa sua área, vê o card do simulado e começa a montar sua parte (fazendo upload do Word, adicionando manualmente ou usando a nossa <strong>Inteligência Artificial</strong> para gerar questões e imagens).',
+          '<strong>Enviando para Revisão:</strong> Após formatar sua parte, o professor salva e envia a disciplina para revisão.',
+          '<strong>Aprovação Final:</strong> O coordenador revisa a prova montada (podendo usar o Estúdio A4 para diagramar) e, quando estiver tudo perfeito, clica em <strong>Salvar e Aprovar</strong> para liberar para impressão!'
+        ]} />
+        <VideoPlaceholder title="Gestão Completa de Simulados" />
+      </Section>
     </>
   )
 }
@@ -272,9 +283,11 @@ function ProfessorContent({ search }: { search: string }) {
         <StepList steps={[
           '<strong>Estúdio Lateral (Esquerda):</strong> Você tem controles avançados para aumentar/diminuir fontes, e alterar o <strong>Layout da Prova</strong> (1 coluna inteira ou formato de 2 colunas tipo vestibular).',
           'Ainda no estúdio, você pode mudar o <strong>Layout das Questões</strong> (vertical uma embaixo da outra, ou lado a lado para economizar espaço).',
-          '<strong>Folha Central:</strong> A folha no meio é interativa! Você pode clicar em qualquer imagem inserida e puxar pelas bordas para <strong>ajustar o tamanho da foto</strong> perfeitamente, trocar ou excluir.',
-          'Pela folha também é possível editar os textos dos enunciados, formatar, excluir alternativas, trocar a resposta e arrastar e soltar questões para <strong>trocar de posição</strong>.',
-          '<strong>Imprimir por aqui:</strong> Quando a formatação estiver pronta, basta clicar no botão azul de imprimir ou salvar na parte superior.'
+          '<strong>Folha Central (Edição Livre):</strong> Absolutamente tudo na folha é editável! Clique direto no texto de qualquer enunciado ou alternativa para corrigir e digitar.',
+          'Você pode puxar as bordas de qualquer imagem para <strong>ajustar o tamanho da foto</strong>, arrastar questões para <strong>trocar de posição</strong> ou excluir e modificar alternativas com poucos cliques.',
+          '<strong>Margens da Folha:</strong> Nas bordas da folha A4 há linhas delimitadoras que você pode arrastar para ajustar as margens e aproveitar melhor o espaço! Importante: não se esqueça de clicar em <strong>Salvar Margens</strong> no topo da tela para não perder seu ajuste.',
+          '<strong>Questões Descritivas:</strong> Se precisar que o aluno escreva, há um botão ao lado da questão descritiva para inserir <strong>linhas pautadas</strong> automáticas ou um grande <strong>espaço em branco</strong>, no tamanho que você preferir.',
+          '<strong>Imprimir por aqui:</strong> Quando a formatação estiver impecável, basta clicar no botão azul de imprimir na parte superior.'
         ]} />
         <VideoPlaceholder title="Trabalhando no Estúdio A4 (Formatação e Impressão)" />
       </Section>
