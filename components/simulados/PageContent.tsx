@@ -845,21 +845,21 @@ export function PageContent({
                                   title="Remover alternativa"
                                   style={{
                                     position: 'absolute',
-                                    right: -30,
+                                    left: -28,
                                     top: 4,
                                     background: '#fee2e2',
                                     color: '#ef4444',
                                     border: 'none',
                                     borderRadius: 20,
-                                    width: 24,
-                                    height: 24,
+                                    width: 18,
+                                    height: 18,
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     cursor: 'pointer',
                                   }}
                                 >
-                                  <X size={14} />
+                                  <X size={12} />
                                 </button>
                               )}
                             </div>
@@ -1352,7 +1352,7 @@ export function PageContent({
                             )}
                           </div>
                           {onRemoveAlternativa && !readOnly && (
-                            <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ position: 'absolute', right: -30, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} /></button>
+                            <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ position: 'absolute', left: -28, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
                           )}
                         </div>
                       );
@@ -1511,10 +1511,10 @@ export function PageContent({
                             onRemoveAlternativa(q.id, a.id);
                             forceRepaginate();
                           }}
-                          style={{ position: 'absolute', right: -30, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          style={{ position: 'absolute', left: -28, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                           title="Remover alternativa"
                         >
-                          <X size={14} />
+                          <X size={12} />
                         </button>
                       )}
                     </div>
