@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles } from 'lucide-react'
+import { Search, PlayCircle, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Printer, FileEdit, Layout, Sparkles, Upload, Brain } from 'lucide-react'
 import { useApp } from '@/lib/context'
 
 export default function AjudaPage() {
@@ -209,6 +209,44 @@ function ProfessorContent({ search }: { search: string }) {
           'O card da sua prova aparecerá embaixo! Nele, você conseguirá ver os professores vinculados e quantas questões cada um precisa inserir.'
         ]} />
         <VideoPlaceholder title="Expandindo a Turma e Visualizando o Card" />
+
+      </Section>
+
+      <Section title="Enviando e Adicionando Questões" icon={Upload} search={search}>
+        <h3 style={{ fontSize: 18, color: 'hsl(var(--text-primary))', fontWeight: 800, marginTop: 0 }}>Importando do Word (Upload)</h3>
+        <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>Você pode enviar sua prova pronta e o sistema lerá tudo para você!</p>
+        <StepList steps={[
+          'O arquivo precisa estar no formato <strong>.doc</strong> ou <strong>.docx</strong>.',
+          'As questões devem estar numeradas (exemplo: <em>1)</em>, <em>1.</em> ou <em>1-</em>).',
+          'As alternativas também devem seguir um padrão (exemplo: <em>a)</em>, <em>a.</em> ou <em>a-</em>).',
+          '<strong>Dica de Ouro:</strong> Pinte o texto da alternativa correta de <strong style="color:red;">vermelho</strong> no Word! Assim, o sistema marcará o gabarito automaticamente.',
+          'O sistema também puxará automaticamente <strong>todas as imagens</strong> do seu arquivo.'
+        ]} />
+        <VideoPlaceholder title="Upload de Arquivo Word" />
+
+        <hr style={{ border: 'none', borderTop: '1px solid hsl(var(--border-subtle))', margin: '40px 0' }} />
+
+        <h3 style={{ fontSize: 18, color: 'hsl(var(--text-primary))', fontWeight: 800, marginTop: 0 }}>Criando Questões Manualmente</h3>
+        <StepList steps={[
+          'Dentro do painel de questões, clique em <strong>Adicionar Questão</strong>.',
+          'Um modal se abrirá. Digite ou cole o seu enunciado e as alternativas.',
+          'Você pode inserir imagens no meio do texto e marcar a alternativa correta clicando na bolinha ao lado dela.',
+          '<strong>Gerador de Imagens IA:</strong> Precisa de uma ilustração? Clique no botão de Inteligência Artificial para gerar uma imagem exclusiva para a sua questão!'
+        ]} />
+        <VideoPlaceholder title="Criação Manual de Questões" />
+
+        <hr style={{ border: 'none', borderTop: '1px solid hsl(var(--border-subtle))', margin: '40px 0' }} />
+
+        <h3 style={{ fontSize: 18, color: 'hsl(var(--text-primary))', fontWeight: 800, marginTop: 0 }}>Gerando Questões com Inteligência Artificial</h3>
+        <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>Ficou sem criatividade? Deixe a IA criar a questão perfeita para você.</p>
+        <StepList steps={[
+          'Clique em <strong>Gerar com IA</strong>.',
+          'Selecione a <strong>Turma</strong> (para a IA entender a faixa etária e dificuldade correta).',
+          'Escolha o <strong>Nível de Dificuldade</strong> (Fácil, Médio, Difícil).',
+          'Digite o <strong>Tema</strong> (ex: "Revolução Francesa com foco em causas econômicas").',
+          'A IA criará o enunciado, as alternativas e já marcará o gabarito. Se gostar, é só salvar!'
+        ]} />
+        <VideoPlaceholder title="Gerando Questão com Inteligência Artificial" />
 
       </Section>
 
