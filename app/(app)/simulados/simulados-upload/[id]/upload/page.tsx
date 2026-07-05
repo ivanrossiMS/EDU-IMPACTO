@@ -564,16 +564,26 @@ export default function UploadSimuladoPage() {
       {/* ─── ISOLATED PREVIEW MODAL ─── */}
       {showPreviewIsolated && (
         <SimuladoPreviewModal
-          questoes={questoes}
+          questoes={simulado?.questoes_json?.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })) || []}
           setQuestoes={setQuestoes}
-          simulado={simulado}
+          simulado={{ 
+            ...simulado, 
+            isSimulado: true,
+            formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '',
+            formattedSeries: simulado?.series?.join(', ') || '',
+            formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
+            formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
+              const nome = r.professores?.nome || r.professor_nome || '';
+              return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
+            }))).filter(Boolean).join(', ')
+          }}
           config={simConfig}
           onClose={() => {
             setShowPreviewIsolated(false)
             router.push(`/simulados/simulados-upload/${simuladoId}/upload?all=true`)
           }}
           isolatedMode={true}
-          isReadOnly={isProfessorViewAll}
+          isReadOnly={true}
         />
       )}
       
