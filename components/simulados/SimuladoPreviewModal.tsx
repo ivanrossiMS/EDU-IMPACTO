@@ -81,11 +81,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const [showBackModal, setShowBackModal] = useState(false)
 
   const handleSaveHeaderLayout = async () => {
-    if (isolatedMode) {
-      alert('Posições do cabeçalho alteradas apenas para esta pré-visualização (Modo Isolado).')
-      setIsEditHeaderMode(false)
-      return
-    }
+
     if (!config || !config.id) return
     setSavingHeader(true)
     try {
