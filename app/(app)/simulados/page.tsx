@@ -12,6 +12,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { getDerivedStatus } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 
 export default function SimuladosDashboard() {
   const router = useRouter()
@@ -137,14 +139,14 @@ export default function SimuladosDashboard() {
           // ==============================
           
           const [resProvas, resSimulados, resRedacao] = await Promise.all([
-            (supabase as any).from('provas_upload').select('id, titulo, status, data_aplicacao, created_at').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('simulados_upload').select('id, titulo, status, data_aplicacao, created_at').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('redacao_upload').select('id, titulo, status, data_aplicacao, created_at').order('created_at', { ascending: false }).limit(10)
+            (supabase as any).from('provas_upload').select('id, titulo, status, data_aplicacao, created_at, provas_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('simulados_upload').select('id, titulo, status, data_aplicacao, created_at, simulados_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('redacao_upload').select('id, titulo, status, data_aplicacao, created_at, redacao_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10)
           ])
 
-          const pData = resProvas.data || []
-          const sData = resSimulados.data || []
-          const rData = resRedacao.data || []
+          const pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova') }))
+          const sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado') }))
+          const rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao') }))
 
           const pAtivas = pData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
           const sAtivas = sData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length

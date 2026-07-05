@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { getDerivedStatus } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -93,7 +94,8 @@ export default function VerProvaUploadPage() {
     reprovado: { label: 'Reprovado', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
     publicado: { label: 'Publicado', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
   }
-  const sc = statusConfig[prova?.status] || statusConfig['aguardando']
+  const derivedStatus = getDerivedStatus({ ...prova, provas_upload_requisicoes: requisicoes }, 'prova')
+  const sc = statusConfig[derivedStatus] || statusConfig['aguardando']
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>

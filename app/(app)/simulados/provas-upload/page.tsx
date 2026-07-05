@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
+import { getDerivedStatus } from '@/lib/utils'
 import { GabaritoProvaModal } from '@/components/simulados/GabaritoProvaModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
@@ -64,10 +65,14 @@ export default function UploadProvasGerenciamentoPage() {
           })
           if (reqsRes.ok) {
             const reqsData = await reqsRes.json()
-            provasData = provasData.map((p: any) => ({
-              ...p,
-              provas_upload_requisicoes: reqsData.filter((r: any) => r.id_prova_upload === p.id)
-            }))
+            provasData = provasData.map((p: any) => {
+              const reqs = reqsData.filter((r: any) => r.id_prova_upload === p.id)
+              const pWithReqs = { ...p, provas_upload_requisicoes: reqs }
+              return {
+                ...pWithReqs,
+                status: getDerivedStatus(pWithReqs, 'prova')
+              }
+            })
           }
         } catch (e) {
           console.error("Error fetching requisitions", e)

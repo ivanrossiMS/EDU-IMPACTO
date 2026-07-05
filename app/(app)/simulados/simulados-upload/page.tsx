@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
+import { getDerivedStatus } from '@/lib/utils'
 import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
@@ -64,10 +65,14 @@ export default function UploadSimuladosGerenciamentoPage() {
           })
           if (reqsRes.ok) {
             const reqsData = await reqsRes.json()
-            simuladosData = simuladosData.map((p: any) => ({
-              ...p,
-              simulados_upload_requisicoes: reqsData.filter((r: any) => r.id_simulado_upload === p.id)
-            }))
+            simuladosData = simuladosData.map((p: any) => {
+              const reqs = reqsData.filter((r: any) => r.id_simulado_upload === p.id)
+              const pWithReqs = { ...p, simulados_upload_requisicoes: reqs }
+              return {
+                ...pWithReqs,
+                status: getDerivedStatus(pWithReqs, 'simulado')
+              }
+            })
           }
         } catch (e) {
           console.error("Error fetching requisitions", e)

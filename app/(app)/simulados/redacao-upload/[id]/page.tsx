@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { getDerivedStatus } from '@/lib/utils'
 import { RedacaoPreviewModal, Questao } from '@/components/simulados/RedacaoPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -93,7 +94,8 @@ export default function VerRedaçãoUploadPage() {
     reredacaodo: { label: 'Reredacaodo', color: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
     publicado: { label: 'Publicado', color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
   }
-  const sc = statusConfig[redacao?.status] || statusConfig['aguardando']
+  const derivedStatus = getDerivedStatus({ ...redacao, redacao_upload_requisicoes: requisicoes }, 'redacao')
+  const sc = statusConfig[derivedStatus] || statusConfig['aguardando']
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>

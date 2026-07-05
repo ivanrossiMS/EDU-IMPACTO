@@ -32,7 +32,7 @@ export default function BimestresPage() {
       setFormData({ nome: item.nome, data_inicio: item.data_inicio || '', data_fim: item.data_fim || '', status: item.status, ano_letivo: item.ano_letivo || '' })
     } else {
       setEditingId(null)
-      const anoAtivo = cfgCalendarioLetivo.find((a: any) => a.status === 'Aberto')?.ano || ''
+      const anoAtivo = String(cfgCalendarioLetivo.find((a: any) => a.status === 'Aberto')?.ano || '')
       setFormData({ nome: '', data_inicio: '', data_fim: '', status: 'ativo', ano_letivo: anoAtivo })
     }
     setIsModalOpen(true)

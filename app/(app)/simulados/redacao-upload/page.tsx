@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
+import { getDerivedStatus } from '@/lib/utils'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 import { GabaritoRedacaoModal } from '@/components/simulados/GabaritoRedacaoModal'
 
@@ -63,10 +64,14 @@ export default function UploadRedaçõesGerenciamentoPage() {
           })
           if (reqsRes.ok) {
             const reqsData = await reqsRes.json()
-            redacoesData = redacoesData.map((p: any) => ({
-              ...p,
-              redacao_upload_requisicoes: reqsData.filter((r: any) => r.id_redacao_upload === p.id)
-            }))
+            redacoesData = redacoesData.map((p: any) => {
+              const reqs = reqsData.filter((r: any) => r.id_redacao_upload === p.id)
+              const pWithReqs = { ...p, redacao_upload_requisicoes: reqs }
+              return {
+                ...pWithReqs,
+                status: getDerivedStatus(pWithReqs, 'redacao')
+              }
+            })
           }
         } catch (e) {
           console.error("Error fetching requisitions", e)

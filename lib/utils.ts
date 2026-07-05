@@ -156,3 +156,31 @@ export function formatPhone(value: string): string {
   }
   return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7, 11)}`
 }
+
+export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redacao'): string {
+  if (!item) return 'aguardando'
+  // Se já foi publicado, esse status prevalece (pode ser forçado pelo coordenador)
+  if (item.status === 'publicado') return 'publicado'
+  
+  const reqs = type === 'prova' ? item.provas_upload_requisicoes 
+             : type === 'simulado' ? item.simulados_upload_requisicoes
+             : item.redacao_upload_requisicoes;
+             
+  if (!reqs || reqs.length === 0) return item.status || 'aguardando'
+  
+  const statuses = reqs.map((r: any) => r.status)
+  
+  // Se existe algum professor que ainda está pendente ou teve upload rejeitado,
+  // ou se a requisição acabou de ser criada, no geral o painel fica "Aguardando"
+  if (statuses.some((s: string) => s === 'pendente' || s === 'rejeitado')) {
+    return 'aguardando'
+  }
+  
+  // Se TODOS os professores já enviaram e o coordenador aprovou TODOS, então a prova está aprovada
+  if (statuses.every((s: string) => s === 'aprovado' || s === 'publicado')) {
+    return 'aprovado'
+  }
+  
+  // Se todos enviaram mas ainda não foram todos aprovados, então está em revisão
+  return 'em_revisao'
+}
