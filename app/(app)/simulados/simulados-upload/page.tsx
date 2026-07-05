@@ -294,7 +294,7 @@ export default function UploadSimuladosGerenciamentoPage() {
               </div>
             </div>
           </div>
-          {isCoord && (
+          {true && (
             <Link href="/simulados/simulados-upload/nova" style={{ textDecoration: 'none' }}>
               <motion.button
                 whileHover={{ scale: 1.03, y: -1 }}
@@ -463,7 +463,7 @@ export default function UploadSimuladosGerenciamentoPage() {
               {search ? 'Nenhum simulado encontrada' : 'Nenhum simulado criada ainda'}
             </h3>
             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: 0 }}>
-              {isCoord ? 'Clique em "Novo Simulado" para começar.' : 'Aguarde o coordenador criar um simulado para você.'}
+              {'Clique em "Novo Simulado" para começar.'}
             </p>
           </motion.div>
         ) : (

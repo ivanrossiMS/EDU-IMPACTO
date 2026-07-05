@@ -281,7 +281,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
               </div>
             </div>
           </div>
-          {isCoord && (
+          {true && (
             <Link href="/simulados/redacao-upload/nova" style={{ textDecoration: 'none' }}>
               <motion.button
                 whileHover={{ scale: 1.03, y: -1 }}
@@ -429,7 +429,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
               {search ? 'Nenhuma redacao encontrada' : 'Nenhuma redacao criada ainda'}
             </h3>
             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: 0 }}>
-              {isCoord ? 'Clique em "Nova Redação" para começar.' : 'Aguarde o coordenador criar uma redacao para você.'}
+              {'Clique em "Nova Redação" para começar.'}
             </p>
           </motion.div>
         ) : (
