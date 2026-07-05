@@ -291,39 +291,23 @@ export default function UploadSimuladoPage() {
                 <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
               </motion.button>
             )}
-            {currentUser?.perfil !== 'Professor' && (
-              <motion.button onClick={() => {
-                const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-                if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                  setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
-                  return;
-                }
-                setShowPreview(true);
-              }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-                <Printer size={16} color="white" /> Pré-visualizar A4
-              </motion.button>
-            )}
-            {currentUser?.perfil === 'Professor' && (
-              <motion.button onClick={() => {
-                const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-                if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                  setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
-                  return;
-                }
-                setShowPreviewIsolated(true);
-              }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-                <Printer size={16} color="white" /> Pré-visualizar Professor
-              </motion.button>
-            )}
+            <motion.button onClick={() => {
+              const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
+                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
+                return;
+              }
+              setShowPreview(true);
+            }}
+              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #2563eb)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
+              <Printer size={16} color="white" /> Pré-visualizar A4
+            </motion.button>
             {!isProfessorViewAll && (
               <>
                 <motion.button onClick={() => handleSave()} disabled={saving}
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #34d399, #10b981)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(52,211,153,0.3)' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
                   {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
                 </motion.button>
                 
