@@ -181,10 +181,15 @@ export default function UploadSimuladoPage() {
       }
 
       // 3. Prepare our questions
-      const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => ({ 
-        ...q, 
-        id_professor: currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor 
-      }))
+      const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => {
+        let profId = q.id_professor;
+        if (currentUser?.perfil !== 'Professor' && targetProf && (!profId || profId === currentUser?.id)) {
+          profId = targetProf;
+        } else if (currentUser?.perfil === 'Professor') {
+          profId = currentUser.id;
+        }
+        return { ...q, id_professor: profId };
+      })
 
       // 4. Merge
       const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
@@ -425,8 +430,8 @@ export default function UploadSimuladoPage() {
           <QuestoesEditor 
             questoes={questoes} 
             setQuestoes={setQuestoes} 
-            defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
-            defaultProfessorId={currentUser?.id}
+            defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === (searchParams.get('prof') || currentUser?.id))?.id_disciplina}
+            defaultProfessorId={searchParams.get('prof') || currentUser?.id}
             readOnly={isProfessorViewAll}
           />
 

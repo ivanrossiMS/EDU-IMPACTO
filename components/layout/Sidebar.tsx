@@ -159,13 +159,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
-  {
-    title: 'AJUDA',
-    collapsible: false,
-    items: [
-      { label: 'CENTRAL DE AJUDA', href: '/ajuda', icon: <HelpCircle size={16} /> },
-    ],
-  },
+
 ]
 
 function NavItemComp({ item, collapsed, depth = 0 }: { item: NavItem; collapsed: boolean; depth?: number }) {
