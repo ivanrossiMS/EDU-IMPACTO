@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenAI, Type, Schema } from '@google/genai'
 
 export async function POST(request: Request) {
   try {
@@ -31,16 +31,25 @@ Sua tarefa:
 2. Se uma questão não tiver nenhuma marcação clara, use null.
 3. Se houver mais de uma alternativa marcada claramente para a mesma questão, você DEVE retornar "ANULADA".
 
-Responda APENAS com um JSON válido no seguinte formato, sem nenhum texto adicional:
-{
-  "respostas": [
-    { "numero": 1, "resposta": "B" },
-    { "numero": 2, "resposta": "ANULADA" },
-    ...
-  ]
-}
-
 Retorne exatamente ${totalQuestoes} itens no array, um para cada questão.`
+
+    const responseSchema: Schema = {
+      type: Type.OBJECT,
+      properties: {
+        respostas: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              numero: { type: Type.NUMBER },
+              resposta: { type: Type.STRING, nullable: true }
+            },
+            required: ['numero']
+          }
+        }
+      },
+      required: ['respostas']
+    }
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -62,18 +71,21 @@ Retorne exatamente ${totalQuestoes} itens no array, um para cada questão.`
         temperature: 0.1,
         topP: 0.95,
         maxOutputTokens: 2048,
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema
       }
     })
 
     const rawText = response.text?.trim() || ''
 
-    // Extract JSON from response
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'A IA não retornou um JSON válido. Tente com uma imagem mais nítida.' }, { status: 422 })
+    // Now we can parse directly since responseMimeType enforces strict JSON
+    let parsed
+    try {
+      parsed = JSON.parse(rawText)
+    } catch (e) {
+      return NextResponse.json({ error: 'Erro ao interpretar a resposta da IA. Tente com uma imagem mais nítida.' }, { status: 422 })
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
     const respostasAluno: { numero: number; resposta: string | null }[] = parsed.respostas || []
 
     // Score the answers

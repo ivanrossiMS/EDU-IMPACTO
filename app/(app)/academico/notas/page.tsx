@@ -15,9 +15,35 @@ import { useQueryClient } from '@tanstack/react-query'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
 import { UpdatingIndicator } from '@/components/skeletons/States'
+import { PDFDocument } from 'pdf-lib'
 
 // Cores para os segmentos
 const SEG_COLORS: Record<string,string> = { EI:'#10b981', EF1:'#3b82f6', EF2:'#8b5cf6', EM:'#f59e0b', EJA:'#ec4899' }
+
+// Helper para Fuzzy Matching (Similaridade de Strings)
+function stringSimilarity(s1: string, s2: string): number {
+  if (!s1 || !s2) return 0;
+  const str1 = s1.toLowerCase().trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9 ]/g, '');
+  const str2 = s2.toLowerCase().trim().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9 ]/g, '');
+  if (str1 === str2) return 1;
+  
+  // Jaro-Winkler like simplificado ou distância Levenshtein rápida
+  const track = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
+  for (let i = 0; i <= str1.length; i += 1) track[0][i] = i;
+  for (let j = 0; j <= str2.length; j += 1) track[j][0] = j;
+  for (let j = 1; j <= str2.length; j += 1) {
+    for (let i = 1; i <= str1.length; i += 1) {
+      const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      track[j][i] = Math.min(
+        track[j][i - 1] + 1,
+        track[j - 1][i] + 1,
+        track[j - 1][i - 1] + indicator
+      );
+    }
+  }
+  const maxLen = Math.max(str1.length, str2.length);
+  return (maxLen - track[str2.length][str1.length]) / maxLen;
+}
 
 export default function NotasPage() {
   const { turmas = [], cfgCalendarioLetivo = [], cfgNiveisEnsino = [], logSystemAction } = useData()
@@ -45,6 +71,7 @@ export default function NotasPage() {
   const [dragActive, setDragActive] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [statusText, setStatusText] = useState('Lendo arquivo...')
   
   // Estado para visualizar boletim
   const [boletimParaVisualizar, setBoletimParaVisualizar] = useState<any>(null)
@@ -170,9 +197,10 @@ export default function NotasPage() {
                       <input 
                         type="file" 
                         accept="application/pdf"
+                        multiple
                         onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleFileUpload(file)
+                          const files = e.target.files
+                          if (files && files.length > 0) handleFileUpload(files)
                         }}
                         style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
                       />
@@ -186,7 +214,7 @@ export default function NotasPage() {
                     {uploading && (
                       <div style={{ marginTop: 24 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#0f172a', fontWeight: 600, marginBottom: 8 }}>
-                          <span>Lendo arquivo...</span>
+                          <span>{statusText}</span>
                           <span>{progress}%</span>
                         </div>
                         <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
@@ -272,9 +300,9 @@ export default function NotasPage() {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
                       <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('validation')}>Voltar</button>
-                      <button style={{ height: '40px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleConfirmImport}>
-                        <CheckCircle size={14} />
-                        Confirmar e Salvar
+                      <button disabled={uploading} style={{ height: '40px', padding: '0 20px', background: uploading ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleConfirmImport}>
+                        {uploading ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                        {uploading ? 'Salvando...' : 'Confirmar e Salvar'}
                       </button>
                     </div>
                   </div>
@@ -588,56 +616,118 @@ export default function NotasPage() {
     }
   }
 
-  async function handleFileUpload(file: File) {
+  async function handleFileUpload(files: FileList | File[]) {
     setUploading(true)
-    setProgress(10)
+    setProgress(2)
+    setStatusText('Iniciando processamento múltiplo...')
     
     try {
-      const formData = new FormData()
-      formData.append('file', file)
+      let allAlunosDetectados: any[] = []
+      const filesArray = Array.from(files)
+      
+      for (let f = 0; f < filesArray.length; f++) {
+        const file = filesArray[f]
+        setStatusText(`Analisando documento PDF ${f + 1} de ${filesArray.length}...`)
+        
+        // 1. Carregar o PDF na memória do navegador usando pdf-lib
+        const arrayBuffer = await file.arrayBuffer()
+        const originalPdf = await PDFDocument.load(arrayBuffer)
+        const totalPages = originalPdf.getPageCount()
+        
+        const BATCH_SIZE = 2 // Reduzido de 8 para 2 para garantir que a IA não pule nenhum aluno por excesso de densidade
+        const totalBatches = Math.ceil(totalPages / BATCH_SIZE)
 
-      const interval = setInterval(() => {
-        setProgress(p => p < 90 ? p + 5 : p)
-      }, 500)
+        // 2. Processar cada lote sequencialmente
+        for (let i = 0; i < totalBatches; i++) {
+          const startPage = i * BATCH_SIZE
+          const endPage = Math.min((i + 1) * BATCH_SIZE, totalPages)
+          
+          setStatusText(`Arquivo ${f + 1} de ${filesArray.length}: Processando lote ${i + 1} de ${totalBatches} (págs ${startPage + 1} a ${endPage})...`)
+          
+          // Calcula progresso dinâmico bidimensional
+          const progressPorArquivo = 90 / filesArray.length
+          const progressoAcumuladoAnterior = f * progressPorArquivo
+          const progressoLoteAtual = (i / totalBatches) * progressPorArquivo
+          setProgress(Math.floor(2 + progressoAcumuladoAnterior + progressoLoteAtual))
 
-      const response = await fetch('/api/boletins/extrair-pdf', {
-        method: 'POST',
-        body: formData
-      })
+          // Cria um novo PDF apenas com as páginas deste lote
+          const newPdf = await PDFDocument.create()
+          const pageIndices = Array.from({ length: endPage - startPage }, (_, idx) => startPage + idx)
+          const copiedPages = await newPdf.copyPages(originalPdf, pageIndices)
+          copiedPages.forEach(page => newPdf.addPage(page))
 
-      clearInterval(interval)
+          // Salva e converte para File
+          const pdfBytes = await newPdf.save()
+          const batchBlob = new Blob([pdfBytes], { type: 'application/pdf' })
+          const batchFile = new File([batchBlob], `batch_${i + 1}.pdf`, { type: 'application/pdf' })
+
+          // Envia para a API
+          const formData = new FormData()
+          formData.append('file', batchFile)
+
+          const response = await fetch('/api/boletins/extrair-pdf', {
+            method: 'POST',
+            body: formData
+          })
+
+          if (!response.ok) {
+            const err = await response.json()
+            throw new Error(err.error || `Erro na leitura do lote ${i + 1} do arquivo ${f + 1}`)
+          }
+
+          const { data } = await response.json()
+          
+          if (Array.isArray(data)) {
+            allAlunosDetectados = [...allAlunosDetectados, ...data]
+          }
+        }
+      }
+
+      setStatusText('Mapeando alunos no sistema...')
       setProgress(95)
-
-      if (!response.ok) {
-        const err = await response.json()
-        throw new Error(err.error || 'Erro na leitura do PDF')
-      }
-
-      const { data } = await response.json()
       
-      if (!Array.isArray(data)) {
-         throw new Error('Formato de dados inválido retornado pela IA.')
-      }
-
-      const alunosDetectados = data
-
-      setProgress(70)
-      
-      const mappedData = alunosDetectados.map((data: any) => {
-        const codigoLimpo = String(data.codigo).replace(/^0+/, '')
-        const alunoEncontrado = (alunos || []).find((a: any) => {
-          const idLimpo = String(a.id).replace(/^0+/, '')
-          const matriculaLimpa = String(a.matricula).replace(/^0+/, '')
-          return idLimpo === codigoLimpo || matriculaLimpa === codigoLimpo
+      // Mapeamento e fallback
+      const mappedData = allAlunosDetectados.map((data: any) => {
+        const codigoLimpo = String(data.codigo).replace(/\\D/g, '').replace(/^0+/, '')
+        
+        let alunoEncontrado = (alunos || []).find((a: any) => {
+          const idLimpo = String(a.id).replace(/\\D/g, '').replace(/^0+/, '')
+          const matriculaLimpa = String(a.matricula).replace(/\\D/g, '').replace(/^0+/, '')
+          return (idLimpo === codigoLimpo && idLimpo !== '') || (matriculaLimpa === codigoLimpo && matriculaLimpa !== '')
         })
         
-        let nomeFallback = 'Não encontrado no sistema'
-        if (codigoLimpo === '4421') nomeFallback = 'teste qaku'
-        if (codigoLimpo === '5230') nomeFallback = 'ivan25'
+        // Fallback 1: Match exato de nome (case-insensitive)
+        if (!alunoEncontrado && data.nomeArquivo) {
+          alunoEncontrado = (alunos || []).find((a: any) => {
+            if (!a.nome) return false
+            return a.nome.toLowerCase().trim() === data.nomeArquivo.toLowerCase().trim()
+          })
+        }
+        
+        // Fallback 2: Fuzzy Matching (nome similar, >85% de similaridade) - resolve problemas de typos de OCR (Luz vs Luiz, 5084 vs 5984)
+        if (!alunoEncontrado && data.nomeArquivo) {
+          let bestMatch: any = null;
+          let bestScore = 0;
+          (alunos || []).forEach((a: any) => {
+            if (a.nome) {
+              const score = stringSimilarity(a.nome, data.nomeArquivo);
+              if (score > bestScore) {
+                bestScore = score;
+                bestMatch = a;
+              }
+            }
+          });
+          if (bestScore > 0.85) {
+            alunoEncontrado = bestMatch;
+          }
+        }
+        
+        let nomeFallback = data.nomeArquivo || 'Aluno não cadastrado'
 
         return {
           ...data,
           id: alunoEncontrado?.id || data.codigo,
+          codigo: alunoEncontrado ? (alunoEncontrado.matricula || alunoEncontrado.id) : data.codigo,
           nomeERP: alunoEncontrado?.nome || nomeFallback,
           turma_id: alunoEncontrado?.turma || alunoEncontrado?.turma_id || turmaObj?.id
         }
@@ -645,6 +735,8 @@ export default function NotasPage() {
       
       setImportData(mappedData)
       setProgress(100)
+      setStatusText('Concluído!')
+      
       setTimeout(() => {
         setUploading(false)
         setCurrentStep('validation')
@@ -658,11 +750,11 @@ export default function NotasPage() {
 
   async function handleConfirmImport() {
     setUploading(true)
-    const logs = []
+    const logs: string[] = []
     
     for (const data of importData) {
       if (!data.turma_id) {
-        logs.push(`Turma não encontrada para o aluno ${data.nomeERP}`)
+        logs.push(`- ${data.nomeERP} (Matrícula: ${data.codigo}): Sem turma vinculada.`)
         continue
       }
       try {
@@ -688,22 +780,53 @@ export default function NotasPage() {
     setUploading(false)
     setModalOpen(false)
     
-    if (logs.length > 0) {
-      alert('Alguns erros ocorreram ao salvar:\\n' + logs.join('\\n'))
-    } else {
-      // Recarrega os boletins globais e da turma selecionada
-      queryClient.invalidateQueries({ queryKey: ['boletins'] })
-      alert('Notas importadas com sucesso!')
+    // Invalida queries independentemente de ter havido erros parciais
+    queryClient.invalidateQueries({ queryKey: ['boletins'] })
+
+    setTimeout(() => {
+      if (logs.length > 0) {
+        const salvos = importData.length - logs.length
+        alert(`${salvos} notas foram enviadas com sucesso.\\n\\nIgnoramos ${logs.length} alunos pois eles não estão cadastrados no sistema ou não possuem turma vinculada:\\n\\n` + logs.join('\\n'))
+      } else {
+        alert('Todas as notas foram roteadas e importadas com sucesso!')
+      }
+    }, 200)
+  }
+
+  const handleDeleteBoletim = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este boletim?')) return
+    
+    try {
+      const res = await fetch(`/api/boletins?id=${id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Falha ao excluir boletim')
+      
+      queryClient.setQueryData(['boletins', turmaObj?.id], (old: any) => {
+        if (!old) return old
+        return { ...old, data: old.data.filter((o: any) => o.id !== id) }
+      })
+      alert('Boletim excluído com sucesso!')
+    } catch (err: any) {
+      alert(err.message)
     }
   }
 
-  const handleDeleteBoletim = (id: string) => {
-    if (!confirm('Deseja realmente excluir este boletim?')) return
-    queryClient.setQueryData(['boletins', turmaObj?.id], (old: any) => {
-      if (!old) return old
-      return { ...old, data: old.data.filter((o: any) => o.id !== id) }
-    })
-    alert('Boletim excluído com sucesso!')
+  const handleDeleteAllClassBoletins = async () => {
+    if (!turmaObj?.id) return
+    if (!confirm(`ATENÇÃO: Você está prestes a apagar TODOS os boletins importados para a turma ${turmaObj.nome}. Isso não pode ser desfeito. Tem certeza?`)) return
+
+    try {
+      setUploading(true)
+      const res = await fetch(`/api/boletins?turma_id=${turmaObj.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Falha ao excluir boletins da turma')
+      
+      queryClient.setQueryData(['boletins', turmaObj.id], { data: [] })
+      queryClient.invalidateQueries({ queryKey: ['boletins'] })
+      alert('Todos os boletins da turma foram excluídos!')
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -722,14 +845,28 @@ export default function NotasPage() {
             <p style={{ fontSize: 14, color: '#64748b', margin: '2px 0 0 0' }}>Gerencie ou importe os boletins dos alunos desta turma.</p>
           </div>
         </div>
-        
-        <button 
-          onClick={handleOpenImportModal}
-          style={{ height: '46px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
-        >
-          <Upload size={16} />
-          Importar Notas
-        </button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            onClick={handleDeleteAllClassBoletins}
+            disabled={uploading}
+            style={{ padding: '0 20px', height: '44px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', color: '#ef4444', fontSize: '14px', fontWeight: 700, cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+            onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+          >
+            {uploading ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+            Limpar Turma
+          </button>
+          
+          <button 
+            onClick={handleOpenImportModal}
+            style={{ padding: '0 24px', height: '44px', background: '#2563eb', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, transition: 'all 0.2s', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+            onMouseLeave={e => e.currentTarget.style.transform = ''}
+          >
+            <Upload size={18} />
+            Importar Notas
+          </button>
+        </div>
       </div>
 
       {/* Grid de Alunos em Caixas */}

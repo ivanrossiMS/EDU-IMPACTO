@@ -139,14 +139,56 @@ export default function SimuladosDashboard() {
           // ==============================
           
           const [resProvas, resSimulados, resRedacao] = await Promise.all([
-            (supabase as any).from('provas_upload').select('id, titulo, status, data_aplicacao, created_at, provas_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('simulados_upload').select('id, titulo, status, data_aplicacao, created_at, simulados_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('redacao_upload').select('id, titulo, status, data_aplicacao, created_at, redacao_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10)
+            (supabase as any).from('provas_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, provas_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('simulados_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, simulados_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('redacao_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, redacao_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10)
           ])
 
-          const pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova') }))
-          const sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado') }))
-          const rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao') }))
+          let pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova') }))
+          let sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado') }))
+          let rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao') }))
+
+          // Fetch users for criado_por
+          const allUserIds = Array.from(new Set([
+            ...pData.map(p => p.criado_por),
+            ...sData.map(s => s.criado_por),
+            ...rData.map(r => r.criado_por)
+          ].filter(Boolean)));
+          
+          if (allUserIds.length > 0) {
+            try {
+              const req = await fetch('/api/usuarios/nomes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: allUserIds })
+              });
+              const resData = await req.json();
+              const usersMap = resData.data || {};
+              
+              if (currentUser?.id && !usersMap[currentUser.id]) {
+                usersMap[currentUser.id] = currentUser.nome;
+              }
+
+              const formatCreatorName = (name: string) => {
+                if (!name) return 'Desconhecido';
+                const parts = name.trim().split(/\s+/).filter((p: string) => !['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase()));
+                if (parts.length > 1) {
+                  return parts.slice(0, 2).join(' ');
+                }
+                return parts[0] || 'Desconhecido';
+              };
+              
+              Object.keys(usersMap).forEach(k => {
+                usersMap[k] = formatCreatorName(usersMap[k]);
+              });
+
+              pData = pData.map(p => ({ ...p, criado_por_nome: usersMap[p.criado_por] || 'Desconhecido' }));
+              sData = sData.map(s => ({ ...s, criado_por_nome: usersMap[s.criado_por] || 'Desconhecido' }));
+              rData = rData.map(r => ({ ...r, criado_por_nome: usersMap[r.criado_por] || 'Desconhecido' }));
+            } catch(e) {
+              console.error("Error fetching creators:", e);
+            }
+          }
 
           const pAtivas = pData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
           const sAtivas = sData.filter((r: any) => r.status === 'aguardando' || r.status === 'em_revisao').length
@@ -469,6 +511,11 @@ export default function SimuladosDashboard() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600 }}>
                           <Calendar size={14} /> Aplicação: {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
                         </div>
+                        {item.criado_por_nome && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 4 }}>
+                            <User size={14} /> Criado por: {item.criado_por_nome}
+                          </div>
+                        )}
                       </div>
 
                     </motion.div>

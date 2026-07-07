@@ -33,63 +33,133 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
 
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const PAGE_SIZE = 50
+
   const seriesOptions = ['1º Ano EF', '2º Ano EF', '3º Ano EF', '4º Ano EF', '5º Ano EF', '6º Ano EF', '7º Ano EF', '8º Ano EF', '9º Ano EF', '1ª Série EM', '2ª Série EM', '3ª Série EM']
 
   useEffect(() => {
     setIsClient(true)
     const saved = sessionStorage.getItem('selectedAnoLetivo')
     if (saved) setSelectedAnoLetivo(saved)
-    loadData()
   }, [])
+
+  useEffect(() => {
+    if (isClient) {
+      setPage(1)
+      loadData(1, false)
+    }
+  }, [search, filterBimestre, isClient])
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(searchTerm), 300)
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  const loadData = async () => {
-    setLoading(true)
+  const loadData = async (pageNum = 1, append = false) => {
+    if (pageNum === 1) setLoading(true)
+    else setLoadingMore(true)
+
     try {
+      let query = (supabase as any).from('simulados_upload')
+        .select('*, simulados_upload_requisicoes(*)')
+        .order('created_at', { ascending: false })
+
+      if (search) {
+        query = query.ilike('titulo', `%${search}%`)
+      }
+      if (filterBimestre && filterBimestre !== 'todos') {
+        query = query.eq('id_bimestre', filterBimestre)
+      }
+
+      query = query.range((pageNum - 1) * PAGE_SIZE, pageNum * PAGE_SIZE - 1)
+
       const [bimRes, simuladosRes] = await Promise.all([
         (supabase as any).from('simulados_bimestres').select('*').eq('status', 'ativo').order('nome'),
-        (supabase as any).from('simulados_upload').select('*').order('created_at', { ascending: false })
+        query
       ])
       
-      let simuladosData = simuladosRes.data || []
+      let newSimuladosData = simuladosRes.data || []
       
-      // Fetch requisitions via API to bypass RLS so professors can see all cards
-      if (simuladosData.length > 0) {
+      if (newSimuladosData.length < PAGE_SIZE) {
+        setHasMore(false)
+      } else {
+        setHasMore(true)
+      }
+      
+      if (newSimuladosData.length > 0) {
         try {
-          const reqsRes = await fetch(`/api/simulados-upload/requisicoes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ simuladoIds: simuladosData.map((p: any) => p.id) })
-          })
-          if (reqsRes.ok) {
-            const reqsData = await reqsRes.json()
-            simuladosData = simuladosData.map((p: any) => {
-              const reqs = reqsData.filter((r: any) => r.id_simulado_upload === p.id)
-              const pWithReqs = { ...p, simulados_upload_requisicoes: reqs }
-              return {
-                ...pWithReqs,
-                status: getDerivedStatus(pWithReqs, 'simulado')
+          // Calculate status
+          newSimuladosData = newSimuladosData.map((p: any) => ({
+            ...p,
+            status: getDerivedStatus(p, 'simulado')
+          }))
+          
+          // Fetch users for criado_por
+          const userIds = Array.from(new Set(newSimuladosData.map((p: any) => p.criado_por).filter(Boolean)));
+          if (userIds.length > 0) {
+            try {
+              const req = await fetch('/api/usuarios/nomes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: userIds })
+              });
+              const resData = await req.json();
+              const usersMap = resData.data || {};
+
+              if (currentUser?.id && !usersMap[currentUser.id]) {
+                usersMap[currentUser.id] = currentUser.nome;
               }
-            })
+
+              const formatCreatorName = (name: string) => {
+                if (!name) return 'Desconhecido';
+                const parts = name.trim().split(/\s+/).filter((p: string) => !['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase()));
+                if (parts.length > 1) {
+                  return parts.slice(0, 2).join(' ');
+                }
+                return parts[0] || 'Desconhecido';
+              };
+              
+              Object.keys(usersMap).forEach(k => {
+                usersMap[k] = formatCreatorName(usersMap[k]);
+              });
+
+              newSimuladosData = newSimuladosData.map((p: any) => ({ ...p, criado_por_nome: usersMap[p.criado_por] || 'Desconhecido' }));
+            } catch (e) {
+              console.error(e);
+            }
           }
         } catch (e) {
-          console.error("Error fetching requisitions", e)
+          console.error("Error fetching requisitions or users", e)
         }
       }
 
       setBimestres(bimRes.data || [])
-      setSimulados(simuladosData)
+      
+      if (append) {
+        setSimulados(prev => {
+          const newItems = newSimuladosData.filter((n: any) => !prev.some((p: any) => p.id === n.id))
+          return [...prev, ...newItems]
+        })
+      } else {
+        setSimulados(newSimuladosData)
+      }
       
       if (simuladosRes.error) console.error("Error loading simulados:", simuladosRes.error)
     } catch (e: any) {
       console.error("Error in loadData:", e?.message || e)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
+  }
+
+  const loadMore = () => {
+    const nextPage = page + 1
+    setPage(nextPage)
+    loadData(nextPage, true)
   }
 
   const confirmDelete = async () => {
@@ -449,9 +519,25 @@ export default function UploadSimuladosGerenciamentoPage() {
 
         {/* List */}
         {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
-            <div style={{ width: 36, height: 36, border: '3px solid rgba(139,92,246,0.2)', borderTopColor: '#8b5cf6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-            <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+          <div style={{ display: 'grid', gap: 16 }}>
+            {[...Array(3)].map((_, i) => (
+              <div key={i} style={{ height: 120, background: 'hsl(var(--bg-surface))', borderRadius: 20, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', position: 'relative' }}>
+                <motion.div
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '100%' }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)' }}
+                />
+                <div style={{ padding: 24, display: 'flex', gap: 20 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 12, background: 'hsl(var(--bg-elevated))' }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ width: '40%', height: 20, background: 'hsl(var(--bg-elevated))', borderRadius: 4, marginBottom: 12 }} />
+                    <div style={{ width: '20%', height: 16, background: 'hsl(var(--bg-elevated))', borderRadius: 4 }} />
+                  </div>
+                  <div style={{ width: 100, height: 32, background: 'hsl(var(--bg-elevated))', borderRadius: 8 }} />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filtered.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -572,6 +658,11 @@ export default function UploadSimuladosGerenciamentoPage() {
                             {(totalRequested > 0 || totalUploaded > 0) && (
                               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <Layers size={14} /> {totalUploaded}/{totalRequested} questões
+                              </span>
+                            )}
+                            {simulado.criado_por_nome && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#3b82f6' }}>
+                                <User size={14} /> Criado por: {simulado.criado_por_nome}
                               </span>
                             )}
                           </div>
@@ -732,6 +823,30 @@ export default function UploadSimuladosGerenciamentoPage() {
                 </div>
               ))}
             </AnimatePresence>
+
+            {hasMore && (
+              <div style={{ textAlign: 'center', marginTop: '40px' }}>
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '12px',
+                    background: 'rgba(59,130,246,0.1)',
+                    color: '#3b82f6',
+                    border: '1px solid rgba(59,130,246,0.2)',
+                    fontWeight: 'bold',
+                    cursor: loadingMore ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {loadingMore ? 'Carregando...' : 'Carregar mais simulados'}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </motion.div>

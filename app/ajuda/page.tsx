@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Layout, Sparkles, Upload, Layers, PenTool, LogIn, FileCode2, Camera, ArrowLeft } from 'lucide-react'
+import { Search, BookOpen, Users, GraduationCap, Settings, CheckCircle, FileText, Layout, Sparkles, Upload, Layers, PenTool, LogIn, FileCode2, Camera, ArrowLeft, HeartHandshake } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 export default function AjudaPage() {
@@ -333,6 +333,26 @@ function ProfessorContent({ search }: { search: string }) {
           }
         />
       </Section>
+
+      <Section title="Provas e Simulados Adaptados" icon={HeartHandshake} search={search}>
+        <LayoutSplit
+          left={
+            <>
+              <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6, fontSize: 15, margin: 0 }}>
+                O sistema permite a criação rápida de versões adaptadas de suas avaliações para alunos com necessidades específicas.
+              </p>
+              <StepList steps={[
+                '<strong>Criando a Adaptação:</strong> Ao clicar no botão <strong>Adaptar</strong> no card de uma prova ou simulado, o sistema fará instantaneamente uma cópia de toda a estrutura com o nome/etiqueta de "ADAPTADO".',
+                '<strong>Acesso à Edição:</strong> Esta nova versão adaptada será mostrada na página de listagem das provas/simulados.',
+                '<strong>Edição Livre:</strong> Clicando novamente em <strong>Adaptar</strong> nesta nova versão, você terá acesso à página de edição para adaptar. Todas as opções de edição estão disponíveis nessa versão independente!'
+              ]} />
+            </>
+          }
+          right={
+            <ImageCard src="/ajuda/imagem7.png" alt="Prova Adaptada" caption="Versão adaptada gerada na listagem de provas, com o botão Adaptar para edição livre." />
+          }
+        />
+      </Section>
     </>
   )
 }
@@ -371,6 +391,26 @@ function CoordenadorContent({ search }: { search: string }) {
           '<strong>Provas e Redações:</strong> Você pode iniciar uma prova atribuindo ela a qualquer professor, ou fazer a diagramação de uma redação.',
           'Apenas inserindo Título, Série e Data na criação da Redação, o sistema gera o cabeçalho completo, e ela já pode ser impressa direto da listagem, super rápido.'
         ]} />
+      </Section>
+
+      <Section title="Provas e Simulados Adaptados" icon={HeartHandshake} search={search}>
+        <LayoutSplit
+          left={
+            <>
+              <p style={{ color: 'hsl(var(--text-secondary))', lineHeight: 1.6, fontSize: 15, margin: 0 }}>
+                Tanto os coordenadores quanto professores podem gerenciar provas adaptadas para inclusão.
+              </p>
+              <StepList steps={[
+                '<strong>Criando a Adaptação:</strong> Ao clicar no botão <strong>Adaptar</strong> no card de uma prova ou simulado, o sistema fará instantaneamente uma cópia de toda a estrutura com o nome/etiqueta de "ADAPTADO".',
+                '<strong>Acesso à Edição:</strong> Esta nova versão adaptada será mostrada na página de listagem das provas/simulados.',
+                '<strong>Edição Livre:</strong> Clicando novamente em <strong>Adaptar</strong> nesta nova versão, você terá acesso à página de edição para adaptar. Todas as opções de edição estão disponíveis nessa versão independente!'
+              ]} />
+            </>
+          }
+          right={
+            <ImageCard src="/ajuda/imagem7.png" alt="Prova Adaptada" caption="Versão adaptada gerada na listagem de provas, com o botão Adaptar para edição livre." />
+          }
+        />
       </Section>
     </>
   )

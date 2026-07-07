@@ -136,15 +136,18 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const turma_id = searchParams.get('turma_id')
     
-    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
+    if (id) {
+      const { error } = await supabase.from('boletins').delete().eq('id', id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    } else if (turma_id) {
+      const { error } = await supabase.from('boletins').delete().eq('turma_id', turma_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    } else {
+      return NextResponse.json({ error: 'ID ou turma_id é obrigatório' }, { status: 400 })
+    }
     
-    const { error } = await supabase
-      .from('boletins')
-      .delete()
-      .eq('id', id)
-      
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

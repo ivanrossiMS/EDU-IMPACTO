@@ -4,9 +4,12 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Settings, Upload, Image as ImageIcon, Loader2, Save, Download } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import ProfessoresPage from '../cadastros/professores/page'
-import DisciplinasPage from '../cadastros/disciplinas/page'
-import BimestresPage from '../cadastros/bimestres/page'
+import { toast } from 'sonner'
+import dynamic from 'next/dynamic'
+
+const ProfessoresPage = dynamic(() => import('../cadastros/professores/page'), { loading: () => <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}><Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 16px' }} />Carregando...</div> })
+const DisciplinasPage = dynamic(() => import('../cadastros/disciplinas/page'), { loading: () => <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}><Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 16px' }} />Carregando...</div> })
+const BimestresPage = dynamic(() => import('../cadastros/bimestres/page'), { loading: () => <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}><Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 16px' }} />Carregando...</div> })
 
 
 export default function SimuladosConfiguracoesPage() {
@@ -93,7 +96,7 @@ export default function SimuladosConfiguracoesPage() {
       if (inputRef.current) inputRef.current.value = ''
     } catch (err: any) {
       console.error(err)
-      alert('Erro: ' + err.message)
+      toast.error('Erro no upload: ' + err.message)
     } finally {
       setUploadState(false)
     }
@@ -120,15 +123,15 @@ export default function SimuladosConfiguracoesPage() {
       if (error) {
         throw error
       }
-      alert('Configurações salvas com sucesso!')
+      toast.success('Configurações salvas com sucesso!')
     } catch (err: any) {
       console.error(err)
       if (err.message?.includes('does not exist') || err.code === '42P01') {
-        alert('AVISO: A tabela simulados_configuracoes ainda não existe no Supabase. Por favor, rode o script SQL fornecido no plano para criá-la.')
+        toast.warning('A tabela simulados_configuracoes ainda não existe. Crie-a no Supabase.')
       } else if (err.code === 'PGRST204' || err.message?.includes('schema cache')) {
-        alert('AVISO: O banco de dados ainda não reconheceu as novas colunas. Por favor, vá no painel do Supabase, entre em Project Settings > API e clique em "Reload schema cache" (ou aguarde alguns minutos e tente novamente).')
+        toast.warning('O banco ainda não reconheceu as novas colunas. Recarregue o cache do schema no Supabase.')
       } else {
-        alert('Erro ao salvar: ' + err.message)
+        toast.error('Erro ao salvar: ' + err.message)
       }
     } finally {
       setSaving(false)

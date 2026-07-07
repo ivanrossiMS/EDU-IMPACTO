@@ -181,8 +181,31 @@ export async function GET(request: Request) {
     }
 
     if (lightweight) {
+      let turmasData: any[] = []
+      const uniqueTurmaRefs = Array.from(new Set(students.map((s: any) => s.turma).filter(Boolean)))
+      
+      if (uniqueTurmaRefs.length > 0) {
+        const cleanRefs = uniqueTurmaRefs.map(r => String(r).trim()).filter(Boolean)
+        if (cleanRefs.length > 0) {
+          const formattedRefs = cleanRefs.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+          const { data: tData } = await supabase
+            .from('turmas')
+            .select('id, codigo, nome, ano')
+            .or(`id.in.(${formattedRefs}),codigo.in.(${formattedRefs}),nome.in.(${formattedRefs})`)
+          turmasData = tData || []
+        }
+      }
+
       const formatted = (students || []).map((student: any) => {
         const d = student.dados || {}
+        
+        const studentTurma = student.turma
+        const tObj = turmasData?.find((t: any) =>
+          String(t.id) === String(studentTurma) ||
+          String(t.codigo) === String(studentTurma) ||
+          String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
+        )
+
         return {
           ...student,
           responsaveis: student.responsaveis || d.responsaveis,
@@ -191,6 +214,8 @@ export async function GET(request: Request) {
           cpf_responsavel: student.cpf_responsavel || d.cpf_responsavel || d.cpfResponsavel,
           email_responsavel: student.email_responsavel || d.email_responsavel || d.emailResponsavel,
           celular_responsavel: student.celular_responsavel || d.celular_responsavel || d.telResponsavel,
+          turma_nome: tObj?.nome || student.turma || '',
+          turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || d.anoLetivo || ''),
           dados: {
             historicoTurmas: [],
             celular_responsavel: d.celular_responsavel,

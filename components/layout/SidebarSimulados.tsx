@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Sparkles, Loader2, Upload
+  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Loader2, Upload, FolderArchive, Sparkles
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Provas via Upload', href: '/simulados/provas-upload', icon: <Upload size={18} />, groupId: 'upload-provas' },
   { label: 'Simulados via Upload', href: '/simulados/simulados-upload', icon: <Upload size={18} />, groupId: 'upload-simulados' },
   { label: 'Redação via Upload', href: '/simulados/redacao-upload', icon: <Upload size={18} />, groupId: 'upload-redacao' },
+  { label: 'Arquivo Adaptadas', href: '/simulados/arquivo-adaptadas', icon: <FolderArchive size={18} /> },
   { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
   { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
   { label: 'Ajuda', href: '/ajuda', icon: <BookOpen size={18} /> },
