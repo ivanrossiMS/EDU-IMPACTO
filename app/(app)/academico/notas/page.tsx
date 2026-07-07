@@ -658,7 +658,7 @@ export default function NotasPage() {
 
           // Salva e converte para File
           const pdfBytes = await newPdf.save()
-          const batchBlob = new Blob([pdfBytes], { type: 'application/pdf' })
+          const batchBlob = new Blob([pdfBytes as any], { type: 'application/pdf' })
           const batchFile = new File([batchBlob], `batch_${i + 1}.pdf`, { type: 'application/pdf' })
 
           // Envia para a API

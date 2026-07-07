@@ -199,7 +199,7 @@ export default function ScannerPage() {
         }
       }
       const pdfBytes = await pdfDoc.save()
-      return new Blob([pdfBytes], { type: 'application/pdf' })
+      return new Blob([pdfBytes as any], { type: 'application/pdf' })
     } catch (err) {
       console.error(err)
       return null
@@ -261,16 +261,16 @@ export default function ScannerPage() {
 
       const { url, size } = await uploadRes.json()
 
-      const { data: dbData, error: dbError } = await supabase.from('arquivos_adaptadas').insert({
+      const { error: dbError } = await supabase.from('arquivos_adaptadas').insert({
         aluno_id: selectedAluno.id,
         turma,
         ano_letivo: anoLetivo,
         titulo,
         bimestre,
-        tamanho_bytes: size || 0,
+        tamanho_bytes: blob.size,
         file_url: url,
         criado_por: currentUser?.id || null
-      })
+      } as any)
 
       if (dbError) {
         console.error('SUPABASE DB ERROR:', JSON.stringify(dbError, null, 2))

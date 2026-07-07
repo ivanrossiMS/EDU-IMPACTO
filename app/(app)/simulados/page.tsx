@@ -150,9 +150,9 @@ export default function SimuladosDashboard() {
 
           // Fetch users for criado_por
           const allUserIds = Array.from(new Set([
-            ...pData.map(p => p.criado_por),
-            ...sData.map(s => s.criado_por),
-            ...rData.map(r => r.criado_por)
+            ...pData.map((p: any) => p.criado_por),
+            ...sData.map((s: any) => s.criado_por),
+            ...rData.map((r: any) => r.criado_por)
           ].filter(Boolean)));
           
           if (allUserIds.length > 0) {
@@ -182,9 +182,9 @@ export default function SimuladosDashboard() {
                 usersMap[k] = formatCreatorName(usersMap[k]);
               });
 
-              pData = pData.map(p => ({ ...p, criado_por_nome: usersMap[p.criado_por] || 'Desconhecido' }));
-              sData = sData.map(s => ({ ...s, criado_por_nome: usersMap[s.criado_por] || 'Desconhecido' }));
-              rData = rData.map(r => ({ ...r, criado_por_nome: usersMap[r.criado_por] || 'Desconhecido' }));
+              pData = pData.map((p: any) => ({ ...p, criado_por_nome: usersMap[p.criado_por] || 'Sistema' }));
+              sData = sData.map((s: any) => ({ ...s, criado_por_nome: usersMap[s.criado_por] || 'Sistema' }));
+              rData = rData.map((r: any) => ({ ...r, criado_por_nome: usersMap[r.criado_por] || 'Sistema' }));
             } catch(e) {
               console.error("Error fetching creators:", e);
             }

@@ -58,7 +58,7 @@ export default function ArquivoAdaptadasPage() {
           
           const anos = new Set<string>()
           const turmas = new Set<string>()
-          data?.forEach(item => {
+          data?.forEach((item: any) => {
             if (item.ano_letivo) anos.add(item.ano_letivo)
             if (item.turma) turmas.add(item.turma)
           })
@@ -200,7 +200,7 @@ export default function ArquivoAdaptadasPage() {
         <div style={{ display: 'grid', gap: 20 }}>
           {Object.entries(groupedByTurma).map(([turma, alunosObj]) => {
             const isExpanded = expandedTurmas[turma]
-            const qtdAlunos = Object.keys(alunosObj).length
+            const qtdAlunos = Object.keys(alunosObj as any).length
             
             return (
               <motion.div 
@@ -231,7 +231,7 @@ export default function ArquivoAdaptadasPage() {
                 
                 {isExpanded && (
                   <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {Object.entries(alunosObj).map(([alunoId, group]) => (
+                    {Object.entries(alunosObj as any).map(([alunoId, group]: [string, any]) => (
                       <div key={alunoId} style={{ background: 'hsl(var(--bg-body))', borderRadius: 12, padding: 16, border: '1px solid hsl(var(--border-subtle))' }}>
                         <h4 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }}></div>
