@@ -10,7 +10,7 @@ interface DestinatariosModalProps {
   isOpen: boolean
   onClose: () => void
   onAdd: (selected: {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]) => void
-  initialSelected?: {id: string, name: string}[]
+  initialSelected?: {id: string, name: string, type?: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]
   allowedTurmasIds?: string[]
   allowedGruposIds?: string[]
 }
@@ -125,15 +125,18 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     ;(alunos || []).forEach((a: any) => {
       aById.set(String(a.id), a)
-      const ref = String(a.turma)
-      if (ref) {
-        let list = byTurmaRef.get(ref)
-        if (!list) {
-          list = []
-          byTurmaRef.set(ref, list)
+      const refs = [String(a.turma || ''), String((a as any).turmaId || '')].filter(Boolean)
+      refs.forEach(r => {
+        const ref = r.trim().toLowerCase()
+        if (ref) {
+          let list = byTurmaRef.get(ref)
+          if (!list) {
+            list = []
+            byTurmaRef.set(ref, list)
+          }
+          if (!list.find(x => x.id === a.id)) list.push(a)
         }
-        list.push(a)
-      }
+      })
     })
 
     ;(colaboradores || []).forEach((c: any) => {
@@ -145,9 +148,9 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   const getTurmaAlunos = (t: any) => {
     const refs = new Set<string>()
-    if (t.id) refs.add(String(t.id))
-    if (t.codigo) refs.add(String(t.codigo))
-    if (t.nome) refs.add(String(t.nome))
+    if (t.id) refs.add(String(t.id).trim().toLowerCase())
+    if (t.codigo) refs.add(String(t.codigo).trim().toLowerCase())
+    if (t.nome) refs.add(String(t.nome).trim().toLowerCase())
     
     const all: any[] = []
     refs.forEach(ref => {
@@ -184,13 +187,13 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     if (initialSelected.length > 0) {
        const hasTurma = initialSelected.some(s => {
-         const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+         const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
          return type === 'turma'
        })
        if (hasTurma && turmas.length === 0) return
 
        const hasGrupo = initialSelected.some(s => {
-         const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+         const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
          return type === 'grupo'
        })
        if (hasGrupo && gruposManuais.length === 0) return
@@ -200,7 +203,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     const map: typeof selected = {}
       initialSelected.forEach(s => {
-        const type = s.id.startsWith('f_') || s.id === 'func' ? 'funcionario' : s.id.startsWith('a_') ? 'aluno' : s.id.startsWith('g_') ? 'grupo' : 'turma'
+        const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
         
         if (type === 'turma') {
            const t = turmas.find((x:any) => String(x.id) === String(s.id) || String(x.nome) === String(s.name))
@@ -602,7 +605,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {searchQuery.trim() !== '' ? (
+                        {isLoadingData ? (
+                          Array.from({ length: 4 }).map((_, i) => (
+                            <div key={`skel-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderRadius: 20, background: '#f8fafc', border: '2px solid #e2e8f0' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ height: 16, width: '50%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                                <div style={{ height: 12, width: '30%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                              </div>
+                            </div>
+                          ))
+                        ) : searchQuery.trim() !== '' ? (
                            flatPeopleList.length === 0 ? (
                              <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
                                 Nenhum resultado encontrado para "{searchQuery}"
@@ -707,16 +720,18 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                       {item.title}
                                     </span>
                                     {item.subtitle && (
-                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B' }}>
                                         {item.subtitle}
+                                      </span>
+                                    )}
+                                    {item.countBadge && (
+                                      <span style={{ fontSize: 10, fontWeight: 500, color: '#94A3B8', marginTop: item.subtitle ? 2 : 0 }}>
+                                        {item.countBadge}
                                       </span>
                                     )}
                                   </div>
 
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                    <div style={{ background: '#F1F5F9', color: '#475569', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 100 }}>
-                                      {item.countBadge}
-                                    </div>
                                     {isCategory && (
                                       <ChevronRight size={20} color="#94A3B8" />
                                     )}

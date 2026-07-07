@@ -130,6 +130,27 @@ export function SidebarSimulados() {
         <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
 
         <button
+          onClick={() => window.location.href = '/login?step=choose_system'}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 4,
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: '#00D2FF',
+            minWidth: 60,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ padding: '8px 16px', borderRadius: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <LayoutDashboard size={18} />
+          </div>
+          <span style={{ fontSize: 10, color: '#00D2FF', fontWeight: 600, textAlign: 'center', lineHeight: 1.1 }}>Trocar<br/>Módulo</span>
+        </button>
+
+        <button
           onClick={handleLogout}
           style={{
             display: 'flex',

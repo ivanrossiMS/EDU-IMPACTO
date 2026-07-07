@@ -507,8 +507,8 @@ export default function NovoComunicadoModal({
               
               {selectedDest.length > 0 && (
                 <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 120, overflowY: 'auto' }}>
-                  {selectedDest.map(d => (
-                    <div key={d.id} className="ad-nc-chip" onClick={e => e.stopPropagation()}>
+                  {selectedDest.map((d, i) => (
+                    <div key={d.id || `dest_${i}`} className="ad-nc-chip" onClick={e => e.stopPropagation()}>
                       {d.type === 'turma' ? <Users size={12} /> : <UserAvatar name={d.name} size={16} />}
                       {d.name}
                       {onRemoveDest && (

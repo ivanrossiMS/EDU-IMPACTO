@@ -102,7 +102,7 @@ export default function UploadSimuladoPage() {
     const allowed = ['.doc', '.docx']
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!allowed.includes(ext)) {
-      setParseError('Formato não suportado. Use apenas .doc ou .docx')
+      setParseError('Formato não suportado. Use apenas .docx')
       return
     }
     setFileName(file.name)
@@ -323,10 +323,10 @@ export default function UploadSimuladoPage() {
                 {dragOver ? 'Solte o arquivo aqui!' : 'Arraste ou clique para enviar'}
               </h3>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: '0 0 20px' }}>
-                Suportamos arquivos <strong>.DOC ou .DOCX</strong> (Word) com questões e alternativas
+                Suportamos arquivos <strong>.DOCX</strong> (Word) com questões e alternativas
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                {[{ icon: FileText, label: '.DOC/DOCX — Word', color: '#3b82f6' }].map((t, i) => (
+                {[{ icon: FileText, label: '.DOCX — Word', color: '#3b82f6' }].map((t, i) => (
                   <div key={i} style={{ padding: '8px 16px', borderRadius: 10, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <t.icon size={14} color={t.color} />
                     <span style={{ fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
@@ -334,6 +334,19 @@ export default function UploadSimuladoPage() {
                 ))}
               </div>
             </motion.div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+            <motion.button 
+              onClick={() => setUploadStep('review')}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 14, background: 'transparent', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.3)', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.05)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Plus size={18} /> Inserir questões manualmente
+            </motion.button>
           </div>
 
           {parseError && (

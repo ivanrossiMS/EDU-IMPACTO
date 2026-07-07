@@ -134,7 +134,7 @@ export default function ScannerPage() {
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
-        const MAX_DIMENSION = 1600
+        const MAX_DIMENSION = 1200 // Otimizado para reduzir tamanho do arquivo sem perder legibilidade
         let { width, height } = img
 
         if (width > height) {
@@ -158,7 +158,7 @@ export default function ScannerPage() {
         ctx.fillRect(0, 0, width, height)
         ctx.drawImage(img, 0, 0, width, height)
 
-        resolve(canvas.toDataURL('image/jpeg', 0.65))
+        resolve(canvas.toDataURL('image/jpeg', 0.55)) // Compressão ajustada para 55%
       }
       img.onerror = reject
       img.src = URL.createObjectURL(file)
@@ -432,7 +432,7 @@ export default function ScannerPage() {
                   <select value={bimestre} onChange={e => setBimestre(e.target.value)} required style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-body))', color: 'hsl(var(--text-primary))', outline: 'none' }}>
                     <option value="" disabled>Selecione um bimestre</option>
                     {bimestresList.map((b: any) => (
-                      <option key={b.id} value={b.id}>{b.nome} ({b.ano_letivo})</option>
+                      <option key={b.id} value={b.nome}>{b.nome} ({b.ano_letivo})</option>
                     ))}
                   </select>
                 </div>

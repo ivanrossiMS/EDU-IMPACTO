@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useApp } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
-
-type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role'
-
+type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
   { icon: '💰', label: 'Financeiro Completo', desc: 'Mensalidades, inadimplência e fluxo de caixa' },
@@ -266,18 +264,8 @@ export default function LoginPage() {
            perfil: perfilReal
         })
         setHasDualRole(isAlsoFamily)
-        setHasDualRole(isAlsoFamily)
 
-        const isApp = typeof window !== 'undefined' && !!(window as any).Capacitor;
-        if (isApp) {
-          if (perfilReal === 'Diretor Geral' || cargoReal === 'Administrador Master') {
-            router.push('/agenda-digital/selecionar-perfil-admin');
-          } else {
-            router.push('/agenda-digital/selecionar-aluno');
-          }
-        } else {
-          setStep('choose_system')
-        }
+        setStep('choose_system')
         
         setLoginLoading(false)
         return;
@@ -309,7 +297,7 @@ export default function LoginPage() {
       }
 
       const { user } = await res.json()
-      setFaUser(user); setStep('first_access_create'); setFaRegEmail(user.email || '') 
+      setFaUser(user); setStep(step === 'forgot_password' ? 'forgot_password_create' : 'first_access_create'); setFaRegEmail(user.email || '') 
     } catch (err: any) {
       setFaError(err.message)
     } finally {
@@ -440,10 +428,10 @@ export default function LoginPage() {
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:22 }}>
           <div>
-            <Label text="E-mail, Matrícula (Aluno) ou CPF" />
+            <Label text="E-mail, Código ou Celular" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>👤</span>
-              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="Digite seu e-mail, matrícula ou CPF" autoComplete="username"
+              <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="Digite seu e-mail, código ou celular" autoComplete="username"
                 suppressHydrationWarning
                 style={{ ...baseInputStyle, paddingLeft: 46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
             </div>
@@ -451,14 +439,16 @@ export default function LoginPage() {
           <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
               <Label text="Senha" />
-              <button type="button" onClick={(e) => { e.preventDefault(); window.location.href = '/esqueci-senha'; }} style={{ fontSize:12, color:'#a78bfa', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0 }}>Esqueci minha senha</button>
             </div>
-            <div style={{ position:'relative' }} suppressHydrationWarning>
+            <div style={{ position:'relative', marginBottom: 8 }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>🔒</span>
               <input type={showPw?'text':'password'} value={password} onChange={e=>{setPassword(e.target.value);setLoginError('')}} placeholder="Digite sua senha" autoComplete="current-password"
                 suppressHydrationWarning
                 style={{ ...baseInputStyle, paddingLeft: 46, paddingRight:46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
               <button type="button" onClick={()=>setShowPw(p=>!p)} style={{ position:'absolute', right:16, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16, color:'rgba(255,255,255,0.5)' }}>{showPw?'🙈':'👁'}</button>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => window.location.href = '/esqueci-senha'} style={{ fontSize:13, color:'#fbbf24', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0, transition:'color 0.2s', letterSpacing:'0.02em' }} onMouseEnter={e=>e.currentTarget.style.color='#fcd34d'} onMouseLeave={e=>e.currentTarget.style.color='#fbbf24'}>🤔 Esqueci minha senha</button>
             </div>
           </div>
           <ErrorBox msg={loginError} />
@@ -486,14 +476,14 @@ export default function LoginPage() {
             <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.08)' }} />
           </div>
           <button type="button" onClick={()=>setStep('first_access_verify')}
-            style={{ width:'100%', padding:'16px', borderRadius:16, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', fontSize:14, fontWeight:700, cursor:'pointer', transition:'all 0.25s', fontFamily:"'Outfit',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            style={{ width:'100%', padding:'16px', borderRadius:16, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', color:'rgba(255,255,255,0.8)', fontSize:16, fontWeight:700, cursor:'pointer', transition:'all 0.25s', fontFamily:"'Outfit',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
             onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.06)'}}
             onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'}}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 14 }}>🔑</span>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: 16 }}>🔑</span>
               </div>
-              <span>Primeiro Acesso (Alunos/Pais)</span>
+              <span style={{ fontSize: 20 }}>Primeiro Acesso</span>
             </div>
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 20, paddingRight: 4 }}>›</span>
           </button>
@@ -555,19 +545,19 @@ export default function LoginPage() {
       </motion.button>
       <style dangerouslySetInnerHTML={{__html: `button:hover .back-arrow { transform: translateX(-3px); }`}} />
       <div style={{ marginBottom:32 }}>
-        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background:'rgba(139,92,246,0.1)', border:'1px solid rgba(139,92,246,0.25)', marginBottom:20 }}>
-          <span>🔑</span><span style={{ fontSize:11, fontWeight:700, color:'#a78bfa', letterSpacing:'0.06em' }}>PRIMEIRO ACESSO</span>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 14px', borderRadius:100, background: step === 'forgot_password' ? 'rgba(245,158,11,0.1)' : 'rgba(139,92,246,0.1)', border: step === 'forgot_password' ? '1px solid rgba(245,158,11,0.25)' : '1px solid rgba(139,92,246,0.25)', marginBottom:20 }}>
+          <span>{step === 'forgot_password' ? '🔐' : '🔑'}</span><span style={{ fontSize:11, fontWeight:700, color: step === 'forgot_password' ? '#fbbf24' : '#a78bfa', letterSpacing:'0.06em' }}>{step === 'forgot_password' ? 'RECUPERAÇÃO DE SENHA' : 'PRIMEIRO ACESSO'}</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Identificação</h2>
-        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong>, <strong style={{ color:'rgba(255,255,255,0.6)' }}>matrícula do aluno</strong> ou <strong style={{ color:'rgba(255,255,255,0.6)' }}>CPF</strong> para verificar seu acesso.</p>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:30, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>{step === 'forgot_password' ? 'Esqueceu a senha?' : 'Identificação'}</h2>
+        <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>Informe o <strong style={{ color:'rgba(255,255,255,0.6)' }}>e-mail cadastrado</strong>, <strong style={{ color:'rgba(255,255,255,0.6)' }}>código do aluno</strong> ou <strong style={{ color:'rgba(255,255,255,0.6)' }}>celular do usuário</strong> para verificar seu acesso.</p>
       </div>
       <div className="login-card" style={cardStyle}>
         <form onSubmit={handleVerify} style={{ display:'flex', flexDirection:'column', gap:20 }}>
           <div>
-            <Label text="E-mail Institucional, Celular ou Código" />
+            <Label text="E-mail, Celular ou Código" />
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
-              <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('')}} placeholder="E-mail, CPF, ou Código do Aluno" autoFocus suppressHydrationWarning
+              <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('')}} placeholder="E-mail, Celular, ou Código do Aluno" autoFocus suppressHydrationWarning
                 style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
             </div>
             <p style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:8 }}>Use o e-mail ou código/login vinculado ao seu cadastro escolar.</p>
@@ -584,9 +574,9 @@ export default function LoginPage() {
         </form>
         {/* Hint para admin */}
         <div style={{ marginTop:20, padding:'12px 16px', borderRadius:12, background:'rgba(59,130,246,0.05)', border:'1px solid rgba(59,130,246,0.15)' }}>
-          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>ℹ PRIMEIRO ACESSO</div>
+          <div style={{ fontSize:11, fontWeight:700, color:'rgba(59,130,246,0.7)', marginBottom:4, letterSpacing:'0.06em' }}>ℹ {step === 'forgot_password' ? 'RECUPERAÇÃO' : 'PRIMEIRO ACESSO'}</div>
           <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)' }}>
-            Este fluxo é destinado a alunos e responsáveis para criação da primeira senha no app.
+            {step === 'forgot_password' ? 'Este fluxo irá redefinir a sua senha para voltar a acessar o app.' : 'Este fluxo é destinado para criação da primeira senha no app.'}
           </div>
         </div>
       </div>
@@ -616,7 +606,7 @@ export default function LoginPage() {
           </div>
           <span style={{ marginLeft:'auto', fontSize:20 }}>👍</span>
         </div>
-        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', marginBottom:6 }}>Crie sua senha</h2>
+        <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:28, fontWeight:900, color:'#fff', marginBottom:6 }}>{step === 'forgot_password_create' ? 'Crie uma nova senha' : 'Crie sua senha'}</h2>
         <p style={{ fontSize:14, color:'rgba(255,255,255,0.35)' }}>Defina uma senha segura para acessar a plataforma.</p>
       </div>
 
@@ -624,8 +614,8 @@ export default function LoginPage() {
         {createSuccess ? (
           <div style={{ textAlign:'center', padding:'20px 0' }}>
             <div style={{ fontSize:52, marginBottom:16 }}>🎉</div>
-            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:22, fontWeight:900, color:'#fff', marginBottom:8 }}>Senha criada com sucesso!</div>
-            <p style={{ fontSize:14, color:'rgba(255,255,255,0.4)' }}>Redirecionando para o login...</p>
+            <div style={{ fontFamily:"'Outfit',sans-serif", fontSize:22, fontWeight:900, color:'#fff', marginBottom:8 }}>{step === 'forgot_password_create' ? 'Senha redefinida com sucesso!' : 'Senha criada com sucesso!'}</div>
+            <p style={{ fontSize:14, color:'rgba(255,255,255,0.4)' }}>Pode demorar alguns minutinhos para o e-mail chegar. Redirecionando...</p>
             <div style={{ marginTop:20, height:3, borderRadius:2, background:'rgba(255,255,255,0.1)', overflow:'hidden' }}>
               <div style={{ height:'100%', borderRadius:2, background:'linear-gradient(90deg,#10b981,#3b82f6)', width:'100%', animation:'progressFill 2.2s linear forwards' }} />
             </div>
@@ -926,9 +916,9 @@ export default function LoginPage() {
 
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
-        {step === 'login'                && LoginContent}
-        {step === 'first_access_verify'  && FirstAccessVerify}
-        {step === 'first_access_create' && FirstAccessCreate}
+        {step === 'login' && LoginContent}
+        {(step === 'first_access_verify' || step === 'forgot_password') && FirstAccessVerify}
+        {(step === 'first_access_create' || step === 'forgot_password_create') && FirstAccessCreate}
         {step === 'setup_master' && SetupMasterContent}
         {step === 'choose_system' && ChooseSystemContent}
         {step === 'choose_agenda_role' && ChooseAgendaRoleContent}

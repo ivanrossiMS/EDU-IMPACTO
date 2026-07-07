@@ -763,11 +763,11 @@ export function ComunicadoViewModal({
                 badgeText = "PAGAMENTO RECEBIDO";
                 Icon = CheckCircle2;
               } else if (isOverdue) {
-                colors.bg = '#fffbeb';
-                colors.accent = '#f59e0b'; // Orange
-                colors.accentBg = '#fffbeb';
-                colors.border = 'rgba(245,158,11,0.25)';
-                badgeText = "PAGAMENTO EM ABERTO";
+                colors.bg = '#fef2f2';
+                colors.accent = '#ef4444'; // Red
+                colors.accentBg = '#fef2f2';
+                colors.border = 'rgba(239,68,68,0.25)';
+                badgeText = "COBRANÇA VENCIDA";
                 Icon = ShieldAlert;
               } else {
                 colors.bg = '#fffbeb';
@@ -821,8 +821,9 @@ export function ComunicadoViewModal({
                        </div>
                      ) : paymentLink ? (
                         <button 
-                          onClick={() => window.open(paymentLink, '_blank')}
-                          style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40` }}
+                          onClick={() => !isOverdue && window.open(paymentLink, '_blank')}
+                          disabled={isOverdue}
+                          style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: isOverdue ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40` }}
                         >
                           <ExternalLink size={18} />
                           ACESSAR FATURA
@@ -830,8 +831,8 @@ export function ComunicadoViewModal({
                      ) : (
                         <button 
                           onClick={handleGeneratePayment}
-                          disabled={isGeneratingPayment}
-                          style={{ width: '100%', background: colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: isGeneratingPayment ? 'wait' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: `0 4px 12px ${colors.accent}40`, opacity: isGeneratingPayment ? 0.7 : 1 }}
+                          disabled={isGeneratingPayment || isOverdue}
+                          style={{ width: '100%', background: isOverdue ? '#94a3b8' : colors.accent, color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: (isGeneratingPayment || isOverdue) ? (isOverdue ? 'not-allowed' : 'wait') : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isOverdue ? 'none' : `0 4px 12px ${colors.accent}40`, opacity: (isGeneratingPayment && !isOverdue) ? 0.7 : 1 }}
                         >
                           <CreditCard size={18} />
                           {isGeneratingPayment ? 'GERANDO LINK...' : 'PAGAR AGORA'}

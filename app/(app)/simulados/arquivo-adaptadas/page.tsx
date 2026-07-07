@@ -53,7 +53,22 @@ export default function ArquivoAdaptadasPage() {
           console.error(json.error)
           setArquivos([])
         } else {
-          const data = json.data || []
+          let data = json.data || []
+          
+          try {
+            const { data: bimestresData } = await supabase.from('simulados_bimestres').select('id, nome')
+            if (bimestresData) {
+              const bimestresMap = new Map()
+              bimestresData.forEach(b => bimestresMap.set(b.id, b.nome))
+              data = data.map((item: any) => ({
+                ...item,
+                bimestre: bimestresMap.get(item.bimestre) || item.bimestre
+              }))
+            }
+          } catch (e) {
+            console.error('Erro ao mapear bimestres:', e)
+          }
+
           setArquivos(data)
           
           const anos = new Set<string>()
@@ -254,9 +269,20 @@ export default function ArquivoAdaptadasPage() {
 
                           return sortedBimestres.map(bim => (
                             <div key={bim} style={{ marginBottom: bim === sortedBimestres[sortedBimestres.length - 1] ? 0 : 16 }}>
-                              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 600, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                {bim}
-                              </h5>
+                              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                                <div style={{ 
+                                  fontSize: 11, fontWeight: 700, 
+                                  color: bim === 'Outros' ? 'hsl(var(--text-secondary))' : '#3b82f6', 
+                                  textTransform: 'uppercase', letterSpacing: 0.5, 
+                                  background: bim === 'Outros' ? 'hsl(var(--bg-elevated))' : 'rgba(59, 130, 246, 0.1)', 
+                                  border: `1px solid ${bim === 'Outros' ? 'hsl(var(--border-subtle))' : 'rgba(59, 130, 246, 0.2)'}`, 
+                                  padding: '4px 12px', borderRadius: 20,
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                  display: 'inline-flex', alignItems: 'center'
+                                }}>
+                                  {bim}
+                                </div>
+                              </div>
                               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                                 {byBimestre[bim].map((arq: any) => (
                                   <div key={arq.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))' }}>

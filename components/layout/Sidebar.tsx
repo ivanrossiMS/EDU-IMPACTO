@@ -571,6 +571,37 @@ export function Sidebar() {
                   )}
                 </motion.button>
 
+                {/* Option: Trocar Módulo */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: 'rgba(0, 210, 255, 0.04)' }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowTopMenu(false);
+                    window.location.href = '/login?step=choose_system';
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: effectiveCollapsed ? '10px' : '10px 14px',
+                    borderRadius: 12,
+                    background: 'rgba(255, 255, 255, 0)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: effectiveCollapsed ? 'center' : 'flex-start',
+                    gap: 12,
+                    color: '#00D2FF',
+                    transition: 'all 0.2s',
+                    textAlign: 'left'
+                  }}
+                >
+                  <LayoutDashboard size={18} color="#00D2FF" style={{ filter: 'drop-shadow(0 0 5px rgba(0, 210, 255, 0.5))', flexShrink: 0 }} />
+                  {!effectiveCollapsed && (
+                    <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.02em' }}>Trocar Módulo</span>
+                  )}
+                </motion.button>
+
                 {/* Option 2: Sair */}
                 <motion.button
                   whileHover={{ scale: 1.02, backgroundColor: 'rgba(239, 68, 68, 0.04)' }}

@@ -16,9 +16,11 @@ interface ReportsSelectionModalProps {
 
 export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {
   const { templates: contextTemplates = [] } = useRelatorios()
-  const [alunos] = useSupabaseArray<any>('alunos')
-  const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
-  const [turmas = []] = useSupabaseArray<any>('turmas')
+  const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos')
+  const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
+  const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
+  
+  const isLoadingData = loadingAlunos || loadingGrupos || loadingTurmas
 
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
@@ -36,27 +38,52 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
   // Load only dynamic context templates
   const allTemplates = contextTemplates.filter(t => t.status === 'ativo')
 
-  // Derive available years from students directly to guarantee exact matches
+  // Derive available years from students and turmas directly to guarantee exact matches
   const availableYears = React.useMemo(() => {
     const years = new Set<string>()
     alunos.forEach((a: any) => {
       const year = String(a.ano_letivo || a.anoLetivo || a.ano || '')
       if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
     })
+    turmas.forEach((t: any) => {
+      const year = String(t.ano || t.dados?.anoLetivo || '')
+      if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
+    })
+    // Include current year as fallback
+    years.add(new Date().getFullYear().toString())
     return Array.from(years).sort((a, b) => b.localeCompare(a))
-  }, [alunos])
+  }, [alunos, turmas])
 
-  // Derive available classes from students for the selected year
+  // Derive available classes from turmas and students for the selected year
   const availableTurmas = React.useMemo(() => {
     if (!filterYear) return []
     const classMap = new Map<string, string>()
+
+    turmas.forEach((t: any) => {
+      const tYear = String(t.ano || t.dados?.anoLetivo || new Date().getFullYear().toString())
+      if (tYear === filterYear || filterYear === 'Todos') {
+        classMap.set(String(t.id), t.nome || String(t.id))
+      }
+    })
+    
+    const turmasLower = turmas.map((t: any) => ({
+      id: String(t.id).toLowerCase(),
+      codigo: String(t.codigo || '').toLowerCase(),
+      nome: String(t.nome || '').trim().toLowerCase(),
+      original: t
+    }))
+
     alunos.forEach((a: any) => {
       const year = String(a.ano_letivo || a.anoLetivo || a.ano || '')
-      if (year === filterYear && a.turma) {
-        const tId = String(a.turma).trim()
-        const tObj = turmas.find((t: any) => String(t.id) === tId)
-        const tName = tObj?.nome || tId
-        classMap.set(tId, tName)
+      if ((year === filterYear || filterYear === 'Todos' || year === '') && (a.turma || (a as any).turmaId)) {
+        const tRef = String(a.turma || (a as any).turmaId).trim()
+        const tRefLower = tRef.toLowerCase()
+        const tMatched = turmasLower.find(t => t.id === tRefLower || t.codigo === tRefLower || t.nome === tRefLower)
+        const tObj = tMatched ? tMatched.original : null
+        
+        const canonicalId = tObj ? String(tObj.id) : tRef;
+        const tName = tObj ? tObj.nome : tRef;
+        classMap.set(canonicalId, tName)
       }
     })
     return Array.from(classMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
@@ -79,7 +106,11 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
     if (isOpen) {
       let resolved: any[] = []
       if (!selectedDest || selectedDest.length === 0) {
-        resolved = alunos || []
+        resolved = (alunos || []).filter(a => {
+           const aYear = String(a.ano_letivo || a.anoLetivo || a.ano || '')
+           if (filterYear !== '' && filterYear !== 'Todos' && aYear !== filterYear && aYear !== '') return false;
+           return true;
+        })
       } else {
         const directStudentIds = new Set<string>()
         const targetedClasses = new Set<string>()
@@ -99,25 +130,76 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
             }
           }
         })
-        
+        const validTurmaRefs = new Set<string>();
+        targetedClasses.forEach(tc => {
+           validTurmaRefs.add(tc);
+           const tObj = turmas.find((t: any) => String(t.id).toLowerCase() === tc || String(t.codigo).toLowerCase() === tc || String(t.nome).trim().toLowerCase() === tc);
+           if (tObj) {
+              if (tObj.id) validTurmaRefs.add(String(tObj.id).toLowerCase());
+              if (tObj.codigo) validTurmaRefs.add(String(tObj.codigo).toLowerCase());
+              if (tObj.nome) validTurmaRefs.add(String(tObj.nome).trim().toLowerCase());
+           }
+        });
+
         resolved = (alunos || []).filter(a => {
-          return directStudentIds.has(String(a.id)) || targetedClasses.has(String(a.turma || '').toLowerCase())
+           if (directStudentIds.has(String(a.id))) return true;
+           const tRefLower = String(a.turma || '').trim().toLowerCase();
+           const tIdLower = String((a as any).turmaId || '').trim().toLowerCase();
+           return validTurmaRefs.has(tRefLower) || validTurmaRefs.has(tIdLower);
         })
       }
 
-      // Se os destinos principais (selectedDest) estão vazios,
-      // devemos obrigatoriamente usar a turma selecionada no modal para encontrar os alunos.
-      // Se já tinha destinatários e a turma também foi escolhida, a gente filtra os selecionados para só aquela turma.
       if (filterTurmaId && filterTurmaId !== 'all') {
-        resolved = resolved.filter(a => String(a.turma || '').trim().toLowerCase() === filterTurmaId.trim().toLowerCase())
+        const filterLower = filterTurmaId.trim().toLowerCase();
+        
+        // Vamos usar a mesmíssima lógica blindada do DestinatariosModal
+        const byTurmaRef = new Map<string, any[]>()
+        ;(alunos || []).forEach((a: any) => {
+          const refs = [String(a.turma || ''), String((a as any).turmaId || '')].filter(Boolean)
+          refs.forEach(r => {
+            const ref = r.trim().toLowerCase()
+            if (ref) {
+              let list = byTurmaRef.get(ref)
+              if (!list) {
+                list = []
+                byTurmaRef.set(ref, list)
+              }
+              if (!list.find(x => x.id === a.id)) list.push(a)
+            }
+          })
+        })
+
+        const selectedTurma = turmas.find((t: any) => 
+          String(t.id).toLowerCase() === filterLower || 
+          String(t.codigo).toLowerCase() === filterLower || 
+          String(t.nome).trim().toLowerCase() === filterLower
+        );
+        
+        let foundStudents: any[] = []
+        if (selectedTurma) {
+          let tNameLower = '';
+          if (selectedTurma.nome) tNameLower = String(selectedTurma.nome).trim().toLowerCase();
+          
+          foundStudents = byTurmaRef.get(tNameLower) || []
+          if (foundStudents.length === 0 && selectedTurma.id) {
+             foundStudents = byTurmaRef.get(String(selectedTurma.id).toLowerCase()) || []
+          }
+        } else {
+          foundStudents = byTurmaRef.get(filterLower) || []
+        }
+        
+        resolved = foundStudents
+      } else if (selectedDest && selectedDest.length > 0) {
+        // Se nenhuma turma foi selecionada no modal, mas temos destinatários, 
+        // a lista já está filtrada em `resolved`. Não fazemos nada.
       } else {
-        // Se ainda não selecionou a turma, exibimos 0 alunos
+        // Se ainda não selecionou a turma e não há destinatários prévios, exibimos 0 alunos
         resolved = []
       }
 
       setTargetedStudents(resolved)
     }
-  }, [isOpen, selectedDest, alunos, gruposManuais, filterYear, filterTurmaId, availableTurmas])
+  }, [isOpen, selectedDest, alunos, turmas, gruposManuais, filterYear, filterTurmaId, availableTurmas])
 
   // Set default date when going to step 2
   useEffect(() => {
@@ -140,6 +222,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
       templateId: selectedTemplate.id,
       templateName: selectedTemplate.name,
       turmaId: filterTurmaId,
+      turmaName: availableTurmas.find((t: any) => t.id === filterTurmaId)?.name || 'Turma selecionada',
       dataReferencia: new Date().toISOString().split('T')[0],
       studentCount: targetedStudents.length,
       studentIds: targetedStudents.map(st => st.id)
@@ -174,10 +257,55 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
       {isOpen && (
       <div className="ad-reports-modal-overlay" style={{ position: 'fixed', inset: 0, zIndex: 9999999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
         <style>{`
-          @media (max-width: 768px) {
+          @media (min-width: 769px) {
             .ad-reports-step1 {
-              padding: 24px 20px !important;
+              border-radius: 40px;
+              padding: 40px;
+              max-width: 640px;
+              height: auto;
+              width: 100%;
+            }
+            .ad-reports-modal-overlay {
+              padding: 20px;
+            }
+          }
+          @media (max-width: 768px) {
+            .ad-reports-modal-overlay {
+              padding: 0 !important;
+            }
+            .ad-reports-step1 {
+              height: 100dvh !important;
+              max-height: 100dvh !important;
+              width: 100vw !important;
+              max-width: 100vw !important;
+              border-radius: 0 !important;
+              padding: 24px 20px 100px 20px !important;
               gap: 24px !important;
+              overflow-y: auto !important;
+              margin: 0 !important;
+            }
+            .ad-reports-footer {
+              position: fixed !important;
+              bottom: 0 !important;
+              left: 0 !important;
+              right: 0 !important;
+              background: #fff !important;
+              padding: 16px 20px 24px 20px !important;
+              border-top: 1px solid #e2e8f0 !important;
+              z-index: 100 !important;
+              border-radius: 0 !important;
+              box-shadow: 0 -10px 25px rgba(0,0,0,0.05) !important;
+              justify-content: space-between !important;
+              border: none !important;
+            }
+            .ad-reports-footer button {
+              flex: 1 !important;
+              padding: 14px 16px !important;
+              font-size: 14px !important;
+              justify-content: center !important;
+            }
+            .ad-reports-list {
+              max-height: none !important;
             }
           }
         `}</style>
@@ -189,7 +317,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
             exit={{ scale: 0.95, opacity: 0, y: 30 }}
             transition={{ type: "spring", stiffness: 450, damping: 35 }}
             style={{ 
-              background: '#fff', borderRadius: 40, width: '100%', maxWidth: 640, padding: 40, 
+              background: '#fff', width: '100%', 
               boxShadow: '0 50px 100px rgba(15, 23, 42, 0.25)', border: '1px solid rgba(255,255,255,0.4)',
               display: 'flex', flexDirection: 'column', gap: 32
             }}
@@ -215,68 +343,87 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
             {/* Turma filter */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Filtro de Turma</div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <select 
-                    value={filterYear}
-                    onChange={e => { setFilterYear(e.target.value); setFilterTurmaId(''); }}
-                    style={{ width: '100%', height: 48, borderRadius: 16, border: '2px solid #e2e8f0', padding: '0 16px', fontSize: 14, fontWeight: 700, outline: 'none', background: '#f8fafc', color: '#1e293b' }}
-                  >
-                    <option value="" disabled>Selecione o Ano</option>
-                    {availableYears.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+              {isLoadingData ? (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1, height: 48, borderRadius: 16, background: '#f1f5f9', animation: 'pulse 1.5s infinite' }} />
+                  <div style={{ flex: 2, height: 48, borderRadius: 16, background: '#f1f5f9', animation: 'pulse 1.5s infinite' }} />
                 </div>
-                <div style={{ flex: 2 }}>
-                  <select 
-                    value={filterTurmaId}
-                    onChange={e => setFilterTurmaId(e.target.value)}
-                    style={{ width: '100%', height: 48, borderRadius: 16, border: '2px solid #e2e8f0', padding: '0 16px', fontSize: 14, fontWeight: 700, outline: 'none', background: '#f8fafc', color: '#1e293b' }}
-                  >
-                    <option value="" disabled>Selecione a Turma</option>
-                    {availableTurmas.map((t: {id: string, name: string}) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+              ) : (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <select 
+                      value={filterYear}
+                      onChange={e => { setFilterYear(e.target.value); setFilterTurmaId(''); }}
+                      style={{ width: '100%', height: 48, borderRadius: 16, border: '2px solid #e2e8f0', padding: '0 16px', fontSize: 14, fontWeight: 700, outline: 'none', background: '#f8fafc', color: '#1e293b' }}
+                    >
+                      <option value="" disabled>Selecione o Ano</option>
+                      {availableYears.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 2 }}>
+                    <select 
+                      value={filterTurmaId}
+                      onChange={e => setFilterTurmaId(e.target.value)}
+                      style={{ width: '100%', height: 48, borderRadius: 16, border: '2px solid #e2e8f0', padding: '0 16px', fontSize: 14, fontWeight: 700, outline: 'none', background: '#f8fafc', color: '#1e293b' }}
+                    >
+                      <option value="" disabled>Selecione a Turma</option>
+                      {availableTurmas.map((t: {id: string, name: string}) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Template choice */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Escolha o relatório</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 200, overflowY: 'auto', paddingRight: 4 }}>
-                {allTemplates.map(t => (
-                  <div 
-                    key={t.id}
-                    onClick={() => setSelectedTemplate(t)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 16, padding: '18px 24px', borderRadius: 24,
-                      background: selectedTemplate?.id === t.id ? '#f8fafc' : '#fff',
-                      border: selectedTemplate?.id === t.id ? '2px solid #3b82f6' : '2px solid #e2e8f0',
-                      cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-                    }}
-                  >
-                    <div style={{ width: 48, height: 48, borderRadius: 14, background: (t.color || '#6366f1') + '12', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.color || '#6366f1', flexShrink: 0 }}>
-                      {renderIcon(t)}
+              <div className="ad-reports-list" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 200, overflowY: 'auto', paddingRight: 4 }}>
+                {isLoadingData ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderRadius: 20, background: '#f8fafc', border: '2px solid #e2e8f0' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ height: 14, width: '60%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                        <div style={{ height: 10, width: '30%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: '#1e293b', marginBottom: 2 }}>{t.name}</div>
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{t.description || t.category}</div>
+                  ))
+                ) : (
+                  allTemplates.map(t => (
+                    <div 
+                      key={t.id}
+                      onClick={() => setSelectedTemplate(t)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 16, padding: '18px 24px', borderRadius: 24,
+                        background: selectedTemplate?.id === t.id ? '#f8fafc' : '#fff',
+                        border: selectedTemplate?.id === t.id ? '2px solid #3b82f6' : '2px solid #e2e8f0',
+                        cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                      }}
+                    >
+                      <div style={{ width: 48, height: 48, borderRadius: 14, background: (t.color || '#6366f1') + '12', display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.color || '#6366f1', flexShrink: 0 }}>
+                        {renderIcon(t)}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 16, fontWeight: 900, color: '#1e293b', marginBottom: 2 }}>{t.name}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{t.description || t.category}</div>
+                      </div>
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', flexShrink: 0 }}>
+                        {selectedTemplate?.id === t.id && (
+                          <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#3b82f6' }} />
+                        )}
+                      </div>
                     </div>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', flexShrink: 0 }}>
-                      {selectedTemplate?.id === t.id && (
-                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#3b82f6' }} />
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
             {/* Footer */}
-            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 28, display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
+            <div className="ad-reports-footer" style={{ borderTop: '1px solid #e2e8f0', paddingTop: 28, display: 'flex', justifyContent: 'flex-end', gap: 16 }}>
               <button 
                 onClick={onClose} 
                 style={{ padding: '16px 28px', borderRadius: 18, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 15, fontWeight: 800, cursor: 'pointer' }}

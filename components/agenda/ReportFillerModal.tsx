@@ -10,13 +10,14 @@ import { useData } from '@/lib/dataContext';
 interface ReportFillerModalProps {
   isOpen: boolean
   onClose: () => void
+  onBack?: () => void
   anexoStr: string | null
   currentUser: any
   alunos: any[]
   turmas?: any[]
 }
 
-export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alunos, turmas: propTurmas }: ReportFillerModalProps) {
+export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUser, alunos, turmas: propTurmas }: ReportFillerModalProps) {
   const { templates = [] } = useRelatorios()
   const { adAlert, setComunicadosLocally } = useAgendaDigital()
   const { turmas: contextTurmas = [] } = useData()
@@ -66,10 +67,15 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
       return alunos.filter(a => payload.studentIds.includes(a.id));
     }
     if (payload.turmaId) {
-      return alunos.filter(a => String(a.turma || '').trim().toLowerCase() === String(payload.turmaId).trim().toLowerCase());
+      return alunos.filter(a => {
+        const tRef = String(a.turma || '').trim();
+        const tObj = turmas?.find((t: any) => String(t.id) === tRef || String(t.codigo) === tRef || String(t.nome) === tRef);
+        const canonicalId = tObj ? String(tObj.id) : tRef;
+        return canonicalId.toLowerCase() === String(payload.turmaId).trim().toLowerCase() || tRef.toLowerCase() === String(payload.turmaId).trim().toLowerCase();
+      });
     }
     return [];
-  }, [payload, alunos]);
+  }, [payload, alunos, turmas]);
 
   const activeStudents = useMemo(() => {
     if (fillMode === 'especifico') {
@@ -78,12 +84,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
     return targetedStudents;
   }, [fillMode, targetedStudents, selectedStudentIds]);
 
-  // Initialize selected students
+  // Initialize selected students or reset when payload changes
   useEffect(() => {
     if (isOpen && targetedStudents && targetedStudents.length > 0) {
-      setSelectedStudentIds(prev => prev.length === 0 ? targetedStudents.map(s => s.id) : prev);
+      setSelectedStudentIds(targetedStudents.map(s => s.id));
     }
-  }, [isOpen, targetedStudents]);
+  }, [isOpen, payload]);
 
   // Reset state when opening a new report task
   useEffect(() => {
@@ -93,9 +99,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
       setAnswers({})
       setIsSubmitting(false)
       setIsSelectingStudents(false)
-      setSelectedStudentIds([])
     }
-  }, [isOpen, anexoStr])
+  }, [isOpen, payload?.templateId])
 
   if (!isOpen || !payload || !template || targetedStudents.length === 0) return null;
 
@@ -434,14 +439,41 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
   const progressPercentage = fillMode ? ((currentFieldIndex + 1) / allFields.length) * 100 : 0;
 
   const modalContent = (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 999999999, background: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <motion.div 
-        initial={{ opacity: 0, y: 30 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        exit={{ opacity: 0, y: 30 }}
-        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+    <AnimatePresence>
+      {isOpen && template && (
+        <div className="ad-report-filler-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <style>{`
+            @media (min-width: 769px) {
+              .ad-report-filler-modal {
+                border-radius: 24px !important;
+                max-width: 640px !important;
+                height: 85vh !important;
+                flex: none !important;
+                box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+              }
+              .ad-report-filler-overlay {
+                padding: 40px;
+              }
+            }
+            @media (max-width: 768px) {
+              .ad-report-filler-modal {
+                width: 100vw !important;
+                height: 100dvh !important;
+                border-radius: 0 !important;
+              }
+              .ad-report-filler-overlay {
+                padding: 0 !important;
+              }
+            }
+          `}</style>
+          <motion.div 
+            className="ad-report-filler-modal"
+            initial={{ opacity: 0, scale: 0.95, y: 30 }} 
+            animate={{ opacity: 1, scale: 1, y: 0 }} 
+            exit={{ opacity: 0, scale: 0.95, y: 30 }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
         style={{ 
-          background: '#fff', width: '100%', height: '100%', flex: 1,
+          background: '#fff', width: '100%', flex: 1,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           paddingTop: 'env(safe-area-inset-top)', // Ensure iOS notch is covered
           paddingBottom: 'env(safe-area-inset-bottom)'
@@ -455,8 +487,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
             </div>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Preenchimento de Relatório</h3>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                {template.name} • {fillMode ? activeStudents.length : targetedStudents.length} alunos
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span>{template.name}</span>
+                {payload?.turmaName && <span style={{ color: '#3b82f6' }}>{payload.turmaName} • {fillMode ? activeStudents.length : targetedStudents.length} alunos</span>}
               </div>
             </div>
           </div>
@@ -473,38 +506,63 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
 
         {/* STEP 0: SELECTION OF MODE */}
         {!fillMode && !isSelectingStudents ? (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', gap: 20, background: '#f8fafc' }}>
-            <div style={{ textAlign: 'center', marginBottom: 12 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>Como deseja preencher?</h2>
-              <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>Escolha o modo de preenchimento para esta turma.</p>
+          <>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', gap: 20, background: '#f8fafc' }}>
+              <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 6px 0' }}>Como deseja preencher?</h2>
+                <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>Escolha o modo de preenchimento para esta turma.</p>
+              </div>
+
+              <div 
+                onClick={() => setFillMode('igual')}
+                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+              >
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Users size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Igual para todos</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda uma única vez e aplique a todos os {targetedStudents.length} alunos.</p>
+                </div>
+              </div>
+
+              <div 
+                onClick={() => setIsSelectingStudents(true)}
+                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+              >
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <UserCheck size={24} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Específico por aluno</h4>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda individualmente a pergunta para cada aluno na lista.</p>
+                </div>
+              </div>
             </div>
 
-            <div 
-              onClick={() => setFillMode('igual')}
-              style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Users size={24} />
-              </div>
-              <div>
-                <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Igual para todos</h4>
-                <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda uma única vez e aplique a todos os {targetedStudents.length} alunos.</p>
-              </div>
+            {/* Footer */}
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #f1f5f9', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <button 
+                onClick={onBack || onClose}
+                style={{ 
+                  flex: 1, padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', background: '#fff', 
+                  color: '#475569', fontSize: 14, fontWeight: 700, 
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 
+                }}
+              >
+                <ArrowLeft size={16} /> Voltar
+              </button>
+              <button 
+                onClick={onClose}
+                style={{ 
+                  flex: 1, padding: '12px 16px', borderRadius: 12, border: 'none', background: '#f8fafc', 
+                  color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                }}
+              >
+                Cancelar
+              </button>
             </div>
-
-            <div 
-              onClick={() => setIsSelectingStudents(true)}
-              style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
-            >
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <UserCheck size={24} />
-              </div>
-              <div>
-                <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Específico por aluno</h4>
-                <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda individualmente a pergunta para cada aluno na lista.</p>
-              </div>
-            </div>
-          </div>
+          </>
         ) : !fillMode && isSelectingStudents ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, background: '#f8fafc' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -676,7 +734,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, currentUser, alun
           </>
         )}
       </motion.div>
-    </div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 
   return mounted ? createPortal(modalContent, document.body) : modalContent;

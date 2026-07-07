@@ -94,31 +94,38 @@ async function dispatchPushNotifications(supabase: any, row: any) {
     shouldSendReminder = sendAfterDate > new Date();
   }
 
-  // 1. Dispatch for students (individualized messages)
+  // 1. Dispatch for students (grouped to avoid timeouts and infinite loops)
+  const allStudentTargetIds = new Set<string>();
   for (const student of students) {
-    if (!student.responsaveis_ids || student.responsaveis_ids.length === 0) continue;
-    
-    // Notificação Imediata
+    if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+      student.responsaveis_ids.forEach(id => allStudentTargetIds.add(id));
+    }
+  }
+
+  const studentTargetArray = Array.from(allStudentTargetIds);
+
+  if (studentTargetArray.length > 0) {
+    // Notificação Imediata em Lote
     await sendAgendaPushNotification({
       type: 'calendario',
-      itemId: `${row.id}-${student.aluno_id}`,
+      itemId: `${row.id}-all-students`,
       title: '📅 Novo Evento!',
-      message: `O evento "${row.titulo}" foi adicionado para o aluno(a) ${student.aluno_nome}.`,
-      targetUserIds: student.responsaveis_ids,
+      message: `Novo evento no calendário: ${row.titulo}. Confira os detalhes!`,
+      targetUserIds: studentTargetArray,
       targetUrl: '/agenda-digital/calendario'
-    }).catch(err => console.error('Evento Push Error:', err))
+    }).catch(err => console.error('Evento Push Error:', err));
 
-    // Lembrete Agendado
+    // Lembrete Agendado em Lote
     if (shouldSendReminder && sendAfterStr) {
       await sendAgendaPushNotification({
         type: 'calendario',
-        itemId: `${row.id}-${student.aluno_id}-reminder`,
+        itemId: `${row.id}-all-students-reminder`,
         title: '⏰ Lembrete: Amanhã!',
-        message: `Amanhã o aluno(a) ${student.aluno_nome} tem o evento: ${row.titulo}. Não se esqueça!`,
-        targetUserIds: student.responsaveis_ids,
+        message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
+        targetUserIds: studentTargetArray,
         targetUrl: '/agenda-digital/calendario',
         sendAfter: sendAfterStr
-      }).catch(err => console.error('Evento Reminder Error:', err))
+      }).catch(err => console.error('Evento Reminder Error:', err));
     }
   }
 

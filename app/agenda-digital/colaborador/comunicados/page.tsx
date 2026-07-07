@@ -306,12 +306,12 @@ export default function ColaboradorComunicadosPage() {
     setEditComId(c.id)
     
     const dests: any[] = []
-    if (c.turmas) c.turmas.forEach((t: string) => dests.push({ type: 'turma', name: t }))
+    if (c.turmas) c.turmas.forEach((t: string) => dests.push({ type: 'turma', id: `t_${t}`, name: t }))
     if (c.alunosIds) c.alunosIds.forEach((id: string) => {
        const al = alunosAtivos.find((a: any) => a.id.replace(/^a_?/, '') === id.replace(/^a_?/, ''))
        if (al) dests.push({ type: 'aluno', id: al.id, name: al.nome })
     })
-    if (c.grupos) c.grupos.forEach((g: string) => dests.push({ type: 'grupo', name: g }))
+    if (c.grupos) c.grupos.forEach((g: string) => dests.push({ type: 'grupo', id: `g_${g}`, name: g }))
     if (c.funcionariosIds) c.funcionariosIds.forEach((id: string) => {
        const col = colaboradores.find((colItem: any) => colItem.id.replace(/^f_?/, '') === id.replace(/^f_?/, ''))
        if (col) dests.push({ type: 'funcionario', id: col.id, name: col.nome })
@@ -1114,6 +1114,7 @@ export default function ColaboradorComunicadosPage() {
         isOpen={!!openedReportTaskStr}
         anexoStr={openedReportTaskStr}
         onClose={() => setOpenedReportTaskStr(null)}
+        onBack={() => { setOpenedReportTaskStr(null); setShowRelsModal(true); }}
         currentUser={currentUser}
         alunos={alunos}
         turmas={turmas}
