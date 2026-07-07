@@ -238,41 +238,63 @@ export default function ArquivoAdaptadasPage() {
                           {group.aluno_nome}
                         </h4>
                         
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-                          {group.arquivos.map((arq: any) => (
-                            <div key={arq.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
-                                <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <FileText size={16} />
-                                </div>
-                                <div style={{ overflow: 'hidden' }}>
-                                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={arq.titulo}>{arq.titulo}</p>
-                                  <p style={{ margin: 0, fontSize: 11, color: 'hsl(var(--text-tertiary))', display: 'flex', gap: 4, alignItems: 'center' }}>
-                                    {new Date(arq.created_at).toLocaleDateString('pt-BR')}
-                                    {arq.tamanho_bytes ? <span>• {formatBytes(arq.tamanho_bytes)}</span> : null}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              <div style={{ display: 'flex', gap: 6 }}>
-                                <a 
-                                  href={arq.file_url} target="_blank" rel="noopener noreferrer"
-                                  style={{ width: 32, height: 32, borderRadius: 8, background: 'hsl(var(--bg-elevated))', color: '#3b82f6', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-                                  title="Visualizar/Baixar"
-                                >
-                                  <Download size={14} />
-                                </a>
-                                <button 
-                                  onClick={() => handleDelete(arq.id, arq.file_url)}
-                                  style={{ width: 32, height: 32, borderRadius: 8, background: 'hsl(var(--bg-elevated))', color: '#ef4444', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-                                  title="Excluir"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
+                        {(() => {
+                          const byBimestre = group.arquivos.reduce((acc: any, curr: any) => {
+                            const bim = curr.bimestre || 'Outros'
+                            if (!acc[bim]) acc[bim] = []
+                            acc[bim].push(curr)
+                            return acc
+                          }, {})
+
+                          const sortedBimestres = Object.keys(byBimestre).sort((a, b) => {
+                            if (a === 'Outros') return 1
+                            if (b === 'Outros') return -1
+                            return a.localeCompare(b)
+                          })
+
+                          return sortedBimestres.map(bim => (
+                            <div key={bim} style={{ marginBottom: bim === sortedBimestres[sortedBimestres.length - 1] ? 0 : 16 }}>
+                              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 600, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                {bim}
+                              </h5>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                                {byBimestre[bim].map((arq: any) => (
+                                  <div key={arq.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, overflow: 'hidden' }}>
+                                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <FileText size={16} />
+                                      </div>
+                                      <div style={{ overflow: 'hidden' }}>
+                                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={arq.titulo}>{arq.titulo}</p>
+                                        <p style={{ margin: 0, fontSize: 11, color: 'hsl(var(--text-tertiary))', display: 'flex', gap: 4, alignItems: 'center' }}>
+                                          {new Date(arq.created_at).toLocaleDateString('pt-BR')}
+                                          {arq.tamanho_bytes ? <span>• {formatBytes(arq.tamanho_bytes)}</span> : null}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                      <a 
+                                        href={arq.file_url} target="_blank" rel="noopener noreferrer"
+                                        style={{ width: 32, height: 32, borderRadius: 8, background: 'hsl(var(--bg-elevated))', color: '#3b82f6', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                                        title="Visualizar/Baixar"
+                                      >
+                                        <Download size={14} />
+                                      </a>
+                                      <button 
+                                        onClick={() => handleDelete(arq.id, arq.file_url)}
+                                        style={{ width: 32, height: 32, borderRadius: 8, background: 'hsl(var(--bg-elevated))', color: '#ef4444', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                                        title="Excluir"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          ))
+                        })()}
                       </div>
                     ))}
                   </div>
