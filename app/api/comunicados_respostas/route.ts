@@ -12,18 +12,25 @@ export async function GET(request: Request) {
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url);
   const comunicadoId = searchParams.get('comunicado_id');
+  const comunicadoIds = searchParams.get('comunicado_ids');
   const remetenteId = searchParams.get('remetente_id'); // If parent is viewing, they pass their ID to only see their chat
   const isAdmin = searchParams.get('admin') === 'true'; // Admin passes admin=true
 
-  if (!comunicadoId) {
-    return NextResponse.json({ error: 'comunicado_id is required' }, { status: 400 });
+  if (!comunicadoId && !comunicadoIds) {
+    return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
   }
 
   let query = supabase
     .from('comunicados_respostas')
     .select('*')
-    .eq('comunicado_id', comunicadoId)
     .order('created_at', { ascending: true });
+
+  if (comunicadoIds) {
+    const idsArray = comunicadoIds.split(',');
+    query = query.in('comunicado_id', idsArray);
+  } else if (comunicadoId) {
+    query = query.eq('comunicado_id', comunicadoId);
+  }
 
   // Privacy rule: if not admin, only fetch messages where remetente_id matches the student/parent
   if (!isAdmin && remetenteId) {

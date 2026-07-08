@@ -33,6 +33,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, Record<string, any>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [reportTitle, setReportTitle] = useState('')
 
   // Parse payload
   const payload = useMemo(() => {
@@ -68,10 +69,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     }
     if (payload.turmaId) {
       return alunos.filter(a => {
-        const tRef = String(a.turma || '').trim();
-        const tObj = turmas?.find((t: any) => String(t.id) === tRef || String(t.codigo) === tRef || String(t.nome) === tRef);
-        const canonicalId = tObj ? String(tObj.id) : tRef;
-        return canonicalId.toLowerCase() === String(payload.turmaId).trim().toLowerCase() || tRef.toLowerCase() === String(payload.turmaId).trim().toLowerCase();
+        const refs = [String(a.turma || '').trim(), String((a as any).turmaId || '').trim()].filter(Boolean);
+        return refs.some(tRef => {
+          const tObj = turmas?.find((t: any) => String(t.id) === tRef || String(t.codigo) === tRef || String(t.nome) === tRef);
+          const canonicalId = tObj ? String(tObj.id) : tRef;
+          return canonicalId.toLowerCase() === String(payload.turmaId).trim().toLowerCase() || tRef.toLowerCase() === String(payload.turmaId).trim().toLowerCase();
+        });
       });
     }
     return [];
@@ -99,6 +102,13 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       setAnswers({})
       setIsSubmitting(false)
       setIsSelectingStudents(false)
+      setReportTitle('')
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
     }
   }, [isOpen, payload?.templateId])
 
@@ -221,9 +231,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
          }
       }
 
+      const baseTitle = reportTitle ? reportTitle : `Relatório de Rotina`;
+      const cleanTitle = baseTitle.replace(/Cópia - /g, '');
+
       newComunicados.push({
         id: `AD-COM-REL-STU-${Date.now()}-${aluno.id}-${Math.random().toString(36).substr(2, 5)}`,
-        titulo: `Relatório de Rotina: ${aluno.nome.split(' ')[0]}`,
+        titulo: `${cleanTitle}: ${aluno.nome.split(' ')[0]}`,
         conteudo: `Olá! O relatório de rotina diária do(a) aluno(a) ${aluno.nome.split(' ')[0]} já está disponível. Clique no anexo abaixo para visualizar.`,
         tipo: 'texto',
         autor: currentUser?.nome || 'Equipe Pedagógica',
@@ -265,9 +278,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     
     const uniqueTurmas = Array.from(new Set(activeStudents.map(a => getTurmaName(a)))).filter(Boolean) as string[];
 
+    const baseColabTitle = reportTitle ? reportTitle : `Relatório: ${template.name}`;
+    const cleanColabTitle = baseColabTitle.replace(/Cópia - /g, '');
+
     newComunicados.push({
         id: `AD-COM-REL-COLAB-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        titulo: `Cópia do Relatório: ${template.name}`,
+        titulo: cleanColabTitle,
         conteudo: `Relatório dinâmico enviado para a turma.\n\nVocê pode visualizar o relatório individual de cada aluno clicando nos anexos abaixo.`,
         tipo: 'texto',
         autor: currentUser?.nome || 'Equipe Pedagógica',
@@ -511,6 +527,17 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               <div style={{ textAlign: 'center', marginBottom: 12 }}>
                 <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 6px 0' }}>Como deseja preencher?</h2>
                 <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>Escolha o modo de preenchimento para esta turma.</p>
+              </div>
+
+              <div style={{ background: '#fff', padding: 16, borderRadius: 16, border: '2px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: '#475569', marginBottom: 8 }}>TÍTULO DO COMUNICADO</label>
+                <input 
+                  type="text" 
+                  value={reportTitle} 
+                  onChange={e => setReportTitle(e.target.value)} 
+                  placeholder="Ex: Rotina Diária" 
+                  style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 15, fontWeight: 600, color: '#0f172a', outline: 'none' }}
+                />
               </div>
 
               <div 

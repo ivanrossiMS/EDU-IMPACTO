@@ -16,7 +16,7 @@ interface ReportsSelectionModalProps {
 
 export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {
   const { templates: contextTemplates = [] } = useRelatorios()
-  const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos')
+  const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight')
   const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
   
@@ -97,6 +97,12 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
       setSearchStudent('')
       setFilterYear('')
       setFilterTurmaId('')
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
@@ -177,13 +183,19 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
         
         let foundStudents: any[] = []
         if (selectedTurma) {
-          let tNameLower = '';
-          if (selectedTurma.nome) tNameLower = String(selectedTurma.nome).trim().toLowerCase();
+          const uniqueStudents = new Map<string, any>()
           
-          foundStudents = byTurmaRef.get(tNameLower) || []
-          if (foundStudents.length === 0 && selectedTurma.id) {
-             foundStudents = byTurmaRef.get(String(selectedTurma.id).toLowerCase()) || []
-          }
+          const tRefs = new Set<string>()
+          if (selectedTurma.id) tRefs.add(String(selectedTurma.id).toLowerCase())
+          if (selectedTurma.codigo) tRefs.add(String(selectedTurma.codigo).toLowerCase())
+          if (selectedTurma.nome) tRefs.add(String(selectedTurma.nome).trim().toLowerCase())
+          
+          tRefs.forEach(ref => {
+             const list = byTurmaRef.get(ref) || []
+             list.forEach(a => uniqueStudents.set(a.id, a))
+          })
+          
+          foundStudents = Array.from(uniqueStudents.values())
         } else {
           foundStudents = byTurmaRef.get(filterLower) || []
         }

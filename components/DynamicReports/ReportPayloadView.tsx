@@ -14,15 +14,35 @@ interface ReportPayloadViewProps {
   targetStudentId?: string;
   targetStudentName?: string;
   targetStudentAvatar?: string;
+  alunos?: any[];
 }
 
-export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStudentId, targetStudentName, targetStudentAvatar }: ReportPayloadViewProps) {
+export function ReportPayloadView({ 
+  isOpen, 
+  onClose, 
+  attachmentString, 
+  targetStudentId, 
+  targetStudentName, 
+  targetStudentAvatar,
+  alunos: propAlunos
+}: ReportPayloadViewProps) {
   const [mounted, setMounted] = useState(false);
-  const { turmas = [] } = useData();
+  const { turmas = [], alunos: contextAlunos = [] } = useData();
+  const alunos = propAlunos || contextAlunos;
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   const payload = useMemo(() => {
     if (!attachmentString) return null;
@@ -57,11 +77,20 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStu
     }
 
     const firstStudentId = Object.keys(payload.values || {})[0];
-    const studentIdToUse = targetStudentId || firstStudentId;
+    const studentIdToUse = targetStudentId || firstStudentId || payload.studentInfo?.id;
+    
+    let currentAvatarUrl = targetStudentAvatar || payload.studentInfo?.avatarUrl || null;
+    if (!currentAvatarUrl && studentIdToUse && alunos && alunos.length > 0) {
+      const foundAluno = alunos.find((a: any) => String(a.id) === String(studentIdToUse) || String(a.id) === String(studentIdToUse).replace(/^a_?/, ''));
+      if (foundAluno && foundAluno.foto) {
+         currentAvatarUrl = foundAluno.foto;
+      }
+    }
     
     const info = { 
-        ...(payload.studentInfo || { id: studentIdToUse || 'unknown', name: targetStudentName || 'Aluno(a)', avatarUrl: targetStudentAvatar || null }), 
-        turma: displayTurma 
+        ...(payload.studentInfo || { id: studentIdToUse || 'unknown', name: targetStudentName || 'Aluno(a)' }), 
+        turma: displayTurma,
+        avatarUrl: currentAvatarUrl
     };
 
     const temp = MOCK_TEMPLATES.find((t) => t.id === payload.templateId) || {
@@ -156,9 +185,6 @@ export function ReportPayloadView({ isOpen, onClose, attachmentString, targetStu
               <h2 className="text-[17px] font-[800] text-white m-0 leading-tight relative z-10 tracking-wide">
                 Relatório Diário
               </h2>
-              <p className="text-[12px] mt-0.5 relative z-10 font-[500]" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                {payload.dataReferencia || new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-              </p>
             </motion.div>
 
             {/* Content Area */}

@@ -1083,6 +1083,7 @@ export default function ColaboradorComunicadosPage() {
         {selectedComunicado && (
           <ComunicadoViewModal
             comunicado={selectedComunicado}
+            allComunicados={comunicados}
             onClose={() => setSelectedComunicado(null)}
             onCiencia={handleCiencia}
             currentUserSlug={userSlug}
@@ -1124,6 +1125,7 @@ export default function ColaboradorComunicadosPage() {
         isOpen={!!openedReportPayloadStr}
         onClose={() => setOpenedReportPayloadStr(null)}
         attachmentString={openedReportPayloadStr || ''}
+        alunos={alunosAtivos}
       />
 
       <AnimatePresence>

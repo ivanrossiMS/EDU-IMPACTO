@@ -12,7 +12,7 @@ export async function GET(req: Request) {
     // Select apenas os campos básicos e indexados para performance < 100ms
     const { data, error } = await supabase
       .from('alunos')
-      .select('id, nome, matricula, turma, status')
+      .select('id, nome, matricula, turma, status, dados, foto, foto_url')
       .or('status.neq.inativo,status.is.null')
       .order('nome')
 
@@ -27,6 +27,8 @@ export async function GET(req: Request) {
       nome: String(aluno.nome || ''),
       matricula: aluno.matricula || '',
       turma: aluno.turma || '',
+      anoLetivo: aluno.dados?.anoLetivo || aluno.dados?.ano_letivo || '',
+      foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || aluno.dados?.avatarUrl || null,
       status: aluno.status || 'ativo'
     }))
 

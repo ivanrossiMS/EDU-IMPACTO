@@ -196,7 +196,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     let channel: any = null
 
     const setupRealtime = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { user } } = await supabase.auth.getUser()
       // Allow connection even without auth so Monitor TV can receive broadcasts
       
       setRealtimeStatus('connecting')

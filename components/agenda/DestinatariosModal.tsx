@@ -81,15 +81,18 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
     ;(alunos || []).forEach((a: any) => {
       aById.set(String(a.id), a)
-      const ref = String(a.turma)
-      if (ref) {
-        let list = byTurmaRef.get(ref)
-        if (!list) {
-          list = []
-          byTurmaRef.set(ref, list)
+      const refs = [String(a.turma || ''), String((a as any).turmaId || '')].filter(Boolean)
+      refs.forEach(r => {
+        const ref = r.trim().toLowerCase()
+        if (ref) {
+          let list = byTurmaRef.get(ref)
+          if (!list) {
+            list = []
+            byTurmaRef.set(ref, list)
+          }
+          if (!list.find(x => x.id === a.id)) list.push(a)
         }
-        list.push(a)
-      }
+      })
     })
 
     ;(colaboradores || []).forEach((c: any) => {
@@ -101,9 +104,9 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   const getTurmaAlunos = (t: any) => {
     const refs = new Set<string>()
-    if (t.id) refs.add(String(t.id))
-    if (t.codigo) refs.add(String(t.codigo))
-    if (t.nome) refs.add(String(t.nome))
+    if (t.id) refs.add(String(t.id).trim().toLowerCase())
+    if (t.codigo) refs.add(String(t.codigo).trim().toLowerCase())
+    if (t.nome) refs.add(String(t.nome).trim().toLowerCase())
     
     const all: any[] = []
     refs.forEach(ref => {

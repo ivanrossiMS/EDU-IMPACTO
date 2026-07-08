@@ -92,10 +92,9 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verifica sessão via JWT local para performance no middleware (evita 2.5s de latência)
   // O getUser() real e seguro continua sendo chamado nas rotas de API via requireAuth()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user
+  // Utilizando getUser() aqui também para evitar o aviso de segurança do Supabase
+  const { data: { user } } = await supabase.auth.getUser()
 
   // ── Sem sessão → redireciona para login ───────────────────────────────────
   if (!user) {

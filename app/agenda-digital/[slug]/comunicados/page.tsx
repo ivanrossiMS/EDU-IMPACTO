@@ -835,6 +835,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         isOpen={!!openedReportPayloadStr}
         onClose={() => setOpenedReportPayloadStr(null)}
         attachmentString={openedReportPayloadStr || ''}
+        targetStudentId={aluno?.id}
+        targetStudentName={aluno?.nome}
+        targetStudentAvatar={aluno?.foto || aluno?.foto_url || aluno?.dados?.foto || aluno?.dados?.avatarUrl || null}
       />
 
       <AnimatePresence>

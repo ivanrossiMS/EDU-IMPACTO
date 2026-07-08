@@ -61,6 +61,7 @@ interface ChatMessage {
 
 interface ComunicadoViewModalProps {
   comunicado: any
+  allComunicados?: any[]
   onClose: () => void
   onCiencia: (id: string) => void
   currentUserSlug: string
@@ -82,6 +83,7 @@ interface ComunicadoViewModalProps {
 
 export function ComunicadoViewModal({
   comunicado: initialComunicado,
+  allComunicados = [],
   onClose,
   onCiencia,
   currentUserSlug,
@@ -160,7 +162,8 @@ export function ComunicadoViewModal({
     }
   }, [comunicado.id])
 
-  const canReply = comunicado.permiteResposta || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
+  const isGroupedReport = comunicado.id?.startsWith('AD-COM-REL-COLAB');
+  const canReply = comunicado.permiteResposta || (isAdminMode && isGroupedReport) || comunicado.isSaudacao || comunicado.dados?.isSaudacao || comunicado.titulo === 'Mensagem de Boas-vindas' || comunicado.titulo === 'Mensagem de Saudação'
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loadingMsg, setLoadingMsg] = useState(true)
@@ -281,11 +284,46 @@ export function ComunicadoViewModal({
     return parts.join(' | ');
   }, [comunicado, isAdminMode, alunos]);
 
+  const relatedIndividualIds = useMemo(() => {
+    if (!isGroupedReport || !allComunicados || allComunicados.length === 0) return [];
+    const groupDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
+    if (!groupDate) return [];
+    
+    return allComunicados
+      .filter(c => c.id?.startsWith('AD-COM-REL-STU'))
+      .filter(c => c.autorId === comunicado.autorId)
+      .filter(c => {
+         const dDate = new Date(c.dataEnvio || c.created_at || 0).getTime();
+         return Math.abs(dDate - groupDate) < 15000; // 15 seconds window
+      })
+      .map(c => c.id);
+  }, [comunicado, isGroupedReport, allComunicados]);
+
+  const getComunicadoIdForStudent = (studentId: string) => {
+    if (!isGroupedReport || !allComunicados) return comunicado.id;
+    const groupDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
+    const related = allComunicados.find(c => 
+      c.id?.startsWith('AD-COM-REL-STU') && 
+      c.autorId === comunicado.autorId &&
+      Math.abs(new Date(c.dataEnvio || c.created_at || 0).getTime() - groupDate) < 15000 &&
+      (c.alunosIds || []).some((id: string) => String(id) === String(studentId))
+    );
+    return related ? related.id : comunicado.id;
+  };
+
   const fetchMessages = async () => {
     try {
-      const url = isAdminMode 
-        ? `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true`
-        : `/api/comunicados_respostas?comunicado_id=${comunicado.id}&remetente_id=${currentUserSlug}`;
+      let url = '';
+      if (isAdminMode) {
+        if (isGroupedReport && relatedIndividualIds.length > 0) {
+          url = `/api/comunicados_respostas?comunicado_ids=${relatedIndividualIds.join(',')}&admin=true`;
+        } else {
+          url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true`;
+        }
+      } else {
+        url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&remetente_id=${currentUserSlug}`;
+      }
+      
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
@@ -304,16 +342,19 @@ export function ComunicadoViewModal({
       const interval = setInterval(fetchMessages, 10000)
       return () => clearInterval(interval)
     }
-  }, [comunicado.id, currentUserSlug, isAdminMode, canReply])
+  }, [comunicado.id, currentUserSlug, isAdminMode, canReply, relatedIndividualIds])
 
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return
     setIsSending(true)
     
     try {
+      const studentId = isAdminMode ? (selectedThreadId || currentUserSlug) : currentUserSlug;
+      const targetComunicadoId = isAdminMode ? getComunicadoIdForStudent(studentId) : comunicado.id;
+
       const payload = {
-        comunicado_id: comunicado.id,
-        remetente_id: isAdminMode ? (selectedThreadId || currentUserSlug) : currentUserSlug,
+        comunicado_id: targetComunicadoId,
+        remetente_id: studentId,
         remetente_nome: currentUserName,
         conteudo: newMessage.trim(),
         anexos: pendingAnexos,
