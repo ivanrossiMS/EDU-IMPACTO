@@ -6,6 +6,8 @@ import { X, Search, Check, FileBarChart, Plus, FileText, ClipboardList, BookOpen
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useRelatorios, ReportTemplate, ReportField } from '@/lib/relatoriosContext'
 
+import { useApp } from '@/lib/context'
+
 interface ReportsSelectionModalProps {
   isOpen: boolean
   onClose: () => void
@@ -15,6 +17,7 @@ interface ReportsSelectionModalProps {
 }
 
 export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {
+  const { currentUser } = useApp()
   const { templates: contextTemplates = [] } = useRelatorios()
   const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight')
   const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
@@ -38,35 +41,76 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
   // Load only dynamic context templates
   const allTemplates = contextTemplates.filter(t => t.status === 'ativo')
 
-  // Derive available years from students and turmas directly to guarantee exact matches
+  const userGroups = React.useMemo(() => {
+    if (!currentUser?.id) return [];
+    return (gruposManuais || []).filter((g: any) => {
+      let colabs = g.colaboradoresIds;
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+      }
+      if (!Array.isArray(colabs)) colabs = [];
+      return colabs.some((id: any) => String(id) === String(currentUser.id));
+    });
+  }, [gruposManuais, currentUser]);
+
+  const accessibleTurmas = React.useMemo(() => {
+    if (!currentUser?.id) return [];
+    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || String(currentUser?.cargo || '').toLowerCase().includes('admin');
+    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
+    
+    const globalGroups = userGroups.filter((g: any) => 
+      g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1 ||
+      g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1
+    );
+    
+    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+      return a === '';
+    });
+    
+    if (hasGlobalWithoutYear) return turmas;
+    
+    const globalYears = new Set(globalGroups.map((g: any) => {
+      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+    }).filter((a: string) => a !== ''));
+
+    const filtered = turmas.filter((t: any) => {
+       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+       if (globalYears.has(tAno)) return true;
+       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+    });
+    return filtered
+  }, [turmas, userGroups, currentUser])
+
+  // Derive available years from students and accessible turmas
   const availableYears = React.useMemo(() => {
     const years = new Set<string>()
     alunos.forEach((a: any) => {
       const year = String(a.ano_letivo || a.anoLetivo || a.ano || '')
       if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
     })
-    turmas.forEach((t: any) => {
+    accessibleTurmas.forEach((t: any) => {
       const year = String(t.ano || t.dados?.anoLetivo || '')
       if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
     })
     // Include current year as fallback
     years.add(new Date().getFullYear().toString())
     return Array.from(years).sort((a, b) => b.localeCompare(a))
-  }, [alunos, turmas])
+  }, [alunos, accessibleTurmas])
 
-  // Derive available classes from turmas and students for the selected year
+  // Derive available classes from accessible turmas and students for the selected year
   const availableTurmas = React.useMemo(() => {
     if (!filterYear) return []
     const classMap = new Map<string, string>()
 
-    turmas.forEach((t: any) => {
+    accessibleTurmas.forEach((t: any) => {
       const tYear = String(t.ano || t.dados?.anoLetivo || new Date().getFullYear().toString())
       if (tYear === filterYear || filterYear === 'Todos') {
         classMap.set(String(t.id), t.nome || String(t.id))
       }
     })
     
-    const turmasLower = turmas.map((t: any) => ({
+    const turmasLower = accessibleTurmas.map((t: any) => ({
       id: String(t.id).toLowerCase(),
       codigo: String(t.codigo || '').toLowerCase(),
       nome: String(t.nome || '').trim().toLowerCase(),
@@ -79,15 +123,16 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
         const tRef = String(a.turma || (a as any).turmaId).trim()
         const tRefLower = tRef.toLowerCase()
         const tMatched = turmasLower.find(t => t.id === tRefLower || t.codigo === tRefLower || t.nome === tRefLower)
-        const tObj = tMatched ? tMatched.original : null
-        
-        const canonicalId = tObj ? String(tObj.id) : tRef;
-        const tName = tObj ? tObj.nome : tRef;
-        classMap.set(canonicalId, tName)
+        if (tMatched) {
+          const tObj = tMatched.original
+          const canonicalId = String(tObj.id)
+          const tName = tObj.nome
+          classMap.set(canonicalId, tName)
+        }
       }
     })
     return Array.from(classMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-  }, [alunos, turmas, filterYear])
+  }, [alunos, accessibleTurmas, filterYear])
 
   // Initialization when modal opens
   useEffect(() => {

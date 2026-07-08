@@ -339,11 +339,6 @@ export function PageContent({
                         {block.qIndex + 1}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {q.enunciado?.includes('<meta name="gerado_por_ia" content="true">') && (
-                          <div className="no-print" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', border: '1px solid rgba(217,70,239,0.2)', color: '#d946ef', padding: '4px 10px', borderRadius: 100, fontSize: 10, fontWeight: 900, letterSpacing: '0.05em', marginBottom: 8 }}>
-                            <Sparkles size={12} /> GERADO POR IA
-                          </div>
-                        )}
                         {(() => {
                           const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
                           const groupedParts: any[] = [];
