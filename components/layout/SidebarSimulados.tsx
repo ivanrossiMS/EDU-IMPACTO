@@ -205,7 +205,7 @@ export function SidebarSimulados() {
               </div>
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: 'white', fontSize: 20, letterSpacing: '-0.02em', lineHeight: 1 }}>SIMULADOS</span>
+                  <span style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 900, color: 'white', fontSize: 20, letterSpacing: '-0.02em', lineHeight: 1 }}>PROVAS/SIMULADOS</span>
                   <Sparkles size={14} color="#f43f5e" />
                 </div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.05em', marginTop: 4, textTransform: 'uppercase' }}>Sistema de Provas</div>

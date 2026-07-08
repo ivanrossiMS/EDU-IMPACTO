@@ -703,7 +703,7 @@ export function Sidebar() {
               </Link>
 
               {/* SIMULADOS */}
-              <Link href="/simulados" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="SIMULADOS">
+              <Link href="/simulados" style={{ flex: 1, textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }} title="PROVAS/SIMULADOS">
                 <motion.div 
                   whileHover={{ scale: 1.05, filter: 'brightness(1.1)' }} 
                   whileTap={{ scale: 0.95 }}

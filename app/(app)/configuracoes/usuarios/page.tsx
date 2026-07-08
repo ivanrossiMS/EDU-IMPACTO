@@ -706,7 +706,7 @@ export default function UsuariosPage() {
                     📝
                   </div>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Simulados</div>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>Acesso ao Módulo de Provas/Simulados</div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>Controle de acesso à geração e gestão de provas e simulados.</div>
                   </div>
                 </div>

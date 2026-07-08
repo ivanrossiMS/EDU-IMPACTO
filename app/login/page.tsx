@@ -838,7 +838,7 @@ export default function LoginPage() {
                 onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
                 <div style={{ width:64, height:64, borderRadius:20, background:'linear-gradient(135deg, #f43f5e, #be123c)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, boxShadow:'0 10px 24px rgba(244,63,94,0.4)' }}>📝</div>
                 <div>
-                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>SIMULADOS</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:'#fff', marginBottom:4 }}>Provas/Simulados</div>
                   <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)' }}>Geração de Provas</div>
                 </div>
               </button>
