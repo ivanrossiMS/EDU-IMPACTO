@@ -559,22 +559,22 @@ export default function UploadSimuladosGerenciamentoPage() {
                 <div key={serie} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, marginBottom: 24, overflow: 'hidden' }}>
                   <div 
                     onClick={() => setExpandedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
-                    style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: expandedGroups[serie] ? '1px solid hsl(var(--border-subtle))' : 'none' }}
+                    style={{ padding: '20px', display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: expandedGroups[serie] ? '1px solid hsl(var(--border-subtle))' : 'none' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '1 1 240px', minWidth: 0 }}>
+                      <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)', flexShrink: 0 }}>
                         <Users size={24} color="#fff" />
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
-                          <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>{items.length} simulados</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{serie}</span>
+                          <span style={{ padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', whiteSpace: 'nowrap' }}>{items.length} {items.length === 1 ? 'simulado' : 'simulados'}</span>
                         </div>
-                        <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe os simulados aplicados e programados para esta turma.</span>
+                        <span style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 4, display: 'block', lineHeight: 1.4 }}>Acompanhe os simulados aplicados e programados para esta turma.</span>
                       </div>
                     </div>
                     <motion.button 
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, flex: '1 1 100px', maxWidth: '140px' }}
                     >
                       {expandedGroups[serie] ? 'Recolher' : 'Expandir'}
                       <ChevronUp size={16} style={{ transform: expandedGroups[serie] ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
