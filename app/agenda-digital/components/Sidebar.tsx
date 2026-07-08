@@ -146,7 +146,6 @@ export function ADSidebar() {
     // On student/family slug paths, always show only family tabs — never admin tabs
     if (!isFamily && !isSlugPath && alunoId !== "colaborador" && !alunoId) {
       mobileTabs = [
-        { id: 'modulos', label: 'Módulos', icon: Grid, href: '/login?step=choose_system' },
         { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
@@ -156,13 +155,12 @@ export function ADSidebar() {
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
         { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
-        { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' }
+        { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' },
+        { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ]
     } else if (alunoId) {
       mobileTabs = [
-        { id: 'modulos', label: 'Módulos', icon: Grid, href: '/login?step=choose_system' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
-
         { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: `/agenda-digital/${alunoId}/calendario` },
         { id: 'financeiro', label: 'Financeiro', icon: DollarSign, href: `/agenda-digital/${alunoId}/financeiro` },
@@ -170,9 +168,10 @@ export function ADSidebar() {
         { id: 'ocorrencias', label: 'Ocorrências', icon: AlertTriangle, href: `/agenda-digital/${alunoId}/ocorrencias` },
         { id: 'notas', label: 'Notas', icon: GraduationCap, href: `/agenda-digital/${alunoId}/notas` },
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
+        { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'Mídia', 'Agenda', 'Perfil', 'Módulos'].includes(item.label)
+          return ['comunicados', 'Mídia', 'Agenda', 'Perfil', 'Trocar Módulo'].includes(item.label)
         }
         
         // Se não for colaborador nem família (ou seja, é um usuário na visão de aluno), hide Módulos unless we want it?
