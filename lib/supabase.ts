@@ -1,25 +1,40 @@
 import { createClient } from '@supabase/supabase-js'
 import { Preferences } from '@capacitor/preferences'
 
+import { Capacitor } from '@capacitor/core'
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-const capacitorStorage = {
+// Custom async storage adapter that evaluates native platform at runtime
+const customStorage = {
   getItem: async (key: string) => {
-    const { value } = await Preferences.get({ key })
-    return value
+    if (typeof window === 'undefined') return null;
+    if (Capacitor.isNativePlatform()) {
+      const { value } = await Preferences.get({ key })
+      return value
+    }
+    return window.localStorage.getItem(key)
   },
   setItem: async (key: string, value: string) => {
-    await Preferences.set({ key, value })
+    if (typeof window === 'undefined') return;
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.set({ key, value })
+    } else {
+      window.localStorage.setItem(key, value)
+    }
   },
   removeItem: async (key: string) => {
-    await Preferences.remove({ key })
+    if (typeof window === 'undefined') return;
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.remove({ key })
+    } else {
+      window.localStorage.removeItem(key)
+    }
   },
 }
 
-// Check if running on web vs native via capacitor (or just use capacitor storage if window exists)
 const isBrowser = typeof window !== 'undefined'
-const isCapacitor = isBrowser && !!(window as any).Capacitor
 
 // We must store the client in a global variable in the browser to prevent Next.js Fast Refresh 
 // from creating multiple instances and fighting for the lock:sb-<project>-auth-token Web Lock.
@@ -29,7 +44,7 @@ if (isBrowser) {
   if (!(window as any)._supabaseClient) {
     (window as any)._supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        storage: isCapacitor ? capacitorStorage : window.localStorage,
+        storage: customStorage,
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
