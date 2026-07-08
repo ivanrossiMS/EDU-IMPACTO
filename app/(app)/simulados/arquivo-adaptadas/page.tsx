@@ -59,7 +59,7 @@ export default function ArquivoAdaptadasPage() {
             const { data: bimestresData } = await supabase.from('simulados_bimestres').select('id, nome')
             if (bimestresData) {
               const bimestresMap = new Map()
-              bimestresData.forEach(b => bimestresMap.set(b.id, b.nome))
+              bimestresData.forEach((b: any) => bimestresMap.set(b.id, b.nome))
               data = data.map((item: any) => ({
                 ...item,
                 bimestre: bimestresMap.get(item.bimestre) || item.bimestre
