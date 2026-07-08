@@ -6,7 +6,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -505,6 +505,42 @@ const SELECTOR_STYLES = `
           box-shadow: 0 10px 25px rgba(244, 63, 94, 0.05);
         }
 
+        .back-button-modern {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          padding: 12px 20px;
+          border-radius: 16px;
+          background: rgba(99, 102, 241, 0.1);
+          border: 1px solid rgba(99, 102, 241, 0.2);
+          color: #6366f1;
+          font-weight: 800;
+          font-size: 16px;
+          font-family: 'Outfit', sans-serif;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          width: 100%;
+          max-width: 320px;
+          height: 56px;
+          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08);
+        }
+        .back-button-modern:hover {
+          background: rgba(99, 102, 241, 0.15);
+          border-color: rgba(99, 102, 241, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+        }
+        .dark .back-button-modern {
+          background: rgba(99, 102, 241, 0.1);
+          border-color: rgba(99, 102, 241, 0.3);
+          color: #818cf8;
+        }
+        .dark .back-button-modern:hover {
+          background: rgba(99, 102, 241, 0.2);
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+        }
+
         .premium-logout-btn {
           display: flex;
           align-items: center;
@@ -907,7 +943,14 @@ function SelecionarAlunoContent() {
         </section>
       </main>
 
-      <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
+      <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
+        <button 
+          onClick={() => window.location.href = '/login?step=choose_system'}
+          className="back-button-modern"
+        >
+          <ArrowLeft size={20} strokeWidth={2.5} />
+          <span>Trocar Módulo</span>
+        </button>
         <button 
           onClick={async (e) => {
             const btn = e.currentTarget;

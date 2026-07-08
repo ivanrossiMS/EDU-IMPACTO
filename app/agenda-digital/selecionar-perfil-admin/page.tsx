@@ -4,7 +4,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
-import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut } from 'lucide-react'
+import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -610,12 +610,24 @@ function SelecionarPerfilAdminContent() {
         </section>
 
         {/* LOGOUT BUTTON */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '24px' }} className="animate-reveal delay-2">
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }} className="animate-reveal delay-2">
+          <button 
+            onClick={() => window.location.href = '/login?step=choose_system'}
+            className="back-button-modern"
+          >
+            <ArrowLeft size={18} strokeWidth={2.5} />
+            <span>Trocar Módulo</span>
+          </button>
           <button
             onClick={async () => {
               try {
                 await fetch('/api/auth/logout', { method: 'POST' });
+                const { supabase } = await import('@/lib/supabase');
+                await supabase.auth.signOut();
                 setCurrentUser(null);
+                const { removeSettingAsync } = await import('@/lib/context');
+                await removeSettingAsync('currentUser');
+                await removeSettingAsync('activeModule');
                 window.location.href = '/login';
               } catch (err) {
                 window.location.href = '/login';
@@ -630,6 +642,45 @@ function SelecionarPerfilAdminContent() {
       </main>
 
       <style dangerouslySetInnerHTML={{__html: `
+        .back-button-modern {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 28px;
+          background: rgba(99, 102, 241, 0.08);
+          border: 1px solid rgba(99, 102, 241, 0.2);
+          border-radius: 100px;
+          color: #6366f1;
+          font-weight: 700;
+          font-size: 14px;
+          font-family: 'Outfit', sans-serif;
+          letter-spacing: 0.02em;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .back-button-modern:hover {
+          background: rgba(99, 102, 241, 0.15);
+          border-color: rgba(99, 102, 241, 0.4);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+        }
+
+        .back-button-modern:active {
+          transform: translateY(1px);
+        }
+
+        .dark .back-button-modern {
+          background: rgba(99, 102, 241, 0.1);
+          border-color: rgba(99, 102, 241, 0.3);
+          color: #818cf8;
+        }
+
+        .dark .back-button-modern:hover {
+          background: rgba(99, 102, 241, 0.2);
+          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+        }
+
         .logout-button-modern {
           display: flex;
           align-items: center;
