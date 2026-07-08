@@ -13,7 +13,7 @@ import {
   Bell, Search, Plus, Filter, Pin, FileText, CheckCircle2, XCircle, 
   Send as SendIcon, Clock, Paperclip, MoreHorizontal, X,
   Bold, Italic, Link as LinkIcon, List, Underline, BadgeDollarSign, Smile, FileBarChart,
-  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity
+  ClipboardList, BookOpen, GraduationCap, Calendar, Users, User, MessageSquare, Layout, FileCheck, Menu, Loader2, Activity, Trash
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
@@ -114,6 +114,8 @@ export default function ADAdminComunicados() {
   const [colaboradores, setColaboradores] = useState<{nome: string}[]>([]);
 
   const [visibleCount, setVisibleCount] = useState(10);
+  const [selectedComs, setSelectedComs] = useState<string[]>([]);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   useEffect(() => {
     setVisibleCount(10);
@@ -317,6 +319,28 @@ export default function ADAdminComunicados() {
     setShowComposer(true)
   }
 
+  const handleBulkDelete = () => {
+    adConfirm(`Tem certeza que deseja excluir ${selectedComs.length} comunicado(s)? Esta ação é irreversível.`, 'Excluir Comunicados', async () => {
+      try {
+        const res = await fetch(`/api/comunicados?ids=${selectedComs.join(',')}`, { method: 'DELETE' });
+        if (res.ok) {
+          if (setComunicadosLocally) {
+            setComunicadosLocally(prev => prev.filter(c => !selectedComs.includes(c.id)));
+          } else {
+            setComunicados(prev => prev.filter(c => !selectedComs.includes(c.id)));
+          }
+          setSelectedComs([]);
+          adAlert('Comunicados excluídos com sucesso.', 'Sucesso');
+        } else {
+          const data = await res.json();
+          adAlert(`Erro ao excluir: ${data.error}`, 'Erro');
+        }
+      } catch (err: any) {
+        adAlert(`Erro ao excluir: ${err.message}`, 'Erro');
+      }
+    });
+  }
+
   const filtered = comunicados.filter(c => {
     if (tab === 'enviados' && c.status !== 'enviado') return false
     if (tab === 'agendados' && c.status !== 'agendado') return false
@@ -414,6 +438,36 @@ export default function ADAdminComunicados() {
         </button>
       </div>
 
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input 
+            type="checkbox"
+            checked={filtered.length > 0 && selectedComs.length === Math.min(filtered.length, visibleCount)}
+            onChange={(e) => {
+              if (e.target.checked) {
+                setSelectedComs(filtered.slice(0, visibleCount).map(c => c.id));
+              } else {
+                setSelectedComs([]);
+              }
+            }}
+            style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4f46e5' }}
+            title="Selecionar todos os visíveis"
+          />
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b' }}>
+            {selectedComs.length > 0 ? `${selectedComs.length} selecionados` : 'Selecionar comunicados'}
+          </span>
+        </div>
+        {selectedComs.length > 0 && (
+          <button 
+            className="btn" 
+            onClick={handleBulkDelete} 
+            style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#ef4444', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          >
+            <Trash size={14} /> Excluir Selecionados
+          </button>
+        )}
+      </div>
+
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filtered.length === 0 && isDataLoading && (
@@ -467,6 +521,22 @@ export default function ADAdminComunicados() {
                   e.currentTarget.style.transform = 'translateY(0)'
                 }}
               >
+                <div style={{ display: 'flex', alignItems: 'center', paddingRight: 8 }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedComs.includes(c.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      if (e.target.checked) {
+                        setSelectedComs(prev => [...prev, c.id]);
+                      } else {
+                        setSelectedComs(prev => prev.filter(id => id !== c.id));
+                      }
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#4f46e5' }}
+                  />
+                </div>
                 {/* Content Column */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -560,12 +630,18 @@ export default function ADAdminComunicados() {
           {(filtered.length > visibleCount || hasNextPageComunicados) && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16, marginBottom: 32 }}>
               <button 
-                onClick={() => {
+                onClick={async () => {
                   if (visibleCount >= filtered.length && hasNextPageComunicados && fetchNextPageComunicados) {
-                    fetchNextPageComunicados()
+                    setIsFetchingMore(true);
+                    try {
+                      await fetchNextPageComunicados();
+                    } finally {
+                      setIsFetchingMore(false);
+                    }
                   }
                   setVisibleCount(prev => prev + 10)
                 }}
+                disabled={isFetchingMore}
                 style={{
                   background: '#f1f5f9',
                   color: '#475569',
@@ -574,20 +650,27 @@ export default function ADAdminComunicados() {
                   borderRadius: 20,
                   fontSize: 14,
                   fontWeight: 700,
-                  cursor: 'pointer',
+                  cursor: isFetchingMore ? 'not-allowed' : 'pointer',
+                  opacity: isFetchingMore ? 0.7 : 1,
                   transition: 'all 0.2s',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = '#e2e8f0'
+                  if (!isFetchingMore) e.currentTarget.style.background = '#e2e8f0'
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = '#f1f5f9'
+                  if (!isFetchingMore) e.currentTarget.style.background = '#f1f5f9'
                 }}
               >
-                Carregar Mais Comunicados
+                {isFetchingMore ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Carregando...
+                  </>
+                ) : (
+                  'Carregar Mais Comunicados'
+                )}
               </button>
             </div>
           )}

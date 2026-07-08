@@ -56,9 +56,18 @@ export async function POST(request: Request) {
     }
 
     // ── 2. Check ALUNOS — by email, matricula or CPF ────────────────
+    const safeQ = q.replace(/"/g, '""')
+    const qDigits = q.replace(/\D/g, '')
+
+    let orAlunos = `email.eq."${safeQ}",matricula.eq."${safeQ}",dados->>email.eq."${safeQ}",dados->>codigo.eq."${safeQ}"`
+    if (qDigits.length >= 11) {
+      orAlunos += `,cpf.eq."${qDigits}",dados->>cpf.eq."${qDigits}"`
+    }
+
     const { data: alunosRows } = await supabaseAdmin
       .from('alunos')
       .select('id, nome, email, matricula, telefone, dados, status')
+      .or(orAlunos)
 
     const aluno = (alunosRows || []).find((a: any) => {
       const emailA   = (a.email || a.dados?.email || '').trim().toLowerCase()
@@ -110,9 +119,18 @@ export async function POST(request: Request) {
     }
 
     // ── 3. Check RESPONSAVEIS table — by email, CPF or celular ──────
+    let orResp = `email.eq."${safeQ}",codigo.eq."${safeQ}"`
+    if (qDigits.length >= 10) {
+      orResp += `,celular.ilike.%${qDigits}%,telefone.ilike.%${qDigits}%`
+    }
+    if (qDigits.length >= 11) {
+      orResp += `,cpf.eq."${qDigits}",dados->>cpf.eq."${qDigits}"`
+    }
+
     const { data: responsaveisRows } = await supabaseAdmin
       .from('responsaveis')
       .select('id, nome, email, celular, codigo, telefone, dados')
+      .or(orResp)
 
     const responsavel = (responsaveisRows || []).find((r: any) => {
       const emailR   = (r.email || '').trim().toLowerCase()

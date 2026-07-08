@@ -327,7 +327,12 @@ export function ComunicadoViewModal({
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        setMessages(data)
+        if (Array.isArray(data)) {
+          const unique = Array.from(new Map(data.map((m: any) => [m.id, m])).values());
+          setMessages(unique as ChatMessage[])
+        } else {
+          setMessages(data)
+        }
       }
     } catch (e) {
       console.error('Error fetching messages', e)
@@ -1064,7 +1069,7 @@ export function ComunicadoViewModal({
                       const msgTimeStr = msgDate.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' às ' + msgDate.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
                       
                       return (
-                        <div key={msg.id} style={{ display: 'flex', gap: 12 }}>
+                        <div key={`${msg.id}-${idx}`} style={{ display: 'flex', gap: 12 }}>
                           <UserAvatar
                             userId={msg.is_admin ? msg.remetente_id : (alunoObj?.id || msg.remetente_id)}
                             name={alunoObj?.nome || msg.remetente_nome}

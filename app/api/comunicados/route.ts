@@ -72,6 +72,25 @@ export async function GET(request: Request) {
     }
   }
 
+  let isAdmin = false;
+  const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin'];
+  const cargosAdmin = ['Administrador Master', 'Diretor Geral'];
+  
+  if (perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo)) {
+    isAdmin = true;
+  } else if (!perfil && !cargo) {
+    // Buscar banco se metadata falhar para checar admin
+    const { data: dbUserAdmin } = await supabase
+      .from('system_users')
+      .select('perfil, cargo')
+      .eq('id', user.id)
+      .maybeSingle();
+    
+    if (dbUserAdmin && (perfisAdmin.includes(dbUserAdmin.perfil) || cargosAdmin.includes(dbUserAdmin.cargo))) {
+      isAdmin = true;
+    }
+  }
+
   // BLINDAGEM IDOR: Se for família, DEVE informar um aluno_id que lhe pertença
   if (isFamilyOrStudent) {
     if (!alunoId) {
@@ -214,9 +233,13 @@ export async function GET(request: Request) {
 
      return merged;
   });
-  let filtered = isFamilyOrStudent
-    ? normalized.filter((c: any) => c.destino !== 'interno')
-    : normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
+
+  let filtered = normalized;
+  if (isFamilyOrStudent) {
+    filtered = normalized.filter((c: any) => c.destino !== 'interno');
+  } else if (!isAdmin) {
+    filtered = normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
+  }
 
   // Optimization: Remove heavy payload from lists (Phase 3)
   if (!idParam) {
@@ -431,6 +454,16 @@ export async function DELETE(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
+  const idsParam = searchParams.get('ids')
+
+  if (idsParam) {
+    const ids = idsParam.split(',').filter(Boolean)
+    if (ids.length === 0) return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    const { error } = await supabase.from('comunicados').delete().in('id', ids)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true })
+  }
+
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const { error } = await supabase.from('comunicados').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
