@@ -282,20 +282,20 @@ export default function SimuladosDashboard() {
           </div>
 
           {/* KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginBottom: 48 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 48 }}>
             {[
               { title: 'Provas Pendentes', value: profStats.provasPendentes, icon: FileSignature, color: '#10b981' },
               { title: 'Simulados Pendentes', value: profStats.simuladosPendentes, icon: BookOpen, color: '#3b82f6' },
               { title: 'Redações Pendentes', value: profStats.redacoesPendentes, icon: PenTool, color: '#f43f5e' }
             ].map((card, idx) => (
               <motion.div key={idx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * idx }}
-                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 24, border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: 20, boxShadow: '0 8px 24px -8px rgba(0,0,0,0.05)' }}>
-                <div style={{ width: 56, height: 56, borderRadius: 16, background: `linear-gradient(135deg, ${card.color}20, ${card.color}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <card.icon size={28} color={card.color} strokeWidth={2.5} />
+                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 20, padding: '16px 8px', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${card.color}20, ${card.color}10)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <card.icon size={22} color={card.color} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 36, fontWeight: 900, color: 'hsl(var(--text-primary))', lineHeight: 1 }}>{card.value}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{card.title}</div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', lineHeight: 1 }}>{card.value}</div>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-secondary))', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.02em', lineHeight: 1.2, whiteSpace: 'pre-line' }}>{card.title.replace(' ', '\n')}</div>
                 </div>
               </motion.div>
             ))}
