@@ -4,6 +4,7 @@ import { useData, Ocorrencia, newId } from '@/lib/dataContext'
 import { getInitials } from '@/lib/utils'
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
+import { useApp } from '@/lib/context'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { Skeleton } from '@/components/skeletons/Skeleton'
@@ -468,8 +469,8 @@ export default function OcorrenciasPage() {
     { noCache: true }
   );
   const { cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData();
-  const { data: userData } = useApiQuery<any>(['auth-me'], `/api/auth/me`);
-  const currentUser = userData?.user || {};
+  const { currentUser: authUser } = useApp();
+  const currentUser: any = authUser || {};
   
   const { data: rawTurmas, isLoading: isLoadingTurmas } = useApiQuery<any[]>(['turmas'], `/api/turmas`);
   const { data: rawAlunos, isLoading: isLoadingAlunos } = useApiQuery<any[]>(['alunos'], `/api/alunos?all=true&lightweight=true`);

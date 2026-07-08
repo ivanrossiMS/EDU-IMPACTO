@@ -82,10 +82,7 @@ export async function POST(request: Request) {
 
         // SYNC Delete to system_users and Auth
         if (deletedEmails.length > 0) {
-          const supabaseAdmin = require('@supabase/supabase-js').createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-          )
+          const supabaseAdmin = getAdminClient()
           const { data: sysUsers } = await supabaseAdmin.from('system_users').select('id, email').in('email', deletedEmails)
           await supabaseAdmin.from('system_users').delete().in('email', deletedEmails)
           if (sysUsers) {
@@ -139,10 +136,7 @@ export async function POST(request: Request) {
         if (error) throw new Error(error.message)
 
         // SYNC: Refletir o status e perfil na tabela do controle de acesso (system_users)
-        const supabaseAdmin = require('@supabase/supabase-js').createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        const supabaseAdmin = getAdminClient();
         
         for (const row of rowsToUpsert) {
           if (row.email) {
@@ -232,7 +226,7 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     if (row.email) {
-      const supabaseAdmin = require('@supabase/supabase-js').createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const supabaseAdmin = getAdminClient();
       
       const { data: existing } = await supabaseAdmin.from('system_users').select('id').eq('email', row.email).maybeSingle();
       
@@ -326,7 +320,7 @@ export async function PUT(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     if (data.email) {
-      const supabaseAdmin = require('@supabase/supabase-js').createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const supabaseAdmin = getAdminClient();
       
       // Sync update or create if perfil_sistema is present
       const { data: existing } = await supabaseAdmin.from('system_users').select('id').eq('email', data.email).maybeSingle();
@@ -385,10 +379,7 @@ export async function DELETE(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   if (funcRow?.email) {
-    const supabaseAdmin = require('@supabase/supabase-js').createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
     const { data: sysUser } = await supabaseAdmin.from('system_users').select('id').eq('email', funcRow.email).maybeSingle()
     await supabaseAdmin.from('system_users').delete().eq('email', funcRow.email)
     if (sysUser?.id && sysUser.id.length > 10) {

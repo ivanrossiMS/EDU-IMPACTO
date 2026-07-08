@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export async function GET(request: Request) {
@@ -18,16 +18,7 @@ export async function GET(request: Request) {
     }
 
     // Now, we MUST use the Service Role Key to fetch data from auth.admin
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseAdmin = getAdminClient();
     let authFoto = null;
     // Somente faz a busca no auth se o id parecer um UUID, para evitar erro do SDK
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
@@ -74,16 +65,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 })
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseAdmin = getAdminClient();
 
     // 1. Atualizar Auth Metadata
     const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {

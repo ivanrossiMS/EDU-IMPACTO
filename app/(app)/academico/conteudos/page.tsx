@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useData } from '@/lib/dataContext'
 import { useApiQuery } from '@/hooks/useApi'
+import { useApp } from '@/lib/context'
 import { useQueryClient } from '@tanstack/react-query'
 import { 
   BookMarked, Plus, Search, Calendar, Edit, Trash2, Filter, 
@@ -57,8 +58,8 @@ export default function ConteudosTarefasPage() {
   const { turmas: rawTurmas, cfgCalendarioLetivo = [], cfgNiveisEnsino = [], logSystemAction } = useData()
   const turmas = rawTurmas || []
 
-  const { data: userData } = useApiQuery<any>(['current-user'], '/api/auth/me', {})
-  const currentUser = userData?.user || {}
+  const { currentUser: authUser } = useApp()
+  const currentUser: any = authUser || {}
 
   const queryClient = useQueryClient()
 

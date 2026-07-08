@@ -4,6 +4,7 @@ import { Tarefa, useData, newId } from '@/lib/dataContext'
 import { useState, useMemo } from 'react'
 import { Plus, CheckCircle, Clock, AlertTriangle, Brain, X, Undo, Calendar, User, Trash2 } from 'lucide-react'
 import { useApiQuery } from '@/hooks/useApi'
+import { useApp } from '@/lib/context'
 
 type Priority = 'urgente' | 'alta' | 'media' | 'baixa'
 type Status = 'pendente' | 'em-andamento' | 'concluida'
@@ -32,8 +33,8 @@ const BLANK: Omit<Tarefa, 'id'> = {
 
 export default function TarefasPage() {
   const { tarefas = [], setTarefas } = useData()
-  const { data: userData } = useApiQuery<any>(['current-user'], '/api/auth/me', {})
-  const currentUser = userData?.user || {}
+  const { currentUser: authUser } = useApp()
+  const currentUser: any = authUser || {}
   
   const { data: usersData } = useApiQuery<any[]>(['system-users'], '/api/configuracoes/usuarios', [])
   const colaboradores = useMemo(() => {
