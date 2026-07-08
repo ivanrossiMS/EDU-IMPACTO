@@ -944,13 +944,15 @@ function SelecionarAlunoContent() {
       </main>
 
       <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
-        <button 
-          onClick={() => window.location.href = '/login?step=choose_system'}
-          className="back-button-modern"
-        >
-          <ArrowLeft size={20} strokeWidth={2.5} />
-          <span>Trocar Módulo</span>
-        </button>
+        {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
+          <button 
+            onClick={() => window.location.href = '/login?step=choose_system'}
+            className="back-button-modern"
+          >
+            <ArrowLeft size={20} strokeWidth={2.5} />
+            <span>Trocar Módulo</span>
+          </button>
+        )}
         <button 
           onClick={async (e) => {
             const btn = e.currentTarget;
