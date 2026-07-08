@@ -174,10 +174,8 @@ export function ADSidebar() {
           return ['comunicados', 'Mídia', 'Agenda', 'Perfil', 'Trocar Módulo'].includes(item.label)
         }
         
-        // Se não for colaborador nem família (ou seja, é um usuário na visão de aluno), hide Módulos unless we want it?
-        // Let's hide it if it's family, but if it's admin/colaborador impersonating an aluno, maybe they want to switch.
-        // The user specifically asked for "admin e colaborador", so we'll show it if !isFamily.
-        if (item.label === 'Módulos' && isFamily) return false;
+        // Ocultar sempre "Trocar Módulo" na visão de aluno/família (conforme solicitado pelo usuário)
+        if (item.label === 'Trocar Módulo') return false;
 
         let isFin = false;
         if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
