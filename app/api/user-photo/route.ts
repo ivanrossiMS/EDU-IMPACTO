@@ -44,13 +44,14 @@ export async function GET(request: Request) {
       .from('alunos')
       .select('foto')
       .eq('id', id)
-      .single()
+      .maybeSingle()
       
     if (!alunoError && alunoData?.foto) {
       return NextResponse.json({ foto: alunoData.foto })
     }
 
-    return NextResponse.json({ foto: null }, { status: 404 })
+    // Retorna 200 com foto: null em vez de 404 para evitar loops de requisição no cliente
+    return NextResponse.json({ foto: null })
   } catch (err) {
     return NextResponse.json({ foto: null }, { status: 500 })
   }

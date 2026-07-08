@@ -97,9 +97,7 @@ export async function POST(request: NextRequest) {
         .limit(1)
         .then(r => r.data?.[0] || null)
         
-      console.log('[login trace] Awaiting Promise.all for email format')
       const [alunoByEmail, respByEmail, sysUserByEmail] = await Promise.all([alunoPromise, respPromise, sysUserPromise])
-      console.log('[login trace] Fetched email format')
       
       if (alunoByEmail) {
         alunoRecord   = alunoByEmail
@@ -114,11 +112,8 @@ export async function POST(request: NextRequest) {
         resolvedEmail     = loginInput
       }
     }
-    
-    console.log('[login trace] Resolved userType:', userType)
-    
+
     if (userType === 'responsavel' && responsavelRecord) {
-      console.log('[login trace] Checking responsavel links')
       const { data: links } = await supabaseAdmin
         .from('aluno_responsavel')
         .select('resp_financeiro, resp_pedagogico')
@@ -135,11 +130,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('[login trace] Awaiting cookies')
     const cookieStore = await cookies()
-    console.log('[login trace] Got cookies')
 
-    console.log('[login debug] env vars:', { url: process.env.NEXT_PUBLIC_SUPABASE_URL, keyLen: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.length })
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -177,9 +169,7 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    console.log('[login debug] Attempting sign in for resolvedEmail:', resolvedEmail, 'userType:', userType)
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: resolvedEmail, password })
-    console.log('[login debug] signIn result:', { error: signInError?.message, user: signInData?.user?.id })
     
     let user = signInData?.user
     let session = signInData?.session
@@ -190,10 +180,8 @@ export async function POST(request: NextRequest) {
       const matricula = alunoRecord.matricula || alunoRecord.dados?.codigo || alunoRecord.id
       const virtualEmail = `aluno.${matricula}@impactoedu.local`
       
-      console.log('[login debug] Falling back to virtualEmail:', virtualEmail)
       if (resolvedEmail !== virtualEmail) {
         const fallbackAttempt = await supabase.auth.signInWithPassword({ email: virtualEmail, password })
-        console.log('[login debug] Fallback signIn result:', { error: fallbackAttempt.error?.message, user: fallbackAttempt.data?.user?.id })
         if (!fallbackAttempt.error && fallbackAttempt.data?.user) {
           user = fallbackAttempt.data.user
           session = fallbackAttempt.data.session
@@ -204,8 +192,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (error || !user) {
-      console.log('[login debug] Final auth error:', error?.message)
-      
+
       const isNetworkError = error?.message?.toLowerCase().includes('fetch') || error?.message?.toLowerCase().includes('timed out') || error?.status === 522;
       const isHtmlError = error?.message?.includes('Unexpected token') || error?.message?.includes('is not valid JSON');
       

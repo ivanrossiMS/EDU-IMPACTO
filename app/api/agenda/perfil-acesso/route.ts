@@ -23,6 +23,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Slug do aluno é obrigatório' }, { status: 400 })
     }
 
+    // Slugs não-numéricos como 'colaborador', 'admin' etc. nunca serão IDs de aluno.
+    // Retornar resposta vazia em vez de 404 para evitar erros desnecessários no log.
+    const slugIsLikelyNumericId = /^\d+$/.test(slug) || /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(slug)
+    if (!slugIsLikelyNumericId) {
+      return NextResponse.json({ aluno: null, vinculo: null, meusAlunos: [] }, {
+        headers: { 'Cache-Control': 'private, max-age=300' }
+      })
+    }
+
     const cacheKey = `${user.id}-${slug}-${responsavel_id}-${isAlunoProfile}`;
     const cached = memCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -44,7 +53,8 @@ export async function GET(request: Request) {
     }
 
     if (!aluno) {
-      return NextResponse.json({ error: 'Aluno não encontrado' }, { status: 404 })
+      // Retornar 200 com null em vez de 404 para evitar erros no console do cliente
+      return NextResponse.json({ aluno: null, vinculo: null, meusAlunos: [] })
     }
 
     // 1.5. Resolver nome e turno da Turma

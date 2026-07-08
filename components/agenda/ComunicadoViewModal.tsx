@@ -142,7 +142,7 @@ export function ComunicadoViewModal({
       const cobInterval = setInterval(fetchCobranca, 5000);
       return () => clearInterval(cobInterval);
     }
-  }, [comunicado, currentUserSlug, isAdminMode])
+  }, [comunicado.id, currentUserSlug, isAdminMode])
 
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
@@ -347,7 +347,8 @@ export function ComunicadoViewModal({
       const interval = setInterval(fetchMessages, 10000)
       return () => clearInterval(interval)
     }
-  }, [comunicado.id, currentUserSlug, isAdminMode, canReply, relatedIndividualIds])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comunicado.id, currentUserSlug, isAdminMode, canReply, relatedIndividualIds.join(',')])
 
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return

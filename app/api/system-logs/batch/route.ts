@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
+import { requireAuth } from '@/lib/server/authGuard'
 
 export async function POST(req: Request) {
+  const { errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
   try {
     const supabaseAdmin = getAdminClient()
     const logs = await req.json()
