@@ -25,7 +25,8 @@ function setCachedColaboradores(key: string, data: any) {
   _colaboradoresCache.set(key, { data, ts: Date.now() })
 }
 
-export function invalidateColaboradoresCache() {
+// Nota: não exportar funções não-handler de route files (Next.js App Router)
+function invalidateColaboradoresCache() {
   _colaboradoresCache.clear()
 }
 

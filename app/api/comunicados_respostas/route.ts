@@ -14,7 +14,14 @@ export async function GET(request: Request) {
   const comunicadoId = searchParams.get('comunicado_id');
   const comunicadoIds = searchParams.get('comunicado_ids');
   const remetenteId = searchParams.get('remetente_id'); // If parent is viewing, they pass their ID to only see their chat
-  const isAdmin = searchParams.get('admin') === 'true'; // Admin passes admin=true
+  
+  // SECURITY FIX: Verificar no servidor se o usuário é admin (não confiar no ?admin=true do cliente)
+  const perfil = user.user_metadata?.perfil || ''
+  const cargo = user.user_metadata?.cargo || ''
+  const adminPerfis = ['Diretor Geral', 'Administrador', 'Admin', 'Colaborador', 'Professor', 'Coordenador']
+  const familyPerfis = ['Família', 'Responsável', 'Aluno']
+  const isFamilyOrStudent = familyPerfis.includes(perfil) || familyPerfis.includes(cargo)
+  const isAdmin = !isFamilyOrStudent && (adminPerfis.includes(perfil) || adminPerfis.includes(cargo) || (!perfil && !cargo))
 
   if (!comunicadoId && !comunicadoIds) {
     return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
@@ -26,15 +33,19 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: true });
 
   if (comunicadoIds) {
-    const idsArray = comunicadoIds.split(',');
+    const idsArray = comunicadoIds.split(',').slice(0, 50); // Limitar a 50 IDs
     query = query.in('comunicado_id', idsArray);
   } else if (comunicadoId) {
     query = query.eq('comunicado_id', comunicadoId);
   }
 
-  // Privacy rule: if not admin, only fetch messages where remetente_id matches the student/parent
+  // Privacy rule: se não é admin, filtrar apenas mensagens do próprio usuário
   if (!isAdmin && remetenteId) {
     query = query.eq('remetente_id', remetenteId);
+  } else if (!isAdmin && !remetenteId) {
+    // Sem remetente_id e sem admin: filtrar pelo ID do usuário autenticado
+    const userSlug = user.user_metadata?.aluno_id || user.user_metadata?.responsavel_id || user.id
+    query = query.eq('remetente_id', String(userSlug));
   }
 
   const { data, error } = await query;
@@ -59,13 +70,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // SECURITY FIX: Determinar is_admin via perfil do servidor, não pelo body do cliente
+    const senderPerfil = user.user_metadata?.perfil || ''
+    const senderCargo = user.user_metadata?.cargo || ''
+    const familyPerfisPost = ['Família', 'Responsável', 'Aluno']
+    const serverIsAdmin = !familyPerfisPost.includes(senderPerfil) && !familyPerfisPost.includes(senderCargo)
+
     const row = {
       comunicado_id: body.comunicado_id,
       remetente_id: body.remetente_id,
       remetente_nome: body.remetente_nome || 'Usuário',
       conteudo: body.conteudo,
       anexos: Array.isArray(body.anexos) ? body.anexos : [],
-      is_admin: Boolean(body.is_admin)
+      is_admin: serverIsAdmin  // Determinado pelo servidor, não pelo cliente
     };
 
     const { data, error } = await supabase
