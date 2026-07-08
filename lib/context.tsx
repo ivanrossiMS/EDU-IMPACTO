@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { Preferences } from '@capacitor/preferences'
+import { Capacitor } from '@capacitor/core'
 
 export type Theme = 'dark' | 'light'
 
@@ -18,17 +20,39 @@ export const DEFAULT_MODULES: Record<string, boolean> = {
   almoxarifado: true,
 }
 
-// localStorage helpers
-function loadSetting<T>(key: string, fallback: T): T {
+// Async setting loader to support Capacitor Preferences
+export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> {
   if (typeof window === 'undefined') return fallback
   try {
-    const v = localStorage.getItem(key)
+    if (Capacitor.isNativePlatform()) {
+      const { value } = await Preferences.get({ key })
+      if (value !== null) return JSON.parse(value) as T
+    }
+    const v = window.localStorage.getItem(key)
     return v !== null ? (JSON.parse(v) as T) : fallback
   } catch { return fallback }
 }
-function saveSetting(key: string, value: unknown) {
+
+// saveSetting now saves to both localStorage and Capacitor Preferences
+export function saveSetting(key: string, value: unknown) {
   if (typeof window === 'undefined') return
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+  try { 
+    const str = JSON.stringify(value)
+    window.localStorage.setItem(key, str) 
+    if (Capacitor.isNativePlatform()) {
+      Preferences.set({ key, value: str }).catch(() => {})
+    }
+  } catch { /* ignore */ }
+}
+
+export async function removeSettingAsync(key: string) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(key)
+    if (Capacitor.isNativePlatform()) {
+      await Preferences.remove({ key }).catch(() => {})
+    }
+  } catch { /* ignore */ }
 }
 
 export interface CurrentUser {
@@ -108,44 +132,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Hydrate from localStorage after mount
   useEffect(() => {
-    const savedTheme = loadSetting<Theme>('edu-theme', 'light')
-    const savedSidebarTheme = loadSetting<Theme>('edu-sidebar-theme', 'dark')
-    const savedModules = loadSetting<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES)
-    const savedUnit = loadSetting<string>('edu-active-unit', 'Unidade Centro')
-    const savedPerfil = loadSetting<string>('edu-current-perfil', 'Diretor Geral')
-    const savedUser = loadSetting<CurrentUser | null>('edu-current-user', null)
+    async function hydrate() {
+      const savedTheme = await loadSettingAsync<Theme>('edu-theme', 'light')
+      const savedSidebarTheme = await loadSettingAsync<Theme>('edu-sidebar-theme', 'dark')
+      const savedModules = await loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES)
+      const savedUnit = await loadSettingAsync<string>('edu-active-unit', 'Unidade Centro')
+      const savedPerfil = await loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral')
+      const savedUser = await loadSettingAsync<CurrentUser | null>('edu-current-user', null)
 
-    setThemeState(savedTheme)
-    setSidebarThemeState(savedSidebarTheme)
-    setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
-    setActiveUnitState(savedUnit)
-    // Only hydrate user if explicitly saved — never default to a perfil
-    if (savedUser) {
-      setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
-      
-      // Tentar carregar a foto de chaves isoladas (mais persistente)
-      try {
-        const isolatedPhoto = localStorage.getItem(`edu-user-photo-${savedUser.id}`)
-        const extraData = localStorage.getItem(`edu-profile-extra-${savedUser.id}`)
+      setThemeState(savedTheme)
+      setSidebarThemeState(savedSidebarTheme)
+      setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
+      setActiveUnitState(savedUnit)
+      // Only hydrate user if explicitly saved — never default to a perfil
+      if (savedUser) {
+        setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
         
-        if (isolatedPhoto) {
-          savedUser.foto = isolatedPhoto
-        } else if (extraData) {
-          const parsed = JSON.parse(extraData)
-          if (parsed.foto) {
-            savedUser.foto = parsed.foto
+        // Tentar carregar a foto de chaves isoladas (mais persistente)
+        try {
+          const isolatedPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null)
+          const extraData = await loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null)
+          
+          if (isolatedPhoto) {
+            savedUser.foto = isolatedPhoto
+          } else if (extraData && extraData.foto) {
+            savedUser.foto = extraData.foto
           }
-        }
-      } catch (e) {}
+        } catch (e) {}
 
-      setCurrentUserState(savedUser)
-    } else {
-      // No saved user = logged out — clear any stale perfil
-      setCurrentUserPerfilState('')
-      localStorage.removeItem('edu-current-perfil')
+        setCurrentUserState(savedUser)
+      } else {
+        // No saved user = logged out — clear any stale perfil
+        setCurrentUserPerfilState('')
+        removeSettingAsync('edu-current-perfil')
+      }
+      document.documentElement.setAttribute('data-theme', savedTheme)
+      setHydrated(true)
     }
-    document.documentElement.setAttribute('data-theme', savedTheme)
-    setHydrated(true)
+
+    hydrate()
   }, [])
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), [])
@@ -188,7 +213,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         
         // Garante que a foto fique isolada para persistência extrema
         if (merged.foto) {
-          localStorage.setItem(`edu-user-photo-${merged.id}`, merged.foto)
+          saveSetting(`edu-user-photo-${merged.id}`, merged.foto)
         }
         
         return merged
@@ -203,7 +228,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         'edu-current-perfil',
         'edu-user-passwords',  // legacy local passwords — nuke on every logout
       ]
-      USER_KEYS.forEach(k => localStorage.removeItem(k))
+      USER_KEYS.forEach(k => removeSettingAsync(k))
       setCurrentUserPerfilState('')
     }
   }, [])

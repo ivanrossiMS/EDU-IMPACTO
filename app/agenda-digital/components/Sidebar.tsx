@@ -15,6 +15,7 @@ import {
   FileText, 
   DollarSign, 
   ClipboardList, 
+  Grid,
   Settings, 
   ChevronLeft,
   ChevronDown,
@@ -145,6 +146,7 @@ export function ADSidebar() {
     // On student/family slug paths, always show only family tabs — never admin tabs
     if (!isFamily && !isSlugPath && alunoId !== "colaborador" && !alunoId) {
       mobileTabs = [
+        { id: 'modulos', label: 'Módulos', icon: Grid, href: '/login?step=choose_system' },
         { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
@@ -158,6 +160,7 @@ export function ADSidebar() {
       ]
     } else if (alunoId) {
       mobileTabs = [
+        { id: 'modulos', label: 'Módulos', icon: Grid, href: '/login?step=choose_system' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: `/agenda-digital/${alunoId}/comunicados` },
 
         { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: `/agenda-digital/${alunoId}/momentos` },
@@ -169,9 +172,14 @@ export function ADSidebar() {
         { id: 'perfil', label: 'Perfil', icon: UserCog, href: `/agenda-digital/${alunoId}/perfil` },
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'Mídia', 'Agenda', 'Perfil'].includes(item.label)
+          return ['comunicados', 'Mídia', 'Agenda', 'Perfil', 'Módulos'].includes(item.label)
         }
         
+        // Se não for colaborador nem família (ou seja, é um usuário na visão de aluno), hide Módulos unless we want it?
+        // Let's hide it if it's family, but if it's admin/colaborador impersonating an aluno, maybe they want to switch.
+        // The user specifically asked for "admin e colaborador", so we'll show it if !isFamily.
+        if (item.label === 'Módulos' && isFamily) return false;
+
         let isFin = false;
         if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
            isFin = true;
@@ -629,8 +637,7 @@ export function ADSidebar() {
                     onClick={async () => { 
                       setLoadingPath('logout')
                       fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
-                      localStorage.removeItem('edu-current-user');
-                      localStorage.removeItem('edu-current-perfil');
+                      setCurrentUser(null);
                       window.location.href = '/login'; 
                     }}
                     style={{
@@ -704,8 +711,7 @@ export function ADSidebar() {
                 <button 
                   onClick={() => { 
                     setLoadingPath('logout')
-                    localStorage.removeItem('edu-current-user');
-                    localStorage.removeItem('edu-current-perfil');
+                    setCurrentUser(null);
                     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                     window.location.href = '/login'; 
                   }}

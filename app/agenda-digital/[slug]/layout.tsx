@@ -2211,8 +2211,7 @@ export default function ADInnerLayout({
                     onClick={() => {
                         setLoadingPath('logout')
                         fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-                        localStorage.removeItem('edu-current-user');
-                        localStorage.removeItem('edu-current-perfil');
+                        setCurrentUser(null);
                         window.location.href = '/login';
                       }}
                       title="Sair da Conta"
@@ -2371,8 +2370,7 @@ export default function ADInnerLayout({
                     onClick={() => {
                       setLoadingPath('logout')
                       fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-                      localStorage.removeItem('edu-current-user');
-                      localStorage.removeItem('edu-current-perfil');
+                      setCurrentUser(null);
                       window.location.href = '/login';
                     }}
                     title="Sair da Conta"

@@ -68,17 +68,9 @@ export default function ADPerfilPage() {
 
       refetch() 
       
-      const cachedUser = localStorage.getItem('edu-current-user')
-      if (cachedUser) {
-         try {
-           const parsedUser = JSON.parse(cachedUser)
-           if (targetResp?.email && parsedUser.email?.toLowerCase() === targetResp.email.toLowerCase()) {
-             parsedUser.foto = uploadRes.url
-             localStorage.setItem('edu-current-user', JSON.stringify(parsedUser))
-             setCurrentUser(parsedUser)
-             window.dispatchEvent(new Event('storage'))
-           }
-         } catch(e) {}
+      if (currentUser && targetResp?.email && currentUser.email?.toLowerCase() === targetResp.email.toLowerCase()) {
+        const updatedUser = { ...currentUser, foto: uploadRes.url }
+        setCurrentUser(updatedUser)
       }
 
     } catch (err: any) {

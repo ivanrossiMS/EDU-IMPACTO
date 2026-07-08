@@ -758,13 +758,10 @@ function SelecionarAlunoContent() {
   useEffect(() => {
     if (currentUser && currentUser.perfil === 'Aluno') {
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('edu-current-user')
-        if (stored) {
-          const u = JSON.parse(stored)
-          if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-            setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
-            return
-          }
+        const u = currentUser as any;
+        if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
+          setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
+          return
         }
       }
       if (currentUser.id) {

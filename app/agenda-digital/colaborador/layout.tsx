@@ -438,8 +438,6 @@ export default function AgendaDigitalColaboradorLayout({
               <button 
                 onClick={() => { 
                   setLoadingPath('logout')
-                  localStorage.removeItem('edu-current-user');
-                  localStorage.removeItem('edu-current-perfil');
                   setCurrentUser(null); 
                   fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
                   window.location.href = '/login'; 

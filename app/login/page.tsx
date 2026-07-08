@@ -3,7 +3,7 @@
 import { useState, useEffect, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { useApp } from '@/lib/context'
+import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
@@ -121,38 +121,41 @@ export default function LoginPage() {
       const stepParam = params.get('step') as Step
       const nextParam = params.get('next')
       
-      const storedUser = localStorage.getItem('edu-current-user')
-      if (storedUser) {
-        // Se fomos redirecionados para o login pelo middleware (nextParam existe),
-        // significa que os cookies do Supabase expiraram ou são inválidos.
-        // Devemos ignorar o localStorage, limpá-lo, e forçar um novo login.
-        if (nextParam) {
-          localStorage.removeItem('edu-current-user')
-          localStorage.removeItem('edu-current-perfil')
-          setStep('login')
-          return
-        }
-
-        try {
-          const user = JSON.parse(storedUser)
-          const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
-          
-          setPendingAuth({
-            cargo: user.cargo,
-            perfil: user.perfil
-          })
-          setHasDualRole(isAlsoFamily)
-          
-          if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
-            setStep(stepParam)
-          } else {
-            // Default to choose_system if logged in but no step in URL
-            setStep('choose_system')
+      const checkStoredUser = async () => {
+        const storedUser = await loadSettingAsync<any>('edu-current-user', null)
+        if (storedUser) {
+          // Se fomos redirecionados para o login pelo middleware (nextParam existe),
+          // significa que os cookies do Supabase expiraram ou são inválidos.
+          // Devemos ignorar o localStorage, limpá-lo, e forçar um novo login.
+          if (nextParam) {
+            await removeSettingAsync('edu-current-user')
+            await removeSettingAsync('edu-current-perfil')
+            setStep('login')
+            return
           }
-        } catch (e) {
-          console.error("Error restoring user for step:", e)
+
+          try {
+            const user = storedUser
+            const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
+            
+            setPendingAuth({
+              cargo: user.cargo,
+              perfil: user.perfil
+            })
+            setHasDualRole(isAlsoFamily)
+            
+            if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
+              setStep(stepParam)
+            } else {
+              // Default to choose_system if logged in but no step in URL
+              setStep('choose_system')
+            }
+          } catch (e) {
+            console.error("Error restoring user for step:", e)
+          }
         }
       }
+      checkStoredUser()
     }
   }, [])
 
@@ -242,8 +245,8 @@ export default function LoginPage() {
       
       // FIX: Force synchronous localStorage write to avoid React batching race condition before navigation
       try {
-        localStorage.setItem('edu-current-user', JSON.stringify(userObj))
-        localStorage.setItem('edu-current-perfil', JSON.stringify(perfilReal))
+        saveSetting('edu-current-user', userObj)
+        saveSetting('edu-current-perfil', perfilReal)
       } catch (e) {}
 
       if (cargoReal === 'Aluno') {
