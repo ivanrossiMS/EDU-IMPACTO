@@ -215,6 +215,54 @@ export async function GET(request: Request) {
      ]);
      allReads = readsRes.data || [];
      allCiencias = cienciasRes.data || [];
+
+     // Fetch reads for dynamic STU reports related to COLAB reports
+     const colabs = data.filter((d: any) => d.id && String(d.id).startsWith('AD-COM-REL-COLAB-'));
+     if (colabs.length > 0) {
+       const colabReadsPromises = colabs.map(async (colab: any) => {
+         try {
+           const dateStr = colab.created_at || (colab.dados && colab.dados.dataEnvio);
+           if (!dateStr) return null;
+           const createdDate = new Date(dateStr);
+           if (isNaN(createdDate.getTime())) return null;
+           
+           const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
+           const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
+           const autorId = colab.dados && colab.dados.autorId;
+           if (!autorId) return null;
+           
+           const { data: stus } = await supabaseServer.from('comunicados')
+             .select('id, dados')
+             .ilike('id', 'AD-COM-REL-STU-%')
+             .gte('created_at', minDate)
+             .lte('created_at', maxDate);
+             
+           const filteredStus = (stus || []).filter((s: any) => s.dados && s.dados.autorId === autorId);
+           if (filteredStus.length === 0) return null;
+           
+           const { data: stuReads } = await supabaseServer.from('agenda_notification_reads')
+             .select('content_id, usuario_id, read_at')
+             .in('content_id', filteredStus.map((s: any) => s.id));
+             
+           return { colabId: colab.id, reads: stuReads || [] };
+         } catch(e) {
+           console.error('Error fetching dynamic reads:', e);
+           return null;
+         }
+       });
+       
+       const colabReadsResults = await Promise.all(colabReadsPromises);
+       for (const res of colabReadsResults) {
+         if (!res) continue;
+         for (const r of res.reads) {
+           allReads.push({
+             content_id: res.colabId,
+             usuario_id: r.usuario_id,
+             read_at: r.read_at
+           });
+         }
+       }
+     }
   }
 
   const normalized = (data || []).map((row: any) => {
@@ -241,21 +289,21 @@ export async function GET(request: Request) {
     filtered = normalized.filter((c: any) => !c.isSaudacao && !c.dados?.isSaudacao && c.titulo !== 'Mensagem de Boas-vindas');
   }
 
-  // Optimization: Remove heavy payload from lists (Phase 3)
-  if (!idParam) {
-    filtered = filtered.map((c: any) => {
-      delete c.conteudo;
-      delete c.texto;
-      delete c.anexos;
-      if (c.dados) {
-        delete c.dados.conteudo;
-        delete c.dados.texto;
-        delete c.dados.anexos;
-        delete c.dados.respostas;
-      }
-      return c;
-    });
-  }
+  // Optimization disabled: Modals rely on the complete payload
+  // if (!idParam) {
+  //   filtered = filtered.map((c: any) => {
+  //     delete c.conteudo;
+  //     delete c.texto;
+  //     delete c.anexos;
+  //     if (c.dados) {
+  //       delete c.dados.conteudo;
+  //       delete c.dados.texto;
+  //       delete c.dados.anexos;
+  //       delete c.dados.respostas;
+  //     }
+  //     return c;
+  //   });
+  // }
 
   return NextResponse.json(filtered)
 }

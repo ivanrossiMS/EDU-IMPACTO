@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
+import { ComunicadoReportModal } from '@/components/agenda/ComunicadoReportModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
@@ -488,7 +489,7 @@ export default function ADAdminComunicados() {
                 : alunosAtivos.filter(a => c.turmas?.includes(a.turma) || c.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === a.id.replace(/^_*(ALU)?/, '')));
              const targetCount = targets.length;
              const lidas = Object.keys(c.leituras || {}).length
-             const progresso = targetCount > 0 ? (lidas / targetCount) * 100 : 0
+             const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0
              const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
 
              return (
@@ -681,148 +682,14 @@ export default function ADAdminComunicados() {
 {/* Drawer: Comunicado Details */}
       {selectedCom && (
         <ClientPortal>
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
-          position: 'fixed', top: 0, right: 0, bottom: 0, width: 450,
-          backgroundColor: '#ffffff', boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
-          borderLeft: '1px solid hsl(var(--border-subtle))', zIndex: 9999,
-          display: 'flex', flexDirection: 'column'
-        }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700 }}>Relatório do Comunicado</h3>
-            <button className="btn btn-ghost btn-sm" onClick={() => setSelectedCom(null)}><X size={18} /></button>
-          </motion.div>
-          
-          <div style={{ padding: 32, flex: 1, overflowY: 'auto' }}>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 4 }}>Assunto</div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>{selectedCom.titulo}</div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-               <div className="card" style={{ padding: 16 }}>
-                 <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Leituras Totais</div>
-                 <div style={{ fontSize: 24, fontWeight: 800, color: '#3b82f6' }}>{Object.keys(selectedCom.leituras || {}).length}</div>
-               </div>
-               {selectedCom.exigeCiencia && (
-                 <div className="card" style={{ padding: 16 }}>
-                   <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Ciências Confirmadas</div>
-                   <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{Object.keys(selectedCom.ciencias || {}).length}</div>
-                 </div>
-               )}
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 8, textTransform: 'uppercase' }}>
-                Conteúdo Original
-              </div>
-              <div style={{ padding: 16, background: 'hsl(var(--bg-surface))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', fontSize: 13, lineHeight: 1.6, color: 'hsl(var(--text-main))' }}>
-                {renderConteudo(selectedCom.conteudo)}
-              </div>
-              
-              {selectedCom.anexos && selectedCom.anexos.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {selectedCom.anexos.map((anexo: string, idx: number) => {
-                    const parts = typeof anexo === 'string' ? anexo.split('|') : [String(anexo)];
-                    const name = parts[0];
-                    const isForm = name.startsWith('Formulário:')
-                    const isRel = name.startsWith('Relatório:')
-                    let payloadData = null;
-                    if (isRel && parts.length > 1 && parts[1].startsWith('payload:')) {
-                      try {
-                        payloadData = JSON.parse(parts[1].substring(8));
-                      } catch(e) {}
-                    }
-                    
-                    return (
-                      <button 
-                        key={idx} 
-                        onClick={() => {
-                          if (isRel && payloadData) {
-                            const stringAnexo = typeof anexo === 'string' ? anexo : String(anexo);
-                            setViewingReportPayload({
-                              string: stringAnexo
-                            });
-                          }
-                        }}
-                        style={{ 
-                          background: isRel ? 'rgba(139, 92, 246, 0.1)' : 'hsl(var(--bg-overlay))', 
-                          color: isRel ? '#7c3aed' : 'hsl(var(--text-secondary))', 
-                          fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', padding: '6px 12px', 
-                          borderRadius: 8, border: `1px solid ${isRel ? 'rgba(139, 92, 246, 0.2)' : 'hsl(var(--border-subtle))'}`,
-                          cursor: isRel ? 'pointer' : 'default', fontWeight: 600,
-                          transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={e => {
-                          if (isRel) {
-                            e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          if (isRel) {
-                            e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                          }
-                        }}
-                      >
-                        {isForm ? <FileText size={14} color="#3b82f6" /> : isRel ? <FileBarChart size={14} color="#7c3aed" /> : <Paperclip size={14} color="#64748b" />}
-                        {name}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Status de Leitura (Famílias)</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {(() => {
-                const isGlobal = !selectedCom.turmas?.length && !selectedCom.alunosIds?.length
-                const targets = alunosAtivos.filter(a => {
-                  if (isGlobal) return true;
-                  if (selectedCom.turmas?.includes(a.turma)) return true;
-                  const aIdPlain = a.id.replace(/^_*(ALU)?/, '')
-                  return selectedCom.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === aIdPlain)
-                })
-                
-                return targets.map(a => {
-                  const leu = !!(selectedCom.leituras && selectedCom.leituras[a.id])
-                  const hasReportAnexo = selectedCom.anexos?.find((anx: string) => typeof anx === 'string' && anx.startsWith('Relatório:'));
-                  return (
-                    <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'hsl(var(--bg-surface))', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))' }}>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{a.nome} <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginLeft: 8 }}>{a.turma}</span></div>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        {hasReportAnexo && (
-                          <button 
-                            onClick={() => {
-                               setViewingReportPayload({
-                                 string: typeof hasReportAnexo === 'string' ? hasReportAnexo : String(hasReportAnexo),
-                                 studentId: a.id,
-                                 studentName: a.nome,
-                                 studentAvatar: a.avatarUrl
-                               });
-                            }}
-                            style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', border: 'none', cursor: 'pointer' }}
-                          >
-                            Ver Relatório
-                          </button>
-                        )}
-                        {leu ? (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981', fontSize: 11, fontWeight: 600 }}><CheckCircle2 size={14}/> Lido</span>
-                        ) : (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ef4444', fontSize: 11, fontWeight: 600 }}><XCircle size={14}/> Não lido</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })
-              })()}
-              <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 8 }}>Ver Lista Completa</button>
-            </div>
-          </div>
-        
-</motion.div>
+          <ComunicadoReportModal 
+            selectedCom={selectedCom}
+            alunosAtivos={alunosAtivos}
+            turmas={turmas}
+            onClose={() => setSelectedCom(null)}
+            setViewingReportPayload={setViewingReportPayload}
+            renderConteudo={renderConteudo}
+          />
 </ClientPortal>)}</AnimatePresence>
 
       
@@ -1055,6 +922,10 @@ export default function ADAdminComunicados() {
                             url = parts[1] || (parts[0].startsWith('http') ? parts[0] : '');
                             mimeType = parts[2] || '';
                           }
+                        } else if (a && typeof a === 'object') {
+                          name = a.nome || a.name || 'Anexo';
+                          url = a.url || '';
+                          mimeType = a.type || a.mimeType || (name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image/' : '');
                         } else {
                           name = String(a);
                         }
@@ -1364,6 +1235,10 @@ export default function ADAdminComunicados() {
                               url = parts[1];
                               mimeType = parts[2] || '';
                             }
+                          } else if (anexo && typeof anexo === 'object') {
+                            name = anexo.nome || anexo.name || 'Anexo';
+                            url = anexo.url || '';
+                            mimeType = anexo.type || anexo.mimeType || (name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image/' : '');
                           } else {
                             name = String(anexo);
                           }

@@ -21,7 +21,14 @@ export async function POST(request: Request) {
         isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
       }
     }
-    const readerId = user.id
+    let readerId = user.id
+    if (isFamily) {
+      if (user.user_metadata?.responsavel_id) {
+        readerId = String(user.user_metadata.responsavel_id);
+      } else if (user.user_metadata?.aluno_id) {
+        readerId = String(user.user_metadata.aluno_id);
+      }
+    }
 
     if (!tipo || !ids || !readerId || !Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: 'Parâmetros incompletos' }, { status: 400 })

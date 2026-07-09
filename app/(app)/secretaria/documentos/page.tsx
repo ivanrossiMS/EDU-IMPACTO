@@ -2,242 +2,943 @@
 
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useData } from '@/lib/dataContext'
-import { useState, useEffect } from 'react'
-import { FileText, Search, Plus, FileCheck, Download, CheckCircle, Clock, Trash2, Printer } from 'lucide-react'
-import { useApiQuery } from '@/hooks/useApi'
-import { useQueryClient } from '@tanstack/react-query'
-import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
+import { useState, useEffect, useRef } from 'react'
+import { FileText, Search, Plus, Trash2, Printer, Image as ImageIcon, Sparkles, Upload, FileSignature, Save, X, Eye, CheckCircle, Wand2, Settings } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import dynamic from 'next/dynamic'
+import 'react-quill-new/dist/quill.snow.css'
 
-interface DocumentoEmitido {
-  id: string
-  aluno_id: string
-  documento_tipo: string
-  data_emissao: string
-  emitido_por?: string
+const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false })
+
+const quillModules = {
+  toolbar: [
+    [{ 'size': ['small', false, 'large', 'huge'] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'align': [] }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    ['clean']
+  ],
+  clipboard: {
+    matchVisual: false
+  }
 }
 
-export default function SecretariaPage() {
-  const [alunos] = useSupabaseArray<any>('alunos')
-  const [search, setSearch] = useState('')
-  const [alunoSel, setAlunoSel] = useState('')
-  const queryClient = useQueryClient()
+interface ModeloDocumento {
+  id: string
+  titulo: string
+  conteudo: string
+  created_at: string
+}
+
+interface Timbrado {
+  name: string
+  url: string
+}
+
+export default function SecretariaDocumentosPage() {
   const { logSystemAction } = useData()
 
-  const filtered = (alunos || []).filter(a =>
-    a.nome.toLowerCase().includes(search.toLowerCase()) ||
-    a.matricula.includes(search)
-  )
+  // Tabs: 'emitir' | 'modelos' | 'timbrados'
+  const [activeTab, setActiveTab] = useState<'emitir' | 'modelos' | 'timbrados'>('emitir')
 
-  const DOCUMENTOS_TIPOS = [
-    { icon: '📋', label: 'Declaração de Matrícula', desc: 'Comprova matrícula do aluno no período indicado' },
-    { icon: '📅', label: 'Declaração de Frequência', desc: 'Comprova frequência escolar para fins externos' },
-    { icon: '📚', label: 'Histórico Escolar', desc: 'Histórico completo de notas e progressão' },
-    { icon: '✅', label: 'Atestado de Escolaridade', desc: 'Comprova nível de escolaridade atual' },
-    { icon: '📊', label: 'Boletim Escolar', desc: 'Notas e frequência por bimestre' },
-    { icon: '🔄', label: 'Declaração de Transferência', desc: 'Para transferências entre escolas' },
-  ]
+  // Timbrados
+  const [timbrados, setTimbrados] = useState<{name: string, url: string}[]>([])
+  const [loadingTimbrados, setLoadingTimbrados] = useState(true)
+  
+  // Margens dos Timbrados (armazenadas no localStorage)
+  const [timbradosMargens, setTimbradosMargens] = useState<Record<string, { top: number, bottom: number, left: number, right: number }>>({})
+  const [margemModalOpen, setMargemModalOpen] = useState(false)
+  const [timbradoParaMargem, setTimbradoParaMargem] = useState<{name: string, url: string} | null>(null)
+  const [margensTemp, setMargensTemp] = useState({ top: 75, bottom: 30, left: 25, right: 25 })
+  
+  // Modelos State
+  const [modelosDB, setModelosDB] = useState<ModeloDocumento[]>([])
+  const [modeloAtual, setModeloAtual] = useState<{titulo: string, conteudo: string, id?: string}>({ titulo: '', conteudo: '' })
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+  const [promptIA, setPromptIA] = useState('')
 
-  const alunoSelecionado = (alunos || []).find(a => a.id === alunoSel)
+  // Emissão State
+  const [search, setSearch] = useState('')
+  const [isSearchingDB, setIsSearchingDB] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [alunosEncontrados, setAlunosEncontrados] = useState<any[]>([])
+  const [alunoSel, setAlunoSel] = useState<any>(null)
+  const [modeloSelId, setModeloSelId] = useState<string>('')
+  const [timbradoSelUrl, setTimbradoSelUrl] = useState<string>('')
+  
+  // Revisão e Impressão
+  const [showPreviewModal, setShowPreviewModal] = useState(false)
+  const [textoFinalImp, setTextoFinalImp] = useState('')
 
-  // Query para buscar histórico de documentos (Cache via React Query)
-  const { data: historico = [], isLoading: loadingHist, refetch: fetchHistorico } = useApiQuery<DocumentoEmitido[]>(
-    ['documentos'],
-    '/api/documentos'
-  )
+  // Limpar texto final modificado sempre que as seleções mudarem
+  useEffect(() => {
+    setTextoFinalImp('')
+  }, [alunoSel, modeloSelId])
 
-  const handleEmitir = async (tipo: string) => {
-    if (!alunoSel) return
+  // Print Preview
+  const printRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    fetchTimbrados()
+    fetchModelos()
+    
+    // Load margins
     try {
-      const res = await fetch('/api/documentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          aluno_id: alunoSel,
-          documento_tipo: tipo,
-          emitido_por: 'Secretaria' // Aqui poderia ser o nome do usuário logado
-        })
-      })
-
-      if (res.ok) {
-        logSystemAction(
-          'Secretaria (Documentos)',
-          'Emissão',
-          `Emissão do documento "${tipo}" para o aluno ${alunoSelecionado?.nome}`,
-          { registroId: alunoSel, detalhesDepois: { tipo, aluno_id: alunoSel } }
-        )
-        alert(`Documento "${tipo}" emitido com sucesso para ${alunoSelecionado?.nome}!`)
-        queryClient.invalidateQueries({ queryKey: ['documentos'] })
-        // Aqui simularia o download do PDF
-      } else {
-        alert('Erro ao registrar emissão.')
+      const stored = localStorage.getItem('@EduImpacto:TimbradosMargens')
+      if (stored) {
+        setTimbradosMargens(JSON.parse(stored))
       }
-    } catch (error) {
-      console.error('Erro ao emitir documento:', error)
+    } catch (e) {
+      console.error('Error loading margins', e)
+    }
+  }, [])
+
+  const fetchModelos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('documentos_modelos')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setModelosDB(data || [])
+    } catch (err) {
+      console.error('Erro ao buscar modelos:', err)
     }
   }
 
+  const handleBuscarAlunos = async () => {
+    if (!search.trim()) return
+    setIsSearchingDB(true)
+    setHasSearched(false)
+    try {
+      // Usamos a API para contornar restrições de RLS do client-side
+      const res = await fetch(`/api/alunos?search=${encodeURIComponent(search.trim())}&limit=100`)
+      const result = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(result.error || 'Falha ao buscar alunos na API')
+      }
+      
+      setAlunosEncontrados(result.data || [])
+      setHasSearched(true)
+    } catch (err: any) {
+      console.error('Erro ao buscar alunos', err)
+      alert('Erro ao buscar alunos no banco: ' + err.message)
+    } finally {
+      setIsSearchingDB(false)
+    }
+  }
+
+  const fetchTimbrados = async () => {
+    setLoadingTimbrados(true)
+    try {
+      const formData = new FormData()
+      formData.append('action', 'list')
+      
+      const res = await fetch('/api/documentos-midia', {
+        method: 'POST',
+        body: formData
+      })
+      const data = await res.json()
+      
+      if (!res.ok) throw new Error(data.error || 'Erro ao carregar timbrados')
+      
+      setTimbrados(data.list || [])
+    } catch (err) {
+      console.error('Erro ao buscar timbrados', err)
+    } finally {
+      setLoadingTimbrados(false)
+    }
+  }
+
+  const handleUploadTimbrado = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    const formData = new FormData()
+    formData.append('action', 'upload')
+    formData.append('file', file)
+    formData.append('bucket', 'documentos')
+    formData.append('path', 'timbrados')
+    
+    try {
+      const res = await fetch('/api/documentos-midia', {
+        method: 'POST',
+        body: formData
+      })
+      const result = await res.json()
+      
+      if (!res.ok) throw new Error(result.error)
+      
+      alert('Timbrado enviado com sucesso!')
+      fetchTimbrados()
+    } catch (err: any) {
+      alert('Erro ao enviar timbrado: ' + err.message)
+    }
+  }
+
+  const handleDeleteTimbrado = async (name: string) => {
+    if (!confirm('Deseja realmente apagar este timbrado?')) return
+    
+    const formData = new FormData()
+    formData.append('action', 'delete')
+    formData.append('fileName', name)
+    
+    try {
+      const res = await fetch('/api/documentos-midia', {
+        method: 'POST',
+        body: formData
+      })
+      const result = await res.json()
+      
+      if (!res.ok) throw new Error(result.error)
+        
+      fetchTimbrados()
+    } catch (err: any) {
+      alert('Erro ao deletar timbrado: ' + err.message)
+    }
+  }
+
+  const variaveisDisponiveis = `
+<<aluno>> : Nome do aluno
+<<matricula>> : Matrícula do aluno
+<<turma>> : Nome da turma atual
+<<serie>> : Série atual
+<<turno>> : Turno
+<<status>> : Situação do aluno
+<<unidade>> : Unidade escolar
+<<email_aluno>> : Email do aluno
+<<telefone_aluno>> : Telefone do aluno
+<<data_nascimento>> : Data de nascimento
+<<responsavel_nome>> : Nome do responsável principal
+<<responsavel_financeiro>> : Responsável Financeiro
+<<responsavel_pedagogico>> : Responsável Pedagógico
+<<data_atual_str>> : Data por extenso (Ex: "08 de julho de 2026")
+<<data_atual_num>> : Data numérica (Ex: "08/07/2026")
+<<hora_atual>> : Hora (Ex: "14:30")
+`
+
+  // --- GERADOR DE IA ---
+  const handleGerarComIA = async () => {
+    if (!promptIA) return
+    setIsGeneratingAI(true)
+    try {
+      const res = await fetch('/api/ai/gerar-modelo-documento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptIA, variaveisDisponiveis })
+      })
+      const data = await res.json()
+      if (res.ok && data.texto) {
+        let cont = data.texto;
+        if (!cont.includes('<p>') && !cont.includes('<br>')) {
+          cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map((l: string) => l.trim() ? `<p>${l}</p>` : '').join('')
+        } else {
+          cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;')
+        }
+        setModeloAtual(prev => ({ ...prev, conteudo: cont }))
+        setPromptIA('')
+      } else {
+        alert('Erro ao gerar com IA: ' + (data.error || 'Erro desconhecido'))
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Falha na comunicação com a IA')
+    } finally {
+      setIsGeneratingAI(false)
+    }
+  }
+
+  const handleSaveModelo = async () => {
+    if (!modeloAtual.titulo || !modeloAtual.conteudo) {
+      alert('Preencha título e conteúdo')
+      return
+    }
+    
+    // Como a tabela foi criada manualmente, ela pode não ter um gerador automático de UUID.
+    // Então passamos um crypto.randomUUID() caso seja um novo modelo.
+    const modeloId = modeloAtual.id || crypto.randomUUID()
+    
+    const { error } = await supabase.from('documentos_modelos').upsert({
+      id: modeloId,
+      titulo: modeloAtual.titulo,
+      conteudo: modeloAtual.conteudo
+    } as any)
+    
+    if (error) {
+      alert('Erro ao salvar modelo: ' + error.message)
+    } else {
+      alert('Modelo salvo com sucesso!')
+      setModeloAtual({ titulo: '', conteudo: '' })
+      fetchModelos()
+    }
+  }
+
+  const handleDeleteModelo = async (id: string) => {
+    if (!confirm('Deseja excluir este modelo?')) return
+    const { error } = await supabase.from('documentos_modelos').delete().eq('id', id)
+    if (error) {
+      alert('Erro ao deletar: ' + error.message)
+    } else {
+      fetchModelos()
+    }
+  }
+
+  const getConteudoInterpolado = () => {
+    const mod = (modelosDB || []).find(m => m.id === modeloSelId)
+    if (!mod) return ''
+    let texto = mod.conteudo.replace(/&nbsp;/g, ' ')
+    const dataAtualExtenso = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    const dataAtualNum = new Date().toLocaleDateString('pt-BR')
+    const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+    const replaceVar = (text: string, varName: string, value: string) => {
+      // Aceita <<variavel>> ou &lt;&lt;variavel&gt;&gt; (do Quill editor)
+      const regex = new RegExp(`(?:<<|&lt;&lt;)${varName}(?:>>|&gt;&gt;)`, 'g')
+      return text.replace(regex, value)
+    }
+
+    if (alunoSel) {
+      texto = replaceVar(texto, 'aluno', alunoSel.nome || '')
+      texto = replaceVar(texto, 'matricula', alunoSel.matricula || '')
+      texto = replaceVar(texto, 'turma', alunoSel.turma_nome || alunoSel.turma || '')
+      texto = replaceVar(texto, 'serie', alunoSel.serie_nome || alunoSel.serie || '')
+      texto = replaceVar(texto, 'turno', alunoSel.turno_nome || alunoSel.turno || '')
+      texto = replaceVar(texto, 'status', alunoSel.status || '')
+      texto = replaceVar(texto, 'unidade', alunoSel.unidade || '')
+      texto = replaceVar(texto, 'email_aluno', alunoSel.email || '')
+      texto = replaceVar(texto, 'telefone_aluno', alunoSel.telefone || '')
+      texto = replaceVar(texto, 'data_nascimento', alunoSel.data_nascimento ? new Date(alunoSel.data_nascimento).toLocaleDateString('pt-BR') : '')
+      texto = replaceVar(texto, 'responsavel_nome', alunoSel.responsavel || '')
+      texto = replaceVar(texto, 'responsavel_financeiro', alunoSel.responsavel_financeiro || '')
+      texto = replaceVar(texto, 'responsavel_pedagogico', alunoSel.responsavel_pedagogico || '')
+      texto = replaceVar(texto, 'ano', new Date().getFullYear().toString())
+    }
+    
+    texto = replaceVar(texto, 'data_atual_str', dataAtualExtenso)
+    texto = replaceVar(texto, 'data_atual_num', dataAtualNum)
+    texto = replaceVar(texto, 'hora_atual', horaAtual)
+    
+    return texto
+  }
+
+  const handleAbrirRevisao = () => {
+    setTextoFinalImp(getConteudoInterpolado())
+    setShowPreviewModal(true)
+  }
+
+  const imprimir = () => {
+    if (!alunoSel || !timbradoSelUrl || !modeloSelId) {
+      return alert('Selecione o Aluno, o Modelo e o Timbrado para imprimir.')
+    }
+    
+    // Registra emissão no banco (pode falhar silenciosamente se a tabela antiga 'documentos_emitidos' for usada)
+    fetch('/api/documentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        aluno_id: alunoSel.id,
+        documento_tipo: (modelosDB || []).find(m => m.id === modeloSelId)?.titulo || 'Documento',
+        emitido_por: 'Secretaria'
+      })
+    }).catch(console.error)
+
+    window.print()
+  }
 
   return (
     <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
       
+      {/* Estilos globais para a impressão */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #print-area, #print-area * {
+            visibility: visible;
+          }
+          #print-area {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            transform: none !important;
+            background: white !important;
+            -webkit-print-color-adjust: exact;
+            z-index: 9999 !important;
+          }
+          @page {
+            size: A4;
+            margin: 0;
+          }
+        }
+        
+        .ql-editor {
+          min-height: 250px;
+          font-family: inherit;
+          font-size: 14px;
+        }
+        
+        .ql-editor p {
+          margin-bottom: 0.5em;
+        }
+        
+        .ql-toolbar.ql-snow {
+          border: none !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+          background: #f8fafc;
+        }
+        
+        .ql-container.ql-snow {
+          border: none !important;
+        }
+      `}} />
+
       {/* Header */}
-      <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <FileText size={20} style={{ color: '#2563eb' }} />
             <span style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '1px' }}>Secretaria</span>
           </div>
-          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Secretaria Digital</h1>
-          <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Documentos, declarações, atestados e protocolos.</p>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Gerador de Documentos</h1>
+          <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Crie documentos usando Inteligência Artificial e Papel Timbrado.</p>
         </div>
-        <button style={{ height: '44px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={16} /> Novo Protocolo
-        </button>
+        
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button onClick={() => setActiveTab('emitir')} style={{ padding: '10px 16px', background: activeTab === 'emitir' ? '#2563eb' : '#fff', color: activeTab === 'emitir' ? '#fff' : '#64748b', border: activeTab === 'emitir' ? 'none' : '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+            Emitir Documento
+          </button>
+          <button onClick={() => setActiveTab('modelos')} style={{ padding: '10px 16px', background: activeTab === 'modelos' ? '#2563eb' : '#fff', color: activeTab === 'modelos' ? '#fff' : '#64748b', border: activeTab === 'modelos' ? 'none' : '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+            Gerenciar Modelos (IA)
+          </button>
+          <button onClick={() => setActiveTab('timbrados')} style={{ padding: '10px 16px', background: activeTab === 'timbrados' ? '#2563eb' : '#fff', color: activeTab === 'timbrados' ? '#fff' : '#64748b', border: activeTab === 'timbrados' ? 'none' : '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+            Papéis Timbrados
+          </button>
+        </div>
       </div>
 
-      {/* Seleção de aluno */}
-      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
-        <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px' }}>Selecionar Aluno para Emitir Documento</div>
-        
-        <div style={{ position: 'relative', marginBottom: '12px' }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-          <input 
-            className="form-input" 
-            style={{ paddingLeft: 36, height: '48px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '14px' }}
-            placeholder="Buscar aluno por nome ou matrícula..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setAlunoSel('') }}
-          />
-        </div>
-
-        {search && filtered.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px', background: '#fff', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-            {filtered.slice(0, 10).map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', borderRadius: '8px', background: alunoSel === a.id ? '#eff6ff' : 'transparent', border: alunoSel === a.id ? '1px solid #bfdbfe' : '1px solid transparent' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{a.nome}</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>Matrícula: {a.matricula} • Turma: {a.turma}</div>
+      {activeTab === 'timbrados' && (
+        <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>Gestão de Timbrados (Backgrounds)</h2>
+            <label style={{ cursor: 'pointer', padding: '10px 16px', background: '#0f172a', color: '#fff', borderRadius: '8px', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Upload size={16} /> Enviar Novo Fundo
+              <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleUploadTimbrado} />
+            </label>
+          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+            {loadingTimbrados ? <p>Carregando...</p> : timbrados.length === 0 ? <p>Nenhum timbrado enviado.</p> : timbrados.map(t => (
+              <div key={t.name} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ height: '280px', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundImage: `url(${t.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' }}>
+                  {/* Preview image */}
                 </div>
-                <button 
-                  onClick={() => { setAlunoSel(a.id); setSearch(a.nome) }}
-                  style={{ height: '32px', padding: '0 12px', background: alunoSel === a.id ? '#2563eb' : '#f1f5f9', color: alunoSel === a.id ? '#fff' : '#475569', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  {alunoSel === a.id ? 'Selecionado' : 'Selecionar'}
-                </button>
+                <div style={{ padding: '12px', background: '#fff', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name.substring(14)}</span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => {
+                      setTimbradoParaMargem(t)
+                      setMargensTemp(timbradosMargens[t.name] || { top: 75, bottom: 30, left: 25, right: 25 })
+                      setMargemModalOpen(true)
+                    }} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }} title="Ajustar Margens">
+                      <Settings size={16} />
+                    </button>
+                    <button onClick={() => handleDeleteTimbrado(t.name)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Excluir Fundo">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {alunoSelecionado && (
-          <div style={{ marginTop: '16px', padding: '16px', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <CheckCircle size={20} style={{ color: '#2563eb' }} />
-            <div>
-              <span style={{ fontWeight: 700, color: '#1e3a8a' }}>Aluno Selecionado:</span>{' '}
-              <span style={{ color: '#1e40af' }}>{alunoSelecionado.nome}</span>
-              <span style={{ fontSize: '12px', color: '#60a5fa', marginLeft: '8px' }}>• {alunoSelecionado.turma}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Tipos de documentos */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
-        {DOCUMENTOS_TIPOS.map(doc => (
-          <div key={doc.label} style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
-                  {doc.icon}
-                </div>
-                <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '15px' }}>{doc.label}</div>
-              </div>
-              <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px 0', lineHeight: 1.5 }}>{doc.desc}</p>
-            </div>
+      {activeTab === 'modelos' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '24px' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px 0' }}>{modeloAtual.id ? 'Editar Modelo' : 'Criar Novo Modelo'}</h2>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
-              {alunoSelecionado ? (
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600 }}>Pronto para emitir</span>
-              ) : (
-                <span style={{ fontSize: '11px', color: '#94a3b8' }}>Selecione um aluno</span>
-              )}
-              <button 
-                className={`btn btn-sm ${alunoSelecionado ? 'btn-primary' : 'btn-secondary'}`} 
-                style={{ height: '32px', padding: '0 12px', background: alunoSelecionado ? '#2563eb' : '#f1f5f9', color: alunoSelecionado ? '#fff' : '#94a3b8', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: alunoSelecionado ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '6px' }}
-                disabled={!alunoSelecionado}
-                onClick={() => handleEmitir(doc.label)}
-              >
-                <Download size={14} /> Emitir PDF
+            <input 
+              className="form-input"
+              style={{ width: '100%', marginBottom: '16px', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+              placeholder="Título do Documento (Ex: Declaração de Matrícula)"
+              value={modeloAtual.titulo}
+              onChange={e => setModeloAtual({...modeloAtual, titulo: e.target.value})}
+            />
+
+            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <Sparkles size={18} style={{ color: '#8b5cf6' }} />
+                <span style={{ fontWeight: 600, color: '#4c1d95' }}>Escrever com Inteligência Artificial</span>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <input 
+                  className="form-input"
+                  style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                  placeholder="Ex: Gere uma declaração de transferência escolar..."
+                  value={promptIA}
+                  onChange={e => setPromptIA(e.target.value)}
+                />
+                <button 
+                  onClick={handleGerarComIA}
+                  disabled={isGeneratingAI}
+                  style={{ padding: '10px 20px', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: isGeneratingAI ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isGeneratingAI ? 'Gerando...' : <><Wand2 size={16} /> Gerar Texto</>}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
+              <ReactQuill 
+                theme="snow"
+                modules={quillModules}
+                value={modeloAtual.conteudo}
+                onChange={val => setModeloAtual({...modeloAtual, conteudo: val})}
+                placeholder="Conteúdo do documento. Use as variáveis <<aluno>>, <<turma>>, etc..."
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px', gap: '12px' }}>
+              <button onClick={() => setModeloAtual({titulo: '', conteudo: ''})} style={{ padding: '10px 20px', background: 'transparent', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
+                Limpar
+              </button>
+              <button onClick={handleSaveModelo} style={{ padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Save size={16} /> Salvar Modelo
               </button>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Histórico de Documentos Emitidos */}
-      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Histórico de Documentos Emitidos</div>
-          <button 
-            onClick={() => fetchHistorico()}
-            style={{ background: 'transparent', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            Atualizar
-          </button>
-        </div>
+          <div style={{ flex: 1, minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileSignature size={18} color="#2563eb" /> Variáveis Disponíveis
+              </div>
+              <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '16px', lineHeight: '1.5' }}>
+                Copie e cole os códigos abaixo no seu modelo. Eles serão substituídos automaticamente pelos dados reais ao gerar o documento.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', fontFamily: 'monospace', color: '#334155' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '4px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dados do Aluno</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;aluno&gt;&gt;</span> : Nome do aluno</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;matricula&gt;&gt;</span> : Matrícula do aluno</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;turma&gt;&gt;</span> : Turma atual</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;serie&gt;&gt;</span> : Série atual</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;turno&gt;&gt;</span> : Turno de estudo</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;status&gt;&gt;</span> : Situação acadêmica</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;data_nascimento&gt;&gt;</span> : Nasc. (Ex: 15/05/2010)</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;telefone_aluno&gt;&gt;</span> : Telefone principal</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;email_aluno&gt;&gt;</span> : Email do aluno</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;unidade&gt;&gt;</span> : Unidade Escolar</div>
+                </div>
 
-        <div className="table-container" style={{ border: 'none' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Aluno</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Documento</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Data de Emissão</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Emitido Por</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingHist ? (
-                <TableSkeleton rows={3} cols={5} />
-              ) : historico.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>Nenhum documento emitido recentemente.</td>
-                </tr>
-              ) : (
-                historico.map(reg => {
-                  const aluno = (alunos || []).find(a => a.id === reg.aluno_id)
-                  return (
-                    <tr key={reg.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{aluno?.nome || 'Aluno Não Encontrado'}</div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: {aluno?.matricula || '—'}</div>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#0f172a' }}>{reg.documento_tipo}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Clock size={14} style={{ color: '#94a3b8' }} />
-                          {new Date(reg.data_emissao).toLocaleString('pt-BR')}
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b' }}>{reg.emitido_por || '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '4px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Responsáveis</div>
+                  <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_nome&gt;&gt;</span> : Responsável padrão</div>
+                  <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_financeiro&gt;&gt;</span> : Resp. Financeiro</div>
+                  <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_pedagogico&gt;&gt;</span> : Resp. Pedagógico</div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: '4px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sistema & Data</div>
+                  <div><span style={{ color: '#8b5cf6', fontWeight: 600 }}>&lt;&lt;data_atual_str&gt;&gt;</span> : "08 de julho de 2026"</div>
+                  <div><span style={{ color: '#8b5cf6', fontWeight: 600 }}>&lt;&lt;data_atual_num&gt;&gt;</span> : "08/07/2026"</div>
+                  <div><span style={{ color: '#8b5cf6', fontWeight: 600 }}>&lt;&lt;hora_atual&gt;&gt;</span> : "14:30"</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 12px 0' }}>Modelos Salvos</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {(!modelosDB || modelosDB.length === 0) ? (
+                  <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Nenhum modelo criado ainda.</p>
+                ) : (
+                  modelosDB.map(m => (
+                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', flex: 1 }}>{m.titulo}</span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
-                          style={{ width: '32px', height: '32px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', margin: '0 auto' }}
-                          title="Reimprimir / Visualizar"
+                          onClick={() => {
+                            let cont = m.conteudo
+                            if (!cont.includes('<p>') && !cont.includes('<br>')) {
+                              cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map(l => `<p>${l}</p>`).join('')
+                            }
+                            setModeloAtual({...m, conteudo: cont})
+                          }} 
+                          style={{ background: 'transparent', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '4px' }} 
+                          title="Editar"
                         >
-                          <Printer size={14} />
+                          <FileSignature size={16} />
                         </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+                        <button onClick={() => handleDeleteModelo(m.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Excluir">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'emitir' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '24px' }}>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Bloco 1: Aluno */}
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px' }}>1. Selecione o Aluno</div>
+              <div style={{ position: 'relative', marginBottom: '12px', display: 'flex', gap: '8px' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input 
+                    className="form-input" 
+                    style={{ width: '100%', paddingLeft: 36, height: '44px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                    placeholder="Nome ou matrícula..."
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setHasSearched(false); setAlunoSel(null) }}
+                    onKeyDown={e => e.key === 'Enter' && search && handleBuscarAlunos()}
+                  />
+                </div>
+                <button 
+                  onClick={handleBuscarAlunos}
+                  disabled={!search.trim() || isSearchingDB}
+                  style={{ height: '44px', padding: '0 16px', background: search.trim() ? '#2563eb' : '#e2e8f0', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: (search.trim() && !isSearchingDB) ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  {isSearchingDB ? (
+                    <>
+                      <div style={{ width: 16, height: 16, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      Buscando...
+                    </>
+                  ) : (
+                    'Buscar no Banco'
+                  )}
+                </button>
+              </div>
+              {hasSearched && alunosEncontrados.length > 0 && !alunoSel && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 300, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '4px', background: '#fff' }}>
+                  {alunosEncontrados.map(a => (
+                    <div key={a.id} onClick={() => { setAlunoSel(a); setSearch(''); setHasSearched(false) }} style={{ padding: '10px', borderRadius: '6px', cursor: 'pointer', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{a.nome}</div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>Matrícula: {a.matricula} • Turma: {a.turma}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {hasSearched && alunosEncontrados.length === 0 && !alunoSel && (
+                <div style={{ padding: '12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '14px', textAlign: 'center' }}>
+                  Nenhum aluno encontrado no banco para "{search}".
+                </div>
+              )}
+              {alunoSel && (
+                <div style={{ padding: '12px', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#1e3a8a', fontSize: '14px' }}>{alunoSel.nome}</div>
+                    <div style={{ fontSize: '12px', color: '#1e40af' }}>{alunoSel.turma}</div>
+                  </div>
+                  <button onClick={() => setAlunoSel(null)} style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer' }}><X size={16} /></button>
+                </div>
+              )}
+            </div>
+
+            {/* Bloco 2: Fundo Timbrado */}
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px' }}>2. Selecione o Timbrado (Fundo)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
+                {timbrados.map(t => (
+                  <div 
+                    key={t.name} 
+                    onClick={() => setTimbradoSelUrl(t.url)}
+                    style={{ 
+                      height: '160px', borderRadius: '8px', border: timbradoSelUrl === t.url ? '2px solid #2563eb' : '1px solid #e2e8f0', 
+                      backgroundImage: `url(${t.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', cursor: 'pointer',
+                      position: 'relative', backgroundBlendMode: 'multiply', backgroundColor: '#f8fafc'
+                    }}
+                  >
+                    {timbradoSelUrl === t.url && (
+                      <div style={{ position: 'absolute', top: 6, right: 6, background: '#2563eb', color: '#fff', borderRadius: '50%', padding: '4px' }}>
+                        <CheckCircle size={12} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {timbrados.length === 0 && (
+                  <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Nenhum timbrado cadastrado.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Bloco 3: Modelo */}
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', marginBottom: '16px' }}>3. Selecione o Modelo</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+                {(modelosDB || []).map(m => (
+                  <button 
+                    key={m.id}
+                    onClick={() => setModeloSelId(m.id)}
+                    onMouseEnter={(e) => { 
+                      if (modeloSelId !== m.id) {
+                        e.currentTarget.style.background = '#f8fafc'; 
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }
+                      e.currentTarget.style.transform = 'translateY(-2px)'; 
+                      e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.05)';
+                    }}
+                    onMouseLeave={(e) => { 
+                      if (modeloSelId !== m.id) {
+                        e.currentTarget.style.background = '#fff'; 
+                        e.currentTarget.style.borderColor = '#e2e8f0';
+                      }
+                      e.currentTarget.style.transform = 'translateY(0)'; 
+                      e.currentTarget.style.boxShadow = modeloSelId === m.id ? '0 4px 6px -1px rgba(59,130,246,0.1)' : 'none';
+                    }}
+                    style={{ 
+                      padding: '16px', textAlign: 'left', background: modeloSelId === m.id ? '#eff6ff' : '#fff', 
+                      border: modeloSelId === m.id ? '2px solid #2563eb' : '1px solid #e2e8f0', borderRadius: '12px', 
+                      cursor: 'pointer', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '16px',
+                      transition: 'all 0.2s', outline: 'none',
+                      boxShadow: modeloSelId === m.id ? '0 4px 6px -1px rgba(59,130,246,0.1)' : 'none'
+                    }}
+                  >
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: modeloSelId === m.id ? '#bfdbfe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 0.2s' }}>
+                      <FileText size={20} color={modeloSelId === m.id ? '#1d4ed8' : '#64748b'} />
+                    </div>
+                    <div style={{ fontWeight: modeloSelId === m.id ? 700 : 600, fontSize: '14px', lineHeight: '1.3' }}>
+                      {m.titulo}
+                    </div>
+                  </button>
+                ))}
+                {(!modelosDB || modelosDB.length === 0) && (
+                  <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                    <FileText size={32} color="#94a3b8" style={{ margin: '0 auto 8px auto' }} />
+                    <p style={{ fontSize: '14px', color: '#64748b', margin: 0, fontWeight: 500 }}>Nenhum modelo cadastrado.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {/* Botão de Emissão Principal */}
+            <div style={{ marginTop: '8px' }}>
+              <button 
+                onClick={handleAbrirRevisao}
+                disabled={!alunoSel || !timbradoSelUrl || !modeloSelId}
+                style={{ 
+                  width: '100%', padding: '16px', 
+                  background: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? '#e2e8f0' : '#10b981', 
+                  color: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? '#94a3b8' : '#fff', 
+                  border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: '16px',
+                  cursor: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? 'not-allowed' : 'pointer', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px',
+                  boxShadow: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? 'none' : '0 4px 6px -1px rgb(16 185 129 / 0.4)'
+                }}
+              >
+                <Printer size={20} /> 
+                {(!alunoSel || !timbradoSelUrl || !modeloSelId) ? 'Preencha os passos 1, 2 e 3 acima' : 'Gerar e Revisar Documento'}
+              </button>
+            </div>
+          </div>
+
+          {/* Pré-visualização */}
+          <div>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', position: 'sticky', top: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>Pré-visualização (A4)</div>
+                <button 
+                  onClick={handleAbrirRevisao}
+                  disabled={!alunoSel || !timbradoSelUrl || !modeloSelId}
+                  style={{ padding: '8px 16px', background: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? '#e2e8f0' : '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: (!alunoSel || !timbradoSelUrl || !modeloSelId) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <Printer size={16} /> Gerar e Revisar
+                </button>
+              </div>
+
+              {/* Área de Impressão (Scale down for UI, but full size on print) */}
+              <div style={{ width: '100%', background: '#e2e8f0', padding: '16px', borderRadius: '8px', display: 'flex', justifyContent: 'center', overflow: 'hidden', minHeight: '400px' }}>
+                <div style={{ width: '105mm', height: '148.5mm', position: 'relative' }}>
+                  <div 
+                    id="print-area"
+                    style={{
+                      width: '210mm',
+                      height: '297mm',
+                      background: '#fff',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                      transform: 'scale(0.5)',
+                      transformOrigin: 'top left'
+                    }}
+                  >
+              {/* Fundo */}
+                  {timbradoSelUrl && (
+                    <img 
+                      src={timbradoSelUrl} 
+                      alt="Timbrado" 
+                      style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }} 
+                    />
+                  )}
+                  
+                  {/* Texto */}
+                  {(() => {
+                    const timbObj = timbrados.find(t => t.url === timbradoSelUrl)
+                    const margins = (timbObj && timbradosMargens[timbObj.name]) || { top: 75, bottom: 30, left: 25, right: 25 }
+                    return (
+                      <div 
+                        className="ql-editor"
+                        style={{ 
+                          position: 'absolute', 
+                          top: `${margins.top}mm`, 
+                          left: `${margins.left}mm`, 
+                          right: `${margins.right}mm`, 
+                          bottom: `${margins.bottom}mm`,
+                          zIndex: 2,
+                          fontSize: '14pt',
+                          lineHeight: '1.6',
+                          color: '#000',
+                          textAlign: 'justify',
+                          padding: 0,
+                          wordBreak: 'normal',
+                          wordWrap: 'break-word',
+                          overflowWrap: 'break-word',
+                          whiteSpace: 'pre-wrap'
+                        }}
+                        dangerouslySetInnerHTML={{ __html: (textoFinalImp || getConteudoInterpolado()).replace(/&nbsp;/g, ' ') }}
+                      />
+                    )
+                  })()}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Modal de Revisão */}
+      {showPreviewModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Revisão do Documento</h2>
+              <button onClick={() => setShowPreviewModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}><X size={20} color="#64748b" /></button>
+            </div>
+            
+            <div style={{ padding: '24px', flex: 1, overflowY: 'auto' }}>
+              <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
+                O texto abaixo já foi preenchido automaticamente com os dados do aluno. Fique à vontade para digitar, apagar ou adicionar qualquer informação extra antes da impressão final.
+              </p>
+              <div style={{ background: '#fff', borderRadius: '8px', border: '1px solid #cbd5e1', overflow: 'hidden' }}>
+                <ReactQuill 
+                  theme="snow"
+                  modules={quillModules}
+                  value={textoFinalImp}
+                  onChange={val => setTextoFinalImp(val)}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '20px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
+              <button onClick={() => setShowPreviewModal(false)} style={{ padding: '12px 24px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 600, color: '#64748b', cursor: 'pointer' }}>
+                Voltar
+              </button>
+              <button onClick={() => { setShowPreviewModal(false); imprimir() }} style={{ padding: '12px 24px', background: '#10b981', border: 'none', borderRadius: '8px', fontWeight: 600, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Printer size={18} /> Confirmar e Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE AJUSTE DE MARGENS */}
+      {margemModalOpen && timbradoParaMargem && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', width: '900px', maxWidth: '95%', display: 'flex', gap: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            
+            {/* Visual Preview Area */}
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f8fafc', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ 
+                width: '315px', height: '445.5px', /* Proporção exata de A4 (210x297 * 1.5) */
+                background: '#fff', position: 'relative', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                backgroundImage: `url(${timbradoParaMargem.url})`, backgroundSize: '100% 100%' 
+              }}>
+                {/* Overlay Box showing text area */}
+                <div style={{
+                  position: 'absolute',
+                  top: `${(margensTemp.top / 297) * 100}%`,
+                  bottom: `${(margensTemp.bottom / 297) * 100}%`,
+                  left: `${(margensTemp.left / 210) * 100}%`,
+                  right: `${(margensTemp.right / 210) * 100}%`,
+                  border: '2px dashed #3b82f6',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <span style={{ color: '#1d4ed8', fontWeight: 600, fontSize: '12px', textAlign: 'center', padding: '8px' }}>Área do Texto</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div style={{ width: '300px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#0f172a' }}>Ajustar Margens</h3>
+                <button onClick={() => setMargemModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={20} /></button>
+              </div>
+              <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px', lineHeight: '1.5' }}>
+                Ajuste os valores em milímetros (mm) para definir onde o texto deve ser impresso em cima deste fundo.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Margem Superior (Topo)</label>
+                  <input type="number" value={margensTemp.top} onChange={e => setMargensTemp({...margensTemp, top: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Esquerda</label>
+                    <input type="number" value={margensTemp.left} onChange={e => setMargensTemp({...margensTemp, left: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Direita</label>
+                    <input type="number" value={margensTemp.right} onChange={e => setMargensTemp({...margensTemp, right: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>Margem Inferior (Fundo)</label>
+                  <input type="number" value={margensTemp.bottom} onChange={e => setMargensTemp({...margensTemp, bottom: Number(e.target.value)})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                </div>
+              </div>
+
+              <div style={{ marginTop: 'auto' }}>
+                <button 
+                  onClick={() => {
+                    const newMap = { ...timbradosMargens, [timbradoParaMargem.name]: margensTemp }
+                    setTimbradosMargens(newMap)
+                    localStorage.setItem('@EduImpacto:TimbradosMargens', JSON.stringify(newMap))
+                    setMargemModalOpen(false)
+                  }}
+                  style={{ width: '100%', padding: '12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Salvar Margens
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
