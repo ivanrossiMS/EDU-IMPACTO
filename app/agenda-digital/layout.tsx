@@ -205,18 +205,20 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             .ad-banner-global {
               position: relative !important;
               width: 100% !important;
-              height: auto !important;
+              min-height: 120px !important;
               background: transparent;
               margin: 0 !important;
               padding: 0 !important;
+              padding-top: env(safe-area-inset-top, 0px) !important;
             }
             .ad-banner-global img {
               display: block !important;
               width: 100% !important;
-              height: auto !important;
-              max-height: 400px !important;
+              height: 140px !important;
               object-fit: cover !important;
               margin: 0 !important;
+              border-bottom-left-radius: 20px;
+              border-bottom-right-radius: 20px;
             }
 
             .ad-content-inner {

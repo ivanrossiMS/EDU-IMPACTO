@@ -564,7 +564,7 @@ export default function ADAdminComunicados() {
                         <Users size={13} /> Toda a Escola
                       </div>
                     ) : (
-                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0)) && (
+                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0) || (c.grupos && c.grupos.length > 0) || (c.funcionariosIds && c.funcionariosIds.length > 0)) && (
                         <button 
                           onClick={e => { e.stopPropagation(); setViewingDestCom(c); }}
                           style={{
@@ -889,9 +889,24 @@ export default function ADAdminComunicados() {
                 <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(79, 70, 229, 0.03)', borderRadius: 12, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
                   <div style={{ fontSize: 10, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.05em' }}>Para:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: '110px', overflowY: 'auto', paddingRight: 4 }}>
-                    {viewingCom.turmas?.length > 0 ? viewingCom.turmas.map(t => (
-                      <span key={t} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
-                    )) : <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>}
+                    {viewingCom.destino === 'todos' ? (
+                      <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>
+                    ) : (
+                      <>
+                        {viewingCom.turmas?.map((t: string) => (
+                          <span key={`t-${t}`} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
+                        ))}
+                        {viewingCom.grupos?.map((g: string) => (
+                          <span key={`g-${g}`} style={{ background: 'white', color: '#ec4899', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(236, 72, 153, 0.1)' }}>Grupo: {g}</span>
+                        ))}
+                        {viewingCom.alunosIds?.map((a: string) => (
+                          <span key={`a-${a}`} style={{ background: 'white', color: '#0ea5e9', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(14, 165, 233, 0.1)' }}>Aluno: {a}</span>
+                        ))}
+                        {viewingCom.funcionariosIds?.map((f: string) => (
+                          <span key={`f-${f}`} style={{ background: 'white', color: '#8b5cf6', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(139, 92, 246, 0.1)' }}>Colaborador: {f}</span>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
 

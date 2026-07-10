@@ -576,6 +576,8 @@ function buildRow(c: any) {
     turmas: Array.isArray(rest.turmas) ? rest.turmas : [],
     turmasIds: Array.isArray(rest.turmasIds) ? rest.turmasIds : [],
     alunosIds: Array.isArray(rest.alunosIds) ? rest.alunosIds : [],
+    grupos: Array.isArray(rest.grupos) ? rest.grupos : [],
+    funcionariosIds: Array.isArray(rest.funcionariosIds) ? rest.funcionariosIds : [],
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
     anexos: Array.isArray(rest.anexos) ? rest.anexos : [],
@@ -588,7 +590,7 @@ function buildRow(c: any) {
     texto: conteudo || texto || '', 
     autor: autor || '',
     data: dataEnvio || data || new Date().toISOString(),
-    destino: destino || ((dados.turmas.length > 0 || dados.alunosIds.length > 0) ? 'selecionados' : 'todos'), 
+    destino: destino || ((dados.turmas.length > 0 || dados.alunosIds.length > 0 || dados.grupos.length > 0 || dados.funcionariosIds.length > 0) ? 'selecionados' : 'todos'), 
     fixado: Boolean(fixado),
     dados: {
       ...dados,
