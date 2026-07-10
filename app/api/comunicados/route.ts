@@ -181,6 +181,45 @@ export async function GET(request: Request) {
       conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
     }
     query = query.or(conditions.join(','));
+  } else if (!isAdmin && !isFamilyOrStudent) {
+    // Colaborador sem aluno_id: garante que comunicados direcionados diretamente a ele apareçam.
+    const colaboradorConditions = [
+      `destino.eq.todos`,
+      `dados->"funcionariosIds".cs.["${user.id}"]`,
+      `dados->"colaboradoresIds".cs.["${user.id}"]`,
+    ];
+    
+    // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
+    const { data: myGroups } = await supabase.from('agenda_grupos')
+      .select('id, nome, isGlobalAccess, ano, dados, syncId')
+      .or(`colaboradoresIds.cs.["${user.id}"],dados->"colaboradoresIds".cs.["${user.id}"]`);
+      
+    if (myGroups && myGroups.length > 0) {
+      const isGlobal = myGroups.some(g => (g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1) && (!g.ano && !g.dados?.anoLetivo));
+      if (isGlobal) {
+         colaboradorConditions.push(`id.not.is.null`); // Vê tudo (acesso global total)
+      } else {
+         myGroups.forEach(g => {
+           if (g.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.nome}"]`);
+         });
+         
+         const syncIds = myGroups.filter(g => String(g.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.syncId || g.id).replace('sync-', ''));
+         const names = myGroups.map(g => String(g.nome).trim().toLowerCase());
+         
+         if (syncIds.length > 0 || names.length > 0) {
+            const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
+            if (myTurmas) {
+               myTurmas.forEach(t => {
+                 if (syncIds.includes(String(t.id)) || names.includes(String(t.nome).trim().toLowerCase())) {
+                   colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`);
+                 }
+               });
+            }
+         }
+      }
+    }
+    
+    query = query.or(colaboradorConditions.join(','));
   }
   
   if (idParam) {

@@ -163,6 +163,19 @@ export async function POST(request: Request) {
               )
             }
           }
+
+          if (directColaboradores && directColaboradores.length > 0) {
+            allPushPromises.push(
+              sendAgendaPushNotification({
+                type: 'momentos',
+                itemId: String(row.id),
+                title: '📸 Novo Momento Publicado!',
+                message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
+                targetUserIds: directColaboradores,
+                targetUrl: '/agenda-digital/momentos'
+              }).catch(err => console.error('Momento Push Error Colab:', err))
+            )
+          }
         }
         await Promise.allSettled(allPushPromises);
       });
@@ -201,6 +214,19 @@ export async function POST(request: Request) {
               }).catch(err => console.error('Momento Push Error:', err))
             )
           }
+        }
+
+        if (directColaboradores && directColaboradores.length > 0) {
+          pushPromises.push(
+            sendAgendaPushNotification({
+              type: 'momentos',
+              itemId: String(data.id),
+              title: '📸 Novo Momento Publicado!',
+              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
+              targetUserIds: directColaboradores,
+              targetUrl: '/agenda-digital/momentos'
+            }).catch(err => console.error('Momento Push Error Colab:', err))
+          )
         }
         await Promise.allSettled(pushPromises);
       });

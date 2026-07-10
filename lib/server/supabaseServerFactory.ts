@@ -27,12 +27,6 @@ export async function createProtectedClient() {
         },
         setAll(cookiesToSet) {
           try {
-            const newNames = cookiesToSet.map(c => c.name)
-            cookieStore.getAll().forEach(c => {
-               if (c.name.startsWith('sb-') && !newNames.includes(c.name)) {
-                  try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
-               }
-            })
             cookiesToSet.forEach(({ name, value, options }) => {
               const sessionOptions = { ...options };
               

@@ -9,6 +9,9 @@ const config: CapacitorConfig = {
     cleartext: true,
   },
   plugins: {
+    CapacitorCookies: {
+      enabled: true,
+    },
     StatusBar: {
       overlaysWebView: true,
       style: 'DARK'

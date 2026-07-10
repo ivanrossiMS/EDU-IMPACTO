@@ -171,7 +171,7 @@ export default function ColaboradorComunicadosPage() {
     const accessibleTurmas = turmas.filter((t: any) => {
        const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
        if (globalYears.has(tAno)) return true;
-       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+       return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
   }, [turmas, userGroups, currentUser])
@@ -740,11 +740,13 @@ export default function ColaboradorComunicadosPage() {
             
             const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
             const targetGrupos = c.grupos || (c.dados?.grupos) || [];
+            const targetTurmas = c.turmas || (c.dados?.turmas) || [];
             
             const inFuncs = targetFuncs.some((id: any) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`);
             const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
+            const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             
-            if (!isAuthor && !isTodos && !inFuncs && !inGrupos) {
+            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
               return false;
             }
             if (!searchTerm) return true;

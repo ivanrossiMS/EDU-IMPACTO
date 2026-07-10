@@ -233,7 +233,7 @@ export default function ADCalendarioPage() {
         baseTurmas = turmas.filter((t: any) => {
            const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
            if (globalYears.has(tAno)) return true;
-           return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+           return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
         });
       }
     }

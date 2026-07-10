@@ -118,10 +118,12 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
   const [hasHydrated, setHasHydrated] = useState(false)
 
-  const { alunosByTurmaRef, alunosById, colaboradoresById } = useMemo(() => {
+  const { alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId } = useMemo(() => {
     const byTurmaRef = new Map<string, any[]>()
     const aById = new Map<string, any>()
     const cById = new Map<string, any>()
+    // Mapa: turmaId (string) -> lista de colaboradores vinculados via grupos sincronizados
+    const cByTurmaId = new Map<string, any[]>()
 
     ;(alunos || []).forEach((a: any) => {
       aById.set(String(a.id), a)
@@ -143,8 +145,30 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       cById.set(String(c.id), c)
     })
 
-    return { alunosByTurmaRef: byTurmaRef, alunosById: aById, colaboradoresById: cById }
-  }, [alunos, colaboradores])
+    // Construir mapa de colaboradores por turma usando grupos sincronizados
+    // Grupos sincronizados têm syncId = 'sync-{turmaId}' ou id = 'sync-{turmaId}'
+    ;(gruposManuais || []).forEach((g: any) => {
+      const syncId: string = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+      if (!syncId) return
+      const turmaId = syncId.replace(/^sync-/, '')
+      if (!turmaId) return
+
+      let cIds = g.colaboradoresIds || []
+      if (typeof cIds === 'string') {
+        try { cIds = JSON.parse(cIds) } catch { cIds = [] }
+      }
+      if (!Array.isArray(cIds) || cIds.length === 0) return
+
+      const list: any[] = cByTurmaId.get(turmaId) || []
+      cIds.forEach((id: any) => {
+        const c = cById.get(String(id))
+        if (c && !list.find((x: any) => x.id === c.id)) list.push(c)
+      })
+      cByTurmaId.set(turmaId, list)
+    })
+
+    return { alunosByTurmaRef: byTurmaRef, alunosById: aById, colaboradoresById: cById, colaboradoresByTurmaId: cByTurmaId }
+  }, [alunos, colaboradores, gruposManuais])
 
   const getTurmaAlunos = (t: any) => {
     const refs = new Set<string>()
@@ -161,6 +185,11 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     const unique = new Map()
     all.forEach(a => unique.set(a.id, a))
     return Array.from(unique.values())
+  }
+
+  // Retorna colaboradores vinculados à turma via grupos sincronizados
+  const getTurmaColaboradores = (t: any): any[] => {
+    return colaboradoresByTurmaId.get(String(t.id)) || []
   }
 
   useEffect(() => {
@@ -267,10 +296,30 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       
       cat.turmas.forEach((t: any) => {
         const tAlunos = getTurmaAlunos(t)
-        const payloads = tAlunos.map(a => {
-          const anoLetivo = t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-          return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t.nome, anoLetivo };
-        })
+        const tColabs = getTurmaColaboradores(t)
+        const anoLetivo = t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+
+        const alunoPayloads = tAlunos.map((a: any) => ({
+          id: `a_${a.id}`,
+          name: a.nome,
+          type: 'aluno' as const,
+          turmaNome: t.nome,
+          anoLetivo
+        }))
+
+        const colabPayloads = tColabs.map((c: any) => ({
+          id: `f_${c.id}`,
+          name: c.nome,
+          type: 'funcionario' as const,
+          turmaNome: t.nome,
+          funcao: c.cargo || c.perfil || c.dados?.cargo || c.dados?.perfil || 'Colaborador'
+        }))
+
+        // Colaboradores primeiro, depois alunos em ordem alfabética
+        const payloads = [
+          ...colabPayloads.sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR')),
+          ...alunoPayloads.sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'))
+        ]
         
         payloads.forEach(p => {
           leafIds.add(p.id)
@@ -278,11 +327,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           catPayloads.set(p.id, p)
         })
         
+        const totalPessoas = payloads.length
+        const subtitleParts = [t.turno || 'Turma']
+        if (!isLoadingData && tColabs.length > 0) {
+          subtitleParts.push(`${tColabs.length} colaborador${tColabs.length > 1 ? 'es' : ''}`)
+        }
+
         turmasItems.push({
           id: `t_${t.id}`,
           title: t.nome,
-          subtitle: t.turno || 'Turma',
-          countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} pessoas`,
+          subtitle: subtitleParts.join(' • '),
+          countBadge: isLoadingData ? 'Carregando...' : `${totalPessoas} pessoa${totalPessoas !== 1 ? 's' : ''}`,
           type: 'turma',
           icon: Users,
           leafIds: payloads.map(p => p.id),
@@ -352,7 +407,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
 
     return { listItems: items, allLeafIds: Array.from(leafIds) }
-  }, [filteredTurmas, filteredGrupos, alunosByTurmaRef, alunosById, colaboradoresById])
+  }, [filteredTurmas, filteredGrupos, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
 
   const activeItems = currentCatId 
     ? (listItems.find(i => i.id === currentCatId)?.children || [])
@@ -623,6 +678,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                            ) : (
                              flatPeopleList.map((person: any) => {
                                const isPersonSelected = !!selected[person.id]
+                               const isColab = person.type === 'funcionario'
                                return (
                                  <div 
                                     key={person.id}
@@ -638,26 +694,33 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                     style={{
                                       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
                                       borderRadius: 16, cursor: 'pointer',
-                                      background: isPersonSelected ? '#F5F3FF' : '#fff',
-                                      border: isPersonSelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
+                                      background: isPersonSelected ? (isColab ? '#F5F0FF' : '#F5F3FF') : (isColab ? '#FAF8FF' : '#fff'),
+                                      border: isPersonSelected ? `2px solid ${isColab ? '#A78BFA' : '#C4B5FD'}` : `1px solid ${isColab ? '#DDD6FE' : '#E2E8F0'}`,
                                       transition: 'all 0.2s'
                                     }}
                                  >
                                     <div style={{ 
                                       width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                      background: isPersonSelected ? '#6D5DF6' : '#fff',
-                                      border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                      background: isPersonSelected ? (isColab ? '#7C3AED' : '#6D5DF6') : '#fff',
+                                      border: isPersonSelected ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
                                     }}>
                                       {isPersonSelected && <Check size={16} color="#fff" strokeWidth={3} />}
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                      <span style={{ fontSize: 15, fontWeight: 600, color: '#0F172A' }}>{person.name}</span>
-                                      <span style={{ fontSize: 12, color: '#64748B', textTransform: 'capitalize' }}>
-                                        {person.type === 'aluno' 
-                                          ? `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}` 
-                                          : person.type === 'funcionario' 
-                                            ? `Funcionário${person.funcao ? ` • ${person.funcao}` : ''}`
-                                            : person.type}
+                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <span style={{ fontSize: 15, fontWeight: 600, color: isColab ? '#5B21B6' : '#0F172A' }}>{person.name}</span>
+                                        {isColab && (
+                                          <span style={{
+                                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                                            background: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
+                                            color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0
+                                          }}>Colaborador</span>
+                                        )}
+                                      </div>
+                                      <span style={{ fontSize: 12, color: isColab ? '#7C3AED' : '#64748B' }}>
+                                        {isColab
+                                          ? `${person.funcao || 'Colaborador'}${person.turmaNome ? ` • ${person.turmaNome}` : ''}`
+                                          : `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}`}
                                       </span>
                                     </div>
                                  </div>
@@ -749,6 +812,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                       <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: 16 }}>
                                         {item.people.map((person: any) => {
                                           const isPersonSelected = !!selected[person.id]
+                                          const isColab = person.type === 'funcionario'
                                           return (
                                             <div 
                                               key={person.id}
@@ -764,27 +828,40 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                               style={{
                                                 display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
                                                 borderRadius: 12, cursor: 'pointer',
-                                                background: isPersonSelected ? '#F8FAFC' : 'transparent',
+                                                background: isColab
+                                                  ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
+                                                  : (isPersonSelected ? '#F8FAFC' : 'transparent'),
+                                                border: isColab ? '1px solid rgba(124,58,237,0.15)' : 'none',
+                                                marginBottom: isColab ? 2 : 0,
                                                 transition: 'background 0.2s'
                                               }}
-                                              onMouseEnter={e => e.currentTarget.style.background = '#F8FAFC'}
-                                              onMouseLeave={e => e.currentTarget.style.background = isPersonSelected ? '#F8FAFC' : 'transparent'}
+                                              onMouseEnter={e => e.currentTarget.style.background = isColab ? 'rgba(124,58,237,0.1)' : '#F8FAFC'}
+                                              onMouseLeave={e => e.currentTarget.style.background = isColab
+                                                ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
+                                                : (isPersonSelected ? '#F8FAFC' : 'transparent')}
                                             >
                                               <div style={{ 
-                                                width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                background: isPersonSelected ? '#4F46E5' : '#fff',
-                                                border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                                width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                                background: isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#fff',
+                                                border: isPersonSelected ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
                                               }}>
                                                 {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
                                               </div>
-                                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: 14, fontWeight: 500, color: '#1E293B' }}>{person.name}</span>
-                                                <span style={{ fontSize: 11, color: '#64748B' }}>
-                                                  {person.type === 'aluno' 
-                                                    ? `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}` 
-                                                    : person.type === 'funcionario' 
-                                                      ? `Funcionário${person.funcao ? ` • ${person.funcao}` : ''}`
-                                                      : person.type}
+                                              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                  <span style={{ fontSize: 14, fontWeight: isColab ? 600 : 500, color: isColab ? '#5B21B6' : '#1E293B' }}>{person.name}</span>
+                                                  {isColab && (
+                                                    <span style={{
+                                                      fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
+                                                      background: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
+                                                      color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0
+                                                    }}>Colaborador</span>
+                                                  )}
+                                                </div>
+                                                <span style={{ fontSize: 11, color: isColab ? '#7C3AED' : '#64748B' }}>
+                                                  {isColab
+                                                    ? `${person.funcao || 'Colaborador'}${person.turmaNome ? ` • ${person.turmaNome}` : ''}`
+                                                    : `Aluno${person.anoLetivo ? ` (${person.anoLetivo})` : ''}`}
                                                 </span>
                                               </div>
                                             </div>

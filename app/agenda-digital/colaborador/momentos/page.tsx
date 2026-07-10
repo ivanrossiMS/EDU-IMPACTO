@@ -98,7 +98,7 @@ export default function ADMomentosPage() {
     const accessibleTurmas = turmas.filter((t: any) => {
        const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
        if (globalYears.has(tAno)) return true;
-       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+       return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
   }, [turmas, userGroups, currentUser])
@@ -197,14 +197,16 @@ export default function ADMomentosPage() {
       const isSelected = newPost.targetClasses.length > 0;
       const selectedTurmas = isSelected ? newPost.targetClasses.filter(t => t.type === 'turma' || t.type === 'grupo') : [];
       const selectedAlunos = isSelected ? newPost.targetClasses.filter(t => t.type === 'aluno') : [];
+      const selectedFuncionarios = isSelected ? newPost.targetClasses.filter(t => t.type === 'funcionario') : [];
 
       const targetClasses = selectedTurmas.length > 0 
         ? selectedTurmas.map(t => t.name) 
-        : (selectedAlunos.length > 0 ? [] : ['Toda a Escola']);
+        : (selectedAlunos.length > 0 || selectedFuncionarios.length > 0 ? [] : ['Toda a Escola']);
         
       const targetClassesIds = selectedTurmas.map(t => String(t.id).replace(/^t_?/, ''));
       const alunosIds = selectedAlunos.map(t => String(t.id).replace(/^a_?/, ''));
       const alunosNomes = selectedAlunos.map(t => t.name);
+      const funcionariosIds = selectedFuncionarios.map(t => String(t.id).replace(/^f_?/, ''));
 
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -214,6 +216,7 @@ export default function ADMomentosPage() {
         targetClassesIds,
         alunosIds,
         alunosNomes,
+        funcionariosIds,
         media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
       }
 
@@ -330,9 +333,15 @@ export default function ADMomentosPage() {
     return momentosFeed.filter(m => {
       const targetClasses = m.targetClasses || []
       const targetAlunos = m.alunosIds || []
+      const targetFuncs = m.funcionariosIds || m.dados?.funcionariosIds || []
       
-      const isGlobal = targetClasses.length === 0 && targetAlunos.length === 0
+      const isGlobal = targetClasses.length === 0 && targetAlunos.length === 0 && targetFuncs.length === 0
       if (isGlobal) return true
+
+      // Se o momento foi endereçado diretamente para mim (colaborador)
+      if (targetFuncs.some((id: string) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`)) {
+        return true
+      }
 
       // Se o momento é direcionado a alunos específicos
       if (targetAlunos.length > 0) {

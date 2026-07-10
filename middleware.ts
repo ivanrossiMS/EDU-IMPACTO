@@ -20,8 +20,10 @@ const PUBLIC_PATHS = [
   '/login',
   '/esqueci-senha',
   '/atualizar-senha',
-  '/api/auth',          // endpoints de login/logout/me
-  '/api/agenda',        // endpoints da agenda que o aluno acessa sem auth do supabase
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/verify-first-access',
+  '/api/auth/reset-access',
   '/api/test',
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
@@ -72,19 +74,12 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           response = NextResponse.next({ request })
-          const keepConnected = request.cookies.get('edu_keep_connected')?.value === '1';
-          
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
-            if (!keepConnected) {
-              delete sessionOptions.maxAge;
-              delete sessionOptions.expires;
-            } else {
-              const expires = new Date();
-              expires.setFullYear(expires.getFullYear() + 1);
-              sessionOptions.maxAge = 315360000;
-              sessionOptions.expires = expires;
-            }
+            const expires = new Date();
+            expires.setFullYear(expires.getFullYear() + 1);
+            sessionOptions.maxAge = 315360000;
+            sessionOptions.expires = expires;
             response.cookies.set(name, value, sessionOptions)
           })
         },

@@ -272,7 +272,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       // Adicionar turmas e grupos
       if (allGroupTerms.length > 0) {
         // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados')
+        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados, colaboradoresIds')
         if (!gruposError && allGrupos) {
           const matchedGrupos = allGrupos.filter(g => {
             const gId = String(g.id).toLowerCase()
@@ -290,6 +290,14 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
               const cleanId = aId.replace(/^(a_|_ALU)/, '')
               if (cleanId) grupoAlunosIds.push(cleanId)
             })
+
+            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
+            if (typeof colabs === 'string') {
+              try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+            }
+            if (Array.isArray(colabs)) {
+              colabs.forEach((c: any) => colaboradoresIds.push(String(c)));
+            }
           })
 
           if (grupoAlunosIds.length > 0) {
@@ -301,23 +309,45 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         // 2. Resolver nomes/IDs de turmas para IDs reais no banco
         const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, dados')
         if (!turmasError && allTurmas) {
-          const matchedTurmaIds = allTurmas
-            .filter(t => {
-              const tId = String(t.id).toLowerCase()
-              const tNome = String(t.nome || '').toLowerCase()
-              const tCod = String(t.codigo || '').toLowerCase()
-              const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
+          const matchedTurmas = allTurmas.filter(t => {
+            const tId = String(t.id).toLowerCase()
+            const tNome = String(t.nome || '').toLowerCase()
+            const tCod = String(t.codigo || '').toLowerCase()
+            const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
 
-              return allGroupTerms.some(turma => {
-                const tl = turma.toLowerCase().trim()
-                if (tl.startsWith('todos:')) {
-                  const targetAno = tl.split(':')[1]?.trim()
-                  return targetAno === tAno
-                }
-                return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
-              })
+            return allGroupTerms.some(turma => {
+              const tl = turma.toLowerCase().trim()
+              if (tl.startsWith('todos:')) {
+                const targetAno = tl.split(':')[1]?.trim()
+                return targetAno === tAno
+              }
+              return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
             })
-            .map(t => String(t.id))
+          });
+          
+          const matchedTurmaIds = matchedTurmas.map(t => String(t.id))
+
+          // Extrair colaboradores dessas turmas (através dos agenda_grupos correspondentes)
+          if (!gruposError && allGrupos) {
+             matchedTurmas.forEach(t => {
+                const tId = String(t.id);
+                const tNome = String(t.nome || '').trim().toLowerCase();
+                const relatedGroup = allGrupos.find(g => {
+                  const sId = String(g.syncId || '');
+                  const gId = String(g.id || '');
+                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.nome).trim().toLowerCase() === tNome;
+                });
+                if (relatedGroup) {
+                  let colabs = relatedGroup.colaboradoresIds || relatedGroup.dados?.colaboradoresIds;
+                  if (typeof colabs === 'string') {
+                    try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+                  }
+                  if (Array.isArray(colabs)) {
+                    colabs.forEach((c: any) => colaboradoresIds.push(String(c)));
+                  }
+                }
+             });
+          }
 
           const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
 
@@ -364,7 +394,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
     return {
       students: studentsResult,
-      directColaboradores: colaboradoresIds
+      directColaboradores: Array.from(new Set(colaboradoresIds))
     }
   } catch (err: any) {
     console.error('[NotifHelper] Erro em getStudentTargetsForComunicados:', err.message)
