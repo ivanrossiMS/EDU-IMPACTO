@@ -8,17 +8,40 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
+  // ── RBAC: apenas Administrador/Diretor Geral pode ler logs ───────────────
   const supabase = await createProtectedClient();
+  const { data: dbUser } = await supabase
+    .from('system_users')
+    .select('perfil, cargo')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
+  const cargo  = dbUser?.cargo  || user.user_metadata?.cargo  || ''
+  const isAdmin =
+    perfil === 'Administrador' ||
+    perfil === 'Diretor Geral' ||
+    perfil === 'Admin'         ||
+    cargo  === 'Administrador Master' ||
+    cargo  === 'Diretor Geral'
+
+  if (!isAdmin) {
+    return NextResponse.json(
+      { error: 'Acesso negado. Apenas administradores podem visualizar os logs do sistema.' },
+      { status: 403 }
+    )
+  }
+
   const { searchParams } = new URL(request.url)
   const modulo = searchParams.get('modulo')
-  const limit = parseInt(searchParams.get('limit') || '200')
+  // Cap máximo de 500 registros por requisição
+  const limit = Math.min(parseInt(searchParams.get('limit') || '200'), 500)
 
   let query = supabase.from('system_logs').select('*', { count: 'exact' })
   
   if (modulo) query = query.eq('modulo', modulo)
 
-  // FIX C: Filtrar por data padrão (últimos 7 dias) para evitar varrer a tabela toda
-  // Caso precise de histórico completo, pode implementar paginação com data custom.
+  // Filtrar por data padrão (últimos 7 dias) para evitar varrer a tabela toda
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   query = query.gte('data_hora', sevenDaysAgo.toISOString())
@@ -53,6 +76,24 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const logs = Array.isArray(body) ? body : [body]
+
+    // ── Segurança: limitar a 100 registros por batch ──────────────────────────
+    if (logs.length > 100) {
+      return NextResponse.json(
+        { error: 'Limite de 100 registros por batch excedido.' },
+        { status: 400 }
+      )
+    }
+
+    // Buscar nome real do usuário para não permitir forjar usuarioNome
+    const supabaseAdminClient = await createProtectedClient()
+    const { data: dbUser } = await supabaseAdminClient
+      .from('system_users')
+      .select('nome')
+      .eq('id', user.id)
+      .maybeSingle()
+    const sessionUserNome = dbUser?.nome || user.email || user.id
+
     const sanitize = (obj: any) => {
        if (!obj || typeof obj !== 'object') return obj;
        const copy = { ...obj };
@@ -64,7 +105,8 @@ export async function POST(request: Request) {
     const rows = logs.map(l => ({
       id: l.id || `LOG-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
       data_hora: l.dataHora || new Date().toISOString(),
-      usuario_nome: l.usuarioNome || '',
+      // ── Segurança: usuario_nome SEMPRE da sessão — nunca do payload ─────────
+      usuario_nome: sessionUserNome,
       perfil: l.perfil || '',
       modulo: l.modulo || '',
       acao: l.acao || '',

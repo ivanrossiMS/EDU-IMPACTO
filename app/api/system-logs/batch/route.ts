@@ -1,19 +1,35 @@
 import { NextResponse } from 'next/server'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { requireAuth } from '@/lib/server/authGuard'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 
 export async function POST(req: Request) {
-  const { errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
   try {
-    const supabaseAdmin = getAdminClient()
+    const supabase = await createProtectedClient()
+
     const logs = await req.json()
     if (!logs || !Array.isArray(logs) || logs.length === 0) {
       return NextResponse.json({ success: true, count: 0 })
     }
 
-    // Process logs to map to correct schema
+    // ── Segurança: limitar 100 registros por batch ────────────────────────────
+    if (logs.length > 100) {
+      return NextResponse.json(
+        { error: 'Limite de 100 registros por batch excedido.' },
+        { status: 400 }
+      )
+    }
+
+    // Buscar nome real do usuário — não aceitar do payload (evita forjamento)
+    const { data: dbUser } = await supabase
+      .from('system_users')
+      .select('nome')
+      .eq('id', user.id)
+      .maybeSingle()
+    const sessionUserNome = dbUser?.nome || user.email || user.id
+
     const sanitize = (obj: any) => {
        if (!obj || typeof obj !== 'object') return obj;
        const copy = { ...obj };
@@ -25,7 +41,8 @@ export async function POST(req: Request) {
     const processedLogs = logs.map((l: any) => ({
       id: l.id || `LOG-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
       data_hora: l.dataHora || l.created_at || new Date().toISOString(),
-      usuario_nome: l.usuarioNome || l.usuario_id || '',
+      // ── Segurança: usuario_nome SEMPRE da sessão — nunca do payload ──────────
+      usuario_nome: sessionUserNome,
       perfil: l.perfil || '',
       modulo: l.modulo || '',
       acao: l.acao || '',
@@ -38,7 +55,8 @@ export async function POST(req: Request) {
       detalhes_depois: sanitize(l.detalhesDepois),
     }))
 
-    const { error } = await supabaseAdmin
+    // Usa cliente protegido (RLS) em vez de AdminClient para batch público
+    const { error } = await supabase
       .from('system_logs')
       .insert(processedLogs)
 
@@ -53,3 +71,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
+

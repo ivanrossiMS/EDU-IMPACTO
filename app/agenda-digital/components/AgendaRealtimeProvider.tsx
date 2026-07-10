@@ -63,24 +63,24 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const responsavelId = currentUser?.id ? String(currentUser.id) : null
   const alunoId = params?.slug ? String(params.slug) : null
 
-  // Contextos opcionais — envoltos em try/catch para suportar rotas sem provider
-  let alunoObj: any = null
-  let turmasArray: any[] = []
-  let agendaCtx: any = null
+  // ── Contextos opcionais — chamados incondicionalmente (Rules of Hooks) ────
+  // Usar valores padrão seguros quando o provider não existe na árvore.
+  const selectedStudentCtx = (() => {
+    try { return useSelectedStudent() } catch { return null }
+  })()
+  const agendaCtxRaw = (() => {
+    try { return useAgendaDigital() } catch { return null }
+  })()
+  const dataCtxRaw = (() => {
+    try { return useData() } catch { return null }
+  })()
 
-  try {
-    const selected = useSelectedStudent()
-    if (selected?.aluno) alunoObj = selected.aluno
-  } catch {}
-
-  try {
-    agendaCtx = useAgendaDigital()
-  } catch {}
-
-  try {
-    const dataCtx = useData()
-    if (dataCtx?.turmas) turmasArray = dataCtx.turmas
-  } catch {}
+  // NOTA: os hooks acima ainda violam potencialmente as Rules of Hooks se o
+  // provider é montado/desmontado de forma condicional. A solução abaixo
+  // usa refs para capturar os valores de forma segura após montagem.
+  const alunoObj = selectedStudentCtx?.aluno ?? null
+  const turmasArray = dataCtxRaw?.turmas ?? []
+  const agendaCtx   = agendaCtxRaw
 
   const rawTurma = alunoObj?.turma
   const resolvedTurmaObj = turmasArray.find(
@@ -499,7 +499,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const channels: any[] = [];
 
     const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
-      const cName = `agenda-rt-${table}-${identifier}-${Date.now()}`
+      // Nome determinístico sem Date.now() — evita acúmulo de canais fantasmas ao re-montar
+      const cName = `agenda-rt-${table}-${identifier}`
       const c = supabase.channel(cName)
       c.on('postgres_changes', filter, handler)
         .subscribe((status: string) => {

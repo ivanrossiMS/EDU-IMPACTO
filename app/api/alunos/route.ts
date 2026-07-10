@@ -328,10 +328,6 @@ export async function GET(request: Request) {
           }
         }).filter((r: any) => r.id) || []
 
-      if (student.nome === 'ivan25') {
-        console.error(`\n[${new Date().toISOString()}] ivan25 linkedResponsaveis: ${JSON.stringify(linkedResponsaveis, null, 2)}\n`)
-      }
-
       const fallbackResponsaveis = student.dados?.responsaveis || []
 
       const studentTurma = student.turma
@@ -378,7 +374,7 @@ export async function POST(request: Request) {
     const item = body
     const row = buildRow(item)
     
-    console.error(`[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
+    console.info(`[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
 
     // 0. Verifica duplicidade de ID do Aluno
     if (row.id && !row.id.startsWith('TEMP-')) {
@@ -617,7 +613,7 @@ export async function PUT(request: Request) {
     const row = buildRow(body)
     delete row.id // Não atualiza o ID!
 
-    console.error(`[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
+    console.info(`[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
 
     // 0. Verifica duplicidade de E-mail do Aluno
     if (row.email && row.email.trim()) {
