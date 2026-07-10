@@ -5,7 +5,7 @@ import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2 } from 'lucide-react'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -229,6 +229,19 @@ export default function CalendarioPage() {
 
   const handleDelete = (id: string) => setEventosAgenda(prev => prev.filter(e => e.id !== id))
 
+  const handleDeleteAll = async () => {
+    try {
+      const res = await fetch('/api/agenda/eventos', { method: 'DELETE' });
+      if (res.ok) {
+        setEventosAgenda([]);
+        if (setLocalEventosAgenda) setLocalEventosAgenda([]);
+      } else {
+        alert('Erro ao excluir eventos.');
+      }
+    } catch (e) {
+      alert('Erro de conexão ao excluir eventos.');
+    }
+  }
   const handleEdit = (ev: EventoAgenda) => {
     setForm({
       titulo: ev.titulo, descricao: ev.descricao, tipo: ev.tipo, data: ev.data,
@@ -319,9 +332,22 @@ export default function CalendarioPage() {
           <h1 className="page-title">Calendário Escolar</h1>
           <p className="page-subtitle">{eventosAgenda.length} evento(s) cadastrado(s) • {year}</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}>
-          <Plus size={13} />Novo Evento
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button 
+            className="btn btn-outline-danger btn-sm" 
+            onClick={() => { 
+              if (confirm('Tem certeza que deseja EXCLUIR TODOS os eventos do calendário? Esta ação não pode ser desfeita.')) {
+                handleDeleteAll();
+              }
+            }}
+            style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5' }}
+          >
+            <Trash2 size={13} /> Excluir Todos
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}>
+            <Plus size={13} />Novo Evento
+          </button>
+        </div>
       </div>
 
       <div className="ad-calendar-filter-bar" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px', background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>

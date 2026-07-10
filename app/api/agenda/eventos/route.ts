@@ -17,16 +17,62 @@ export async function GET(request: Request) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     const supabase = createClient(supabaseUrl, supabaseKey)
     
-    const accessStartDate = await getLoggedUserAccessStartDate()
+    let accessStartDate = await getLoggedUserAccessStartDate()
     const url = new URL(request.url)
     const limitParam = url.searchParams.get('limit')
     const offsetParam = url.searchParams.get('offset')
+    const alunoId = url.searchParams.get('aluno_id')
     
     let query = supabase.from('eventos_agenda').select('*')
     
     if (accessStartDate) {
       const accessStartDateStr = accessStartDate.toISOString().substring(0, 10)
       query = query.gte('data', accessStartDateStr)
+    }
+
+    // Filtragem Segura no Backend para Família/Aluno
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    const isFamilyOrStudent = ['Família', 'Responsável', 'Aluno'].includes(perfil) || ['Responsável', 'Aluno'].includes(cargo);
+    
+    if (isFamilyOrStudent && alunoId) {
+      let resolvedTurma = null;
+      let alunoNome = null;
+      let responsaveis = [];
+      const { data: alunoRes } = await supabase.from('alunos').select('id, nome, turma').eq('id', alunoId).maybeSingle();
+      
+      if (alunoRes) {
+        alunoNome = alunoRes.nome;
+        if (alunoRes.turma) {
+          const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
+          resolvedTurma = tData?.nome || alunoRes.turma;
+        }
+        const { data: vincs } = await supabase.from('aluno_responsavel').select('responsaveis(id, nome)').eq('aluno_id', alunoRes.id);
+        if (vincs) {
+           responsaveis = vincs.map((v: any) => v.responsaveis?.nome).filter(Boolean);
+        }
+      }
+
+      const conditions = [];
+      conditions.push(`turmas.eq."[]"`);
+      conditions.push(`turmas.is.null`);
+      conditions.push(`turmas.cs.["Todos"]`);
+      conditions.push(`turmas.cs.["Toda a escola"]`);
+      conditions.push(`turmas.cs.["Todas"]`);
+      
+      if (resolvedTurma) {
+        conditions.push(`turmas.cs.["${resolvedTurma}"]`);
+      }
+      
+      // visibilidadeUsuario = Nome do aluno ou Nome de um dos responsaveis
+      if (alunoNome) {
+         conditions.push(`dados->>visibilidadeUsuario.ilike."%${alunoNome}%"`);
+      }
+      for (const resp of responsaveis) {
+         conditions.push(`dados->>visibilidadeUsuario.ilike."%${resp}%"`);
+      }
+      
+      query = query.or(conditions.join(','));
     }
 
     if (limitParam) {
@@ -40,6 +86,7 @@ export async function GET(request: Request) {
     query = query.order('data', { ascending: false })
 
     const { data, error } = await query
+
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ 
       ...row, 
@@ -208,5 +255,25 @@ function buildRowAuth(body: any) {
     criado_por: criadoPor || '',
     unidade: unidade || '',
     dados: rest,
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Apenas para garantir que não dê erro no delete (Supabase exige filtro no delete)
+    const { error } = await supabase.from('eventos_agenda').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    
+    if (error) throw new Error(error.message)
+
+    return NextResponse.json({ ok: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }

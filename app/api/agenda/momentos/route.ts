@@ -60,11 +60,61 @@ export async function GET(request: Request) {
       }
     }
 
-    const accessStartDate = await getLoggedUserAccessStartDate(true)
+    let accessStartDate = await getLoggedUserAccessStartDate(true)
     let query = supabase.from('momentos').select('*')
     if (accessStartDate) {
       query = query.gte('created_at', accessStartDate.toISOString())
     }
+
+    // Filtragem segura no Backend
+    if (isFamilyOrStudent && alunoId) {
+      let resolvedTurma = null;
+      const { data: alunoRes } = await supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle();
+      if (alunoRes && alunoRes.turma) {
+        const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
+        resolvedTurma = tData?.nome || alunoRes.turma;
+      }
+
+      const conditions = [];
+      // Momentos públicos para "Toda a escola", "TODOS" ou sem array (empty array)
+      conditions.push(`dados->targetClasses.eq."[]"`);
+      conditions.push(`dados->targetClasses.is.null`);
+      // Se tiver turma
+      if (resolvedTurma) {
+        conditions.push(`dados->targetClasses.cs.["${resolvedTurma}"]`);
+        conditions.push(`dados->targetClasses.cs.["Todos"]`);
+        conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
+        conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+        conditions.push(`dados->targetClasses.cs.["Todas"]`);
+      }
+      // Se tiver aluno especifico
+      conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
+      
+      query = query.or(conditions.join(','));
+    } else if (!isFamilyOrStudent) {
+       // Se for colaborador
+       const isAdmin = ['Diretor Geral', 'Administrador', 'Admin'].includes(perfil) || ['Administrador Master', 'Diretor Geral'].includes(cargo);
+       if (!isAdmin) {
+          const conditions = [];
+          conditions.push(`dados->targetClasses.eq."[]"`);
+          conditions.push(`dados->targetClasses.is.null`);
+          conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
+          conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+          conditions.push(`dados->targetClasses.cs.["Todos"]`);
+          conditions.push(`dados->targetClasses.cs.["Todas"]`);
+          conditions.push(`dados->funcionariosIds.cs.["${user.id}"]`);
+          conditions.push(`dados->colaboradoresIds.cs.["${user.id}"]`);
+          conditions.push(`dados->authorId.eq."${user.id}"`);
+          
+          // E os grupos que ele dá aula? 
+          // Idealmente também filtrar por turmas em que é professor (vamos assumir que a visualização global é suficiente pro colaborador, ou injetar as turmas depois, igual comunicados).
+          // Para simplificar, o colaborador vê os abertos e os que ele mesmo enviou ou foi marcado.
+          query = query.or(conditions.join(','));
+       }
+    }
+
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
     

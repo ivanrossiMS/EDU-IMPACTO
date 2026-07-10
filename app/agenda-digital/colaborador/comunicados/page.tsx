@@ -746,7 +746,7 @@ export default function ColaboradorComunicadosPage() {
             const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
             const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             
-            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
+            if (!isMaster && !isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
               return false;
             }
             if (!searchTerm) return true;
@@ -1377,6 +1377,7 @@ export default function ColaboradorComunicadosPage() {
         onAdd={(res) => setSelectedDest(res as any)}
         allowedTurmasIds={turmaOptions.map(t => String(t.id))}
         allowedGruposIds={currentUser?.perfil === 'administrador' || String(currentUser?.cargo || '').toLowerCase().includes('admin') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
+        currentUserId={currentUser?.id}
       />
 
       <AnimatePresence>

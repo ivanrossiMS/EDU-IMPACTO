@@ -13,6 +13,7 @@ interface DestinatariosModalProps {
   initialSelected?: {id: string, name: string, type?: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]
   allowedTurmasIds?: string[]
   allowedGruposIds?: string[]
+  currentUserId?: string
 }
 
 const DEST_MODAL_STYLES = `
@@ -57,7 +58,7 @@ const GlobalDestStyles = React.memo(function GlobalDestStyles() {
   return <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
 })
 
-export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds, allowedGruposIds }: DestinatariosModalProps) {
+export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds, allowedGruposIds, currentUserId }: DestinatariosModalProps) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -440,14 +441,14 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   const toggleSelect = (item: any) => {
     setSelected(prev => {
       const next = { ...prev }
-      const leafIds = item.leafIds as string[]
+      const leafIds = (item.leafIds as string[]).filter(id => id !== `f_${currentUserId}`)
       const allSelected = leafIds.length > 0 && leafIds.every((id: string) => !!prev[id])
       
       if (allSelected) {
         leafIds.forEach((id: string) => delete next[id])
       } else {
         item.payloads.forEach((p: any) => {
-          next[p.id] = p
+          if (p.id !== `f_${currentUserId}`) next[p.id] = p
         })
       }
       return next
@@ -456,24 +457,25 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   const toggleAll = () => {
     if (searchQuery.trim() !== '') {
-       const allSelected = flatPeopleList.length > 0 && flatPeopleList.every(p => !!selected[p.id])
+       const selectablePeople = flatPeopleList.filter(p => p.id !== `f_${currentUserId}`)
+       const allSelected = selectablePeople.length > 0 && selectablePeople.every(p => !!selected[p.id])
        if (allSelected) {
           setSelected(prev => {
              const next = { ...prev }
-             flatPeopleList.forEach(p => delete next[p.id])
+             selectablePeople.forEach(p => delete next[p.id])
              return next
           })
        } else {
           setSelected(prev => {
              const next = { ...prev }
-             flatPeopleList.forEach(p => next[p.id] = p)
+             selectablePeople.forEach(p => next[p.id] = p)
              return next
           })
        }
        return
     }
 
-    const activeLeavesArray = Array.from(new Set<string>(activeItems.flatMap((i: any) => i.leafIds as string[])))
+    const activeLeavesArray = Array.from(new Set<string>(activeItems.flatMap((i: any) => i.leafIds as string[]))).filter(id => id !== `f_${currentUserId}`)
     const allActiveSelected = activeLeavesArray.length > 0 && activeLeavesArray.every((id: string) => !!selected[id])
 
     if (allActiveSelected) {
@@ -487,7 +489,9 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
         const next = { ...prev }
         activeItems.forEach((item: any) => {
           if (item.payloads) {
-             item.payloads.forEach((p: any) => next[p.id] = p)
+             item.payloads.forEach((p: any) => {
+               if (p.id !== `f_${currentUserId}`) next[p.id] = p
+             })
           }
         })
         return next
@@ -509,7 +513,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
 
     allGroupItems.forEach(item => {
-      if (item.type === 'turma') {
+      if (item.type === 'turma' || item.type === 'grupo') {
         if (item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
            result.push({ id: item.id, name: item.title, type: item.type })
            item.leafIds.forEach((id: string) => coveredLeaves.add(id))
@@ -813,11 +817,13 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                         {item.people.map((person: any) => {
                                           const isPersonSelected = !!selected[person.id]
                                           const isColab = person.type === 'funcionario'
+                                          const isCurrentUser = person.id === `f_${currentUserId}`
                                           return (
                                             <div 
                                               key={person.id}
                                               onClick={(e) => {
                                                 e.stopPropagation()
+                                                if (isCurrentUser) return
                                                 setSelected(prev => {
                                                   const next = { ...prev }
                                                   if (isPersonSelected) delete next[person.id]
@@ -827,38 +833,47 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                                               }}
                                               style={{
                                                 display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                                                borderRadius: 12, cursor: 'pointer',
-                                                background: isColab
-                                                  ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
-                                                  : (isPersonSelected ? '#F8FAFC' : 'transparent'),
-                                                border: isColab ? '1px solid rgba(124,58,237,0.15)' : 'none',
+                                                borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                                                opacity: isCurrentUser ? 0.6 : 1,
+                                                background: isCurrentUser 
+                                                  ? '#F1F5F9' 
+                                                  : (isColab
+                                                    ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
+                                                    : (isPersonSelected ? '#F8FAFC' : 'transparent')),
+                                                border: (isColab && !isCurrentUser) ? '1px solid rgba(124,58,237,0.15)' : 'none',
                                                 marginBottom: isColab ? 2 : 0,
                                                 transition: 'background 0.2s'
                                               }}
-                                              onMouseEnter={e => e.currentTarget.style.background = isColab ? 'rgba(124,58,237,0.1)' : '#F8FAFC'}
-                                              onMouseLeave={e => e.currentTarget.style.background = isColab
-                                                ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
-                                                : (isPersonSelected ? '#F8FAFC' : 'transparent')}
+                                              onMouseEnter={e => {
+                                                if (isCurrentUser) return
+                                                e.currentTarget.style.background = isColab ? 'rgba(124,58,237,0.1)' : '#F8FAFC'
+                                              }}
+                                              onMouseLeave={e => {
+                                                if (isCurrentUser) return
+                                                e.currentTarget.style.background = isColab
+                                                  ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
+                                                  : (isPersonSelected ? '#F8FAFC' : 'transparent')
+                                              }}
                                             >
                                               <div style={{ 
                                                 width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                                background: isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#fff',
-                                                border: isPersonSelected ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
+                                                background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#fff'),
+                                                border: (isPersonSelected || isCurrentUser) ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
                                               }}>
-                                                {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                                                {(isPersonSelected || isCurrentUser) && <Check size={14} color="#fff" strokeWidth={3} />}
                                               </div>
                                               <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                                  <span style={{ fontSize: 14, fontWeight: isColab ? 600 : 500, color: isColab ? '#5B21B6' : '#1E293B' }}>{person.name}</span>
+                                                  <span style={{ fontSize: 14, fontWeight: isColab ? 600 : 500, color: (isColab && !isCurrentUser) ? '#5B21B6' : '#1E293B' }}>{person.name}</span>
                                                   {isColab && (
                                                     <span style={{
                                                       fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
-                                                      background: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
+                                                      background: isCurrentUser ? '#94A3B8' : 'linear-gradient(135deg, #7C3AED, #4F46E5)',
                                                       color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0
-                                                    }}>Colaborador</span>
+                                                    }}>{isCurrentUser ? 'Você (Autor)' : 'Colaborador'}</span>
                                                   )}
                                                 </div>
-                                                <span style={{ fontSize: 11, color: isColab ? '#7C3AED' : '#64748B' }}>
+                                                <span style={{ fontSize: 11, color: (isColab && !isCurrentUser) ? '#7C3AED' : '#64748B' }}>
                                                   {isColab
                                                     ? `${person.funcao || 'Colaborador'}${person.turmaNome ? ` • ${person.turmaNome}` : ''}`
                                                     : `Aluno${person.anoLetivo ? ` (${person.anoLetivo})` : ''}`}

@@ -673,34 +673,9 @@ export function ComunicadoViewModal({
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', zIndex: 1, position: 'relative' }}>
-              <button className="cvm-icon-btn" onClick={onClose} title="Fechar">
-                <X size={24} />
-              </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, zIndex: 1, position: 'relative' }}>
+              {/* Actions moved to footer */}
             </div>
-
-            {(onEdit || onDelete) && (
-              <div style={{ position: 'absolute', bottom: 12, right: 24, display: 'flex', gap: 6, zIndex: 2 }}>
-                {onEdit && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
-                    title="Editar Comunicado"
-                    style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                )}
-                {onDelete && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
-                    title="Excluir Comunicado"
-                    style={{ background: 'rgba(239,68,68,0.25)', color: '#fca5a5', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {/* BODY */}
@@ -1211,6 +1186,53 @@ export function ComunicadoViewModal({
               ))}
             </div>
           )}
+
+          {/* ACTIONS FOOTER */}
+          <div style={{
+            background: '#ffffff',
+            borderTop: '1px solid #e2e8f0',
+            padding: '16px 24px',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16
+          }}>
+            {onEdit && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#f1f5f9', color: '#475569', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
+              >
+                <Edit2 size={20} />
+                Editar
+              </button>
+            )}
+            {onDelete && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#fee2e2', color: '#ef4444', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#fca5a5'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+              >
+                <Trash2 size={20} />
+                Excluir
+              </button>
+            )}
+            <button 
+              onClick={onClose} 
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#4f46e5', color: '#ffffff', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#4338ca'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#4f46e5'}
+            >
+              <X size={20} />
+              Fechar
+            </button>
+          </div>
         </motion.div>
       </motion.div>
 

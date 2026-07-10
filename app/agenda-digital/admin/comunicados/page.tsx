@@ -244,13 +244,18 @@ export default function ADAdminComunicados() {
       if (!asRascunho) {
          const appendedForms = anexos.filter((a: any) => a.startsWith('Formulário: ')).map((a: any) => a.replace('Formulário: ', ''))
          if (appendedForms.length > 0) {
-            const isGlobal = newCom.turmas.length === 0 && newCom.alunosIds.length === 0
-            const targets = alunosAtivos.filter(a => {
-               if (isGlobal) return true;
-               if (newCom.turmas.includes(a.turma)) return true;
-               const aIdPlain = a.id.replace(/^_*(ALU)?/, '')
-               return newCom.alunosIds.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === aIdPlain)
-            })
+            const isGlobal = newCom.destino === 'todos';
+            let targets: any[] = [];
+            
+            if (isGlobal) {
+               targets = alunosAtivos;
+            } else {
+               targets = alunosAtivos.filter(a => {
+                  if (newCom.turmas.includes(a.turma)) return true;
+                  const aIdPlain = a.id.replace(/^_*(ALU)?/, '')
+                  return newCom.alunosIds.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === aIdPlain)
+               });
+            }
 
             const newDisparos: any[] = []
             appendedForms.forEach((formName: string) => {
@@ -483,11 +488,16 @@ export default function ADAdminComunicados() {
             </div>
           )}
           {filtered.slice(0, visibleCount).map(c => {
-             const isGlobal = !c.turmas?.length && !c.alunosIds?.length;
-             const targets = isGlobal 
-                ? alunosAtivos 
-                : alunosAtivos.filter(a => c.turmas?.includes(a.turma) || c.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === a.id.replace(/^_*(ALU)?/, '')));
-             const targetCount = targets.length;
+             const isGlobal = c.destino === 'todos';
+             let targetCount = 0;
+             if (isGlobal) {
+               targetCount = alunosAtivos.length;
+             } else {
+               const alTargets = alunosAtivos.filter(a => c.turmas?.includes(a.turma) || c.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === a.id.replace(/^_*(ALU)?/, '')));
+               targetCount = alTargets.length + (c.funcionariosIds?.length || 0);
+               // Grupos already expanded into alunos/funcionarios at creation, so no need to add them here
+             }
+             
              const lidas = Object.keys(c.leituras || {}).length
              const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0
              const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
@@ -559,12 +569,12 @@ export default function ADAdminComunicados() {
                         {(c.autorCargo || (c as any).dados?.autorCargo) && <span style={{ fontWeight: 500, color: '#94a3b8' }}> • {c.autorCargo || (c as any).dados?.autorCargo}</span>}
                       </span>
                     </div>
-                    {c.destino === 'todos' ? (
+                    {isGlobal ? (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 700, color: '#059669' }}>
                         <Users size={13} /> Toda a Escola
                       </div>
                     ) : (
-                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0) || (c.grupos && c.grupos.length > 0) || (c.funcionariosIds && c.funcionariosIds.length > 0)) && (
+                      ((c.turmas && c.turmas.length > 0) || (c.alunosIds && c.alunosIds.length > 0) || (c.funcionariosIds && c.funcionariosIds.length > 0) || (c.grupos && c.grupos.length > 0)) && (
                         <button 
                           onClick={e => { e.stopPropagation(); setViewingDestCom(c); }}
                           style={{
@@ -585,7 +595,7 @@ export default function ADAdminComunicados() {
                           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(79, 70, 229, 0.05)' }}
                         >
                           <Menu size={13} />
-                          Ver Destinatários ({c.turmas?.length || 0})
+                          Ver Destinatários ({(c.turmas?.length || 0) + (c.grupos?.length || 0) + (c.funcionariosIds?.length || 0) + (c.alunosIds?.length || 0)})
                         </button>
                       )
                     )}
@@ -889,23 +899,20 @@ export default function ADAdminComunicados() {
                 <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(79, 70, 229, 0.03)', borderRadius: 12, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
                   <div style={{ fontSize: 10, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.05em' }}>Para:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: '110px', overflowY: 'auto', paddingRight: 4 }}>
-                    {viewingCom.destino === 'todos' ? (
+                    {viewingCom.turmas?.length > 0 && viewingCom.turmas.map((t: string) => (
+                      <span key={`t-${t}`} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
+                    ))}
+                    {viewingCom.grupos?.length > 0 && viewingCom.grupos.map((g: string) => (
+                      <span key={`g-${g}`} style={{ background: 'white', color: '#059669', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.1)' }}>Grupo: {g}</span>
+                    ))}
+                    {viewingCom.funcionariosIds?.length > 0 && (
+                      <span style={{ background: 'white', color: '#f59e0b', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.1)' }}>{viewingCom.funcionariosIds.length} Colaborador(es)</span>
+                    )}
+                    {viewingCom.alunosIds?.length > 0 && (
+                      <span style={{ background: 'white', color: '#3b82f6', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(59, 130, 246, 0.1)' }}>{viewingCom.alunosIds.length} Aluno(s)</span>
+                    )}
+                    {(!viewingCom.turmas?.length && !viewingCom.grupos?.length && !viewingCom.funcionariosIds?.length && !viewingCom.alunosIds?.length) && (
                       <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>
-                    ) : (
-                      <>
-                        {viewingCom.turmas?.map((t: string) => (
-                          <span key={`t-${t}`} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
-                        ))}
-                        {viewingCom.grupos?.map((g: string) => (
-                          <span key={`g-${g}`} style={{ background: 'white', color: '#ec4899', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(236, 72, 153, 0.1)' }}>Grupo: {g}</span>
-                        ))}
-                        {viewingCom.alunosIds?.map((a: string) => (
-                          <span key={`a-${a}`} style={{ background: 'white', color: '#0ea5e9', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(14, 165, 233, 0.1)' }}>Aluno: {a}</span>
-                        ))}
-                        {viewingCom.funcionariosIds?.map((f: string) => (
-                          <span key={`f-${f}`} style={{ background: 'white', color: '#8b5cf6', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(139, 92, 246, 0.1)' }}>Colaborador: {f}</span>
-                        ))}
-                      </>
                     )}
                   </div>
                 </div>
@@ -1130,6 +1137,33 @@ export default function ADAdminComunicados() {
                           </span>
                         )
                       })}
+                    </div>
+                  </div>
+                )}
+                {viewingDestCom.funcionariosIds && viewingDestCom.funcionariosIds.length > 0 && (
+                  <div>
+                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Colaboradores ({viewingDestCom.funcionariosIds.length})</strong>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                      {viewingDestCom.funcionariosIds.map((fId, idx) => {
+                        const colabObj = (colaboradores || []).find(c => String(c.nome) === String(fId) || String((c as any).id) === String(fId) || String((c as any).id).replace(/^_+/, '') === String(fId).replace(/^_+/, ''));
+                        return (
+                          <span key={idx} className="badge" style={{ background: 'rgba(245,158,11,0.06)', color: '#d97706', border: '1px solid rgba(245,158,11,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
+                            {colabObj ? colabObj.nome : `ID: ${fId}`}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {viewingDestCom.grupos && viewingDestCom.grupos.length > 0 && (
+                  <div>
+                    <strong style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>Grupos ({viewingDestCom.grupos.length})</strong>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                      {viewingDestCom.grupos.map((g, idx) => (
+                        <span key={idx} className="badge" style={{ background: 'rgba(236,72,153,0.06)', color: '#db2777', border: '1px solid rgba(236,72,153,0.12)', fontSize: 11, padding: '4px 10px', fontWeight: 600 }}>
+                          {g}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
