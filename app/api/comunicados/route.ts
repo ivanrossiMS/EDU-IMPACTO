@@ -192,7 +192,7 @@ export async function GET(request: Request) {
     // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
     const { data: myGroups } = await supabase.from('agenda_grupos')
       .select('id, dados')
-      .or(`colaboradoresIds.cs.["${user.id}"],dados->"colaboradoresIds".cs.["${user.id}"]`);
+      .contains('dados->colaboradoresIds', `["${user.id}"]`);
       
     if (myGroups && myGroups.length > 0) {
       const isGlobal = myGroups.some(g => (g.dados?.isGlobalAccess === true || g.dados?.isGlobalAccess === 'true' || g.dados?.isGlobalAccess === 1) && (!g.dados?.ano && !g.dados?.anoLetivo));
