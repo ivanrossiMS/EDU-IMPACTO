@@ -3,8 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function check() {
-  const { data, error } = await supabase.from('configuracoes').select('dados').eq('chave', 'usuarios').single();
-  const users = data?.dados || [];
-  console.log(users.map(u => ({ id: u.id, nome: u.nome, foto: !!u.foto })));
+  const { data } = await supabase.from('aluno_responsavel').select('*').eq('aluno_id', '4697');
+  console.log(data);
 }
 check();

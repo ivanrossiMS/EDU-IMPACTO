@@ -1,11 +1,9 @@
-const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Testing with ANON KEY to simulate frontend access
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
-async function run() {
-  const { data, error } = await supabase.from('system_users').select('id, nome');
-  console.log('system_users ANON:', data, error);
+async function check() {
+  const { data } = await supabase.from('perfis').select('*').limit(10);
+  console.log(data);
 }
-run();
+check();

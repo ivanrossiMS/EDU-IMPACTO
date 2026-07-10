@@ -10,8 +10,8 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const { momentId, action, value, authorName } = await request.json()
-    if (!momentId || !action || !authorName) {
+    const { momentId, action, value, authorName, commentId } = await request.json()
+    if (!momentId || !action || (!authorName && action !== 'delete_comment')) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -51,6 +51,10 @@ export async function POST(request: Request) {
         text: value,
         time: 'Agora'
       })
+      dados.comments = comments
+    } else if (action === 'delete_comment') {
+      if (!commentId) return NextResponse.json({ error: 'Comment ID missing' }, { status: 400 })
+      comments = comments.filter((c: any) => c.id !== commentId)
       dados.comments = comments
     }
 

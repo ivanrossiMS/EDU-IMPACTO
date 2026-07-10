@@ -106,10 +106,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   ))
   const turmaNome = turmaObj?.nome || rawTurma
 
-  const [limit, setLimit] = useState(6)
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryComunicados(false, endpoint)
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(false, endpoint)
   const comunicados = comunicadosData?.pages?.flat() || []
   
   const searchParams = useSearchParams()
@@ -521,7 +520,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             return dateB - dateA;
           });
           
-          const paginatedComunicados = filteredComunicados.slice(0, limit);
+          const paginatedComunicados = filteredComunicados;
           
           if (loading || !aluno) {
             return <ComunicadoSkeleton count={3} />
@@ -552,8 +551,28 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
             const currentReaderId = currentUser?.id || '';
-            const isRead = !!(c.leituras || {})[currentReaderId];
-            const isCiencia = !!(c.ciencias || {})[currentReaderId];
+            const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+            const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+            const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
+            const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
+
+            const isRead = !!(
+              (c.leituras || {})[currentReaderId] || 
+              (c.leituras || {})[resolvedParams.slug] || 
+              (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
+              (legacyAlunoId && (c.leituras || {})[legacyAlunoId]) ||
+              (readerIdWithSlug && (c.leituras || {})[readerIdWithSlug]) ||
+              (c.leituras || {})[currentReaderWithSlug]
+            );
+
+            const isCiencia = !!(
+              (c.ciencias || {})[currentReaderId] || 
+              (c.ciencias || {})[resolvedParams.slug] || 
+              (legacyResponsavelId && (c.ciencias || {})[legacyResponsavelId]) || 
+              (legacyAlunoId && (c.ciencias || {})[legacyAlunoId]) ||
+              (readerIdWithSlug && (c.ciencias || {})[readerIdWithSlug]) ||
+              (c.ciencias || {})[currentReaderWithSlug]
+            );
 
             return (
               <motion.div 
@@ -634,9 +653,31 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     gap: 16
                   }}
                   onClick={() => {
-                    const isRead = !!(c.leituras || {})[currentReaderId];
+                    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+                    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+                    const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
+                    const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
+
+                    const isRead = !!(
+                      (c.leituras || {})[currentReaderId] || 
+                      (c.leituras || {})[resolvedParams.slug] || 
+                      (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
+                      (legacyAlunoId && (c.leituras || {})[legacyAlunoId]) ||
+                      (readerIdWithSlug && (c.leituras || {})[readerIdWithSlug]) ||
+                      (c.leituras || {})[currentReaderWithSlug]
+                    );
+
                     const nowIso = new Date().toISOString();
-                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [currentReaderId]: nowIso } };
+                    const updatedComunicado = { 
+                      ...c, 
+                      leituras: { 
+                        ...(c.leituras || {}), 
+                        [currentReaderId]: nowIso, 
+                        [resolvedParams.slug]: nowIso,
+                        ...(readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+                        [currentReaderWithSlug]: nowIso
+                      } 
+                    };
                     
                     setSelectedComunicado(updatedComunicado)
                     
@@ -794,13 +835,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
               </motion.div>
             )
           })}
-              {(filteredComunicados.length > limit || hasNextPage) && (
+              {hasNextPage && (
                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
                    <button onClick={() => {
-                     if (limit >= filteredComunicados.length && hasNextPage && fetchNextPage) {
+                     if (hasNextPage && fetchNextPage) {
                        fetchNextPage()
                      }
-                     setLimit(l => l + 6)
                    }} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
                      Carregar Mais
                    </button>

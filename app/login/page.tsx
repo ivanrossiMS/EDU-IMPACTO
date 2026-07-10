@@ -36,6 +36,13 @@ function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
 import { BackgroundEffects } from '@/components/ui/LoginBackground'
 
+const ModernLoadingSpinner = () => (
+  <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div style={{ width: 24, height: 24, border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+    <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+  </div>
+);
+
 export default function LoginPage() {
   const router = useRouter()
   const { setCurrentUser } = useApp()
@@ -777,9 +784,12 @@ export default function LoginPage() {
             {profileData && !profileData.bloqueadoGestaoEscolar && (
               <button type="button" 
                 onClick={() => {
-                  const p = pendingAuth?.perfil;
-                  if (p === 'Professor') window.location.href = '/professor';
-                  else window.location.href = '/dashboard';
+                  setLoadingSystem('gestao-escolar');
+                  setTimeout(() => {
+                    const p = pendingAuth?.perfil;
+                    if (p === 'Professor') window.location.href = '/professor';
+                    else window.location.href = '/dashboard';
+                  }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
                 onMouseEnter={e=>{e.currentTarget.style.background='rgba(59,130,246,0.08)'; e.currentTarget.style.borderColor='rgba(59,130,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(59,130,246,0.1)'}}
@@ -795,12 +805,15 @@ export default function LoginPage() {
             {profileData && !profileData.bloqueadoAgendaDigital && (
               <button type="button" 
                 onClick={() => {
-                  const p = pendingAuth?.perfil;
-                  if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                      window.location.href = '/agenda-digital/selecionar-perfil-admin';
-                  } else {
-                      window.location.href = '/agenda-digital/selecionar-aluno';
-                  }
+                  setLoadingSystem('agenda-digital');
+                  setTimeout(() => {
+                    const p = pendingAuth?.perfil;
+                    if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
+                        window.location.href = '/agenda-digital/selecionar-perfil-admin';
+                    } else {
+                        window.location.href = '/agenda-digital/selecionar-aluno';
+                    }
+                  }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
                 onMouseEnter={e=>{e.currentTarget.style.background='rgba(139,92,246,0.08)'; e.currentTarget.style.borderColor='rgba(139,92,246,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(139,92,246,0.1)'}}
@@ -816,7 +829,10 @@ export default function LoginPage() {
             {profileData && !profileData.bloqueadoGestaoPessoas && (
               <button type="button" 
                 onClick={() => {
-                  window.location.href = '/gestao-pessoas';
+                  setLoadingSystem('gestao-pessoas');
+                  setTimeout(() => {
+                    window.location.href = '/gestao-pessoas';
+                  }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
                 onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
@@ -832,7 +848,10 @@ export default function LoginPage() {
             {profileData && !profileData.bloqueadoSimulados && (
               <button type="button" 
                 onClick={() => {
-                  window.location.href = '/simulados';
+                  setLoadingSystem('simulados');
+                  setTimeout(() => {
+                    window.location.href = '/simulados';
+                  }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
                 onMouseEnter={e=>{e.currentTarget.style.background='rgba(244,63,94,0.08)'; e.currentTarget.style.borderColor='rgba(244,63,94,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(244,63,94,0.1)'}}

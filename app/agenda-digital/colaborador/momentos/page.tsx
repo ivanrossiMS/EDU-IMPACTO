@@ -284,6 +284,27 @@ export default function ADMomentosPage() {
     }
   }
 
+  const handleDeleteComment = async (momentId: string | number, commentId: string) => {
+    setMomentosFeedLocally?.(prev => prev.map(m => {
+      if (m.id !== momentId) return m
+      const commentsArray = m.comments || []
+      return {
+        ...m,
+        comments: commentsArray.filter(c => c.id !== commentId)
+      }
+    }))
+    
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ momentId, action: 'delete_comment', commentId })
+      })
+    } catch (err) {
+      console.error("Error deleting momento comment:", err)
+    }
+  }
+
   const handleDeleteMomento = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja excluir esta mídia? Esta ação não pode ser desfeita.')) return;
     setIsDeleting(id);
@@ -730,9 +751,28 @@ export default function ADMomentosPage() {
                     {(m.comments || []).length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4, background: '#f8fafc', padding: 8, borderRadius: 10, border: '1px solid #f1f5f9' }}>
                         {(m.comments || []).map(c => (
-                          <div key={c.id} style={{ fontSize: 12, lineHeight: 1.4 }}>
-                            <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
-                            <span style={{ color: '#475569' }}>{c.text}</span>
+                          <div key={c.id} className="group" style={{ fontSize: 12, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
+                              <span style={{ color: '#475569' }}>{c.text}</span>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteComment(m.id, c.id)}
+                              title="Excluir comentário"
+                              style={{ 
+                                background: 'none', 
+                                border: 'none', 
+                                cursor: 'pointer', 
+                                color: '#ef4444', 
+                                padding: '2px', 
+                                opacity: 0.7,
+                                display: 'flex'
+                              }}
+                              onMouseOver={e => e.currentTarget.style.opacity = '1'}
+                              onMouseOut={e => e.currentTarget.style.opacity = '0.7'}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            </button>
                           </div>
                         ))}
                       </div>

@@ -564,6 +564,7 @@ export async function POST(request: Request) {
           titulo: saudacao.titulo || 'Mensagem de Boas-vindas',
           texto: msg,
           autor: 'Ivan Rossi',
+          autorFoto: 'https://github.com/ivanrossi.png',
           data: new Date().toISOString(),
           destino: 'selecionados',
           fixado: true,

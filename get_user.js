@@ -5,6 +5,7 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 async function check() {
   const { data, error } = await supabase.from('configuracoes').select('dados').eq('chave', 'usuarios').single();
   const users = data?.dados || [];
-  console.log(users.map(u => ({ id: u.id, nome: u.nome, foto: !!u.foto })));
+  const user = users.find(u => u.id === 'fc3bb60c-2d06-4b8c-b9b0-a6bb1bb24810');
+  console.log('User in config:', user);
 }
 check();

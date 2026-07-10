@@ -129,6 +129,13 @@ export default function ColaboradorComunicadosPage() {
   const { adAlert, chatGroups } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   
+  const [isClient, setIsClient] = useState(false)
+  const [isSimulatedLoading, setIsSimulatedLoading] = useState(false)
+  
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+  
   const [alunos] = useSupabaseArray<any>('alunos/lightweight')
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
@@ -169,9 +176,7 @@ export default function ColaboradorComunicadosPage() {
     return accessibleTurmas
   }, [turmas, userGroups, currentUser])
   
-  
   const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
-  
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
   const handleEnviar = (data: any, asRascunho = false) => {
@@ -754,7 +759,7 @@ export default function ColaboradorComunicadosPage() {
             return dateB - dateA;
           });
           
-          const paginatedComunicados = filteredComunicados.slice(0, limit);
+          const paginatedComunicados = filteredComunicados;
           if ((isDataLoading && filteredComunicados.length === 0) || !currentUser) {
             return <ComunicadoSkeleton count={3} />
           }
@@ -1055,23 +1060,44 @@ export default function ColaboradorComunicadosPage() {
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </div>
                   </div>
-                  
-                  {/* Text sneak peek removed by user request */}
-
-                  {/* Exige Ciência Box removed as per user request */}
                 </div>
               </motion.div>
             )
           })}
-              {(filteredComunicados.length > limit || hasNextPageComunicados) && (
+              {hasNextPageComunicados && (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
-              <button className="btn btn-secondary" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }} onClick={() => {
-                if (limit >= filteredComunicados.length && hasNextPageComunicados && fetchNextPageComunicados) {
-                  fetchNextPageComunicados()
-                }
-                setLimit(l => l + 6)
-              }}>
-                Carregar mais
+              <button 
+                className="btn btn-secondary" 
+                style={{ 
+                  background: isSimulatedLoading ? '#818cf8' : '#4f46e5', 
+                  color: '#fff', 
+                  padding: '10px 24px', 
+                  borderRadius: 100, 
+                  border: 'none', 
+                  fontWeight: 600, 
+                  cursor: isSimulatedLoading ? 'wait' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.3s',
+                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)'
+                }} 
+                disabled={isSimulatedLoading}
+                onClick={() => {
+                  setIsSimulatedLoading(true);
+                  if (fetchNextPageComunicados) {
+                    fetchNextPageComunicados();
+                  }
+                  setTimeout(() => {
+                    setIsSimulatedLoading(false);
+                  }, 800);
+                }}>
+                {isSimulatedLoading ? (
+                  <>
+                    <div className="ad-spinner-small" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    Carregando...
+                  </>
+                ) : 'Carregar mais'}
               </button>
             </div>
           )}

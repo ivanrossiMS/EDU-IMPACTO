@@ -101,6 +101,36 @@ export async function POST(request: Request) {
 
     let finalComunicadoId = body.comunicado_id;
 
+    // Se o admin responder a um relatorio agrupado, o frontend (que nao tem os filhos carregados)
+    // enviara o ID do pai (COLAB). Precisamos encontrar o filho (STU) correspondente ao aluno.
+    if (serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-COLAB')) {
+      const { data: parentCom } = await supabase
+        .from('comunicados')
+        .select('created_at, dados')
+        .eq('id', finalComunicadoId)
+        .single();
+        
+      if (parentCom && parentCom.dados && parentCom.dados.autorId) {
+        const pTime = new Date(parentCom.created_at).getTime();
+        const minDate = new Date(pTime - 15000).toISOString();
+        const maxDate = new Date(pTime + 15000).toISOString();
+        
+        const { data: stus } = await supabase
+          .from('comunicados')
+          .select('id, dados')
+          .ilike('id', 'AD-COM-REL-STU-%')
+          .gte('created_at', minDate)
+          .lte('created_at', maxDate);
+          
+        if (stus && stus.length > 0) {
+          const child = stus.find(s => s.dados && s.dados.autorId === parentCom.dados.autorId && (s.dados.alunosIds || []).some((id: any) => String(id) === String(body.remetente_id)));
+          if (child) {
+            finalComunicadoId = child.id;
+          }
+        }
+      }
+    }
+
     // Se o admin tentar responder num report agrupado (pai), o frontend as vezes nao tem o ID do filho carregado
     // Vamos auto-resolver o ID do filho correspondente no servidor se possivel
     if (serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-') && !finalComunicadoId.startsWith('AD-COM-REL-STU-') && body.remetente_id) {
@@ -124,7 +154,7 @@ export async function POST(request: Request) {
           if (relatedComs) {
             const studentChild = relatedComs.find(c => {
                const alIds = Array.isArray(c.alunosIds) ? c.alunosIds : (c.alunosIds ? JSON.parse(c.alunosIds) : []);
-               return alIds.some(id => String(id) === String(body.remetente_id));
+               return alIds.some((id: any) => String(id) === String(body.remetente_id));
             });
             if (studentChild) {
               finalComunicadoId = studentChild.id;
@@ -241,7 +271,120 @@ export async function POST(request: Request) {
       // Nao damos throw para nao quebrar a insercao original da mensagem
     }
 
+    // --- LÓGICA DE RESET DE LEITURA (NOVO/LIDO) ---
+    try {
+      const { data: comData } = await supabase.from('comunicados').select('id, created_at, dados, leituras').eq('id', finalComunicadoId).single();
+      if (comData) {
+        let leituras = comData.leituras || {};
+        let usersToReset = [];
+
+        if (!serverIsAdmin) {
+           // Familia respondeu. O admin (autor) precisa ver como NOVO.
+           const autorId = comData.dados?.autorId;
+           if (autorId) usersToReset.push(autorId);
+        } else {
+           // Admin respondeu. A familia/aluno (remetente_id da conversa) precisa ver como NOVO.
+           if (body.remetente_id) usersToReset.push(body.remetente_id);
+        }
+
+        if (usersToReset.length > 0) {
+          let changed = false;
+          usersToReset.forEach(uid => {
+             if (leituras[uid]) {
+                delete leituras[uid];
+                changed = true;
+             }
+          });
+          
+          if (changed) {
+             await supabase.from('comunicados').update({ leituras }).eq('id', finalComunicadoId);
+          }
+          
+          // Se a resposta foi feita por uma familia num child report, temos que resetar o lido do PAI tambem pro Admin!
+          if (!serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-STU-')) {
+             const autorId = comData.dados?.autorId;
+             if (autorId) {
+               const timeNum = new Date(comData.created_at).getTime();
+               if (timeNum > 0) {
+                 const minTime = new Date(timeNum - 15000).toISOString();
+                 const maxTime = new Date(timeNum + 15000).toISOString();
+                 // Busca o pai
+                 const { data: parentCom } = await supabase.from('comunicados')
+                   .select('id, leituras')
+                   .eq('dados->>autorId', String(autorId))
+                   .not('id', 'like', 'AD-COM-REL-STU-%')
+                   .like('id', 'AD-COM-REL-%')
+                   .gte('created_at', minTime)
+                   .lte('created_at', maxTime)
+                   .limit(1)
+                   .single();
+                   
+                 if (parentCom && parentCom.leituras && parentCom.leituras[autorId]) {
+                   let parentLeituras = parentCom.leituras;
+                   delete parentLeituras[autorId];
+                   await supabase.from('comunicados').update({ leituras: parentLeituras }).eq('id', parentCom.id);
+                 }
+               }
+             }
+          }
+        }
+      }
+    } catch (resetErr) {
+      console.error("Erro ao resetar status LIDO:", resetErr);
+    }
+
     return NextResponse.json(data, { status: 201 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth();
+  if (errorResponse) return errorResponse;
+
+  try {
+    const supabase = await createProtectedClient();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Message ID is required' }, { status: 400 });
+    }
+
+    // Identificar perfil
+    const perfil = user.user_metadata?.perfil || '';
+    const cargo = user.user_metadata?.cargo || '';
+    const adminPerfis = ['Diretor Geral', 'Administrador', 'Admin', 'Colaborador', 'Professor', 'Coordenador'];
+    const familyPerfis = ['Família', 'Responsável', 'Aluno'];
+    const isFamilyOrStudent = familyPerfis.includes(perfil) || familyPerfis.includes(cargo);
+    const isAdmin = !isFamilyOrStudent && (adminPerfis.includes(perfil) || adminPerfis.includes(cargo) || (!perfil && !cargo));
+
+    // Buscar a mensagem atual
+    const { data: msg, error: fetchErr } = await supabase.from('comunicados_respostas').select('*').eq('id', id).single();
+    
+    if (fetchErr || !msg) {
+      return NextResponse.json({ error: 'Mensagem não encontrada' }, { status: 404 });
+    }
+
+    const currentUserId = user.id;
+
+    // Regras de exclusão:
+    // 1. O admin pode excluir qualquer mensagem (ou talvez apenas as dele? Vamos permitir admin excluir qualquer uma para moderação)
+    // 2. O aluno/família só pode excluir a PRÓPRIA mensagem.
+    if (!isAdmin) {
+      if (msg.remetente_id !== currentUserId && msg.remetente_id !== user.user_metadata?.slug) {
+         return NextResponse.json({ error: 'Sem permissão para excluir esta mensagem' }, { status: 403 });
+      }
+    }
+
+    const { error: delErr } = await supabase.from('comunicados_respostas').delete().eq('id', id);
+
+    if (delErr) {
+      return NextResponse.json({ error: delErr.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }

@@ -1218,7 +1218,7 @@ export default function ADAdminComunicados() {
                       if (attachmentFilter === 'nenhum' && hasAny) valid = false;
                       if (attachmentFilter === 'qualquer' && !hasAny) valid = false;
                       if (['relatorio', 'formulario', 'imagem', 'video'].includes(attachmentFilter)) {
-                        const matchesType = anexosList.some((anexo: string) => {
+                        const matchesType = anexosList.some((anexo: any) => {
                           let name = '';
                           let url = '';
                           let mimeType = '';

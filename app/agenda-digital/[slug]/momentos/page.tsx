@@ -78,7 +78,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     const myName = currentUser?.nome || 'Você'
     
     // Otimistic UI
-    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
+    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
@@ -113,7 +113,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     const myName = currentUser?.nome || 'Você'
 
     // Otimistic UI
-    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (old: any) => {
+    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
@@ -138,6 +138,32 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       })
     } catch (err) {
       console.error("Error updating comment:", err)
+    }
+  }
+
+  const handleDeleteComment = async (momentId: string | number, commentId: string) => {
+    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+      if (!old || !old.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any[]) => page.map((m: any) => {
+          if (m.id !== momentId) return m;
+          return {
+            ...m,
+            comments: (m.comments || []).filter((c: any) => c.id !== commentId)
+          }
+        }))
+      };
+    });
+    
+    try {
+      await fetch('/api/agenda/momentos/interacoes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ momentId, action: 'delete_comment', commentId })
+      })
+    } catch (err) {
+      console.error("Error deleting momento comment:", err)
     }
   }
   
@@ -682,9 +708,30 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                     {(m.comments || []).length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4, background: '#f8fafc', padding: 8, borderRadius: 10, border: '1px solid #f1f5f9' }}>
                         {(m.comments || []).map((c: any) => (
-                          <div key={c.id} style={{ fontSize: 12, lineHeight: 1.4 }}>
-                            <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
-                            <span style={{ color: '#475569' }}>{c.text}</span>
+                          <div key={c.id} style={{ fontSize: 12, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <span style={{ fontWeight: 700, marginRight: 6, color: '#1e293b' }}>{c.author}</span>
+                              <span style={{ color: '#475569' }}>{c.text}</span>
+                            </div>
+                            {c.author === (currentUser?.nome || 'Você') && (
+                              <button 
+                                onClick={() => handleDeleteComment(m.id, c.id)}
+                                title="Excluir meu comentário"
+                                style={{ 
+                                  background: 'none', 
+                                  border: 'none', 
+                                  cursor: 'pointer', 
+                                  color: '#ef4444', 
+                                  padding: '2px', 
+                                  opacity: 0.7,
+                                  display: 'flex'
+                                }}
+                                onMouseOver={e => e.currentTarget.style.opacity = '1'}
+                                onMouseOut={e => e.currentTarget.style.opacity = '0.7'}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>

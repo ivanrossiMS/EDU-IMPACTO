@@ -171,6 +171,7 @@ export function ComunicadoViewModal({
   const [isSending, setIsSending] = useState(false)
   const [isInputFocused, setIsInputFocused] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
 
@@ -385,6 +386,25 @@ export function ComunicadoViewModal({
       console.error('Error sending message', e)
     } finally {
       setIsSending(false)
+    }
+  }
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta mensagem?')) return;
+    setDeletingId(msgId);
+    try {
+      const res = await fetch(`/api/comunicados_respostas?id=${msgId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      } else {
+        const errorData = await res.json();
+        alert(`Erro ao excluir mensagem: ${errorData.error}`);
+      }
+    } catch (e) {
+      console.error('Error deleting message', e);
+      alert('Erro ao excluir mensagem');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -1090,16 +1110,30 @@ export function ComunicadoViewModal({
                                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{msgTimeStr}</span>
                               </div>
                             </div>
-                            <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.5, background: isMe ? '#f1f5f9' : '#ffffff', padding: '8px 16px', borderRadius: '0 16px 16px 16px', border: isMe ? 'none' : '1px solid #e2e8f0', display: 'inline-block' }}>
-                              {msg.conteudo}
-                              {msg.anexos && msg.anexos.length > 0 && (
-                                <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                  {msg.anexos.map((url, i) => (
-                                    <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, textDecoration: 'none', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
-                                      <FileText size={14} /> Anexo {i + 1}
-                                    </a>
-                                  ))}
-                                </div>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                              <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.5, background: isMe ? '#f1f5f9' : '#ffffff', padding: '8px 16px', borderRadius: '0 16px 16px 16px', border: isMe ? 'none' : '1px solid #e2e8f0', display: 'inline-block' }}>
+                                {msg.conteudo}
+                                {msg.anexos && msg.anexos.length > 0 && (
+                                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {msg.anexos.map((url, i) => (
+                                      <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, textDecoration: 'none', color: '#3b82f6', fontSize: 12, fontWeight: 600 }}>
+                                        <FileText size={14} /> Anexo {i + 1}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              {(isMe || isAdminMode) && (
+                                <button
+                                  onClick={() => handleDeleteMessage(msg.id)}
+                                  disabled={deletingId === msg.id}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5, transition: 'opacity 0.2s', marginBottom: 4 }}
+                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
+                                  title="Excluir mensagem"
+                                >
+                                  {deletingId === msg.id ? <Loader2 size={14} className="animate-spin" color="#ef4444" /> : <Trash2 size={14} color="#ef4444" />}
+                                </button>
                               )}
                             </div>
                           </div>
