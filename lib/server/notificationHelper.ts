@@ -272,11 +272,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       // Adicionar turmas e grupos
       if (allGroupTerms.length > 0) {
         // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados, colaboradoresIds')
+        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, dados')
         if (!gruposError && allGrupos) {
           const matchedGrupos = allGrupos.filter(g => {
             const gId = String(g.id).toLowerCase()
-            const gNome = String(g.nome || '').toLowerCase()
+            const gNome = String(g.dados?.nome || '').toLowerCase()
             return allGroupTerms.some(term => {
               const tl = term.toLowerCase().trim()
               return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
@@ -291,7 +291,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
               if (cleanId) grupoAlunosIds.push(cleanId)
             })
 
-            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
+            let colabs = g.dados?.colaboradoresIds || [];
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
@@ -333,12 +333,12 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
                 const tId = String(t.id);
                 const tNome = String(t.nome || '').trim().toLowerCase();
                 const relatedGroup = allGrupos.find(g => {
-                  const sId = String((g as any).syncId || '');
+                  const sId = String(g.dados?.syncId || '');
                   const gId = String(g.id || '');
-                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.nome).trim().toLowerCase() === tNome;
+                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.dados?.nome || '').trim().toLowerCase() === tNome;
                 });
                 if (relatedGroup) {
-                  let colabs = relatedGroup.colaboradoresIds || relatedGroup.dados?.colaboradoresIds;
+                  let colabs = relatedGroup.dados?.colaboradoresIds || [];
                   if (typeof colabs === 'string') {
                     try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
                   }

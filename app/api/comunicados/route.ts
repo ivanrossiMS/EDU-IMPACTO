@@ -113,7 +113,7 @@ export async function GET(request: Request) {
     // Batch 1: busca dados do aluno e todos grupos ao mesmo tempo
     const [alunoRes, gruposRes] = await Promise.all([
       supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-      supabase.from('agenda_grupos').select('nome, dados'),
+      supabase.from('agenda_grupos').select('id, dados'),
     ]);
 
     const alunoData = alunoRes.data;
@@ -148,7 +148,7 @@ export async function GET(request: Request) {
       allGrupos.forEach(g => {
         const alunosIdsList = g.dados?.alunosIds || [];
         if (alunosIdsList.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId)) {
-          if (g.nome) studentGroups.push(g.nome);
+          if (g.dados?.nome) studentGroups.push(g.dados.nome);
         }
       });
     }
@@ -191,20 +191,20 @@ export async function GET(request: Request) {
     
     // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
     const { data: myGroups } = await supabase.from('agenda_grupos')
-      .select('id, nome, isGlobalAccess, ano, dados, syncId')
+      .select('id, dados')
       .or(`colaboradoresIds.cs.["${user.id}"],dados->"colaboradoresIds".cs.["${user.id}"]`);
       
     if (myGroups && myGroups.length > 0) {
-      const isGlobal = myGroups.some(g => (g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1) && (!g.ano && !g.dados?.anoLetivo));
+      const isGlobal = myGroups.some(g => (g.dados?.isGlobalAccess === true || g.dados?.isGlobalAccess === 'true' || g.dados?.isGlobalAccess === 1) && (!g.dados?.ano && !g.dados?.anoLetivo));
       if (isGlobal) {
          colaboradorConditions.push(`id.not.is.null`); // Vê tudo (acesso global total)
       } else {
          myGroups.forEach(g => {
-           if (g.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.nome}"]`);
+           if (g.dados?.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.dados.nome}"]`);
          });
          
-         const syncIds = myGroups.filter(g => String(g.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.syncId || g.id).replace('sync-', ''));
-         const names = myGroups.map(g => String(g.nome).trim().toLowerCase());
+         const syncIds = myGroups.filter(g => String(g.dados?.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.dados?.syncId || g.id).replace('sync-', ''));
+         const names = myGroups.map(g => String(g.dados?.nome || '').trim().toLowerCase());
          
          if (syncIds.length > 0 || names.length > 0) {
             const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
