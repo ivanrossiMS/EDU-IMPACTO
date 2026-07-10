@@ -190,6 +190,11 @@ export async function GET(request: Request) {
   if (sinceParam) {
     query = query.gt('created_at', sinceParam);
   }
+
+  // Ocultar envios individuais de relatorios para admins no feed (eles veem apenas o resumo/pai)
+  if (isAdmin && !idParam && !alunoId) {
+    query = query.not('id', 'like', 'AD-COM-REL-STU-%');
+  }
   
   query = query.order('data', { ascending: false });
   

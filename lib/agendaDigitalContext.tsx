@@ -162,7 +162,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading
 
-  const applyFlatUpdater = (oldData: any, updater: any, limit = 30) => {
+  const applyFlatUpdater = (oldData: any, updater: any, limit = 5) => {
     if (!oldData || !oldData.pages) return oldData;
     if (typeof updater === 'function') {
       const flatArray = oldData.pages.flat();
@@ -177,7 +177,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const setLocalComunicadosState = useCallback((updater: any) => {
-    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], (oldData: any) => applyFlatUpdater(oldData, updater, 30))
+    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], (oldData: any) => applyFlatUpdater(oldData, updater, 5))
   }, [queryClient])
   const setComunicadosState = useCallback((updater: any) => {
     setLocalComunicadosState(updater)

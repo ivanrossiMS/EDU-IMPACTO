@@ -315,8 +315,9 @@ export function ComunicadoViewModal({
     try {
       let url = '';
       if (isAdminMode) {
-        if (isGroupedReport && relatedIndividualIds.length > 0) {
-          url = `/api/comunicados_respostas?comunicado_ids=${relatedIndividualIds.join(',')}&admin=true`;
+        if (isGroupedReport) {
+          const gDate = new Date(comunicado.dataEnvio || comunicado.created_at || 0).getTime();
+          url = `/api/comunicados_respostas?grouped_autor_id=${comunicado.autorId}&grouped_time=${gDate}&admin=true`;
         } else {
           url = `/api/comunicados_respostas?comunicado_id=${comunicado.id}&admin=true`;
         }
@@ -348,7 +349,7 @@ export function ComunicadoViewModal({
       return () => clearInterval(interval)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [comunicado.id, currentUserSlug, isAdminMode, canReply, relatedIndividualIds.join(',')])
+  }, [comunicado.id, currentUserSlug, isAdminMode, canReply])
 
   const handleSend = async () => {
     if (!newMessage.trim() && pendingAnexos.length === 0) return

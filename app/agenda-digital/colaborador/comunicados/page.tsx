@@ -953,26 +953,27 @@ export default function ColaboradorComunicadosPage() {
 
                        {/* Attachments Section */}
                        {c.anexos && c.anexos.length > 0 && (
-                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                            {(() => {
                              let reportCount = 0;
                              let firstReportTypeInfo: any = null;
 
                              const otherAnexos: { anexo: string, idx: number, typeInfo: any }[] = [];
 
-                             c.anexos.forEach((anexo: string, idx: number) => {
-                               const typeInfo = getAnexoType(anexo);
-                               if (!typeInfo) return;
-                               
-                               if (anexo.endsWith('|report-payload') || anexo.includes('Relatório Personalizado:')) {
-                                 reportCount++;
-                                 if (!firstReportTypeInfo) {
-                                   firstReportTypeInfo = typeInfo;
-                                 }
-                               } else {
-                                 otherAnexos.push({ anexo, idx, typeInfo });
-                               }
-                             });
+                             c.anexos.forEach((anexo: any, idx: number) => {
+                                const typeInfo = getAnexoType(anexo);
+                                if (!typeInfo) return;
+                                
+                                const anexoStr = typeof anexo === 'string' ? anexo : anexo?.name || '';
+                                if (anexoStr.endsWith('|report-payload') || anexoStr.includes('Relatório Personalizado:')) {
+                                  reportCount++;
+                                  if (!firstReportTypeInfo) {
+                                    firstReportTypeInfo = typeInfo;
+                                  }
+                                } else {
+                                  otherAnexos.push({ anexo, idx, typeInfo });
+                                }
+                              });
 
                              if (reportCount <= 1) {
                                return c.anexos.map((anexo: string, idx: number) => {

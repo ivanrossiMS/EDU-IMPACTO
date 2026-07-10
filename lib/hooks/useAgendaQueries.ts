@@ -8,7 +8,7 @@ import { useApp } from '@/lib/context'
 export function useQueryComunicados(
   isFamily: boolean,
   fetchUrl: string | null = '/api/comunicados',
-  pageSize: number = 30
+  pageSize: number = 5
 ) {
   const { currentUser } = useApp()
   const query = useInfiniteQuery({

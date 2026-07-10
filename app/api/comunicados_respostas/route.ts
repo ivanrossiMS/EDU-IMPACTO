@@ -23,7 +23,10 @@ export async function GET(request: Request) {
   const isFamilyOrStudent = familyPerfis.includes(perfil) || familyPerfis.includes(cargo)
   const isAdmin = !isFamilyOrStudent && (adminPerfis.includes(perfil) || adminPerfis.includes(cargo) || (!perfil && !cargo))
 
-  if (!comunicadoId && !comunicadoIds) {
+  const groupedAutorId = searchParams.get('grouped_autor_id');
+  const groupedTime = searchParams.get('grouped_time');
+
+  if (!comunicadoId && !comunicadoIds && !groupedAutorId) {
     return NextResponse.json({ error: 'comunicado_id or comunicado_ids is required' }, { status: 400 });
   }
 
@@ -32,7 +35,27 @@ export async function GET(request: Request) {
     .select('*')
     .order('created_at', { ascending: true });
 
-  if (comunicadoIds) {
+  if (groupedAutorId && groupedTime) {
+    // Busca os IDs dos relatórios filhos no banco
+    const timeNum = parseInt(groupedTime, 10);
+    const minTime = new Date(timeNum - 15000).toISOString();
+    const maxTime = new Date(timeNum + 15000).toISOString();
+    
+    const { data: relatedComs } = await supabase
+      .from('comunicados')
+      .select('id')
+      .eq('dados->>autorId', groupedAutorId)
+      .like('id', 'AD-COM-REL-STU%')
+      .gte('created_at', minTime)
+      .lte('created_at', maxTime);
+      
+    const idsArray = relatedComs?.map(c => c.id) || [];
+    if (idsArray.length > 0) {
+      query = query.in('comunicado_id', idsArray);
+    } else {
+      return NextResponse.json([]); // Nenhum filho encontrado, logo nenhuma conversa
+    }
+  } else if (comunicadoIds) {
     const idsArray = comunicadoIds.split(',').slice(0, 50); // Limitar a 50 IDs
     query = query.in('comunicado_id', idsArray);
   } else if (comunicadoId) {
@@ -76,8 +99,43 @@ export async function POST(request: Request) {
     const familyPerfisPost = ['Família', 'Responsável', 'Aluno']
     const serverIsAdmin = !familyPerfisPost.includes(senderPerfil) && !familyPerfisPost.includes(senderCargo)
 
+    let finalComunicadoId = body.comunicado_id;
+
+    // Se o admin tentar responder num report agrupado (pai), o frontend as vezes nao tem o ID do filho carregado
+    // Vamos auto-resolver o ID do filho correspondente no servidor se possivel
+    if (serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-') && !finalComunicadoId.startsWith('AD-COM-REL-STU-') && body.remetente_id) {
+      const { data: parentData } = await supabase.from('comunicados').select('created_at, dados').eq('id', finalComunicadoId).single();
+      if (parentData) {
+        const timeNum = new Date(parentData.created_at).getTime();
+        const minTime = new Date(timeNum - 15000).toISOString();
+        const maxTime = new Date(timeNum + 15000).toISOString();
+        const parentAutorId = parentData.dados?.autorId;
+        
+        if (parentAutorId) {
+          // Busca um filho deste autor naquele intervalo que contenha o remetente_id nos alunosIds
+          const { data: relatedComs } = await supabase
+            .from('comunicados')
+            .select('id, alunosIds')
+            .eq('dados->>autorId', parentAutorId)
+            .like('id', 'AD-COM-REL-STU%')
+            .gte('created_at', minTime)
+            .lte('created_at', maxTime);
+            
+          if (relatedComs) {
+            const studentChild = relatedComs.find(c => {
+               const alIds = Array.isArray(c.alunosIds) ? c.alunosIds : (c.alunosIds ? JSON.parse(c.alunosIds) : []);
+               return alIds.some(id => String(id) === String(body.remetente_id));
+            });
+            if (studentChild) {
+              finalComunicadoId = studentChild.id;
+            }
+          }
+        }
+      }
+    }
+
     const row = {
-      comunicado_id: body.comunicado_id,
+      comunicado_id: finalComunicadoId,
       remetente_id: body.remetente_id,
       remetente_nome: body.remetente_nome || 'Usuário',
       conteudo: body.conteudo,
