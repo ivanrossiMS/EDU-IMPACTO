@@ -109,7 +109,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       if (g.alunosIds?.some(id => String(id) === studentId)) return true
       // 2. Synced with student's class/turma
       if (studentTurmaObj && (
-        String(g.syncId || g.id) === `sync-${studentTurmaObj.id}` || 
+        String((g as any).syncId || g.id) === `sync-${studentTurmaObj.id}` || 
         String(g.id) === String(studentTurmaObj.id) ||
         g.nome === studentTurmaObj.nome
       )) return true

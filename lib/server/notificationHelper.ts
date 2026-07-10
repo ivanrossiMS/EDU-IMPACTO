@@ -333,7 +333,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
                 const tId = String(t.id);
                 const tNome = String(t.nome || '').trim().toLowerCase();
                 const relatedGroup = allGrupos.find(g => {
-                  const sId = String(g.syncId || '');
+                  const sId = String((g as any).syncId || '');
                   const gId = String(g.id || '');
                   return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.nome).trim().toLowerCase() === tNome;
                 });
