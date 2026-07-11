@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 import { useData } from '@/lib/dataContext'
 import { memo, useCallback } from 'react'
 import { useApp } from '@/lib/context'
@@ -967,7 +968,7 @@ function SelecionarAlunoContent() {
 
             // 2. Aciona a API de logout no servidor (mata os cookies HTTPOnly)
             try {
-              await fetch('/api/auth/logout', { method: 'POST' });
+              await performLogout();
             } catch (err) {}
 
             // 3. Força o redirecionamento instantâneo para a página inicial de login

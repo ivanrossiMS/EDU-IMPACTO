@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
@@ -534,40 +535,42 @@ function SelecionarPerfilAdminContent() {
       {/* Main content Area */}
       <main className="portal-sections-grid">
         {/* SECTION 1: ADMIN MASTER */}
-        <section className="animate-reveal delay-1">
-          <div className="portal-section-header">
-            <h2 className="portal-section-title">
-              <Shield size={16} strokeWidth={2.5} style={{ color: '#8b5cf6' }} />
-              Acesso Administração
-            </h2>
-            <span className="portal-section-badge" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.08)', borderColor: 'rgba(139, 92, 246, 0.15)' }}>
-              Master
-            </span>
-          </div>
+        {['Administrador', 'Diretor Geral', 'Administrador Master'].includes(currentUser?.perfil || '') && (
+          <section className="animate-reveal delay-1">
+            <div className="portal-section-header">
+              <h2 className="portal-section-title">
+                <Shield size={16} strokeWidth={2.5} style={{ color: '#8b5cf6' }} />
+                Acesso Administração
+              </h2>
+              <span className="portal-section-badge" style={{ color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.08)', borderColor: 'rgba(139, 92, 246, 0.15)' }}>
+                Master
+              </span>
+            </div>
 
-          <div className="cards-column">
-            <Link href={`/agenda-digital/admin/${redirectTarget}`} className="portal-modern-card admin-theme">
-              <div className="card-avatar-container admin-avatar">
-                <LayoutDashboard size={28} color="white" />
-              </div>
-
-              <div className="card-info">
-                <h3 className="card-title">Gestão Geral da Agenda</h3>
-                <div className="card-subtitle">
-                  <span style={{ color: '#8b5cf6', fontWeight: 800 }}>Acesso Irrestrito</span>
-                  <span className="card-dot-separator" />
-                  <span>Painel de Controle</span>
+            <div className="cards-column">
+              <Link href={`/agenda-digital/admin/${redirectTarget}`} className="portal-modern-card admin-theme">
+                <div className="card-avatar-container admin-avatar">
+                  <LayoutDashboard size={28} color="white" />
                 </div>
-              </div>
 
-              <div className="card-actions-wrapper">
-                <div className="chevron-circle-btn">
-                  <ChevronRight size={18} strokeWidth={2.5} />
+                <div className="card-info">
+                  <h3 className="card-title">Gestão Geral da Agenda</h3>
+                  <div className="card-subtitle">
+                    <span style={{ color: '#8b5cf6', fontWeight: 800 }}>Acesso Irrestrito</span>
+                    <span className="card-dot-separator" />
+                    <span>Painel de Controle</span>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          </div>
-        </section>
+
+                <div className="card-actions-wrapper">
+                  <div className="chevron-circle-btn">
+                    <ChevronRight size={18} strokeWidth={2.5} />
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </section>
+        )}
 
         {/* SECTION 2: COLABORADOR / STAFF */}
         <section className="animate-reveal delay-2">
@@ -621,7 +624,7 @@ function SelecionarPerfilAdminContent() {
           <button
             onClick={async () => {
               try {
-                await fetch('/api/auth/logout', { method: 'POST' });
+                await performLogout();
                 const { supabase } = await import('@/lib/supabase');
                 await supabase.auth.signOut();
                 setCurrentUser(null);

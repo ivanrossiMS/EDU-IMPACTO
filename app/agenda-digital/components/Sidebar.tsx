@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion'
 import { compressImage } from '@/lib/mediaCompressor'
@@ -633,7 +634,7 @@ export function ADSidebar() {
                   <button 
                     onClick={async () => { 
                       setLoadingPath('logout')
-                      fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
+                      performLogout(); 
                       setCurrentUser(null);
                       window.location.href = '/login'; 
                     }}
@@ -709,7 +710,7 @@ export function ADSidebar() {
                   onClick={() => { 
                     setLoadingPath('logout')
                     setCurrentUser(null);
-                    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
+                    performLogout(); 
                     window.location.href = '/login'; 
                   }}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}

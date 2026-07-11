@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -439,7 +440,7 @@ export default function AgendaDigitalColaboradorLayout({
                 onClick={() => { 
                   setLoadingPath('logout')
                   setCurrentUser(null); 
-                  fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); 
+                  performLogout(); 
                   window.location.href = '/login'; 
                 }} 
                 className="ad-btn-side logout" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}

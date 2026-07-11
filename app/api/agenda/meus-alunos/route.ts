@@ -33,50 +33,62 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const queryAlunoId = url.searchParams.get('aluno_id') || ''
 
-    if (!isFamilyOrStudent) {
-      if (queryAlunoId) {
-        const { data: aluno } = await supabase
-          .from('alunos')
-          .select('id,nome,turma,status,foto,serie,unidade,matricula,dados')
-          .eq('id', queryAlunoId)
-          .maybeSingle()
+    if (!isFamilyOrStudent && queryAlunoId) {
+      const { data: aluno } = await supabase
+        .from('alunos')
+        .select('id,nome,turma,status,foto,serie,unidade,matricula,dados')
+        .eq('id', queryAlunoId)
+        .maybeSingle()
 
-        if (!aluno) return NextResponse.json([])
+      if (!aluno) return NextResponse.json([])
 
-        const turmaIds = [aluno.turma].filter(Boolean)
-        const fetchTurmas = turmaIds.length > 0
-          ? supabase.from('turmas').select('id,nome,ano,codigo').in('id', turmaIds)
-          : Promise.resolve({ data: [] })
-        const { data: turmasData } = await fetchTurmas
-        const turmasMap: Record<string, { nome: string; ano: number }> = {}
-        ;(turmasData || []).forEach((t: any) => {
-          turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
-        })
-        const turmaInfo = turmasMap[aluno.turma] || { nome: aluno.turma || 'S/T', ano: new Date().getFullYear() }
-        return NextResponse.json([{
-          ...aluno,
-          pendenciasAtrasadas: 0,
-          turmaNome: turmaInfo.nome,
-          anoLetivo: turmaInfo.ano
-        }])
-      }
-      return NextResponse.json([])
+      const turmaIds = [aluno.turma].filter(Boolean)
+      const fetchTurmas = turmaIds.length > 0
+        ? supabase.from('turmas').select('id,nome,ano,codigo').in('id', turmaIds)
+        : Promise.resolve({ data: [] })
+      const { data: turmasData } = await fetchTurmas
+      const turmasMap: Record<string, { nome: string; ano: number }> = {}
+      ;(turmasData || []).forEach((t: any) => {
+        turmasMap[t.id] = { nome: t.nome, ano: t.ano || new Date().getFullYear() }
+      })
+      const turmaInfo = turmasMap[aluno.turma] || { nome: aluno.turma || 'S/T', ano: new Date().getFullYear() }
+      return NextResponse.json([{
+        ...aluno,
+        pendenciasAtrasadas: 0,
+        turmaNome: turmaInfo.nome,
+        anoLetivo: turmaInfo.ano
+      }])
     }
 
-    // ─── Família/Responsável: resolve pelo user.id da sessão ─────────────────
+    // ─── Família/Responsável/Colaborador: resolve pelo user.id da sessão ─────────
+    // Qualquer usuário (inclusive Colaboradores) pode ter filhos cadastrados.
+    // Opcionalmente, eles acessam "meus-alunos" sem `queryAlunoId`.
     // 1. Tenta responsavel_id do JWT (gravado no login)
     let responsavelId: string | null = user.user_metadata?.responsavel_id
       ? String(user.user_metadata.responsavel_id)
       : null
 
-    // 2. Fallback: busca na tabela responsaveis pelo user_id (auth uid)
+    // 2. Fallback: busca na tabela responsaveis pelo email ou nome
     if (!responsavelId) {
-      const { data: respRow } = await supabase
-        .from('responsaveis')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (respRow?.id) responsavelId = String(respRow.id)
+      let orConditions = []
+      if (user.email) {
+        orConditions.push(`email.eq.${user.email}`)
+      }
+      const nomeUser = user.user_metadata?.nome
+      if (nomeUser) {
+        const safeNome = nomeUser.replace(/"/g, '')
+        orConditions.push(`nome.ilike."%${safeNome}%"`)
+      }
+
+      if (orConditions.length > 0) {
+        const { data: respRow } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .or(orConditions.join(','))
+          .limit(1)
+          .maybeSingle()
+        if (respRow?.id) responsavelId = String(respRow.id)
+      }
     }
 
     const linkedAlunoIds = new Set<string>()

@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
@@ -610,7 +611,7 @@ export function Sidebar() {
                     e.stopPropagation();
                     setShowTopMenu(false);
                     try {
-                      await fetch('/api/auth/logout', { method: 'POST' });
+                      await performLogout();
                       setCurrentUser(null);
                       window.location.href = '/login';
                     } catch (err) {

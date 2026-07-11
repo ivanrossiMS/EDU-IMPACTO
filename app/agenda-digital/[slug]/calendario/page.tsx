@@ -256,10 +256,10 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       .map(e => e.id);
 
     if (unreadIds.length > 0) {
-      queryClient.setQueryData(['agenda', 'eventos', endpoint || '/api/agenda/eventos'], (old: any) => {
-        if (!old) return old;
+      setLocalEventos((old: any) => {
+        if (!old || !Array.isArray(old)) return old;
         const nowIso = new Date().toISOString();
-        const pages = old.pages ? old.pages.map((page: any[]) => page.map((e: any) => {
+        return old.map((e: any) => {
           if (unreadIds.includes(e.id)) {
             const currentDados = e.dados || {};
             return {
@@ -276,8 +276,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             }
           }
           return e;
-        })) : undefined;
-        return { ...old, ...(pages ? { pages } : {}) };
+        });
       });
 
       fetch('/api/agenda/notificacoes/marcar-lido', {

@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import { useApp } from '@/lib/context'
 import { useState, useEffect } from 'react'
@@ -29,7 +30,7 @@ export default function AgendaDigitalAdminLayout({
   const handleLogout = () => {
     setLoadingPath('logout')
     setCurrentUser(null)
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    performLogout()
     window.location.href = '/login'
   }
 

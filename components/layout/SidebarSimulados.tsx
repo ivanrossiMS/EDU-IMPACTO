@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -37,7 +38,7 @@ export function SidebarSimulados() {
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    try { await fetch('/api/auth/logout', { method: 'POST' }) } catch(e) {}
+    try { await performLogout() } catch(e) {}
     setCurrentUserPerfil('');
     setCurrentUser(null);
     window.location.href = '/login';

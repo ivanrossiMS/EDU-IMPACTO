@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import { usePathname, useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
@@ -210,7 +211,7 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           <button
             onClick={async () => {
               try {
-                await fetch('/api/auth/logout', { method: 'POST' })
+                await performLogout()
                 setCurrentUser?.(null)
                 window.location.href = '/login'
               } catch (err) {

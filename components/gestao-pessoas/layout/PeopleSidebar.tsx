@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import React from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -30,7 +31,7 @@ export function PeopleSidebar() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      await performLogout()
       router.push('/login')
     } catch (e) {
       console.error('Logout error:', e)

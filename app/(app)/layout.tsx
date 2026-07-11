@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 
 import { Sidebar } from '@/components/layout/Sidebar'
 import { RouteGuard } from '@/components/layout/RouteGuard'
@@ -12,6 +13,8 @@ import { WebVitalsReporter } from '@/lib/webVitals'
 
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { Menu } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
+import { restoreSessionSecurely } from '@/lib/auth/secureSession'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, toggleSidebar, setCurrentUser, currentUser } = useApp()
@@ -26,20 +29,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        const supabase = createClient();
+        const restored = await restoreSessionSecurely(supabase);
+        // Se `restored` for true, o Supabase já injetou a sessão e as requisições API
+        // usarão esse token ou os cookies recriados.
+
         const res = await fetch('/api/auth/me', {
           cache: 'no-store', credentials: 'include',
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         })
 
-        // ✅ CORREÇÃO DE SEGURANÇA: Qualquer falha → redirecionar para login
-        // Antes: erros de rede/4xx resultavam em setAuthState('authorized')
+        // ✅ CORREÇÃO DE SEGURANÇA: Qualquer falha → redirecionar para login, exceto se houver cache local offline
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
             // Sessão inválida ou expirada — ir para login
             router.replace('/login')
             return
           }
-          // Erro de servidor (5xx) — pode ser temporário, mostrar erro mas não autorizar
+          // Erro de servidor (5xx) — pode ser temporário. 
+          // Se tivermos a sessão local recuperada, mantemos logado!
+          if (restored) {
+            console.warn('[Auth] Server error 5xx, mas sessão local restaurada. Mantendo acesso.');
+            setAuthState('authorized')
+            return
+          }
           setAuthState('unauthorized')
           router.replace('/login')
           return
@@ -63,9 +76,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setCurrentUser(serverUser)
         setAuthState('authorized')
       } catch (err) {
-        // ✅ CORREÇÃO DE SEGURANÇA: Erro de rede → ir para login (não autorizar)
-        // Antes: erro resultava em setAuthState('authorized')
-        console.warn('[Auth] Network error checking session, redirecting to login.')
+        // ✅ CORREÇÃO DE SEGURANÇA & OFFLINE: Erro de rede (falta de internet)
+        console.warn('[Auth] Network error checking session.');
+        
+        // Verificamos se há sessão válida local (seja do SecureStorage ou Cache do Supabase)
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          console.log('[Auth] Modo offline ativo: Sessão local válida.');
+          setAuthState('authorized');
+          return;
+        }
+
         router.replace('/login')
       }
     }
@@ -189,9 +211,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <button 
             onClick={() => {
               // Sign out using the API to clear cookies
-              fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
-                window.location.href = '/login'
-              })
+              performLogout()
             }}
             style={{
               background: 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)',

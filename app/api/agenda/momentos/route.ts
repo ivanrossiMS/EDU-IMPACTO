@@ -97,23 +97,50 @@ export async function GET(request: Request) {
     } else if (!isFamilyOrStudent) {
        // Se for colaborador
        const isAdmin = ['Diretor Geral', 'Administrador', 'Admin'].includes(perfil) || ['Administrador Master', 'Diretor Geral'].includes(cargo);
-       if (!isAdmin) {
-          const conditions = [];
-          conditions.push(`dados->targetClasses.eq."[]"`);
-          conditions.push(`dados->targetClasses.is.null`);
-          conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
-          conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
-          conditions.push(`dados->targetClasses.cs.["Todos"]`);
-          conditions.push(`dados->targetClasses.cs.["Todas"]`);
-          conditions.push(`dados->funcionariosIds.cs.["${user.id}"]`);
-          conditions.push(`dados->colaboradoresIds.cs.["${user.id}"]`);
-          conditions.push(`dados->authorId.eq."${user.id}"`);
-          
-          // E os grupos que ele dá aula? 
-          // Idealmente também filtrar por turmas em que é professor (vamos assumir que a visualização global é suficiente pro colaborador, ou injetar as turmas depois, igual comunicados).
-          // Para simplificar, o colaborador vê os abertos e os que ele mesmo enviou ou foi marcado.
-          query = query.or(conditions.join(','));
-       }
+        if (!isAdmin) {
+           const conditions = [];
+           conditions.push(`dados->targetClasses.eq."[]"`);
+           conditions.push(`dados->targetClasses.is.null`);
+           conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
+           conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+           conditions.push(`dados->targetClasses.cs.["Todos"]`);
+           conditions.push(`dados->targetClasses.cs.["Todas"]`);
+           conditions.push(`dados->funcionariosIds.cs.["${user.id}"]`);
+           conditions.push(`dados->colaboradoresIds.cs.["${user.id}"]`);
+           conditions.push(`dados->>authorId.eq.${user.id}`);
+           
+           // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
+           const { data: myGroups } = await supabase.from('agenda_grupos')
+             .select('id, dados')
+             .contains('dados->colaboradoresIds', `["${user.id}"]`);
+             
+           if (myGroups && myGroups.length > 0) {
+             const isGlobal = myGroups.some(g => (g.dados?.isGlobalAccess === true || g.dados?.isGlobalAccess === 'true' || g.dados?.isGlobalAccess === 1) && (!g.dados?.ano && !g.dados?.anoLetivo));
+             if (isGlobal) {
+                conditions.push(`id.not.is.null`); // Vê tudo (acesso global total)
+             } else {
+                myGroups.forEach(g => {
+                  if (g.dados?.nome) conditions.push(`dados->targetClasses.cs.["${g.dados.nome}"]`);
+                });
+                
+                const syncIds = myGroups.filter(g => String(g.dados?.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.dados?.syncId || g.id).replace('sync-', ''));
+                const names = myGroups.map(g => String(g.dados?.nome || '').trim().toLowerCase());
+                
+                if (syncIds.length > 0 || names.length > 0) {
+                   const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
+                   if (myTurmas) {
+                      myTurmas.forEach(t => {
+                        if (syncIds.includes(String(t.id)) || names.includes(String(t.nome).trim().toLowerCase())) {
+                          conditions.push(`dados->targetClasses.cs.["${t.nome}"]`);
+                        }
+                      });
+                   }
+                }
+             }
+           }
+
+           query = query.or(conditions.join(','));
+        }
     }
 
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)

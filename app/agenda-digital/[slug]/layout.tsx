@@ -1,4 +1,5 @@
 'use client'
+import { performLogout } from "@/lib/auth/logout";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
@@ -2214,7 +2215,7 @@ export default function ADInnerLayout({
                   <button 
                     onClick={() => {
                         setLoadingPath('logout')
-                        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+                        performLogout();
                         setCurrentUser(null);
                         window.location.href = '/login';
                       }}
@@ -2373,7 +2374,7 @@ export default function ADInnerLayout({
                   <button 
                     onClick={() => {
                       setLoadingPath('logout')
-                      fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+                      performLogout();
                       setCurrentUser(null);
                       window.location.href = '/login';
                     }}
