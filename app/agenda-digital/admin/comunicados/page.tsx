@@ -931,19 +931,19 @@ export default function ADAdminComunicados() {
                 <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(79, 70, 229, 0.03)', borderRadius: 12, border: '1px solid rgba(79, 70, 229, 0.1)' }}>
                   <div style={{ fontSize: 10, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', marginBottom: 6, letterSpacing: '0.05em' }}>Para:</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: '110px', overflowY: 'auto', paddingRight: 4 }}>
-                    {viewingCom.turmas?.length > 0 && viewingCom.turmas.map((t: string) => (
+                    {viewingCom.turmas && viewingCom.turmas.length > 0 && viewingCom.turmas.map((t: string) => (
                       <span key={`t-${t}`} style={{ background: 'white', color: '#4f46e5', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(79, 70, 229, 0.1)' }}>Turma: {t}</span>
                     ))}
-                    {viewingCom.grupos?.length > 0 && viewingCom.grupos.map((g: string) => (
+                    {viewingCom.grupos && viewingCom.grupos.length > 0 && viewingCom.grupos.map((g: string) => (
                       <span key={`g-${g}`} style={{ background: 'white', color: '#059669', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.1)' }}>Grupo: {g}</span>
                     ))}
-                    {viewingCom.funcionariosIds?.length > 0 && (
+                    {viewingCom.funcionariosIds && viewingCom.funcionariosIds.length > 0 && (
                       <span style={{ background: 'white', color: '#f59e0b', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(245, 158, 11, 0.1)' }}>{viewingCom.funcionariosIds.length} Colaborador(es)</span>
                     )}
-                    {viewingCom.alunosIds?.length > 0 && (
+                    {viewingCom.alunosIds && viewingCom.alunosIds.length > 0 && (
                       <span style={{ background: 'white', color: '#3b82f6', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, border: '1px solid rgba(59, 130, 246, 0.1)' }}>{viewingCom.alunosIds.length} Aluno(s)</span>
                     )}
-                    {(!viewingCom.turmas?.length && !viewingCom.grupos?.length && !viewingCom.funcionariosIds?.length && !viewingCom.alunosIds?.length) && (
+                    {(!(viewingCom.turmas?.length) && !(viewingCom.grupos?.length) && !(viewingCom.funcionariosIds?.length) && !(viewingCom.alunosIds?.length)) && (
                       <span style={{ color: '#64748b', fontSize: 12, fontWeight: 600 }}>Toda a Escola (Global)</span>
                     )}
                   </div>

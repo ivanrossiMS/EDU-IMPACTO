@@ -255,7 +255,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       })
       .map(e => e.id);
 
-    if (unreadIds.length > 0) {
+    if (unreadIds.length > 0 && setLocalEventos) {
       setLocalEventos((old: any) => {
         if (!old || !Array.isArray(old)) return old;
         const nowIso = new Date().toISOString();
