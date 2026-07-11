@@ -4,10 +4,22 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { use, useState, useMemo, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+
+const ClientPortal = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+  return mounted ? createPortal(children, document.body) : null;
+};
 import { X, Expand, Play, Heart, MessageCircle, Share2, Filter, Upload, Trash2, Camera, Download, PlayCircle, MoreVertical, Image as ImageIcon, Sparkles, Smile, Star, Send, ChevronLeft, ChevronRight, Maximize2, Plus, Check, Loader2, Video } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
@@ -165,7 +177,7 @@ export default function ADMomentosPage() {
 
         if (file.type.startsWith('image/')) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
-          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' })
+          fileToUpload = await compressImage(file, { quality: 0.65, format: 'image/webp' })
           setUploadProgress(prev => ({ ...prev, [file.name]: 40 }))
         } else if (file.type.startsWith('video/')) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 5 }))
@@ -837,7 +849,8 @@ export default function ADMomentosPage() {
       </div>
 
       {/* LIGHTBOX / GALLERY MODAL */}
-      {isMounted && createPortal(
+      {isMounted && (
+        <ClientPortal>
         <AnimatePresence>
           {lightboxOpen && lightboxMedia.length > 0 && (
             <motion.div 
@@ -948,14 +961,14 @@ export default function ADMomentosPage() {
               )}
             </motion.div>
           )}
-        </AnimatePresence>,
-        document.body
+        </AnimatePresence>
+        </ClientPortal>
       )}
 
       {/* === MODAL: NOVO MOMENTO === */}
-      {isMounted && createPortal(
-        <AnimatePresence>
-          {showModal && (
+      {isMounted && showModal && (
+        <ClientPortal>
+          <AnimatePresence>
           <motion.div className="ad-momento-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'none', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <motion.div className="ad-momento-content" initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
@@ -1070,9 +1083,8 @@ export default function ADMomentosPage() {
               </div>
             </motion.div>
             </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
+          </AnimatePresence>
+        </ClientPortal>
       )}
 
       <DestinatariosModal

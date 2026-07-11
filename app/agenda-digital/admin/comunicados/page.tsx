@@ -34,6 +34,38 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   return mounted ? createPortal(children, document.body) : null;
 };
 
+const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, initialSize?: string }) => {
+  const [size, setSize] = useState(initialSize || '');
+
+  useEffect(() => {
+    if (!size && url && url.startsWith('http')) {
+      fetch(url, { method: 'HEAD' })
+        .then(res => {
+          const cl = res.headers.get('content-length');
+          if (cl) {
+            const bytes = parseInt(cl, 10);
+            if (bytes > 1048576) setSize((bytes / 1048576).toFixed(2) + ' MB');
+            else setSize((bytes / 1024).toFixed(0) + ' KB');
+          }
+        })
+        .catch(() => {});
+    } else if (size && !size.includes('B')) {
+       const bytes = parseInt(size, 10);
+       if (!isNaN(bytes)) {
+         if (bytes > 1048576) setSize((bytes / 1048576).toFixed(2) + ' MB');
+         else setSize((bytes / 1024).toFixed(0) + ' KB');
+       }
+    }
+  }, [url, size]);
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', overflow: 'hidden' }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+      {size && <span style={{ opacity: 0.7, fontSize: '0.9em', whiteSpace: 'nowrap', marginLeft: 8 }}>{size}</span>}
+    </div>
+  );
+};
+
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados } = useAgendaDigital()
@@ -931,6 +963,7 @@ export default function ADAdminComunicados() {
                         let name = '';
                         let url = '';
                         let mimeType = '';
+                        let size = '';
                         if (typeof a === 'string') {
                           if (a.endsWith('|report-payload')) {
                             const firstPipe = a.indexOf('|');
@@ -943,11 +976,13 @@ export default function ADAdminComunicados() {
                             name = parts[0];
                             url = parts[1] || (parts[0].startsWith('http') ? parts[0] : '');
                             mimeType = parts[2] || '';
+                            size = parts[3] || '';
                           }
                         } else if (a && typeof a === 'object') {
                           name = a.nome || a.name || 'Anexo';
                           url = a.url || '';
                           mimeType = a.type || a.mimeType || (name.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? 'image/' : '');
+                          size = a.size || '';
                         } else {
                           name = String(a);
                         }
@@ -989,8 +1024,8 @@ export default function ADAdminComunicados() {
                                 e.currentTarget.style.transform = 'translateY(0)';
                               }}
                             >
-                              <FileBarChart size={16} />
-                              {name}
+                              <FileBarChart size={16} style={{ flexShrink: 0 }} />
+                              <MediaLabel name={name} url={url} initialSize={size} />
                             </button>
                           );
                         }
@@ -998,7 +1033,9 @@ export default function ADAdminComunicados() {
                         if (isImg && url) return (
                           <div key={i} style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
                             <Image src={url} alt={name} width={800} height={600} style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600, objectFit: 'contain' }} />
-                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>{name}</div>
+                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#64748b', borderTop: '1px solid #e2e8f0' }}>
+                              <MediaLabel name={name} url={url} initialSize={size} />
+                            </div>
                           </div>
                         );
 
@@ -1011,16 +1048,20 @@ export default function ADAdminComunicados() {
                               preload="metadata"
                               style={{ width: '100%', height: 'auto', display: 'block', maxHeight: 600 }} 
                             />
-                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(15,23,42,0.85)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>{name}</div>
+                            <div style={{ padding: '8px 16px', fontSize: 12, color: '#fff', background: 'rgba(15,23,42,0.85)', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+                              <MediaLabel name={name} url={url} initialSize={size} />
+                            </div>
                           </div>
                         );
 
                         return (
                           <div key={i} style={{ padding: '12px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12, fontWeight: 600 }}>
-                            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <Paperclip size={16} color="#64748b" />
                             </div>
-                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                              <MediaLabel name={name} url={url} initialSize={size} />
+                            </div>
                             {url && <button className="btn btn-ghost btn-sm" onClick={() => window.open(url, '_blank')}>Abrir</button>}
                           </div>
                         );

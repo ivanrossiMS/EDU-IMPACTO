@@ -19,7 +19,14 @@ export async function POST(request: Request) {
         isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
       }
     }
-    const readerId = user.id
+    let readerId = user.id
+    if (isFamily) {
+      if (user.user_metadata?.responsavel_id) {
+        readerId = String(user.user_metadata.responsavel_id);
+      } else if (user.user_metadata?.aluno_id) {
+        readerId = String(user.user_metadata.aluno_id);
+      }
+    }
 
     if (!tipo || !id || !readerId) {
       return NextResponse.json({ error: 'Parâmetros incompletos' }, { status: 400 })
@@ -33,7 +40,8 @@ export async function POST(request: Request) {
         perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
         content_id: id,
-        ciente_em: now
+        ciente_em: now,
+        aluno_id: isFamily && alunoId ? String(alunoId) : null
       };
 
       const { error: insertError } = await supabase

@@ -231,19 +231,55 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   useEffect(() => {
     if (!aluno?.id || eventosFiltrados.length === 0) return;
     
-    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+    const evts = eventosFiltrados;
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
 
-    // Check which ones are unread
-    const unreadIds = eventosFiltrados
+    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+    const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${aluno.id}` : '';
+    const currentReaderWithSlug = `${currentReaderId}_${aluno.id}`;
+    const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+
+    const unreadIds = evts
       .filter(e => {
         const leituras = (e as any).dados?.leituras || (e as any).leituras || {};
-        return !leituras[currentReaderId];
+        const isRead = !!(
+          leituras[currentReaderId] || 
+          (legacyResponsavelId && leituras[legacyResponsavelId]) || 
+          (legacyAlunoId && leituras[legacyAlunoId]) ||
+          (readerIdWithSlug && leituras[readerIdWithSlug]) ||
+          leituras[currentReaderWithSlug]
+        );
+        return !isRead;
       })
       .map(e => e.id);
 
     if (unreadIds.length > 0) {
+      queryClient.setQueryData(['agenda', 'eventos', endpoint || '/api/agenda/eventos'], (old: any) => {
+        if (!old) return old;
+        const nowIso = new Date().toISOString();
+        const pages = old.pages ? old.pages.map((page: any[]) => page.map((e: any) => {
+          if (unreadIds.includes(e.id)) {
+            const currentDados = e.dados || {};
+            return {
+              ...e,
+              dados: {
+                ...currentDados,
+                leituras: {
+                  ...(currentDados.leituras || {}),
+                  ...(isFamily ? {} : { [currentReaderId]: nowIso, [aluno.id]: nowIso }),
+                  ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+                  ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
+                }
+              }
+            }
+          }
+          return e;
+        })) : undefined;
+        return { ...old, ...(pages ? { pages } : {}) };
+      });
+
       fetch('/api/agenda/notificacoes/marcar-lido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

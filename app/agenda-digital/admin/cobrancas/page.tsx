@@ -20,6 +20,10 @@ export default function ADAdminCobrancas() {
   const [modalSearchTerm, setModalSearchTerm] = useState('')
   const [alunosMap, setAlunosMap] = useState<Record<string, string>>({})
 
+  // Novos estados para a tabela principal
+  const [mainFilterStatus, setMainFilterStatus] = useState<'ALL' | 'PENDING' | 'PAID'>('ALL')
+  const [mainSearchTerm, setMainSearchTerm] = useState('')
+
   useEffect(() => {
     const fetchAlunosMap = async (charges: any[]) => {
       try {
@@ -97,6 +101,20 @@ export default function ADAdminCobrancas() {
 
   const groupedArray = Object.keys(groupedCharges).map(k => ({ id: k, ...groupedCharges[k] }));
 
+  const filteredGroupedArray = groupedArray.filter(group => {
+    const totalEnviados = group.destinatarios.length;
+    const totalPagos = group.destinatarios.filter((d: any) => d.status === 'CONFIRMED' || d.status === 'RECEIVED').length;
+    
+    // Filtro por status
+    if (mainFilterStatus === 'PAID' && (totalPagos !== totalEnviados || totalEnviados === 0)) return false;
+    if (mainFilterStatus === 'PENDING' && totalPagos === totalEnviados && totalEnviados > 0) return false;
+
+    // Filtro por termo (busca)
+    if (mainSearchTerm && !group.cobranca?.titulo?.toLowerCase().includes(mainSearchTerm.toLowerCase())) return false;
+
+    return true;
+  });
+
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -152,9 +170,27 @@ export default function ADAdminCobrancas() {
                style={{ background: 'transparent', border: 0, fontWeight: 600, padding: '12px 0', borderBottom: activeTab === 'erp' ? '2px solid #4f46e5' : '2px solid transparent', color: activeTab === 'erp' ? '#4f46e5' : 'hsl(var(--text-secondary))', cursor: 'pointer' }}
              >Ver Mensalidades (ERP)</button>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-             <button className="btn btn-ghost btn-sm"><Filter size={14} /> Filtros</button>
-             <button className="btn btn-ghost btn-sm"><Settings2 size={14} /> Config</button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+             <div style={{ position: 'relative', width: 240 }}>
+               <Search size={14} color="#94a3b8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+               <input 
+                 type="text" 
+                 placeholder="Buscar por motivo..." 
+                 value={mainSearchTerm}
+                 onChange={e => setMainSearchTerm(e.target.value)}
+                 style={{ width: '100%', padding: '6px 10px 6px 30px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', outline: 'none', fontSize: 13 }}
+               />
+             </div>
+             <select 
+               value={mainFilterStatus}
+               onChange={e => setMainFilterStatus(e.target.value as any)}
+               style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', outline: 'none', fontSize: 13, background: '#fff', cursor: 'pointer' }}
+             >
+               <option value="ALL">Todas as cobranças</option>
+               <option value="PENDING">Com Pagamentos Pendentes</option>
+               <option value="PAID">Totalmente Pagas</option>
+             </select>
+             <button className="btn btn-ghost btn-sm" style={{ padding: '0 8px' }} title="Configurações"><Settings2 size={16} /></button>
           </div>
         </div>
 
@@ -173,9 +209,9 @@ export default function ADAdminCobrancas() {
                <tbody>
                  {loading ? (
                     <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center' }}>Carregando cobranças...</td></tr>
-                 ) : groupedArray.length === 0 ? (
-                    <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center' }}>Nenhuma cobrança registrada.</td></tr>
-                 ) : groupedArray.map(group => {
+                 ) : filteredGroupedArray.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: 32, textAlign: 'center' }}>Nenhuma cobrança encontrada com esses filtros.</td></tr>
+                 ) : filteredGroupedArray.map(group => {
                    const cobrancaObj = group.cobranca;
                    const totalEnviados = group.destinatarios.length;
                    const totalPagos = group.destinatarios.filter((d: any) => d.status === 'CONFIRMED' || d.status === 'RECEIVED').length;

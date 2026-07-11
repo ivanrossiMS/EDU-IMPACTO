@@ -5,6 +5,7 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
+import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 export const dynamic = 'force-dynamic'
 
 function normalizeRow(row: any) {
@@ -134,9 +135,9 @@ export async function GET(request: Request) {
 
       // Resolver data de acesso
       const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
-      if (dateStr) {
+      if (dateStr && accessStartDate !== null) {
         const studentEntryDate = new Date(dateStr);
-        if (!accessStartDate || studentEntryDate > accessStartDate) {
+        if (studentEntryDate > accessStartDate) {
           accessStartDate = studentEntryDate;
         }
       }
@@ -255,8 +256,8 @@ export async function GET(request: Request) {
 
   if (itemIds.length > 0) {
      const [readsRes, cienciasRes] = await Promise.all([
-        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds),
-        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em').in('content_id', itemIds)
+        supabaseServer.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', itemIds),
+        supabaseServer.from('agenda_ciencias').select('content_id, usuario_id, ciente_em, aluno_id').in('content_id', itemIds)
      ]);
      allReads = readsRes.data || [];
      allCiencias = cienciasRes.data || [];
@@ -316,12 +317,14 @@ export async function GET(request: Request) {
      // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
      const itemReads = allReads.filter(r => r.content_id === String(row.id));
      itemReads.forEach(r => {
-        merged.leituras[r.usuario_id] = r.read_at;
+        const key = r.aluno_id ? `${r.usuario_id}_${r.aluno_id}` : r.usuario_id;
+        merged.leituras[key] = r.read_at;
      });
 
      const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
      itemCiencias.forEach(c => {
-        merged.ciencias[c.usuario_id] = c.ciente_em;
+        const key = c.aluno_id ? `${c.usuario_id}_${c.aluno_id}` : c.usuario_id;
+        merged.ciencias[key] = c.ciente_em;
      });
 
      return merged;
@@ -430,7 +433,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     
-    // Disparar Push em background
+    // 1. Criar Cobrança Asaas se existir (Pseudo-Rollback)
+    let cobrancaError = false;
+    let cobrancaErrorMessage = '';
+    
+    if (body.cobranca && data.destino !== 'interno') {
+       try {
+         const cobrancaObj = {
+           comunicado_id: String(data.id),
+           titulo: body.cobranca.titulo,
+           valor: parseFloat(body.cobranca.valor),
+           vencimento: body.cobranca.vencimento
+         }
+         
+         const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single()
+         
+         if (cobrancaErr) {
+            cobrancaError = true;
+            cobrancaErrorMessage = cobrancaErr.message;
+         } else if (cobrancaSalva) {
+            const { students } = await getStudentTargetsForComunicados(data.dados);
+            const destinatariosToInsert = students.map((s: any) => ({
+              cobranca_id: cobrancaSalva.id,
+              destinatario_id: s.aluno_id,
+              destinatario_nome: s.aluno_nome,
+              status: 'PENDING'
+            }))
+            
+            if (destinatariosToInsert.length > 0) {
+               const { error: destErr } = await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert)
+               if (destErr) {
+                 cobrancaError = true;
+                 cobrancaErrorMessage = destErr.message;
+               }
+            }
+         }
+       } catch (err: any) {
+         console.error('Erro ao salvar cobrança anexada:', err)
+         cobrancaError = true;
+         cobrancaErrorMessage = err.message || 'Erro desconhecido ao salvar cobrança';
+       }
+    }
+
+    // 2. Se a cobrança falhou, faz Rollback do Comunicado e aborta!
+    if (cobrancaError) {
+      await supabase.from('comunicados').delete().eq('id', data.id);
+      console.error("ROLLBACK APLICADO: Comunicado deletado pois a cobrança falhou.", cobrancaErrorMessage);
+      return NextResponse.json({ error: `Falha ao criar cobrança anexada. O comunicado foi cancelado. Erro: ${cobrancaErrorMessage}` }, { status: 400 });
+    }
+
+    // 3. Disparar Push em background apenas se tudo deu certo
     if (data.destino !== 'interno') {
       after(async () => {
         const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
@@ -467,36 +519,6 @@ export async function POST(request: Request) {
         
         await Promise.allSettled(pushPromises);
       });
-    }
-
-    // Criar Cobrança Asaas se existir
-    if (body.cobranca && data.destino !== 'interno') {
-       try {
-         const cobrancaObj = {
-           comunicado_id: String(data.id),
-           titulo: body.cobranca.titulo,
-           valor: parseFloat(body.cobranca.valor),
-           vencimento: body.cobranca.vencimento
-         }
-         
-         const { data: cobrancaSalva, error: cobrancaErr } = await supabase.from('agenda_cobrancas').insert(cobrancaObj).select().single()
-         
-         if (!cobrancaErr && cobrancaSalva) {
-            const { students } = await getStudentTargetsForComunicados(data.dados);
-            const destinatariosToInsert = students.map((s: any) => ({
-              cobranca_id: cobrancaSalva.id,
-              destinatario_id: s.aluno_id,
-              destinatario_nome: s.aluno_nome,
-              status: 'PENDING'
-            }))
-            
-            if (destinatariosToInsert.length > 0) {
-               await supabase.from('agenda_cobrancas_destinatarios').insert(destinatariosToInsert)
-            }
-         }
-       } catch (err) {
-         console.error('Erro ao salvar cobrança anexada:', err)
-       }
     }
 
     return NextResponse.json(normalizeRow(data), { status: 201 })
@@ -552,14 +574,43 @@ export async function DELETE(request: Request) {
   if (idsParam) {
     const ids = idsParam.split(',').filter(Boolean)
     if (ids.length === 0) return NextResponse.json({ error: 'ids required' }, { status: 400 })
+
+    const { data: comunicados } = await supabase.from('comunicados').select('dados').in('id', ids)
+    const urlsToDelete: string[] = []
+    if (comunicados) {
+      for (const com of comunicados) {
+        if (com.dados?.anexos && Array.isArray(com.dados.anexos)) {
+          urlsToDelete.push(...com.dados.anexos)
+        }
+      }
+    }
+
     const { error } = await supabase.from('comunicados').delete().in('id', ids)
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    
+    if (urlsToDelete.length > 0) {
+      // Deleta do storage sem bloquear a response principal
+      deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
+    }
+
     return NextResponse.json({ ok: true })
   }
 
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
+  const { data: com } = await supabase.from('comunicados').select('dados').eq('id', id).single()
+  const urlsToDelete: string[] = []
+  if (com && com.dados?.anexos && Array.isArray(com.dados.anexos)) {
+    urlsToDelete.push(...com.dados.anexos)
+  }
+
   const { error } = await supabase.from('comunicados').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  if (urlsToDelete.length > 0) {
+    deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
+  }
+
   return NextResponse.json({ ok: true })
 }
 

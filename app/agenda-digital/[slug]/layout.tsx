@@ -594,12 +594,16 @@ export default function ADInnerLayout({
 
   // Intercept generic push notification URLs (e.g., /agenda-digital/comunicados)
   const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
-  if (isGenericModule) {
-    if (typeof window !== 'undefined') {
+  
+  useEffect(() => {
+    if (isGenericModule && typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search)
       sp.set('redirect', resolvedParams.slug)
       router.replace(`/agenda-digital?${sp.toString()}`)
     }
+  }, [isGenericModule, resolvedParams?.slug, router])
+
+  if (isGenericModule) {
     return <LoadingGlass />
   }
 

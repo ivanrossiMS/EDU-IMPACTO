@@ -65,19 +65,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   // ── Contextos opcionais — chamados incondicionalmente (Rules of Hooks) ────
   // Usar valores padrão seguros quando o provider não existe na árvore.
-  const selectedStudentCtx = (() => {
-    try { return useSelectedStudent() } catch { return null }
-  })()
-  const agendaCtxRaw = (() => {
-    try { return useAgendaDigital() } catch { return null }
-  })()
-  const dataCtxRaw = (() => {
-    try { return useData() } catch { return null }
-  })()
+  const selectedStudentCtx = useSelectedStudent();
+  const agendaCtxRaw = useAgendaDigital();
+  const dataCtxRaw = useData();
 
-  // NOTA: os hooks acima ainda violam potencialmente as Rules of Hooks se o
-  // provider é montado/desmontado de forma condicional. A solução abaixo
-  // usa refs para capturar os valores de forma segura após montagem.
+  // Os hooks acima agora seguem as Rules of Hooks.
+  // Os valores capturados são usados de forma reativa sem precisar de ref hacks.
   const alunoObj = selectedStudentCtx?.aluno ?? null
   const turmasArray = dataCtxRaw?.turmas ?? []
   const agendaCtx   = agendaCtxRaw

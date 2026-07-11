@@ -141,7 +141,7 @@ export default function NovoComunicadoModal({
 
       if (file.type.startsWith('image/')) {
         setUploadProgress(10);
-        fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' });
+        fileToUpload = await compressImage(file, { quality: 0.65, format: 'image/webp' });
         setUploadProgress(40);
       } else if (file.type.startsWith('video/')) {
         setUploadProgress(5);
@@ -167,7 +167,7 @@ export default function NovoComunicadoModal({
       }
 
       setUploadProgress(100);
-      setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}`]);
+      setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}|${fileToUpload.size}`]);
       setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
     } catch (err: any) {
       alert('Erro inesperado: ' + (err?.message || ''));

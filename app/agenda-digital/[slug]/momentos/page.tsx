@@ -237,15 +237,49 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
 
+    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+    const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${aluno.id}` : '';
+    const currentReaderWithSlug = `${currentReaderId}_${aluno.id}`;
+
     // Check which ones are unread
     const unreadIds = meusMomentos
       .filter(m => {
         const leituras = (m as any).leituras || {};
-        return !leituras[currentReaderId];
+        const isRead = !!(
+          leituras[currentReaderId] || 
+          (legacyResponsavelId && leituras[legacyResponsavelId]) || 
+          (legacyAlunoId && leituras[legacyAlunoId]) ||
+          (readerIdWithSlug && leituras[readerIdWithSlug]) ||
+          leituras[currentReaderWithSlug]
+        );
+        return !isRead;
       })
       .map(m => m.id);
 
     if (unreadIds.length > 0) {
+      queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+        if (!old || !old.pages) return old;
+        const nowIso = new Date().toISOString();
+        return {
+          ...old,
+          pages: old.pages.map((page: any[]) => page.map((m: any) => {
+            if (unreadIds.includes(m.id)) {
+              return {
+                ...m,
+                leituras: {
+                  ...(m.leituras || {}),
+                  ...(isFamily ? {} : { [currentReaderId]: nowIso, [aluno.id]: nowIso }),
+                  ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+                  ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
+                }
+              }
+            }
+            return m;
+          }))
+        };
+      });
+
       fetch('/api/agenda/notificacoes/marcar-lido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

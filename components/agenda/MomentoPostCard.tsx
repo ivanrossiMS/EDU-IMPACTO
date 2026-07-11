@@ -1,4 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+
+const ClientPortal = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+  return mounted ? createPortal(children, document.body) : null;
+};
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, MoreHorizontal, MessageSquare, Heart, ChevronLeft, ChevronRight, Star, Maximize2 } from 'lucide-react'
 import { ADMomento } from '@/lib/agendaDigitalContext'
@@ -295,7 +309,8 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
 
       {/* Modal: Grupos Selecionados */}
       {showTargets && (
-        <div
+        <ClientPortal>
+          <div
           onClick={() => setShowTargets(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
         >
@@ -345,10 +360,12 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
             </div>
           </div>
         </div>
+        </ClientPortal>
       )}
       {/* Lightbox: Media View */}
       <AnimatePresence>
         {showLightbox && (
+          <ClientPortal>
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => setShowLightbox(false)}
@@ -382,6 +399,7 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
               )}
             </motion.div>
           </motion.div>
+          </ClientPortal>
         )}
       </AnimatePresence>
     </>

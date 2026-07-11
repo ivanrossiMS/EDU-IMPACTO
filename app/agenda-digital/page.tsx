@@ -37,53 +37,19 @@ function AgendaDigitalIndexContent() {
         router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
       }
     } else {
-      if (currentUser?.cargo === 'Aluno') {
-        const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
-        
-        // Fast path: if we already have the ID, redirect immediately!
-        if (directAlunoId) {
-          router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`)
-          return
-        }
-
-        // Slow path: Only fetch from DB if we don't have the ID, and ONLY fetch one specific record
-        const fetchAlunoId = async () => {
-          try {
-            const nomeLower = (currentUser.nome || '').trim()
-            if (!nomeLower) {
-              router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
-              return
-            }
-            
-            const { data, error } = await supabase
-              .from('alunos')
-              .select('id')
-              .ilike('nome', nomeLower)
-              .limit(1)
-              .single()
-              
-            if (data && (data as any).id) {
-              router.replace(`/agenda-digital/${(data as any).id}/${redirect}${paramStr}`)
-            } else {
-              router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
-            }
-          } catch (e) {
-            console.error('Error fetching aluno ID', e)
-            router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
-          }
-        }
-        
-        fetchAlunoId()
-        return
-      }
-      // Check if user is Responsável and has only one child using the same logic as selecionar-aluno
-      const fetchResponsavelChildren = async () => {
+      const fetchSecureStudents = async () => {
         try {
-          const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-          const emailBusca = (currentUser?.email || '').toLowerCase().trim();
-          const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
+          // Fast path para alunos que já tem o ID na sessão
+          if (currentUser?.cargo === 'Aluno') {
+             const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
+             if (directAlunoId) {
+               router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
+               return;
+             }
+          }
 
-          const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
+          // Slow path seguro via API do backend (checa user_id ou vínculos)
+          const url = `/api/agenda/meus-alunos`;
           const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
           if (res.ok) {
             const data = await res.json();
@@ -94,11 +60,12 @@ function AgendaDigitalIndexContent() {
           }
           router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         } catch (e) {
+          console.error('Erro ao buscar alunos:', e);
           router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         }
-      }
-      
-      fetchResponsavelChildren()
+      };
+
+      fetchSecureStudents();
     }
   }, [currentUserPerfil, currentUser, router, searchParams])
 

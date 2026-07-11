@@ -178,7 +178,20 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         ...old,
         pages: old.pages.map((page: any[]) => page.map((c: any) => {
           if (c.id === comunicadoId) {
-            const updated = { ...c, ciencias: { ...(c.ciencias || {}), [resolvedParams.slug]: nowIso } }
+            const currentReaderId = currentUser?.id || '';
+            const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
+            const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
+            const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
+
+            const updated = { 
+              ...c, 
+              ciencias: { 
+                ...(c.ciencias || {}), 
+                ...(isFamily ? {} : { [resolvedParams.slug]: nowIso }),
+                ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+                ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
+              } 
+            }
             if (selectedComunicado && selectedComunicado.id === comunicadoId) {
               setSelectedComunicado(updated)
             }
@@ -672,10 +685,9 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                       ...c, 
                       leituras: { 
                         ...(c.leituras || {}), 
-                        [currentReaderId]: nowIso, 
-                        [resolvedParams.slug]: nowIso,
-                        ...(readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
-                        [currentReaderWithSlug]: nowIso
+                        ...(isFamily ? {} : { [currentReaderId]: nowIso, [resolvedParams.slug]: nowIso }),
+                        ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+                        ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
                       } 
                     };
                     

@@ -4,6 +4,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
+import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 
 export const dynamic = 'force-dynamic'
 
@@ -122,7 +123,7 @@ export async function GET(request: Request) {
     let allReads: any[] = [];
   
     if (itemIds.length > 0) {
-       const readsRes = await supabase.from('agenda_notification_reads').select('content_id, usuario_id, read_at').in('content_id', itemIds);
+       const readsRes = await supabase.from('agenda_notification_reads').select('content_id, usuario_id, read_at, aluno_id').in('content_id', itemIds);
        allReads = readsRes.data || [];
     }
 
@@ -132,7 +133,8 @@ export async function GET(request: Request) {
       merged.leituras = merged.leituras && typeof merged.leituras === 'object' && !Array.isArray(merged.leituras) ? merged.leituras : {}
       const itemReads = allReads.filter(r => r.content_id === String(row.id));
       itemReads.forEach(r => {
-         merged.leituras[r.usuario_id] = r.read_at;
+         const key = r.aluno_id ? `${r.usuario_id}_${r.aluno_id}` : r.usuario_id;
+         merged.leituras[key] = r.read_at;
       });
 
       if (merged.midias && Array.isArray(merged.midias)) {
@@ -313,13 +315,25 @@ export async function DELETE(request: Request) {
     if (!id) return NextResponse.json({ error: 'ID não informado' }, { status: 400 })
 
     const supabase = await createProtectedClient()
+
+    const { data: mom } = await supabase.from('momentos').select('dados').eq('id', id).single()
+    const urlsToDelete: string[] = []
+    if (mom && mom.dados?.midia && Array.isArray(mom.dados.midia)) {
+      for (const media of mom.dados.midia) {
+        if (media.url) urlsToDelete.push(media.url)
+      }
+    }
+
     const { error } = await supabase.from('momentos').delete().eq('id', id)
     
     if (error) throw new Error(error.message)
     
+    if (urlsToDelete.length > 0) {
+      deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }
-

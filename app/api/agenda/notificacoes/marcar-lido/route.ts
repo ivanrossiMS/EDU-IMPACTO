@@ -57,7 +57,8 @@ export async function POST(request: Request) {
         perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
         content_id: id,
-        read_at: now
+        read_at: now,
+        aluno_id: isFamily && alunoId ? String(alunoId) : null
       }));
 
       // Utiliza insert em vez de upsert para não depender de UNIQUE CONSTRAINT nomeada no PostgREST

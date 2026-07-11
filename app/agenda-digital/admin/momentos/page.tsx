@@ -1,6 +1,19 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
+
+const ClientPortal = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+  return mounted ? createPortal(children, document.body) : null;
+};
 import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check, Camera } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
@@ -103,7 +116,7 @@ export default function ADAdminMomentos() {
 
         if (file.type.startsWith('image/')) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
-          fileToUpload = await compressImage(file, { quality: 0.80, format: 'image/webp' })
+          fileToUpload = await compressImage(file, { quality: 0.65, format: 'image/webp' })
           setUploadProgress(prev => ({ ...prev, [file.name]: 40 }))
         } else if (file.type.startsWith('video/')) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 5 }))
@@ -403,9 +416,10 @@ export default function ADAdminMomentos() {
       )}
 
       {/* === MODAL: NOVO MOMENTO === */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      {showModal && (
+        <ClientPortal>
+          <AnimatePresence>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'none', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 32px 64px rgba(0,0,0,0.3)' }}>
@@ -519,8 +533,9 @@ export default function ADAdminMomentos() {
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </ClientPortal>
+      )}
 
       <DestinatariosModal
         isOpen={showDestModal}
