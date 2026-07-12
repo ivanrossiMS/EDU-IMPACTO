@@ -1031,7 +1031,12 @@ export default function AlunosPage() {
         )
         queryClient.invalidateQueries({ queryKey: ['alunos'] })
       } else {
-        alert('Erro ao excluir aluno')
+        try {
+          const json = await res.json()
+          alert(`Erro ao excluir aluno: ${json.error || JSON.stringify(json)}`)
+        } catch {
+          alert(`Erro ao excluir aluno: Status ${res.status}`)
+        }
       }
     }
   }

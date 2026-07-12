@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
@@ -72,10 +73,31 @@ function PasswordStrength({ pw }: { pw: string }) {
 
 export default function MeuPerfilPage() {
   const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
+  const searchParams = useSearchParams()
+
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const isMirroring = !!espelharColabId
+  
+  const effectiveUser = useMemo(() => {
+    if (isMirroring) {
+      return {
+        ...currentUser,
+        id: espelharColabId,
+        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
+        perfil: 'colaborador',
+        foto: searchParams?.get('espelhar_foto') || null,
+        email: ''
+      }
+    }
+    return currentUser
+  }, [currentUser, isMirroring, espelharColabId, searchParams])
+
 
   // ── Extra fields (editáveis pelo usuário)
   const [extra, setExtra] = useState<UserProfile>({ bio: '', telefone: '', unidade: '', foto: '' })
   const [editMode, setEditMode] = useState(false)
+  const canEdit = !isMirroring
   const [form, setForm] = useState<UserProfile>(extra)
   const [saved, setSaved] = useState(false)
 
@@ -90,12 +112,12 @@ export default function MeuPerfilPage() {
 
   // Carrega o extra profile e busca dados atualizados da API
   useEffect(() => {
-    if (!currentUser) return
-    const loaded = getProfileExtra(currentUser.id)
+    if (!effectiveUser) return
+    const loaded = getProfileExtra(effectiveUser.id)
     
     // Se o context já tem foto mas o extra não, prioriza o context
-    if (currentUser.foto && !loaded.foto) {
-      loaded.foto = currentUser.foto
+    if (effectiveUser.foto && !loaded.foto) {
+      loaded.foto = effectiveUser.foto
     }
     
     setExtra(loaded)
@@ -108,9 +130,9 @@ export default function MeuPerfilPage() {
         if (Array.isArray(users)) {
           // Procurar pelo ID (prioridade), Email ou Nome (como último recurso)
           const me = users.find(u => 
-            u.id === currentUser.id || 
-            (u.email && u.email.toLowerCase() === currentUser.email?.toLowerCase()) ||
-            (u.nome && u.nome.toLowerCase() === currentUser.nome?.toLowerCase())
+            u.id === effectiveUser.id || 
+            (u.email && u.email.toLowerCase() === effectiveUser.email?.toLowerCase()) ||
+            (u.nome && u.nome.toLowerCase() === effectiveUser.nome?.toLowerCase())
           )
           
           if (me) {
@@ -123,17 +145,19 @@ export default function MeuPerfilPage() {
              const remoteUnidade = me.unidade || me.dados?.unidade || ''
              
              const updates: any = {}
-             if (oficialEmail && oficialEmail.toLowerCase() !== currentUser.email?.toLowerCase()) {
+             if (oficialEmail && oficialEmail.toLowerCase() !== effectiveUser.email?.toLowerCase()) {
                updates.email = oficialEmail
              }
              
              // Só atualiza a foto se receber algo válido da API E for diferente da atual
-             if (remoteFoto && remoteFoto !== currentUser.foto) {
+             if (remoteFoto && remoteFoto !== effectiveUser.foto) {
                 updates.foto = remoteFoto
              }
              
-             if (Object.keys(updates).length > 0) {
-                setCurrentUser({ ...currentUser, ...updates })
+             if (Object.keys(updates).length > 0 && !isMirroring) {
+                if (currentUser) {
+                   setCurrentUser({ ...currentUser, ...updates } as any)
+                }
              }
              
              const updatedExtra = {
@@ -142,7 +166,7 @@ export default function MeuPerfilPage() {
                unidade: remoteUnidade || loaded.unidade,
                foto: remoteFoto || loaded.foto
              }
-             setProfileExtra(currentUser.id, updatedExtra)
+             setProfileExtra(effectiveUser.id, updatedExtra)
              setExtra(updatedExtra)
              setForm(updatedExtra)
           }
@@ -152,10 +176,12 @@ export default function MeuPerfilPage() {
   }, [currentUser?.id])
 
   const saveProfile = async () => {
-    if (!currentUser) return
-    setProfileExtra(currentUser.id, form)
+    if (!effectiveUser) return
+    setProfileExtra(effectiveUser.id, form)
     setExtra(form)
-    setCurrentUser({ ...currentUser, foto: form.foto })
+    if (currentUser && !isMirroring) {
+      setCurrentUser({ ...currentUser, foto: form.foto } as any)
+    }
     
     try {
       const extraReq = await fetch('/api/user-photo/extra', {
@@ -164,7 +190,7 @@ export default function MeuPerfilPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userId: currentUser.id,
+          userId: effectiveUser.id,
           bio: form.bio,
           telefone: form.telefone,
           unidade: form.unidade
@@ -184,13 +210,13 @@ export default function MeuPerfilPage() {
   }
 
   const changePw = () => {
-    if (!currentUser) return
+    if (!effectiveUser) return
     setPwError('')
     if (!pwForm.atual) return setPwError('Informe a senha atual')
-    if (!verificarSenha(currentUser.id, pwForm.atual)) return setPwError('Senha atual incorreta')
+    if (!verificarSenha(effectiveUser.id, pwForm.atual)) return setPwError('Senha atual incorreta')
     if (pwForm.nova.length < 8) return setPwError('Nova senha deve ter ao menos 8 caracteres')
     if (pwForm.nova !== pwForm.confirmar) return setPwError('As senhas não coincidem')
-    setSenha(currentUser.id, pwForm.nova)
+    setSenha(effectiveUser.id, pwForm.nova)
     setPwSuccess(true)
     setPwForm({ atual: '', nova: '', confirmar: '' })
     setTimeout(() => setPwSuccess(false), 4000)
@@ -200,13 +226,13 @@ export default function MeuPerfilPage() {
     nome.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]?.toUpperCase()).join('')
 
   // Dados exibidos — da conta real
-  const displayNome   = currentUser?.nome   ?? '—'
-  const displayEmail  = currentUser?.email  ?? '—'
-  const displayCargo  = currentUser?.cargo  ?? currentUserPerfil
-  const displayPerfil = currentUser?.perfil ?? currentUserPerfil
+  const displayNome   = effectiveUser?.nome   ?? '—'
+  const displayEmail  = effectiveUser?.email  ?? '—'
+  const displayCargo  = effectiveUser?.cargo  ?? (isMirroring ? 'colaborador' : currentUserPerfil)
+  const displayPerfil = effectiveUser?.perfil ?? (isMirroring ? 'colaborador' : currentUserPerfil)
   const initials      = getInitials(displayNome)
 
-  if (!currentUser) {
+  if (!effectiveUser) {
     return (
       <div style={{ textAlign: 'center', padding: '80px 20px', color: 'hsl(var(--text-muted))' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>👤</div>
@@ -293,11 +319,12 @@ export default function MeuPerfilPage() {
                 )}
 
                 {/* Upload foto */}
-                <label style={{ position: 'absolute', bottom: 0, right: -4, width: 28, height: 28, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                  <Camera size={13} color="#fff" />
-                  <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploading} onChange={async e => {
+                {canEdit && (
+                  <label style={{ position: 'absolute', bottom: 0, right: -4, width: 28, height: 28, borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+                    <Camera size={13} color="#fff" />
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploading} onChange={async e => {
                     const file = e.target.files?.[0]
-                    if (!file || !currentUser) return
+                    if (!file || !effectiveUser) return
                     
                     setIsUploading(true)
                     try {
@@ -329,7 +356,7 @@ export default function MeuPerfilPage() {
                         headers: {
                           'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({ userId: currentUser.id, fotoUrl })
+                        body: JSON.stringify({ userId: effectiveUser.id, fotoUrl })
                       })
 
                       if (!updateReq.ok) {
@@ -338,13 +365,15 @@ export default function MeuPerfilPage() {
                       }
 
                       // 4. Atualizar UI e isolar foto no localStorage
-                      localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)
+                      localStorage.setItem(`edu-user-photo-${effectiveUser.id}`, fotoUrl)
                       
                       setForm(p => ({ ...p, foto: fotoUrl }))
-                      const updated = { ...getProfileExtra(currentUser.id), foto: fotoUrl }
-                      setProfileExtra(currentUser.id, updated)
+                      const updated = { ...getProfileExtra(effectiveUser.id), foto: fotoUrl }
+                      setProfileExtra(effectiveUser.id, updated)
                       setExtra(updated)
-                      setCurrentUser({ ...currentUser, foto: fotoUrl })
+                      if (currentUser && !isMirroring) {
+                         setCurrentUser({ ...currentUser, foto: fotoUrl } as any)
+                      }
                       
                       setSaved(true)
                       setTimeout(() => setSaved(false), 3000)
@@ -354,7 +383,8 @@ export default function MeuPerfilPage() {
                       setIsUploading(false)
                     }
                   }} />
-                </label>
+                  </label>
+                )}
               </div>
 
             <div style={{ fontWeight: 800, fontSize: 17 }}>{displayNome}</div>
@@ -433,7 +463,7 @@ export default function MeuPerfilPage() {
                 </div>
               </div>
               {!editMode ? (
-                <button className="btn btn-secondary btn-sm" onClick={() => { setForm(extra); setEditMode(true) }}><Pencil size={12} />Editar</button>
+                canEdit && <button className="btn btn-secondary btn-sm" onClick={() => { setForm(extra); setEditMode(true) }}><Pencil size={12} />Editar</button>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-ghost btn-sm" onClick={() => setEditMode(false)}><X size={12} />Cancelar</button>
@@ -476,14 +506,15 @@ export default function MeuPerfilPage() {
           </div>
 
           {/* Trocar senha */}
-          <div className="card" style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>Segurança — Trocar Senha</div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mantenha sua conta protegida com uma senha forte</div>
+          {canEdit && (
+            <div className="card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Key size={16} color="#ef4444" /></div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Segurança — Trocar Senha</div>
+                  <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Mantenha sua conta protegida com uma senha forte</div>
+                </div>
               </div>
-            </div>
 
             {pwSuccess && (
               <div style={{ padding: '12px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 10, color: '#10b981', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -553,6 +584,7 @@ export default function MeuPerfilPage() {
               </div>
             </div>
           </div>
+          )}
 
           {/* Sessão */}
           <div className="card" style={{ padding: '20px 24px' }}>

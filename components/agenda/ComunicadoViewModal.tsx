@@ -174,6 +174,7 @@ export function ComunicadoViewModal({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingAnexos, setPendingAnexos] = useState<string[]>([])
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
+  const [showDestinatariosModal, setShowDestinatariosModal] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [viewportHeight, setViewportHeight] = useState('100%')
@@ -674,7 +675,13 @@ export function ComunicadoViewModal({
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, zIndex: 1, position: 'relative' }}>
-              {/* Actions moved to footer */}
+              <button 
+                onClick={onClose}
+                className="cvm-icon-btn"
+                aria-label="Fechar"
+              >
+                <X size={24} />
+              </button>
             </div>
           </div>
 
@@ -741,21 +748,40 @@ export function ComunicadoViewModal({
 
                   {/* Destinatários */}
                   {destinatariosStr && (
-                    <div style={{ 
-                      marginTop: 12,
-                      background: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: 12,
-                      padding: '8px 12px',
-                      fontSize: 13,
-                      color: '#475569',
-                      maxHeight: 80,
-                      overflowY: 'auto',
-                      scrollbarWidth: 'thin',
-                      scrollbarColor: '#cbd5e1 transparent',
-                      wordBreak: 'break-word'
-                    }}>
-                      <strong style={{ color: '#0f172a' }}>Enviado para:</strong> {destinatariosStr}
+                    <div style={{ marginTop: 12 }}>
+                      <button 
+                        onClick={() => setShowDestinatariosModal(true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 20,
+                          padding: '6px 14px',
+                          fontSize: 13,
+                          color: '#475569',
+                          cursor: 'pointer',
+                          fontWeight: 500,
+                          transition: 'all 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#f1f5f9';
+                          e.currentTarget.style.borderColor = '#cbd5e1';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#f8fafc';
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="9" cy="7" r="4"></circle>
+                          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Ver Destinatários
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1188,55 +1214,153 @@ export function ComunicadoViewModal({
           )}
 
           {/* ACTIONS FOOTER */}
-          <div style={{
-            background: '#ffffff',
-            borderTop: '1px solid #e2e8f0',
-            padding: '16px 24px',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
-            position: 'sticky',
-            bottom: 0,
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 16
-          }}>
-            {onEdit && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#f1f5f9', color: '#475569', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
-              >
-                <Edit2 size={20} />
-                Editar
-              </button>
-            )}
-            {onDelete && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#fee2e2', color: '#ef4444', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#fca5a5'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
-              >
-                <Trash2 size={20} />
-                Excluir
-              </button>
-            )}
-            <button 
-              onClick={onClose} 
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#4f46e5', color: '#ffffff', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#4338ca'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#4f46e5'}
-            >
-              <X size={20} />
-              Fechar
-            </button>
-          </div>
+          {(onEdit || onDelete) && (
+            <div style={{
+              background: '#ffffff',
+              borderTop: '1px solid #e2e8f0',
+              padding: '16px 24px',
+              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 20,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 16
+            }}>
+              {onEdit && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#f1f5f9', color: '#475569', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                >
+                  <Edit2 size={20} />
+                  Editar
+                </button>
+              )}
+              {onDelete && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#fee2e2', color: '#ef4444', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#fca5a5'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                >
+                  <Trash2 size={20} />
+                  Excluir
+                </button>
+              )}
+            </div>
+          )}
         </motion.div>
       </motion.div>
 
 
+      <AnimatePresence>
+        {showDestinatariosModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              top: 0, left: 0, right: 0, bottom: 0,
+              background: 'rgba(15, 23, 42, 0.6)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 100000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20
+            }}
+            onClick={() => setShowDestinatariosModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#ffffff',
+                borderRadius: 24,
+                width: '100%',
+                maxWidth: 500,
+                maxHeight: '80vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 24px 48px rgba(0,0,0,0.2)'
+              }}
+            >
+              <div style={{ padding: '24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#6366f1' }}>
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  Destinatários
+                </h3>
+                <button 
+                  onClick={() => setShowDestinatariosModal(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4, display: 'flex' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div style={{ padding: '24px', overflowY: 'auto', flex: 1, fontSize: 14, color: '#475569', lineHeight: 1.6 }}>
+                {destinatariosStr?.split(' | ').map((group: string, i: number) => {
+                  const parts = group.split(': ');
+                  // Se não tiver label: value, renderiza tudo na mesma tag
+                  if (parts.length < 2) {
+                    return (
+                      <div key={i} style={{ marginBottom: i === destinatariosStr.split(' | ').length - 1 ? 0 : 20 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          <span style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: 16, fontSize: 13 }}>
+                            {group}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  const label = parts[0];
+                  const rest = parts.slice(1).join(': ');
+                  const items = rest.split(', ');
+                  return (
+                    <div key={i} style={{ marginBottom: i === destinatariosStr.split(' | ').length - 1 ? 0 : 20 }}>
+                      <strong style={{ display: 'block', color: '#0f172a', marginBottom: 8, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</strong>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {items.length > 0 && items[0] !== '' ? items.map((item, j) => (
+                          <span key={j} style={{ background: '#f1f5f9', padding: '4px 10px', borderRadius: 16, fontSize: 13 }}>
+                            {item}
+                          </span>
+                        )) : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Nenhum</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', background: '#f8fafc', borderBottomLeftRadius: 24, borderBottomRightRadius: 24 }}>
+                <button
+                  onClick={() => setShowDestinatariosModal(false)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 12,
+                    background: '#e2e8f0',
+                    color: '#475569',
+                    border: 'none',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Portal>
   )
 }

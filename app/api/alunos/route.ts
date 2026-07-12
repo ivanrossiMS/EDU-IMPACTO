@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { createClient } from '@supabase/supabase-js'
 import { syncStudentToDevices } from '@/lib/portariaSync'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { requireAuth } from '@/lib/server/authGuard'
+import { v4 as uuidv4 } from 'uuid'
+import { NextResponse } from 'next/server'
+import { requireAuth, requireProfile } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -554,18 +555,34 @@ export async function POST(request: Request) {
         
         const anexos = saudacao.imagemUrl ? [{ type: 'image', url: saudacao.imagemUrl, nome: 'boas-vindas.jpg' }] : [];
         const novoId = `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+        
+        let autorNome = 'Ivan Rossi'
+        let autorCargo = 'Diretor Geral'
+        let autorFoto = 'https://github.com/ivanrossi.png'
+        
+        try {
+          const supabaseAdmin = getAdminClient()
+          const { data: masterData } = await supabaseAdmin.from('system_users').select('nome, cargo, dados').eq('email', 'direcao@colegioimpacto.net').maybeSingle()
+          if (masterData) {
+            if (masterData.nome) autorNome = masterData.nome
+            if (masterData.cargo) autorCargo = masterData.cargo
+            if (masterData.dados?.foto) autorFoto = masterData.dados.foto
+          }
+        } catch(e) {
+          console.error('[Saudacao] Erro ao buscar foto do master', e)
+        }
 
         await supabase.from('comunicados').insert({
           id: novoId,
           titulo: saudacao.titulo || 'Mensagem de Boas-vindas',
           texto: msg,
-          autor: 'Ivan Rossi',
-          autorFoto: 'https://github.com/ivanrossi.png',
+          autor: autorNome,
           data: new Date().toISOString(),
           destino: 'selecionados',
           fixado: true,
           dados: {
-            autorCargo: 'Diretor Geral',
+            autorFoto: autorFoto,
+            autorCargo: autorCargo,
             tipo: saudacao.imagemUrl ? 'arquivo' : 'texto',
             status: 'enviado',
             prioridade: 'normal',
@@ -823,10 +840,9 @@ export async function PUT(request: Request) {
   }
 }
 
-// ─── DELETE: Remover aluno ───────────────────────────────────────────────────
 // ─── DELETE: Remover aluno ou todos os alunos ─────────────────────────────────
 export async function DELETE(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireProfile(['Master', 'Diretor Geral', 'Secretária', 'Secretaria'])
   if (errorResponse) return errorResponse
 
   try {

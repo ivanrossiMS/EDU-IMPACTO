@@ -8,7 +8,8 @@ import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBa
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
@@ -100,8 +101,9 @@ const getAnexoType = (anexoStr: any) => {
   return { label: 'Anexo', icon: <Paperclip size={16} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
 };
 
-export default function ColaboradorComunicadosPage() {
+function ColaboradorComunicadosContent() {
   const { currentUser } = useApp()
+  const searchParams = useSearchParams()
   const { turmas = [] } = useData()
   const [showComposer, setShowComposer] = useState(false)
       const [destinatario, setDestinatario] = useState<any>(null) // Legacy
@@ -123,9 +125,24 @@ export default function ColaboradorComunicadosPage() {
   const [showRelsModal, setShowRelsModal] = useState(false)
   const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
 
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const espelharPerfil = searchParams?.get('espelhar_perfil')
+  const isMirroring = !!espelharColabId
   
+  const effectiveUser = useMemo(() => {
+    if (espelharColabId) {
+      return {
+        ...currentUser,
+        id: espelharColabId,
+        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
+        perfil: espelharPerfil || 'colaborador'
+      }
+    }
+    return currentUser
+  }, [currentUser, espelharColabId, searchParams])
 
-  const userSlug = currentUser?.id || 'colaborador';
+  const userSlug = effectiveUser?.id || 'colaborador';
   const { adAlert, chatGroups } = useAgendaDigital()
   const { forms, setSubmissions, setDisparos, submissions } = useFormularios()
   
@@ -139,22 +156,33 @@ export default function ColaboradorComunicadosPage() {
   const [alunos] = useSupabaseArray<any>('alunos/lightweight')
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
+  const effectiveColabId = useMemo(() => {
+    const colab = (colaboradores || []).find((c: any) => 
+      c.email && effectiveUser?.email && String(c.email).toLowerCase() === String(effectiveUser.email).toLowerCase()
+    );
+    return colab?.id || effectiveUser?.id;
+  }, [colaboradores, effectiveUser]);
+
   const userGroups = useMemo(() => {
-    if (!currentUser?.id) return [];
+    if (!effectiveColabId) return [];
     return (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id) === String(currentUser.id));
+      return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
     });
-  }, [chatGroups, currentUser]);
+  }, [chatGroups, effectiveColabId]);
 
   const turmaOptions = useMemo(() => {
-    if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || String(currentUser?.cargo || '').toLowerCase().includes('admin');
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
+    if (!effectiveUser?.id) return [];
+    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const perfilStr = effectiveUser?.perfil || ''; 
+    const cargoStr = effectiveUser?.cargo || ''; 
+    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') return turmas;
     
     const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
     const hasGlobalWithoutYear = globalGroups.some((g: any) => {
@@ -174,7 +202,47 @@ export default function ColaboradorComunicadosPage() {
        return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
-  }, [turmas, userGroups, currentUser])
+  }, [turmas, userGroups, effectiveUser])
+
+  const feedTurmaOptions = useMemo(() => {
+    if (!effectiveUser?.id) return [];
+    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin']; 
+    const cargosAdmin = ['Administrador Master', 'Diretor Geral']; 
+    const perfilStr = effectiveUser?.perfil || ''; 
+    const cargoStr = effectiveUser?.cargo || ''; 
+    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+    // Removido o retorno de todas as turmas para admins na visão de colaborador
+    
+
+    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
+    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
+      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
+      return a === '';
+    });
+    
+    if (hasGlobalWithoutYear) return turmas;
+    let allowedTurmasIds: string[] = [];
+    
+    globalGroups.forEach((g: any) => {
+      if (!g.ano && !g.anoLetivo) return; // global global
+      const syncId = String(g.syncId || g.id).replace('sync-', '');
+      allowedTurmasIds.push(syncId);
+    });
+    
+    userGroups.forEach((g: any) => {
+      let colabs = g.colaboradoresIds;
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+      }
+      if (!Array.isArray(colabs)) colabs = [];
+      if (colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim())) {
+        const syncId = String(g.syncId || g.id).replace('sync-', '');
+        allowedTurmasIds.push(syncId);
+      }
+    });
+
+    return turmas.filter((t: any) => allowedTurmasIds.includes(String(t.id)));
+  }, [turmas, userGroups, effectiveUser])
   
   const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
@@ -193,14 +261,19 @@ export default function ColaboradorComunicadosPage() {
       return
     }
 
+    if (isMirroring) {
+      adAlert('Você está em modo de espelhamento e não pode enviar comunicados.', 'Ação não permitida')
+      return
+    }
+
     if (editComId) {
       const updatedCom = {
         titulo: newTitulo,
         conteudo: newConteudo,
-        autor: currentUser?.nome || 'Usuário ERP',
-        autorCargo: currentUser?.cargo || currentUser?.perfil || 'Colaborador',
-        autorId: currentUser?.id || '',
-        autorFoto: currentUser?.foto || null,
+        autor: effectiveUser?.nome || 'Usuário ERP',
+        autorCargo: effectiveUser?.cargo || effectiveUser?.perfil || 'Colaborador',
+        autorId: effectiveUser?.id || '',
+        autorFoto: effectiveUser?.foto || null,
         anexos: anexos,
         cobranca: cobranca,
         dataAgendamento: dataAgendamento || null,
@@ -229,10 +302,10 @@ export default function ColaboradorComunicadosPage() {
         titulo: newTitulo,
         conteudo: newConteudo,
         tipo: 'texto',
-        autor: currentUser?.nome || 'Usuário ERP',
-        autorCargo: currentUser?.cargo || currentUser?.perfil || 'Colaborador',
-        autorId: currentUser?.id || '',
-        autorFoto: currentUser?.foto || null,
+        autor: effectiveUser?.nome || 'Usuário ERP',
+        autorCargo: effectiveUser?.cargo || effectiveUser?.perfil || 'Colaborador',
+        autorId: effectiveUser?.id || '',
+        autorFoto: effectiveUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
@@ -325,8 +398,13 @@ export default function ColaboradorComunicadosPage() {
     setShowComposer(true)
   }
 
-  const handleDeleteComunicado = async (cId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este comunicado?')) return;
+  const handleDeleteComunicado = (cId: string) => {
+    setComunicadoToDelete(cId);
+  }
+
+  const confirmDeleteComunicado = async () => {
+    if (!comunicadoToDelete) return;
+    const cId = comunicadoToDelete;
     
     setComunicadosLocally?.((prev: any) => prev.filter((c: any) => c.id !== cId));
     if (selectedComunicado?.id === cId) setSelectedComunicado(null);
@@ -336,15 +414,16 @@ export default function ColaboradorComunicadosPage() {
     } catch (e) {
       console.error(e);
     }
+    
+    setComunicadoToDelete(null);
   }
 
-  
-
+  const [comunicadoToDelete, setComunicadoToDelete] = useState<string | null>(null)
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [limit, setLimit] = useState(6)
 
-  if (!currentUser) return null;
+  if (!effectiveUser) return null;
 
   
   const [openedFormStr, setOpenedFormStr] = useState<string | null>(null)
@@ -710,11 +789,13 @@ export default function ColaboradorComunicadosPage() {
             }}>
               <Filter size={16} /> Filtros
             </button>
-            <button className="btn btn-primary" onClick={handleNovo} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, borderRadius: 14, padding: '0 18px', fontSize: 14, fontWeight: 600 }}>
+            {!isMirroring && (
+<button className="btn btn-primary" onClick={handleNovo} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, borderRadius: 14, padding: '0 18px', fontSize: 14, fontWeight: 600 }}>
               <Plus size={16} />
               <span className="ad-desktop-only">Novo Comunicado</span>
               <span className="ad-mobile-only">Novo</span>
             </button>
+)}
           </div>
         </div>
 
@@ -722,31 +803,36 @@ export default function ColaboradorComunicadosPage() {
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || currentUser?.perfil === 'administrador' || currentUser?.perfil === 'admin';
-          const myTurmaNames = turmaOptions.map((t: any) => t.nome);
+          const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin']; 
+          const cargosAdmin = ['Administrador Master', 'Diretor Geral']; 
+          const perfilStr = effectiveUser?.perfil || ''; 
+          const cargoStr = effectiveUser?.cargo || ''; 
+          const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+          const myTurmaNames = feedTurmaOptions.map((t: any) => t.nome);
           const myGroups = (chatGroups || []).filter((g: any) => {
             let colabs = g.colaboradoresIds;
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (!Array.isArray(colabs)) colabs = [];
-            return colabs.some((id: any) => String(id) === String(currentUser?.id));
+            return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
           }).map((g: any) => g.nome);
 
           const filteredComunicados = (comunicados || []).filter((c: any) => {
             if (c.id?.startsWith('AD-COM-REL-STU')) return false;
-            const isAuthor = String(c.autorId) === String(currentUser?.id) || c.autor === currentUser?.nome;
+            const isAuthor = String(c.autorId) === String(effectiveUser?.id) || c.autor === effectiveUser?.nome;
+            if ((c.status === 'rascunho' || c.status === 'agendado') && !isAuthor) return false;
             const isTodos = c.destino === 'todos';
             
             const targetFuncs = c.funcionariosIds || (c.dados?.funcionariosIds) || [];
             const targetGrupos = c.grupos || (c.dados?.grupos) || [];
             const targetTurmas = c.turmas || (c.dados?.turmas) || [];
             
-            const inFuncs = targetFuncs.some((id: any) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`);
-            const inGrupos = targetGrupos.some((g: string) => myGroups.includes(g));
+            const inFuncs = targetFuncs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+            const inGrupos = targetGrupos.some((g: string) => myGroups.some((m: string) => String(m).toLowerCase().trim() === String(g).toLowerCase().trim()));
             const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             
-            if (!isMaster && !isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
+            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
               return false;
             }
             if (!searchTerm) return true;
@@ -762,7 +848,7 @@ export default function ColaboradorComunicadosPage() {
           });
           
           const paginatedComunicados = filteredComunicados;
-          if ((isDataLoading && filteredComunicados.length === 0) || !currentUser) {
+          if ((isDataLoading && filteredComunicados.length === 0) || !effectiveUser) {
             return <ComunicadoSkeleton count={3} />
           }
           
@@ -1116,8 +1202,8 @@ export default function ColaboradorComunicadosPage() {
             onClose={() => setSelectedComunicado(null)}
             onCiencia={handleCiencia}
             currentUserSlug={userSlug}
-            currentUserName={currentUser?.nome || 'Colaborador'}
-            currentUserAvatar={currentUser?.foto || (currentUser as any)?.fotoUrl || (currentUser as any)?.foto_url}
+            currentUserName={effectiveUser?.nome || 'Colaborador'}
+            currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
             isAdminMode={true}
             setOpenedFormStr={setOpenedFormStr}
             setMaximizedImageStr={setMaximizedImageStr}
@@ -1128,11 +1214,11 @@ export default function ColaboradorComunicadosPage() {
             alunos={alunos}
             colaboradores={colaboradores}
             turmas={turmas}
-            onEdit={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === currentUser?.id) ? (c) => {
+            onEdit={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === effectiveUser?.id) ? (c) => {
                setSelectedComunicado(null);
                handleEditComunicado(c);
             } : undefined}
-            onDelete={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === currentUser?.id) ? (id) => {
+            onDelete={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === effectiveUser?.id) ? (id) => {
                setSelectedComunicado(null);
                handleDeleteComunicado(id);
             } : undefined}
@@ -1145,7 +1231,7 @@ export default function ColaboradorComunicadosPage() {
         anexoStr={openedReportTaskStr}
         onClose={() => setOpenedReportTaskStr(null)}
         onBack={() => { setOpenedReportTaskStr(null); setShowRelsModal(true); }}
-        currentUser={currentUser}
+        currentUser={effectiveUser}
         alunos={alunos}
         turmas={turmas}
       />
@@ -1357,7 +1443,7 @@ export default function ColaboradorComunicadosPage() {
         isOpen={showComposer}
         onClose={() => { setShowComposer(false); setSelectedDest([]); }}
         initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
-        currentUser={currentUser}
+        currentUser={effectiveUser}
         selectedDest={selectedDest}
         onClickSelectDest={() => setShowDestModal(true)}
         onRemoveDest={id => setSelectedDest(prev => prev.filter(x => x.id !== id))}
@@ -1376,8 +1462,8 @@ export default function ColaboradorComunicadosPage() {
         initialSelected={selectedDest}
         onAdd={(res) => setSelectedDest(res as any)}
         allowedTurmasIds={turmaOptions.map(t => String(t.id))}
-        allowedGruposIds={currentUser?.perfil === 'administrador' || String(currentUser?.cargo || '').toLowerCase().includes('admin') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
-        currentUserId={currentUser?.id}
+        allowedGruposIds={effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || String(effectiveUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
+        currentUserId={effectiveUser?.id}
       />
 
       <AnimatePresence>
@@ -1450,6 +1536,10 @@ export default function ColaboradorComunicadosPage() {
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
         onAdd={(text, payload) => alert('Atenção: Adicione o relatório anexando o PDF gerado ou insira o link no corpo do comunicado.')} 
+        onFillDirectly={(payload) => {
+          setOpenedReportTaskStr(`ReportTask|payload:${JSON.stringify(payload)}`);
+          setShowRelsModal(false);
+        }}
       />
 
       <AnimatePresence>
@@ -1501,6 +1591,88 @@ export default function ColaboradorComunicadosPage() {
               <button className="btn" style={{ width: '100%', marginTop: 32, height: 56, borderRadius: 20, fontWeight: 900, background: '#0f172a', border: 'none', color: '#fff', fontSize: 15, boxShadow: '0 10px 20px rgba(15, 23, 42, 0.2)' }} onClick={() => setShowFormsModal(false)}>Fechar</button>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {comunicadoToDelete && (
+          <Portal>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed',
+                top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(15, 23, 42, 0.6)',
+                backdropFilter: 'blur(4px)',
+                zIndex: 9999999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 20
+              }}
+              onClick={() => setComunicadoToDelete(null)}
+            >
+              <style dangerouslySetInnerHTML={{__html: `body { overflow: hidden !important; }`}} />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 24,
+                  width: '100%',
+                  maxWidth: 400,
+                  padding: 32,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  boxShadow: '0 24px 48px rgba(0,0,0,0.2)',
+                  textAlign: 'center'
+                }}
+              >
+                <div style={{
+                  width: 64, height: 64, borderRadius: '50%', background: '#fee2e2', color: '#ef4444', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20
+                }}>
+                  <Trash2 size={32} />
+                </div>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                  Excluir Comunicado?
+                </h3>
+                <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
+                  Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita e ele será removido da caixa de entrada de todos os destinatários.
+                </p>
+                <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+                  <button
+                    onClick={() => setComunicadoToDelete(null)}
+                    style={{
+                      flex: 1, padding: '12px 0', borderRadius: 12, background: '#f1f5f9', color: '#475569',
+                      border: 'none', fontWeight: 700, fontSize: 15, cursor: 'pointer', transition: 'background 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmDeleteComunicado}
+                    style={{
+                      flex: 1, padding: '12px 0', borderRadius: 12, background: '#ef4444', color: '#ffffff',
+                      border: 'none', fontWeight: 700, fontSize: 15, cursor: 'pointer', transition: 'background 0.2s',
+                      boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                    onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                  >
+                    Sim, Excluir
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          </Portal>
         )}
       </AnimatePresence>
 
@@ -1610,5 +1782,13 @@ export default function ColaboradorComunicadosPage() {
       `}</style>
     </div>
     </>
+  )
+}
+
+export default function ColaboradorComunicadosPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <ColaboradorComunicadosContent />
+    </Suspense>
   )
 }

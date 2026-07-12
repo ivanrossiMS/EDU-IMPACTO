@@ -541,8 +541,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               </div>
 
               <div 
-                onClick={() => setFillMode('igual')}
-                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                onClick={() => {
+                  if (!reportTitle.trim()) return;
+                  setFillMode('igual')
+                }}
+                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: reportTitle.trim() ? 'pointer' : 'not-allowed', opacity: reportTitle.trim() ? 1 : 0.6, display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
               >
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: '#eff6ff', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Users size={24} />
@@ -554,8 +557,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               </div>
 
               <div 
-                onClick={() => setIsSelectingStudents(true)}
-                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
+                onClick={() => {
+                  if (!reportTitle.trim()) return;
+                  setIsSelectingStudents(true)
+                }}
+                style={{ background: '#fff', padding: 20, borderRadius: 16, border: '2px solid #e2e8f0', cursor: reportTitle.trim() ? 'pointer' : 'not-allowed', opacity: reportTitle.trim() ? 1 : 0.6, display: 'flex', gap: 16, alignItems: 'center', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}
               >
                 <div style={{ width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <UserCheck size={24} />

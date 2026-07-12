@@ -36,8 +36,8 @@ const customStorage = {
 
 const isBrowser = typeof window !== 'undefined'
 
-// We must store the client in a global variable in the browser to prevent Next.js Fast Refresh 
-// from creating multiple instances and fighting for the lock:sb-<project>-auth-token Web Lock.
+// Singleton instance to prevent Next.js Fast Refresh or multiple imports
+// from creating multiple instances and fighting for the auth lock.
 let client: ReturnType<typeof createClient>
 
 if (isBrowser) {
@@ -65,3 +65,4 @@ if (isBrowser) {
 }
 
 export const supabase = client
+

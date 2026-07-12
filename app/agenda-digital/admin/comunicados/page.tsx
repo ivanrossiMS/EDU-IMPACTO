@@ -69,8 +69,7 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
   const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados } = useAgendaDigital()
-  const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos/lightweight');
+  const { turmas = [], alunos = [] } = useData();
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   
@@ -832,6 +831,10 @@ export default function ADAdminComunicados() {
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
         onAdd={(text, payload) => alert('Adicione o relatório anexando o PDF gerado ou insira o link.')} 
+        onFillDirectly={(payload) => {
+          alert('Ação disponível apenas no painel do colaborador.');
+          setShowRelsModal(false);
+        }}
       />
 
       <AnimatePresence>

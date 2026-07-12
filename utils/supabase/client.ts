@@ -1,17 +1,14 @@
-import { createBrowserClient } from '@supabase/ssr'
+import { supabase } from '@/lib/supabase'
 import { saveSessionSecurely } from '@/lib/auth/secureSession'
 
 let isListenerAttached = false;
 
 export function createClient() {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const client = supabase;
 
   if (typeof window !== 'undefined' && !isListenerAttached) {
     isListenerAttached = true;
-    supabase.auth.onAuthStateChange((event, session) => {
+    client.auth.onAuthStateChange((event, session) => {
       // Quando a sessão é iniciada ou o token é renovado silenciosamente,
       // nós guardamos no Keychain/Keystore do Capacitor.
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
@@ -20,5 +17,5 @@ export function createClient() {
     });
   }
 
-  return supabase
+  return client;
 }

@@ -108,7 +108,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(false, endpoint)
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 5, { enabled: true })
   const comunicados = comunicadosData?.pages?.flat() || []
   
   const searchParams = useSearchParams()
@@ -169,9 +169,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   
   const handleCiencia = async (comunicadoId: string) => {
+    const isMirroringMode = !!(searchParams.get('espelhar_aluno') || searchParams.get('espelhar_responsavel') || searchParams.get('espelhar_colaborador'));
+    if (isMirroringMode) return;
+    
     const nowIso = new Date().toISOString()
     
-    // Update React Query Cache directly
+    // Optimistic Update Temporário
     queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
       if (!old || !old.pages) return old;
       return {
@@ -179,17 +182,13 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         pages: old.pages.map((page: any[]) => page.map((c: any) => {
           if (c.id === comunicadoId) {
             const currentReaderId = currentUser?.id || '';
-            const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-            const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
-            const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
+            const fallbackKey = `${currentReaderId}_${resolvedParams.slug}`;
 
             const updated = { 
               ...c, 
               ciencias: { 
                 ...(c.ciencias || {}), 
-                ...(isFamily ? {} : { [resolvedParams.slug]: nowIso }),
-                ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
-                ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
+                [fallbackKey]: nowIso
               } 
             }
             if (selectedComunicado && selectedComunicado.id === comunicadoId) {
@@ -203,7 +202,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     })
 
     try {
-      await fetch('/api/agenda/notificacoes/marcar-ciencia', {
+      const res = await fetch('/api/agenda/notificacoes/marcar-ciencia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -212,6 +211,34 @@ export default function ADComunicadosPage({ params }: { params: any }) {
            alunoId: resolvedParams.slug
         })
       });
+      const data = await res.json();
+      
+      // Update definitivo com a chave gerada pelo servidor
+      if (data.ok && data.key) {
+        queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
+          if (!old || !old.pages) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page: any[]) => page.map((c: any) => {
+              if (c.id === comunicadoId) {
+                const updated = { 
+                  ...c, 
+                  ciencias: { 
+                    ...(c.ciencias || {}), 
+                    [data.key]: nowIso
+                  } 
+                }
+                if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+                  setSelectedComunicado(updated)
+                }
+                return updated
+              }
+              return c
+            }))
+          };
+        })
+      }
+
       window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
     } catch (e) { console.error('Failed to save ciencia', e) }
   }
@@ -563,9 +590,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const currentReaderId = currentUser?.id || '';
-            const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-            const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+            const espelharRespId = searchParams?.get('espelhar_responsavel');
+            const espelharColabId = searchParams?.get('espelhar_colaborador');
+            const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+            const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+            
+            const currentReaderId = isMirroring ? (espelharRespId || espelharColabId || resolvedParams.slug) : (currentUser?.id || '');
+            const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+            const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
             const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
             const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
 
@@ -693,7 +725,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     
                     setSelectedComunicado(updatedComunicado)
                     
-                    if (!isRead) {
+                    if (!isRead && !isMirroring) {
                       queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
                         if (!old || !old.pages) return old;
                         return {
@@ -829,15 +861,17 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                         {isCiencia ? 'Ciência registrada. Obrigado!' : 'Este comunicado exige a sua ciência obrigatória.'}
                       </div>
                       {!isCiencia ? (
-                        <button 
-                           onClick={(e) => { e.stopPropagation(); handleCiencia(c.id) }} 
-                           className="btn" 
-                           style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '6px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, boxShadow: '0 4px 10px -4px rgba(245,158,11,0.5)' }}
-                           onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                           onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                        >
-                           Dar Ciência
-                        </button>
+                        !isMirroring && (
+                          <button 
+                             onClick={(e) => { e.stopPropagation(); handleCiencia(c.id) }} 
+                             className="btn" 
+                             style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff', padding: '6px 14px', fontSize: 13, fontWeight: 600, border: 'none', borderRadius: 8, boxShadow: '0 4px 10px -4px rgba(245,158,11,0.5)' }}
+                             onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                             onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                             Dar Ciência
+                          </button>
+                        )
                       ) : (
                          <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Concluído</span>
                       )}

@@ -38,12 +38,21 @@ export async function GET(request: Request) {
     const filterByMonth = (list: any[], type: string) => {
       return (list || []).filter(item => {
         if (!item.data_nascimento) return false;
-        // Format is usually YYYY-MM-DD
-        const parts = item.data_nascimento.split('-');
-        if (parts.length >= 2) {
-          return parts[1] === mesStr;
+        
+        // Handle both YYYY-MM-DD and DD/MM/YYYY formats
+        const hasDash = item.data_nascimento.includes('-');
+        const hasSlash = item.data_nascimento.includes('/');
+        let monthStr = null;
+        
+        if (hasDash) {
+          const parts = item.data_nascimento.split('-');
+          if (parts.length >= 2) monthStr = parts[1];
+        } else if (hasSlash) {
+          const parts = item.data_nascimento.split('/');
+          if (parts.length >= 2) monthStr = parts[1];
         }
-        return false;
+        
+        return monthStr === mesStr;
       }).map(item => ({ ...item, tipo: type }));
     };
 

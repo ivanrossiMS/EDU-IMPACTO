@@ -6,16 +6,16 @@ import { useApp } from '@/lib/context'
 
 // --- COMUNICADOS ---
 export function useQueryComunicados(
-  isFamily: boolean,
   fetchUrl: string | null = '/api/comunicados',
-  pageSize: number = 5
+  pageSize: number = 5,
+  options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
   const query = useInfiniteQuery({
     queryKey: ['agenda', 'comunicados', fetchUrl],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
-      if (!currentUser || isFamily || !fetchUrl) return [] 
+      if (!currentUser || !fetchUrl) return [] 
       const url = new URL(fetchUrl, window.location.origin)
       url.searchParams.set('limit', String(pageSize))
       url.searchParams.set('offset', String(pageParam * pageSize))
@@ -32,7 +32,7 @@ export function useQueryComunicados(
     gcTime: 1000 * 60 * 10, // 10 min na memória
     refetchOnWindowFocus: false, 
     refetchOnMount: false,
-    enabled: !!currentUser && !isFamily && !!fetchUrl
+    enabled: options?.enabled !== undefined ? options.enabled : (!!currentUser && !!fetchUrl)
   })
 
   return query
@@ -40,16 +40,16 @@ export function useQueryComunicados(
 
 // --- MOMENTOS ---
 export function useQueryMomentos(
-  isFamily: boolean,
   fetchUrl: string | null = '/api/agenda/momentos',
-  pageSize: number = 20
+  pageSize: number = 20,
+  options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
   const query = useInfiniteQuery({
     queryKey: ['agenda', 'momentos', fetchUrl],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
-      if (!currentUser || isFamily || !fetchUrl) return [] 
+      if (!currentUser || !fetchUrl) return [] 
       const url = new URL(fetchUrl, window.location.origin)
       url.searchParams.set('limit', String(pageSize))
       url.searchParams.set('offset', String(pageParam * pageSize))
@@ -66,7 +66,7 @@ export function useQueryMomentos(
     gcTime: 1000 * 60 * 10,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    enabled: !!currentUser && !isFamily && !!fetchUrl
+    enabled: options?.enabled !== undefined ? options.enabled : (!!currentUser && !!fetchUrl)
   })
 
   return query

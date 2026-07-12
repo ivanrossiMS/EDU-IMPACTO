@@ -11,6 +11,7 @@ import React, { use, useState, useEffect, useMemo } from 'react'
 import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
+import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
@@ -26,6 +27,26 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const { currentUser } = useApp()
   const aluno = contextAluno
   
+  useEffect(() => {
+    let enabled = false;
+    const enablePrivacy = async () => {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+        try {
+          await PrivacyScreen.enable();
+          enabled = true;
+        } catch (e) {
+          console.error("PrivacyScreen enable error", e);
+        }
+      }
+    };
+    enablePrivacy();
+    return () => {
+      if (enabled) {
+        PrivacyScreen.disable().catch(console.error);
+      }
+    };
+  }, []);
+  
   const nomeTurmaDoAluno = (() => {
     if (!aluno) return 'Sem Turma'
     if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
@@ -34,8 +55,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return String(aluno.turma || 'Sem Turma').split('-')[0].trim()
   })()
   
+  const searchParams = useSearchParams()
+  const espelharRespId = searchParams?.get('espelhar_responsavel');
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+  const isMirroring = !!(espelharRespId || espelharAluno);
+  
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
-  const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(false, endpoint)
+  const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
@@ -168,8 +194,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   }
   
   const todasTurmasDoAluno = useMemo(() => {
-    const list = []
-    if (aluno?.turma) list.push(String(aluno.turma).toLowerCase())
+    const list: string[] = []
+    if (aluno?.turma) {
+      list.push(String(aluno.turma).toLowerCase())
+      const tObj = turmas.find((t: any) => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma))
+      if (tObj?.nome) list.push(String(tObj.nome).toLowerCase())
+    }
     if (nomeTurmaDoAluno) list.push(nomeTurmaDoAluno.toLowerCase())
     
     if (aluno?.dados?.historicoTurmas) {
@@ -187,6 +217,22 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   // Filtrar momentos aprovados
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
   const meusMomentos = React.useMemo(() => {
+    // Para família/aluno, o backend JÁ TRAZ FILTRADO corretamente (inclusive com as turmas convertidas)
+    const isFamilyOrStudent = !currentUser || 
+      currentUser.perfil === 'Família' || 
+      currentUser.perfil === 'Responsável' || 
+      currentUser.cargo === 'Responsável' || 
+      currentUser.cargo === 'Aluno' || 
+      currentUser.perfil === 'Aluno';
+      
+    if (isFamilyOrStudent) {
+      return [...fetchMomentos].sort((a, b) => {
+        const dateA = new Date((a as any).date || 0).getTime();
+        const dateB = new Date((b as any).date || 0).getTime();
+        return dateB - dateA;
+      });
+    }
+
     return fetchMomentos.filter(m => {
       const targetClasses = m.targetClasses || []
       const targetAlunos = m.alunosIds || []
@@ -212,9 +258,11 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           }
           
           // Check if it matches any of the student's classes (current or historical)
-          return todasTurmasDoAluno.some(minhaTurma => 
+          const isMatch = todasTurmasDoAluno.some(minhaTurma => 
             minhaTurma.includes(tcl) || tcl.includes(minhaTurma)
           )
+          
+          return isMatch;
         })
       }
 
@@ -228,17 +276,17 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       const dateB = new Date((b as any).date || 0).getTime()
       return dateB - dateA
     })
-  }, [fetchMomentos, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno])
+  }, [fetchMomentos, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno, currentUser])
 
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;
     
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
-    const currentReaderId = currentUser?.id;
+    const currentReaderId = isMirroring ? (espelharRespId || resolvedParams.slug) : (currentUser?.id || '');
     if (!currentReaderId) return;
 
-    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+    const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+    const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
     const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${aluno.id}` : '';
     const currentReaderWithSlug = `${currentReaderId}_${aluno.id}`;
 
@@ -256,6 +304,9 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         return !isRead;
       })
       .map(m => m.id);
+
+    // If mirroring, skip marking as read
+    if (isMirroring) return;
 
     if (unreadIds.length > 0) {
       queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {

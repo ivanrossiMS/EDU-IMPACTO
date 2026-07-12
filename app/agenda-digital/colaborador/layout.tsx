@@ -5,15 +5,16 @@ import { useApp } from '@/lib/context'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { UserAvatar } from '@/components/UserAvatar'
 import React, { useState, useEffect } from 'react'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
-  UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText
+  UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText, MonitorSmartphone, AlertTriangle
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function AgendaDigitalColaboradorLayout({ 
   children
@@ -24,7 +25,32 @@ export default function AgendaDigitalColaboradorLayout({
   const { adConfig, setAdLoading } = useAgendaDigital();
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(true)
+
+  const espelharId = searchParams.get('espelhar_colaborador')
+  const isMirrorMode = currentUser && !!espelharId
+
+  
+  const espelharNome = searchParams.get('espelhar_nome')
+  const espelharCargo = searchParams.get('espelhar_cargo')
+  const espelharPerfil = searchParams.get('espelhar_perfil')
+  const espelharFoto = searchParams.get('espelhar_foto')
+
+  const effectiveUser = React.useMemo(() => {
+    if (isMirrorMode) {
+      return {
+        ...currentUser,
+        id: espelharId,
+        nome: espelharNome || currentUser?.nome || 'Colaborador',
+        cargo: espelharCargo || currentUser?.cargo || 'Colaborador',
+        perfil: espelharPerfil || 'colaborador',
+        foto: espelharFoto || null
+      }
+    }
+    return currentUser
+  }, [isMirrorMode, espelharId, espelharNome, espelharCargo, currentUser])
+
 
   useEffect(() => {
     if (!hydrated || !currentUser) return
@@ -67,6 +93,35 @@ export default function AgendaDigitalColaboradorLayout({
 
   return (
     <>
+    {isMirrorMode && (
+      <div style={{
+        background: 'linear-gradient(135deg, #ff4d4d 0%, #e60000 100%)',
+        color: 'white',
+        padding: '12px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontFamily: 'Outfit, sans-serif'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <AlertTriangle size={20} />
+          <div>
+            <strong style={{ display: 'block', fontSize: 14 }}>Modo Visualização (Espelhar Agenda)</strong>
+            <span style={{ fontSize: 12, opacity: 0.9 }}>Você está visualizando o aplicativo como outro usuário. Ações que modificam dados estão restritas.</span>
+          </div>
+        </div>
+        <button
+          onClick={() => router.push('/agenda-digital/admin/espelhar')}
+          style={{
+            background: 'white', color: '#e60000', border: 'none',
+            padding: '6px 16px', borderRadius: 20, fontWeight: 700,
+            fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6
+          }}
+        >
+          <LogOut size={14} /> Voltar para Espelhar
+        </button>
+      </div>
+    )}
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
       <style dangerouslySetInnerHTML={{__html: `
         .ad-main-grid {
@@ -336,6 +391,8 @@ export default function AgendaDigitalColaboradorLayout({
         }
       `}} />
 
+      
+
       {/* Dynamic Header floating profile card */}
       <div className="ad-premium-card-wrapper">
         <div className="ad-premium-card">
@@ -359,9 +416,9 @@ export default function AgendaDigitalColaboradorLayout({
               overflow: 'hidden'
             }}>
               <UserAvatar 
-                userId={currentUser?.id} 
-                name={currentUser?.nome || 'Colaborador'} 
-                fotoUrl={currentUser?.foto}
+                userId={effectiveUser?.id} 
+                name={effectiveUser?.nome || 'Colaborador'} 
+                fotoUrl={effectiveUser?.foto}
                 size={96}
                 style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 0 }}
               />
@@ -369,7 +426,7 @@ export default function AgendaDigitalColaboradorLayout({
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
               <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
-                <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatName(currentUser.nome)}</span>
+                <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatName(effectiveUser?.nome || 'Colaborador')}</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b82f6" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
               </h2>
 
@@ -386,7 +443,7 @@ export default function AgendaDigitalColaboradorLayout({
                       Cargo
                     </div>
                     <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {currentUser.cargo || currentUser.perfil}
+                      {effectiveUser?.cargo || effectiveUser?.perfil}
                     </div>
                   </div>
                 </div>

@@ -1,11 +1,13 @@
 'use client'
+import { useSearchParams } from 'next/navigation'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -32,12 +34,48 @@ import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage() {
   const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
-  const [alunos = [], setAlunos] = useSupabaseArray<any>('alunos/lightweight', []);
   
   
+  useEffect(() => {
+    let enabled = false;
+    const enablePrivacy = async () => {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+        try {
+          await PrivacyScreen.enable();
+          enabled = true;
+        } catch (e) {
+          console.error("PrivacyScreen enable error", e);
+        }
+      }
+    };
+    enablePrivacy();
+    return () => {
+      if (enabled) {
+        PrivacyScreen.disable().catch(console.error);
+      }
+    };
+  }, []);
   const { currentUser } = useApp()
+
+  const searchParams = useSearchParams()
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const espelharPerfil = searchParams?.get('espelhar_perfil')
+  const isMirroring = !!espelharColabId
+  const effectiveUser = useMemo(() => {
+    if (espelharColabId) {
+      return {
+        ...currentUser,
+        id: espelharColabId,
+        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
+        perfil: espelharPerfil || 'colaborador'
+      }
+    }
+    return currentUser
+  }, [currentUser, espelharColabId, searchParams])
+
   
-  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
+  const { turmas = [], cfgCalendarioLetivo = [], alunos = [] } = useData()
   
   
   
@@ -79,21 +117,25 @@ export default function ADMomentosPage() {
   const [visibleCount, setVisibleCount] = useState(5)
 
   const userGroups = React.useMemo(() => {
-    if (!currentUser?.id) return [];
+    if (!effectiveUser?.id) return [];
     return (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id) === String(currentUser.id));
+      return colabs.some((id: any) => String(id) === String(effectiveUser.id));
     });
-  }, [chatGroups, currentUser]);
+  }, [chatGroups, effectiveUser]);
 
   const turmaOptions = React.useMemo(() => {
-    if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || String(currentUser?.cargo || '').toLowerCase().includes('admin');
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
+    if (!effectiveUser?.id) return [];
+    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const perfilStr = effectiveUser?.perfil || ''; 
+    const cargoStr = effectiveUser?.cargo || ''; 
+    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') return turmas;
     
     const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
     const hasGlobalWithoutYear = globalGroups.some((g: any) => {
@@ -113,7 +155,7 @@ export default function ADMomentosPage() {
        return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
     });
     return accessibleTurmas
-  }, [turmas, userGroups, currentUser])
+  }, [turmas, userGroups, effectiveUser])
 
   const anosLetivos = React.useMemo(() => {
     const anos = new Set<string>();
@@ -222,8 +264,8 @@ export default function ADMomentosPage() {
 
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        author: currentUser?.nome || 'Administração',
-        authorId: currentUser?.id,
+        author: effectiveUser?.nome || 'Administração',
+        authorId: effectiveUser?.id,
         targetClasses,
         targetClassesIds,
         alunosIds,
@@ -251,7 +293,7 @@ export default function ADMomentosPage() {
   }
 
   const handleLike = async (momentId: number | string) => {
-    const myName = currentUser?.nome || 'Você'
+    const myName = effectiveUser?.nome || 'Você'
     setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
       const likesArray = m.likes || []
@@ -277,7 +319,7 @@ export default function ADMomentosPage() {
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 
-    const myName = currentUser?.nome || 'Você'
+    const myName = effectiveUser?.nome || 'Você'
     setMomentosFeedLocally?.(prev => prev.map(m => {
       if (m.id !== momentId) return m
       const commentsArray = m.comments || []
@@ -350,8 +392,12 @@ export default function ADMomentosPage() {
       const isGlobal = targetClasses.length === 0 && targetAlunos.length === 0 && targetFuncs.length === 0
       if (isGlobal) return true
 
+      // Se o momento foi criado por mim (colaborador)
+      const isAuthor = String(m.authorId) === String(effectiveUser?.id) || m.author === effectiveUser?.nome;
+      if (isAuthor) return true;
+
       // Se o momento foi endereçado diretamente para mim (colaborador)
-      if (targetFuncs.some((id: string) => String(id) === String(currentUser?.id) || String(id) === `f_${currentUser?.id}`)) {
+      if (targetFuncs.some((id: string) => String(id) === String(effectiveUser?.id) || String(id) === `f_${effectiveUser?.id}`)) {
         return true
       }
 
@@ -393,13 +439,13 @@ export default function ADMomentosPage() {
 
   // Marcação de lidos
   useEffect(() => {
-    if (!currentUser?.id || meusMomentos.length === 0) return;
+    if (!effectiveUser?.id || meusMomentos.length === 0) return;
     
     // Identifica quais IDs não constam como lidos para este colaborador
     const unreadIds = meusMomentos
       .filter(m => {
         const leituras = (m as any).leituras || {};
-        return !leituras[currentUser.id];
+        return !leituras[effectiveUser.id];
       })
       .map(m => m.id);
 
@@ -410,7 +456,7 @@ export default function ADMomentosPage() {
         body: JSON.stringify({
           tipo: 'momento',
           ids: unreadIds,
-          alunoId: currentUser.id // API usa esse campo como ID de quem leu
+          alunoId: effectiveUser.id // API usa esse campo como ID de quem leu
         })
       })
       .then(res => {
@@ -420,7 +466,7 @@ export default function ADMomentosPage() {
       })
       .catch(err => console.error('Failed to mark momentos as read:', err));
     }
-  }, [meusMomentos, currentUser?.id]);
+  }, [meusMomentos, effectiveUser?.id]);
 
   return (
     <div style={{
@@ -540,7 +586,8 @@ export default function ADMomentosPage() {
                     setSelectedAno={setSelectedYear}
                   />
                 </div>
-              <button onClick={() => setShowModal(true)} style={{
+              {!isMirroring && (
+<button onClick={() => setShowModal(true)} style={{
                 height: 42, padding: '0 20px', border: 'none', borderRadius: 12, cursor: 'pointer',
                 background: 'linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)',
                 color: '#fff', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
@@ -548,6 +595,7 @@ export default function ADMomentosPage() {
               }}>
                 <Plus size={16} /> Novo Foto/Vídeo
               </button>
+)}
             </div>
 
             <p className="ad-momentos-desc" style={{ 
@@ -566,7 +614,7 @@ export default function ADMomentosPage() {
 
         {meusMomentos.length === 0 ? (
           <div style={{ padding: '0 24px' }}>
-            {isDataLoading || !currentUser ? (
+            {isDataLoading || !effectiveUser ? (
               <MomentoSkeleton count={2} />
             ) : (
               <EmptyStateCard 
@@ -640,7 +688,7 @@ export default function ADMomentosPage() {
                       </div>
                     </div>
                     {/* Delete Button (ultra modern) */}
-                    {(currentUser?.id === (m as any).authorId || currentUser?.nome === m.author || currentUser?.perfil === 'administrador' || String(currentUser?.cargo).toLowerCase().includes('diretor') || String(currentUser?.cargo).toLowerCase().includes('admin')) && (
+                    {(effectiveUser?.id === (m as any).authorId || effectiveUser?.nome === m.author || effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo).toLowerCase().includes('diretor') || String(effectiveUser?.cargo).toLowerCase().includes('admin')) && (
                       <div style={{ display: 'flex', alignItems: 'center' }}>
                         {isDeleting === m.id ? (
                           <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: '#94a3b8' }} />
@@ -754,11 +802,11 @@ export default function ADMomentosPage() {
                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
                          <Heart 
                            size={20} 
-                           color={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : '#64748b'} 
-                           fill={(m.likes || []).includes(currentUser?.nome || 'Você') ? '#ef4444' : 'none'}
+                           color={(m.likes || []).includes(effectiveUser?.nome || 'Você') ? '#ef4444' : '#64748b'} 
+                           fill={(m.likes || []).includes(effectiveUser?.nome || 'Você') ? '#ef4444' : 'none'}
                            cursor="pointer" 
                            onClick={() => handleLike(m.id)}
-                           style={{ transition: 'all 0.2s', filter: (m.likes || []).includes(currentUser?.nome || 'Você') ? 'drop-shadow(0 4px 6px rgba(239,68,68,0.3))' : 'none' }}
+                           style={{ transition: 'all 0.2s', filter: (m.likes || []).includes(effectiveUser?.nome || 'Você') ? 'drop-shadow(0 4px 6px rgba(239,68,68,0.3))' : 'none' }}
                          />
                          <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.likes || []).length}</span>
                        </div>
@@ -1093,7 +1141,7 @@ export default function ADMomentosPage() {
         initialSelected={newPost.targetClasses}
         onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
         allowedTurmasIds={turmaOptions.map(t => String(t.id))}
-        allowedGruposIds={currentUser?.perfil === 'administrador' || String(currentUser?.cargo || '').toLowerCase().includes('admin') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
+        allowedGruposIds={effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || String(effectiveUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
       />
 
     </div>

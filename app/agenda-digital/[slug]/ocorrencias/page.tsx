@@ -13,9 +13,14 @@ import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 export default function ADOcorrenciasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
   const { currentUser } = useApp()
+  const searchParams = new URLSearchParams(window.location.search);
+  const espelharRespId = searchParams.get('espelhar_responsavel');
+  const espelharAluno = searchParams.get('espelhar_aluno') === 'true';
+  const isMirroring = !!(espelharRespId || espelharAluno);
   const [signingIds, setSigningIds] = useState<Record<string, boolean>>({})
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({})
+  const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({})
 
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
@@ -130,6 +135,8 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
+
+    if (isMirroring) return; // Do not mark as read in mirror mode
 
     const unreadIds = ocorrenciasFiltradas
       .filter(o => {
@@ -388,46 +395,46 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                         top: 28, 
                         transform: 'translate(-50%, -50%)', 
                         zIndex: 2,
-                        width: 16, 
-                        height: 16, 
+                        width: 24, 
+                        height: 24, 
                         borderRadius: '50%', 
                         background: '#fff', 
                         border: `2px solid ${borderColor}`,
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        boxShadow: '0 0 0 4px #fdfdfd'
+                        boxShadow: '0 0 0 6px #fdfdfd'
                       }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: iconColor }} />
+                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: iconColor }} />
                       </div>
 
                       {/* Card Body */}
                       <div style={{
                         background: '#ffffff',
-                        border: '1px solid #f1f5f9',
-                        borderRadius: 20,
-                        padding: '20px 20px',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+                        border: '1px solid #f8fafc',
+                        borderRadius: 24,
+                        padding: '24px',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.04)'
                       }}>
                         {/* Title Row */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             {isLeve ? (
-                              <div style={{ border: `1px solid ${iconColor}`, borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <AlertCircle size={14} color={iconColor} strokeWidth={2.5} />
+                              <div style={{ background: '#ffedd5', borderRadius: 14, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                               </div>
                             ) : (
-                              <div style={{ border: `1px solid ${iconColor}`, borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <AlertTriangle size={14} color={iconColor} strokeWidth={2.5} />
+                              <div style={{ background: '#fee2e2', borderRadius: 14, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <AlertTriangle size={20} color={iconColor} strokeWidth={2.5} />
                               </div>
                             )}
-                            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a' }}>{o.tipo}</h3>
+                            <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>{o.tipo}</h3>
                             <span style={{ 
-                              fontSize: 10, 
+                              fontSize: 11, 
                               background: gravBg, 
                               color: gravColor, 
-                              padding: '4px 8px', 
-                              borderRadius: 12, 
+                              padding: '4px 10px', 
+                              borderRadius: 8, 
                               fontWeight: 800, 
                               textTransform: 'uppercase', 
                               letterSpacing: 0.5 
@@ -436,89 +443,98 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                             </span>
                           </div>
                           
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 700 }}>{timeStr}</span>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                          </div>
-                        </div>
-
-                        {/* Meta Info Rows */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 4, padding: '2px 4px' }}>4º</div>
-                            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
-                              {o.turmaNome || o.dados?.turma || aluno?.turma || '4º Ano A'} • {aluno?.turno || 'Matutino'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
-                              {lancado || o.responsavel || 'Coordenação'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        <p style={{ fontSize: 13, color: '#475569', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-                          {displayText}
-                          {shouldTruncate && (
-                            <span 
-                              onClick={() => setExpandedIds(p => ({...p, [o.id]: true}))} 
-                              style={{ color: '#2563eb', fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
+                            <div 
+                              onClick={() => setCollapsedIds(p => ({ ...p, [o.id]: !p[o.id] }))}
+                              style={{ width: 30, height: 30, borderRadius: '50%', background: '#f8fafc', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                             >
-                              Ver mais
-                            </span>
-                          )}
-                        </p>
-
-                        {/* Action Buttons */}
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                          <button style={{ 
-                            flex: 1, 
-                            minWidth: 120, 
-                            background: '#fff', 
-                            border: '1px solid #e2e8f0', 
-                            color: '#475569', 
-                            fontWeight: 700, 
-                            fontSize: 13, 
-                            padding: '10px 0', 
-                            borderRadius: 16,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6
-                          }}>
-                            <Eye size={15} /> Ver detalhes
-                          </button>
-                          
-                          <button 
-                            onClick={() => !o.ciencia_responsavel && handleAssinar(o.id)}
-                            disabled={!!signingIds[o.id] || o.ciencia_responsavel}
-                            style={{ 
-                              flex: 1, 
-                              minWidth: 140, 
-                              background: o.ciencia_responsavel ? '#ecfdf5' : '#f59e0b', 
-                              border: o.ciencia_responsavel ? '1px solid #a7f3d0' : 'none', 
-                              color: o.ciencia_responsavel ? '#059669' : '#fff', 
-                              fontWeight: 700, 
-                              fontSize: 13, 
-                              padding: '10px 0', 
-                              borderRadius: 16,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: 6,
-                              cursor: (signingIds[o.id] || o.ciencia_responsavel) ? 'default' : 'pointer'
-                            }}
-                          >
-                            {signingIds[o.id] ? (
-                              <Loader2 size={15} className="spin-animation" />
-                            ) : (
-                              <Check size={15} strokeWidth={3.5} />
-                            )}
-                            {o.ciencia_responsavel ? 'Ciência Assinada' : 'Assinar ciência'}
-                          </button>
+                              <svg style={{ transform: collapsedIds[o.id] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                            </div>
+                          </div>
                         </div>
+
+                        <AnimatePresence initial={false}>
+                          {!collapsedIds[o.id] && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3 }}
+                              style={{ overflow: 'hidden' }}
+                            >
+                              {/* Meta Info Rows */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', padding: '12px 16px', borderRadius: 16 }}>
+                                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                                  </div>
+                                  <span style={{ fontSize: 14, color: '#475569', fontWeight: 600 }}>
+                                    {o.turmaNome || o.dados?.turma || aluno?.turma || '4º Ano A'}
+                                  </span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', padding: '12px 16px', borderRadius: 16 }}>
+                                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                  </div>
+                                  <span style={{ fontSize: 14, color: '#475569', fontWeight: 600 }}>
+                                    {lancado || `${o.responsavel || 'Coordenação'} em ${new Date(o.created_at).toLocaleDateString('pt-BR')} às ${timeStr}`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Description */}
+                              <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: 16, position: 'relative', marginBottom: 24, minHeight: 80 }}>
+                                <span style={{ position: 'absolute', top: 10, left: 16, fontSize: 40, color: '#e2e8f0', lineHeight: 1, fontFamily: 'Georgia, serif' }}>"</span>
+                                <span style={{ position: 'absolute', bottom: -10, right: 16, fontSize: 40, color: '#e2e8f0', lineHeight: 1, fontFamily: 'Georgia, serif' }}>"</span>
+                                <p style={{ fontSize: 14, color: '#334155', margin: '14px 0 0 0', lineHeight: 1.6, position: 'relative', zIndex: 1, fontWeight: 500 }}>
+                                  {displayText}
+                                  {shouldTruncate && (
+                                    <span 
+                                      onClick={() => setExpandedIds(p => ({...p, [o.id]: true}))} 
+                                      style={{ color: '#2563eb', fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
+                                    >
+                                      Ver mais
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                                {!isMirroring && (
+                                  <button 
+                                    onClick={() => !o.ciencia_responsavel && handleAssinar(o.id)}
+                                    disabled={!!signingIds[o.id] || o.ciencia_responsavel}
+                                    style={{ 
+                                      flex: 1, 
+                                      minWidth: 140, 
+                                      background: o.ciencia_responsavel ? '#ecfdf5' : 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)', 
+                                      border: o.ciencia_responsavel ? '1px solid #a7f3d0' : 'none', 
+                                      color: o.ciencia_responsavel ? '#059669' : '#ffffff', 
+                                      fontWeight: 800, 
+                                      fontSize: 14, 
+                                      padding: '14px 0', 
+                                      borderRadius: 20,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: 8,
+                                      cursor: (signingIds[o.id] || o.ciencia_responsavel) ? 'default' : 'pointer',
+                                      boxShadow: o.ciencia_responsavel ? 'none' : '0 8px 16px rgba(249, 115, 22, 0.25)'
+                                    }}
+                                  >
+                                    {signingIds[o.id] ? (
+                                      <Loader2 size={18} className="spin-animation" />
+                                    ) : (
+                                      <Check size={18} strokeWidth={3} />
+                                    )}
+                                    {o.ciencia_responsavel ? 'Ciência Assinada' : 'Assinar ciência'}
+                                  </button>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </motion.div>
                   )

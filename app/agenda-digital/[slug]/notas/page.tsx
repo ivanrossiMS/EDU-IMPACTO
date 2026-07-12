@@ -4,6 +4,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '@/lib/context'
+import { useParams, useSearchParams } from 'next/navigation'
 import { GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2, Sparkles } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
@@ -144,6 +145,11 @@ export default function ADNotasPage({ params }: { params: any }) {
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const espelharRespId = searchParams.get('espelhar_responsavel');
+    const espelharAluno = searchParams.get('espelhar_aluno') === 'true';
+    if (espelharRespId || espelharAluno) return; // Do not mark as read in mirror mode
 
     // Check which ones are unread
     const unreadIds = boletins

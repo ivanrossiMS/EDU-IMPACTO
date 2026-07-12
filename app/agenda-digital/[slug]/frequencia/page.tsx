@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { supabase } from '@/lib/supabase'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 export default function ADFrequenciaPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
@@ -112,6 +112,11 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
     const currentReaderId = currentUser?.id;
     if (!currentReaderId) return;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const espelharRespId = searchParams.get('espelhar_responsavel');
+    const espelharAluno = searchParams.get('espelhar_aluno') === 'true';
+    if (espelharRespId || espelharAluno) return; // Do not mark as read in mirror mode
 
     const unreadIds = frequenciasDb
       .filter((item: any) => {

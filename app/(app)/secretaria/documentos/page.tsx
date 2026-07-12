@@ -3,7 +3,7 @@
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useData } from '@/lib/dataContext'
 import { useState, useEffect, useRef } from 'react'
-import { FileText, Search, Plus, Trash2, Printer, Image as ImageIcon, Sparkles, Upload, FileSignature, Save, X, Eye, CheckCircle, Wand2, Settings } from 'lucide-react'
+import { FileText, Search, Plus, Trash2, Printer, Image as ImageIcon, Sparkles, Upload, FileSignature, Save, X, Eye, CheckCircle, Wand2, Settings, Copy } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import dynamic from 'next/dynamic'
 import 'react-quill-new/dist/quill.snow.css'
@@ -12,10 +12,12 @@ const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false })
 
 const quillModules = {
   toolbar: [
-    [{ 'size': ['small', false, 'large', 'huge'] }],
+    [{ 'size': ['8px', '10px', '12px', false, '16px', '18px', '20px', '24px', '32px'] }],
+    [{ 'color': [] }, { 'background': [] }],
     ['bold', 'italic', 'underline', 'strike'],
     [{ 'align': [] }],
     [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'lineheight': [false, '1.0', '1.2', '1.5', '2.0', '2.5', '3.0'] }],
     ['clean']
   ],
   clipboard: {
@@ -79,6 +81,27 @@ export default function SecretariaDocumentosPage() {
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const ReactQuillImport = require('react-quill-new')
+      if (ReactQuillImport && ReactQuillImport.Quill) {
+        const Size = ReactQuillImport.Quill.import('formats/size')
+        if (Size) {
+          Size.whitelist = ['8px', '10px', '12px', '14px', '16px', '18px', '20px', '24px', '32px']
+          ReactQuillImport.Quill.register(Size, true)
+        }
+        
+        const AlignStyle = ReactQuillImport.Quill.import('attributors/style/align')
+        if (AlignStyle) {
+          const StyleAttributor = AlignStyle.constructor
+          const LineHeightStyle = new StyleAttributor('lineheight', 'line-height', {
+            scope: AlignStyle.scope,
+            whitelist: ['1.0', '1.2', '1.5', '2.0', '2.5', '3.0']
+          })
+          ReactQuillImport.Quill.register(LineHeightStyle, true)
+        }
+      }
+    }
+
     fetchTimbrados()
     fetchModelos()
     
@@ -213,6 +236,8 @@ export default function SecretariaDocumentosPage() {
 <<responsavel_nome>> : Nome do responsável principal
 <<responsavel_financeiro>> : Responsável Financeiro
 <<responsavel_pedagogico>> : Responsável Pedagógico
+<<pai>> : Nome do Pai
+<<mae>> : Nome da Mãe
 <<data_atual_str>> : Data por extenso (Ex: "08 de julho de 2026")
 <<data_atual_num>> : Data numérica (Ex: "08/07/2026")
 <<hora_atual>> : Hora (Ex: "14:30")
@@ -232,7 +257,7 @@ export default function SecretariaDocumentosPage() {
       if (res.ok && data.texto) {
         let cont = data.texto;
         if (!cont.includes('<p>') && !cont.includes('<br>')) {
-          cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map((l: string) => l.trim() ? `<p>${l}</p>` : '').join('')
+          cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map((l: string) => l.trim() ? `<p>${l}</p>` : '<p><br></p>').join('')
         } else {
           cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;')
         }
@@ -246,6 +271,29 @@ export default function SecretariaDocumentosPage() {
       alert('Falha na comunicação com a IA')
     } finally {
       setIsGeneratingAI(false)
+    }
+  }
+
+  const handleSaveAsNew = async () => {
+    if (!modeloAtual.titulo || !modeloAtual.conteudo) {
+      alert('Preencha título e conteúdo')
+      return
+    }
+    
+    const newId = crypto.randomUUID()
+    
+    const { error } = await supabase.from('documentos_modelos').insert({
+      id: newId,
+      titulo: modeloAtual.titulo,
+      conteudo: modeloAtual.conteudo
+    } as any)
+    
+    if (error) {
+      alert('Erro ao salvar novo modelo: ' + error.message)
+    } else {
+      alert('Novo modelo salvo com sucesso!')
+      setModeloAtual({ titulo: '', conteudo: '' })
+      fetchModelos()
     }
   }
 
@@ -285,9 +333,18 @@ export default function SecretariaDocumentosPage() {
   }
 
   const getConteudoInterpolado = () => {
-    const mod = (modelosDB || []).find(m => m.id === modeloSelId)
-    if (!mod) return ''
-    let texto = mod.conteudo.replace(/&nbsp;/g, ' ')
+    const modDb = (modelosDB || []).find(m => m.id === modeloSelId)
+    if (!modDb && modeloAtual.id !== modeloSelId) return ''
+    
+    // Se estiver editando o mesmo modelo selecionado, pega o conteúdo atual com todas as edições, 
+    // mesmo que ainda não tenha clicado em salvar.
+    let conteudoReal = (modeloAtual.id === modeloSelId && modeloAtual.conteudo) ? modeloAtual.conteudo : (modDb?.conteudo || '')
+    
+    if (!conteudoReal.includes('<p>') && !conteudoReal.includes('<br>')) {
+      conteudoReal = conteudoReal.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map((l: string) => l.trim() ? `<p>${l}</p>` : '<p><br></p>').join('')
+    }
+    
+    let texto = conteudoReal.replace(/&nbsp;/g, ' ')
     const dataAtualExtenso = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
     const dataAtualNum = new Date().toLocaleDateString('pt-BR')
     const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
@@ -312,7 +369,10 @@ export default function SecretariaDocumentosPage() {
       texto = replaceVar(texto, 'responsavel_nome', alunoSel.responsavel || '')
       texto = replaceVar(texto, 'responsavel_financeiro', alunoSel.responsavel_financeiro || '')
       texto = replaceVar(texto, 'responsavel_pedagogico', alunoSel.responsavel_pedagogico || '')
-      texto = replaceVar(texto, 'ano', new Date().getFullYear().toString())
+      texto = replaceVar(texto, 'pai', alunoSel.nome_pai || alunoSel.pai || alunoSel.dados?.nome_pai || alunoSel.dados?.pai || alunoSel.dados?.nomePai || '')
+      texto = replaceVar(texto, 'mae', alunoSel.nome_mae || alunoSel.mae || alunoSel.dados?.nome_mae || alunoSel.dados?.mae || alunoSel.dados?.nomeMae || '')
+      texto = replaceVar(texto, 'ano', alunoSel.ano_letivo || new Date().getFullYear().toString())
+      texto = replaceVar(texto, 'ano_letivo', alunoSel.ano_letivo || new Date().getFullYear().toString())
     }
     
     texto = replaceVar(texto, 'data_atual_str', dataAtualExtenso)
@@ -383,10 +443,13 @@ export default function SecretariaDocumentosPage() {
           min-height: 250px;
           font-family: inherit;
           font-size: 14px;
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
         
         .ql-editor p {
           margin-bottom: 0.5em;
+          line-height: 1.0;
         }
         
         .ql-toolbar.ql-snow {
@@ -398,6 +461,63 @@ export default function SecretariaDocumentosPage() {
         .ql-container.ql-snow {
           border: none !important;
         }
+
+        /* Quill Custom Sizes Labels */
+        .ql-snow .ql-picker.ql-size .ql-picker-label::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item::before { content: '14px'; }
+        
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="8px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="8px"]::before { content: '8px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="10px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="10px"]::before { content: '10px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12px"]::before { content: '12px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="16px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16px"]::before { content: '16px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="18px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18px"]::before { content: '18px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="20px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="20px"]::before { content: '20px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24px"]::before { content: '24px'; }
+        .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="32px"]::before,
+        .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="32px"]::before { content: '32px'; }
+
+        /* Quill Custom Sizes Classes */
+        .ql-editor .ql-size-8px { font-size: 8px; }
+        .ql-editor .ql-size-10px { font-size: 10px; }
+        .ql-editor .ql-size-12px { font-size: 12px; }
+        .ql-editor .ql-size-16px { font-size: 16px; }
+        .ql-editor .ql-size-18px { font-size: 18px; }
+        .ql-editor .ql-size-20px { font-size: 20px; }
+        .ql-editor .ql-size-24px { font-size: 24px; }
+        .ql-editor .ql-size-32px { font-size: 32px; }
+
+        /* Quill Custom Line Heights Classes */
+        .ql-editor .ql-lineheight-1\\.0 { line-height: 1.0; }
+        .ql-editor .ql-lineheight-1\\.2 { line-height: 1.2; }
+        .ql-editor .ql-lineheight-1\\.5 { line-height: 1.5; }
+        .ql-editor .ql-lineheight-2\\.0 { line-height: 2.0; }
+        .ql-editor .ql-lineheight-2\\.5 { line-height: 2.5; }
+        .ql-editor .ql-lineheight-3\\.0 { line-height: 3.0; }
+
+        /* Quill Custom Line Heights Picker */
+        .ql-snow .ql-picker.ql-lineheight { width: 125px; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item::before { content: 'Espaço 1.0'; }
+        
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="1.0"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="1.0"]::before { content: 'Espaço 1.0'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="1.2"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="1.2"]::before { content: 'Espaço 1.2'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="1.5"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="1.5"]::before { content: 'Espaço 1.5'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="2.0"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="2.0"]::before { content: 'Espaço 2.0'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="2.5"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="2.5"]::before { content: 'Espaço 2.5'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="3.0"]::before,
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="3.0"]::before { content: 'Espaço 3.0'; }
       `}} />
 
       {/* Header */}
@@ -462,12 +582,70 @@ export default function SecretariaDocumentosPage() {
       )}
 
       {activeTab === 'modelos' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '24px' }}>
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px 0' }}>{modeloAtual.id ? 'Editar Modelo' : 'Criar Novo Modelo'}</h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Nova Seção de Modelos Salvos no Topo */}
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={20} color="#2563eb" /> Modelos Salvos
+              </h2>
+              <button 
+                onClick={() => setModeloAtual({titulo: '', conteudo: ''})} 
+                style={{ padding: '8px 16px', background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+              >
+                <Plus size={16} /> Criar Novo Modelo
+              </button>
+            </div>
             
-            <input 
-              className="form-input"
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+              {(!modelosDB || modelosDB.length === 0) ? (
+                <div style={{ gridColumn: '1 / -1', padding: '32px', textAlign: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                  <FileSignature size={32} color="#94a3b8" style={{ margin: '0 auto 12px auto' }} />
+                  <p style={{ fontSize: '14px', color: '#64748b', margin: 0, fontWeight: 500 }}>Nenhum modelo salvo ainda.</p>
+                </div>
+              ) : (
+                modelosDB.map(m => (
+                  <div key={m.id} style={{ display: 'flex', flexDirection: 'column', padding: '16px', background: modeloAtual.id === m.id ? '#eff6ff' : '#fff', borderRadius: '12px', border: modeloAtual.id === m.id ? '2px solid #2563eb' : '1px solid #e2e8f0', transition: 'all 0.2s', boxShadow: modeloAtual.id === m.id ? '0 4px 12px rgba(37, 99, 235, 0.1)' : '0 1px 3px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a', flex: 1, lineHeight: '1.4' }}>{m.titulo}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                      <button 
+                        onClick={() => {
+                          let cont = m.conteudo || ''
+                          if (!cont.includes('<p>') && !cont.includes('<br>')) {
+                            cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map(l => l.trim() ? `<p>${l}</p>` : '<p><br></p>').join('')
+                          }
+                          setModeloAtual({...m, conteudo: cont})
+                        }} 
+                        style={{ flex: 1, padding: '8px', background: modeloAtual.id === m.id ? '#2563eb' : '#f8fafc', color: modeloAtual.id === m.id ? '#fff' : '#334155', border: modeloAtual.id === m.id ? 'none' : '1px solid #cbd5e1', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+                      >
+                        <FileSignature size={14} /> {modeloAtual.id === m.id ? 'Editando...' : 'Editar Modelo'}
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteModelo(m.id)} 
+                        style={{ padding: '8px', background: '#fff', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center' }} 
+                        title="Excluir"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Area do Editor e Variáveis */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '24px' }}>
+            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px 0' }}>{modeloAtual.id ? 'Editar Conteúdo do Modelo' : 'Criar Novo Modelo'}</h2>
+              
+              <input 
+                className="form-input"
               style={{ width: '100%', marginBottom: '16px', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
               placeholder="Título do Documento (Ex: Declaração de Matrícula)"
               value={modeloAtual.titulo}
@@ -502,7 +680,11 @@ export default function SecretariaDocumentosPage() {
                 theme="snow"
                 modules={quillModules}
                 value={modeloAtual.conteudo}
-                onChange={val => setModeloAtual({...modeloAtual, conteudo: val})}
+                onChange={(val, delta, source) => {
+                  if (source === 'user') {
+                    setModeloAtual(prev => ({...prev, conteudo: val}))
+                  }
+                }}
                 placeholder="Conteúdo do documento. Use as variáveis <<aluno>>, <<turma>>, etc..."
               />
             </div>
@@ -511,8 +693,13 @@ export default function SecretariaDocumentosPage() {
               <button onClick={() => setModeloAtual({titulo: '', conteudo: ''})} style={{ padding: '10px 20px', background: 'transparent', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>
                 Limpar
               </button>
+              {modeloAtual.id && (
+                <button onClick={handleSaveAsNew} style={{ padding: '10px 20px', background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Copy size={16} /> Salvar como Novo
+                </button>
+              )}
               <button onClick={handleSaveModelo} style={{ padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Save size={16} /> Salvar Modelo
+                <Save size={16} /> {modeloAtual.id ? 'Salvar Alterações' : 'Salvar Modelo'}
               </button>
             </div>
           </div>
@@ -538,6 +725,7 @@ export default function SecretariaDocumentosPage() {
                   <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;telefone_aluno&gt;&gt;</span> : Telefone principal</div>
                   <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;email_aluno&gt;&gt;</span> : Email do aluno</div>
                   <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;unidade&gt;&gt;</span> : Unidade Escolar</div>
+                  <div><span style={{ color: '#2563eb', fontWeight: 600 }}>&lt;&lt;ano_letivo&gt;&gt;</span> : Ano letivo do curso</div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
@@ -545,6 +733,8 @@ export default function SecretariaDocumentosPage() {
                   <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_nome&gt;&gt;</span> : Responsável padrão</div>
                   <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_financeiro&gt;&gt;</span> : Resp. Financeiro</div>
                   <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;responsavel_pedagogico&gt;&gt;</span> : Resp. Pedagógico</div>
+                  <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;pai&gt;&gt;</span> : Nome do Pai</div>
+                  <div><span style={{ color: '#16a34a', fontWeight: 600 }}>&lt;&lt;mae&gt;&gt;</span> : Nome da Mãe</div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
@@ -555,40 +745,8 @@ export default function SecretariaDocumentosPage() {
                 </div>
               </div>
             </div>
-
-            <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: '0 0 12px 0' }}>Modelos Salvos</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(!modelosDB || modelosDB.length === 0) ? (
-                  <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>Nenhum modelo criado ainda.</p>
-                ) : (
-                  modelosDB.map(m => (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', flex: 1 }}>{m.titulo}</span>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button 
-                          onClick={() => {
-                            let cont = m.conteudo
-                            if (!cont.includes('<p>') && !cont.includes('<br>')) {
-                              cont = cont.replace(/<</g, '&lt;&lt;').replace(/>>/g, '&gt;&gt;').split('\n').map(l => `<p>${l}</p>`).join('')
-                            }
-                            setModeloAtual({...m, conteudo: cont})
-                          }} 
-                          style={{ background: 'transparent', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '4px' }} 
-                          title="Editar"
-                        >
-                          <FileSignature size={16} />
-                        </button>
-                        <button onClick={() => handleDeleteModelo(m.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Excluir">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -794,27 +952,28 @@ export default function SecretariaDocumentosPage() {
                     const timbObj = timbrados.find(t => t.url === timbradoSelUrl)
                     const margins = (timbObj && timbradosMargens[timbObj.name]) || { top: 75, bottom: 30, left: 25, right: 25 }
                     return (
-                      <div 
-                        className="ql-editor"
-                        style={{ 
-                          position: 'absolute', 
-                          top: `${margins.top}mm`, 
-                          left: `${margins.left}mm`, 
-                          right: `${margins.right}mm`, 
-                          bottom: `${margins.bottom}mm`,
-                          zIndex: 2,
-                          fontSize: '14pt',
-                          lineHeight: '1.6',
-                          color: '#000',
-                          textAlign: 'justify',
-                          padding: 0,
-                          wordBreak: 'normal',
-                          wordWrap: 'break-word',
-                          overflowWrap: 'break-word',
-                          whiteSpace: 'pre-wrap'
-                        }}
-                        dangerouslySetInnerHTML={{ __html: (textoFinalImp || getConteudoInterpolado()).replace(/&nbsp;/g, ' ') }}
-                      />
+                      <div className="quill" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2 }}>
+                        <div className="ql-container ql-snow" style={{ border: 'none' }}>
+                          <div 
+                            className="ql-editor"
+                            style={{ 
+                              position: 'absolute', 
+                              top: `${margins.top}mm`, 
+                              left: `${margins.left}mm`, 
+                              right: `${margins.right}mm`, 
+                              bottom: `${margins.bottom}mm`,
+                              color: '#000',
+                              textAlign: 'justify',
+                              padding: 0,
+                              wordBreak: 'normal',
+                              wordWrap: 'break-word',
+                              overflowWrap: 'break-word',
+                              whiteSpace: 'pre-wrap'
+                            }}
+                            dangerouslySetInnerHTML={{ __html: (textoFinalImp || getConteudoInterpolado()).replace(/&nbsp;/g, ' ').replace(/<(p|h[1-6])([^>]*)>\s*<\/\1>/g, '<$1$2><br></$1>') }}
+                          />
+                        </div>
+                      </div>
                     )
                   })()}
                   </div>
@@ -845,7 +1004,11 @@ export default function SecretariaDocumentosPage() {
                   theme="snow"
                   modules={quillModules}
                   value={textoFinalImp}
-                  onChange={val => setTextoFinalImp(val)}
+                  onChange={(val, delta, source) => {
+                    if (source === 'user') {
+                      setTextoFinalImp(val)
+                    }
+                  }}
                 />
               </div>
             </div>

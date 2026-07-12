@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       turma: aluno.turma || '',
       anoLetivo: (aluno as any).dados?.anoLetivo || (aluno as any).dados?.ano_letivo || '',
       foto: (aluno as any).foto || (aluno as any).foto_url || (aluno as any).dados?.foto || (aluno as any).dados?.avatarUrl || null,
+      responsaveis: (aluno as any).dados?.responsaveis || (aluno as any).responsaveis || [],
       status: aluno.status || 'ativo'
     }))
 

@@ -1,4 +1,5 @@
 'use client'
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
@@ -182,6 +183,24 @@ export default function ADCalendarioPage() {
   });
   
   const { currentUser } = useApp()
+
+  const searchParams = useSearchParams()
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const espelharPerfil = searchParams?.get('espelhar_perfil')
+  const isMirroring = !!espelharColabId
+  const effectiveUser = useMemo(() => {
+    if (espelharColabId) {
+      return {
+        ...currentUser,
+        id: espelharColabId,
+        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
+        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
+        perfil: espelharPerfil || 'colaborador'
+      }
+    }
+    return currentUser
+  }, [currentUser, espelharColabId, searchParams])
+
   const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
   const usuariosAtivos = sysUsers || []
   const turmasNomes = turmas.map((t: any) => t.nome)
@@ -201,11 +220,15 @@ export default function ADCalendarioPage() {
   }, [turmas, cfgCalendarioLetivo])
 
   const turmaOptions = React.useMemo(() => {
-    if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor');
+    if (!effectiveUser?.id) return [];
+    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
+    const perfilStr = effectiveUser?.perfil || ''; 
+    const cargoStr = effectiveUser?.cargo || ''; 
+    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
     
     let baseTurmas = [];
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') {
+    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') {
       baseTurmas = turmas;
     } else {
       const userGroups = (chatGroups || []).filter((g: any) => {
@@ -214,7 +237,7 @@ export default function ADCalendarioPage() {
           try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
         }
         if (!Array.isArray(colabs)) colabs = [];
-        return colabs.some((id: any) => String(id) === String(currentUser.id));
+        return colabs.some((id: any) => String(id) === String(effectiveUser.id));
       });
 
       const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
@@ -246,7 +269,7 @@ export default function ADCalendarioPage() {
     }
 
     return baseTurmas;
-  }, [turmas, chatGroups, currentUser, selectedAno])
+  }, [turmas, chatGroups, effectiveUser, selectedAno])
 
   const selectedTurmaName = React.useMemo(() => {
     if (selectedTurmaId === 'all') return 'Todas as turmas'
@@ -293,7 +316,7 @@ export default function ADCalendarioPage() {
     return (eventosAgenda || []).filter(e => {
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
-      const isParaMim = (e as any).visibilidadeUsuario && currentUser?.nome && String((e as any).visibilidadeUsuario).toLowerCase().trim() === String(currentUser.nome).toLowerCase().trim()
+      const isParaMim = (e as any).visibilidadeUsuario && effectiveUser?.nome && String((e as any).visibilidadeUsuario).toLowerCase().trim() === String(effectiveUser.nome).toLowerCase().trim()
       if (isParaMim) return true
       
       let targets: any = e.turmas || []
@@ -442,7 +465,11 @@ export default function ADCalendarioPage() {
         const niversMes = todos.filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
-          const m = parseInt(data.split('-')[1])
+          
+          let m = -1;
+          if (data.includes('-')) m = parseInt(data.split('-')[1]);
+          else if (data.includes('/')) m = parseInt(data.split('/')[1]);
+          
           if (m !== mesView) return false
           
           if (p.tipo === 'Aluno') {
@@ -458,7 +485,10 @@ export default function ADCalendarioPage() {
           return true // Keep teachers visible
         }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
-          const dia = parseInt(data.split('-')[2])
+          let dia = -1;
+          if (data.includes('-')) dia = parseInt(data.split('-')[2]);
+          else if (data.includes('/')) dia = parseInt(data.split('/')[0]); // in DD/MM/YYYY, day is first
+          
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
             const diaHoje = hoje.getDate()
@@ -494,7 +524,8 @@ export default function ADCalendarioPage() {
           <p className="page-subtitle" style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0 0' }}>{eventosFiltrados.length} evento(s) da turma • {year}</p>
         </div>
         <div className="ad-calendar-badge" style={{ display: 'flex', alignItems: 'center', position: 'relative', zIndex: 50, gap: 12 }}>
-          <button 
+          {!isMirroring && (
+<button 
             className="btn btn-primary" 
             style={{ height: 40, padding: '0 16px', borderRadius: 12, fontWeight: 800, background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', border: 'none', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.25)', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => {
@@ -506,6 +537,7 @@ export default function ADCalendarioPage() {
           >
             <Plus size={16} /> <span>Novo Evento</span>
           </button>
+)}
           
           <TurmaDropdown 
             turmaOptions={turmaOptions} 

@@ -179,13 +179,15 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   }, [])
 
   const sendBroadcast = useCallback((event: string, data: any) => {
-    if (channelRef.current) {
+    if (channelRef.current && channelRef.current.state === 'joined') {
       const eventId = Math.random().toString(36).substring(2, 15);
       processedBroadcasts.current.add(eventId);
       channelRef.current.send({
         type: 'broadcast',
         event: 'CALL_EVENT',
         payload: { event, data, eventId }
+      }).catch((e: any) => {
+        console.warn('Realtime send ignored:', e)
       })
     }
   }, [])

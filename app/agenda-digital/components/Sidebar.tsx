@@ -31,10 +31,11 @@ import {
   GraduationCap,
   UserCog,
   Camera,
-  Loader2
+  Loader2,
+  MonitorSmartphone
 } from 'lucide-react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -46,6 +47,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
   { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
   { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
+  { id: 'espelhar', label: 'Espelhar Agenda', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
   { id: 'comunicados', label: 'Comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
 
   { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
@@ -55,16 +57,54 @@ const menuItems = [
   { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' },
 ]
 
+function abbreviateName(name: string) {
+  if (!name) return '';
+  const parts = name.trim().split(' ');
+  if (parts.length <= 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
 export function ADSidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  const espelharRespId = searchParams?.get('espelhar_responsavel')
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true'
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const espelharColabNome = searchParams?.get('espelhar_nome')
+  const espelharColabCargo = searchParams?.get('espelhar_cargo')
+  const espelharColabFoto = searchParams?.get('espelhar_foto')
+  const espelharColabPerfil = searchParams?.get('espelhar_perfil')
+  const isMirroring = !!espelharRespId || espelharAluno || !!espelharColabId
+
   const { currentUser, setCurrentUser, theme, setTheme, loadingPath, setLoadingPath } = useApp()
   const { adConfig } = useAgendaDigital()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
-  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
-  const isAlunoLogado = currentUser?.cargo === 'Aluno'
+  const getMirrorParams = () => {
+    if (!isMirroring) return ''
+    const params = new URLSearchParams()
+    if (espelharRespId) params.append('espelhar_responsavel', espelharRespId)
+    if (espelharAluno) params.append('espelhar_aluno', 'true')
+    if (espelharColabId) params.append('espelhar_colaborador', espelharColabId)
+    if (espelharColabNome) params.append('espelhar_nome', espelharColabNome)
+    if (espelharColabCargo) params.append('espelhar_cargo', espelharColabCargo)
+    if (espelharColabFoto) params.append('espelhar_foto', espelharColabFoto)
+    if (espelharColabPerfil) params.append('espelhar_perfil', espelharColabPerfil)
+    return params.toString()
+  }
+
+  const appendMirrorParams = (href: string) => {
+    const paramsStr = getMirrorParams()
+    if (!paramsStr) return href
+    return href.includes('?') ? `${href}&${paramsStr}` : `${href}?${paramsStr}`
+  }
+
+  const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
+  const respId = espelharRespId || baseRespId
+  const isAlunoLogado = espelharAluno || currentUser?.cargo === 'Aluno'
 
   // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
   const segments = pathname.split('/')
@@ -150,6 +190,7 @@ export function ADSidebar() {
         { id: 'dashboard', label: 'Início', icon: LayoutDashboard, href: '/agenda-digital/admin' },
         { id: 'turmas', label: 'Turmas', icon: BookOpen, href: '/agenda-digital/admin/turmas' },
         { id: 'pessoas', label: 'Usuários', icon: Users, href: '/agenda-digital/admin/pessoas' },
+        { id: 'espelhar', label: 'Espelhar', icon: MonitorSmartphone, href: '/agenda-digital/admin/espelhar' },
         { id: 'comunicados', label: 'comunicados', icon: Bell, href: '/agenda-digital/admin/comunicados' },
 
         { id: 'momentos', label: 'Mídia', icon: ImageIcon, href: '/agenda-digital/admin/momentos' },
@@ -298,7 +339,7 @@ export function ADSidebar() {
                   {idx > 0 && (
                     <div style={{ position: 'absolute', left: 0, width: 1, height: 28, background: 'rgba(255,255,255,0.15)' }} />
                   )}
-                  <Link href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
+                  <Link href={appendMirrorParams(item.href)} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
                     <motion.div 
                       whileTap={{ scale: 0.9 }}
                       style={{
@@ -512,7 +553,6 @@ export function ADSidebar() {
                     } else if (profileData?.vinculo) {
                        isFin = !!profileData.vinculo.resp_financeiro;
                     }
-                    console.log('ADSidebar desktop isFin check:', { alunoId, vinculo: profileData?.vinculo, isFin });
 
                     if (item.label === 'Financeiro') {
                        if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
@@ -525,7 +565,7 @@ export function ADSidebar() {
                   }).map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)
                     return (
-                      <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
+                      <Link key={idx} href={appendMirrorParams(item.href)} style={{ textDecoration: 'none' }}>
                         <motion.div
                           whileHover={{ x: 6, background: 'rgba(255,255,255,0.04)' }}
                           whileTap={{ scale: 0.98 }}
@@ -591,13 +631,27 @@ export function ADSidebar() {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
                   <div style={{ position: 'relative', width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg, #a855f7, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 21 }}>
-                    <UserAvatar 
-                      userId={currentUser?.id} 
-                      name={currentUser?.nome || 'Usuário'} 
-                      fotoUrl={currentUser?.foto}
-                      size={54}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
-                    />
+                    {(() => {
+                      const espelharRespId = searchParams?.get('espelhar_responsavel');
+                      const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+                      const espelharColabId = searchParams?.get('espelhar_colaborador');
+                      const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+                      
+                      const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) : null;
+                      const displayNome = isMirroring ? (espelharAluno ? (profileData?.aluno?.nome || 'Aluno') : (espelharColabId ? (searchParams?.get('espelhar_nome') || 'Colaborador') : (mirroredResp?.nome || 'Responsável'))) : (currentUser?.nome || 'Usuário');
+                      const displayFoto = isMirroring ? (espelharAluno ? profileData?.aluno?.foto : (espelharColabId ? searchParams?.get('espelhar_foto') : (mirroredResp?.foto || null))) : currentUser?.foto;
+                      const displayId = isMirroring ? (espelharAluno ? profileData?.aluno?.id : (espelharColabId ? espelharColabId : (mirroredResp?.id || 'r'))) : currentUser?.id;
+                      
+                      return (
+                        <UserAvatar 
+                          userId={displayId} 
+                          name={displayNome} 
+                          fotoUrl={displayFoto}
+                          size={54}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', opacity: isUploadingPhoto ? 0.5 : 1 }}
+                        />
+                      );
+                    })()}
                     {isUploadingPhoto && (
                       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Loader2 className="animate-spin" size={14} color="#fff" />
@@ -608,14 +662,32 @@ export function ADSidebar() {
                       <input type="file" accept="image/*" style={{ display: 'none' }} disabled={isUploadingPhoto} onChange={handlePhotoUpload} />
                     </label>
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.nome || 'Usuário'}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {currentUser?.cargo === 'Aluno' ? 'ALUNO' : (currentUser?.perfil || 'Conta')}
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+                    <span style={{ fontWeight: 800, color: 'white', fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                      {(() => {
+                        const espelharRespId = searchParams?.get('espelhar_responsavel');
+                        const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+                        const espelharColabId = searchParams?.get('espelhar_colaborador');
+                        const espelharColabNome = searchParams?.get('espelhar_nome');
+                        const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+                        const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) : null;
+                        return isMirroring ? (espelharAluno ? abbreviateName(profileData?.aluno?.nome || 'Aluno') : abbreviateName(espelharColabId ? (espelharColabNome || 'Colaborador') : (mirroredResp?.nome || 'Responsável'))) : abbreviateName(currentUser?.nome || 'Usuário');
+                      })()}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {(() => {
+                        const espelharRespId = searchParams?.get('espelhar_responsavel');
+                        const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+                        const espelharColabId = searchParams?.get('espelhar_colaborador');
+                        const espelharColabCargo = searchParams?.get('espelhar_cargo')
+  const espelharColabFoto = searchParams?.get('espelhar_foto')
+  const espelharColabPerfil = searchParams?.get('espelhar_perfil');
+                        const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+                        return isMirroring ? (espelharAluno ? 'ALUNO' : (espelharColabId ? (espelharColabCargo || 'COLABORADOR') : 'RESPONSÁVEL')) : (currentUser?.cargo || currentUser?.perfil || 'Perfil');
+                      })()}
+                    </span>
                   </div>
                 </div>
-
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   {currentUser?.cargo !== 'Aluno' && (

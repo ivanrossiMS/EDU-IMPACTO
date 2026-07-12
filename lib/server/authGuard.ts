@@ -62,14 +62,18 @@ export async function requireProfile(allowedProfiles: string[]) {
 
   // Buscando o perfil atualizado do system_users para evitar falsificação no user_metadata
   const supabaseAdmin = require('./supabaseAdminSingleton').getAdminClient()
+  const queryId = user.user_metadata?.uid_legacy || user.id
+  
   const { data: dbUser } = await supabaseAdmin
     .from('system_users')
     .select('perfil, status')
-    .eq('id', user.id)
+    .eq('id', queryId)
     .maybeSingle()
 
   const perfil = dbUser?.perfil || user.user_metadata?.perfil
-  const status = dbUser?.status
+  // Se o usuário não está no system_users (ex: Aluno/Família), assumimos ativo se ele logou com sucesso,
+  // ou confiamos no status da tabela caso exista.
+  const status = dbUser ? dbUser.status : (user.user_metadata?.status || 'ativo')
 
   if (status !== 'ativo') {
     return {

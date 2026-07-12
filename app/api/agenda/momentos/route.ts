@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
+    const supabase = supabaseServer; // Bypass RLS as we manually enforce strict filtering in this route
     const { searchParams } = new URL(request.url)
     const limitParam = searchParams.get('limit')
     const offsetParam = searchParams.get('offset')
@@ -63,17 +64,24 @@ export async function GET(request: Request) {
 
     let accessStartDate = await getLoggedUserAccessStartDate(true)
     let query = supabase.from('momentos').select('*')
-    if (accessStartDate) {
-      query = query.gte('created_at', accessStartDate.toISOString())
-    }
 
     // Filtragem segura no Backend
     if (isFamilyOrStudent && alunoId) {
       let resolvedTurma = null;
       const { data: alunoRes } = await supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle();
-      if (alunoRes && alunoRes.turma) {
-        const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
-        resolvedTurma = tData?.nome || alunoRes.turma;
+      if (alunoRes) {
+        if (alunoRes.turma) {
+          const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
+          resolvedTurma = tData?.nome || alunoRes.turma;
+        }
+
+        const dateStr = alunoRes.dados?.data_matricula || alunoRes.dados?.data_inicio || alunoRes.dados?.data_ingresso || alunoRes.created_at;
+        if (dateStr) {
+          const studentEntryDate = new Date(dateStr);
+          if (accessStartDate === null || studentEntryDate > accessStartDate) {
+            accessStartDate = studentEntryDate;
+          }
+        }
       }
 
       const conditions = [];
@@ -96,7 +104,9 @@ export async function GET(request: Request) {
       query = query.or(conditions.join(','));
     } else if (!isFamilyOrStudent) {
        // Se for colaborador
-       const isAdmin = ['Diretor Geral', 'Administrador', 'Admin'].includes(perfil) || ['Administrador Master', 'Diretor Geral'].includes(cargo);
+       const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora'];
+       const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora'];
+       const isAdmin = perfisAdmin.includes(perfil) || cargosAdmin.includes(cargo);
         if (!isAdmin) {
            const conditions = [];
            conditions.push(`dados->targetClasses.eq."[]"`);
@@ -141,6 +151,11 @@ export async function GET(request: Request) {
 
            query = query.or(conditions.join(','));
         }
+    }
+
+    if (accessStartDate) {
+      const adjustedStartDate = new Date(accessStartDate.getTime() - 60000); // 1 min buffer para clock skew
+      query = query.gte('created_at', adjustedStartDate.toISOString());
     }
 
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)

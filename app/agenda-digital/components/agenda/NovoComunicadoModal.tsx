@@ -5,7 +5,7 @@ import {
   X, SendIcon, Clock, FileText, Paperclip, Image as ImageIcon, 
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
   ChevronRight, Save, UploadCloud, Users, Trash2, Calendar,
-  Palette, BarChart2, Receipt
+  Palette, BarChart2, CircleDollarSign
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -74,6 +74,19 @@ export default function NovoComunicadoModal({
         setCobrancaForm({ titulo: '', valor: '', vencimento: '' })
         if (editorRef.current) editorRef.current.innerHTML = ''
       }
+    } else {
+      // Clear completely on close
+      setTitulo('')
+      setConteudo('')
+      setAnexos([])
+      setDataAgendamento('')
+      setCobrancaForm({ titulo: '', valor: '', vencimento: '' })
+      if (editorRef.current) editorRef.current.innerHTML = ''
+      localStorage.removeItem('@edu-impacto/comunicado-draft')
+      setShowRelsModal(false)
+      setShowCobrancaModal(false)
+      setShowScheduleModal(false)
+      setShowEmojiPicker(false)
     }
   }, [isOpen, initialData])
 
@@ -604,27 +617,21 @@ export default function NovoComunicadoModal({
               Anexos <span style={{ fontWeight: 400 }}>(opcional)</span>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#8B5CF6'; e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
-                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <Paperclip size={20} color="#8B5CF6" />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Anexar</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
+                <Paperclip size={18} color="#475569" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Anexar</span>
                 <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={handleFileUpload} />
               </label>
 
-              <button onClick={(e) => { e.preventDefault(); setShowRelsModal(true); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#3B82F6'; e.currentTarget.style.background = '#EFF6FF'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
-                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <BarChart2 size={20} color="#3B82F6" />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Relatório</span>
+              <button onClick={(e) => { e.preventDefault(); setShowRelsModal(true); }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
+                <BarChart2 size={18} color="#475569" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Relatório</span>
               </button>
 
-              <button onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: '#FAFAFA', border: '1px solid #E2E8F0', borderRadius: 16, padding: '16px 8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#10B981'; e.currentTarget.style.background = '#ECFDF5'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FAFAFA'; }}>
-                <div style={{ background: '#FFF', width: 44, height: 44, borderRadius: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                  <Receipt size={20} color="#10B981" />
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A' }}>Cobrança</span>
+              <button onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
+                <CircleDollarSign size={18} color="#475569" />
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Cobrança</span>
               </button>
             </div>
 

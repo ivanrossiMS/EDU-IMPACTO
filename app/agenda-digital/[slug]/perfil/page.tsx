@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { LoadingGlass } from '@/components/LoadingGlass'
@@ -91,8 +92,13 @@ export default function ADPerfilPage() {
   const [phoneInput, setPhoneInput] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
+  const searchParams = useSearchParams()
+  const espelharRespId = searchParams?.get('espelhar_responsavel');
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+  const isMirroring = !!(espelharRespId || espelharAluno);
+
   // Atualizar o state do input se o aluno carregar depois do hook inicial
-  React.useEffect(() => {
+  useEffect(() => {
     if (aluno) {
       setEmailInput(aluno.email || '')
       setPhoneInput(aluno.telefone || '')
@@ -209,7 +215,7 @@ export default function ADPerfilPage() {
                     <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>E-mail do Aluno</div>
-                        {!isEditingEmail && <button onClick={() => { setIsEditingEmail(true); setEmailInput(aluno.email || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
+                        {!isEditingEmail && !isMirroring && <button onClick={() => { setIsEditingEmail(true); setEmailInput(aluno.email || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
                       </div>
                       {isEditingEmail ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -232,7 +238,7 @@ export default function ADPerfilPage() {
                     <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #e2e8f0' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', letterSpacing: 0.5 }}>Telefone / Celular</div>
-                        {!isEditingPhone && <button onClick={() => { setIsEditingPhone(true); setPhoneInput(aluno.telefone || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
+                        {!isEditingPhone && !isMirroring && <button onClick={() => { setIsEditingPhone(true); setPhoneInput(aluno.telefone || '') }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', padding: 4 }}><Edit3 size={14} /></button>}
                       </div>
                       {isEditingPhone ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -300,8 +306,8 @@ export default function ADPerfilPage() {
                     const isPed = resp.respPedagogico || resp.pedagogico || resp.tipo === 'Pedagógico' || resp.tipo === 'Ambos'
                     
                     // Se for o mesmo usuário logado, damos preferência à foto que já está na memória principal (sidebar)
-                    const isSameUser = (resp.email && currentUser?.email && resp.email.toLowerCase() === currentUser.email.toLowerCase()) || 
-                                       (resp.nome && currentUser?.nome && resp.nome.toLowerCase() === currentUser.nome.toLowerCase());
+                    const isSameUser = !isMirroring && ((resp.email && currentUser?.email && resp.email.toLowerCase() === currentUser.email.toLowerCase()) || 
+                                       (resp.nome && currentUser?.nome && resp.nome.toLowerCase() === currentUser.nome.toLowerCase()));
                     const displayFoto = isSameUser ? (currentUser?.foto || resp.foto || resp.dados?.foto) : (resp.foto || resp.dados?.foto);
                     
                     return (
@@ -320,7 +326,7 @@ export default function ADPerfilPage() {
                                   width: 62, height: 62, borderRadius: 20, 
                                   background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', 
                                   fontWeight: 800, color: '#475569', fontSize: 20,
-                                  position: 'relative', overflow: 'hidden', cursor: resp.id ? 'pointer' : 'default',
+                                  position: 'relative', overflow: 'hidden', cursor: resp.id && isSameUser ? 'pointer' : 'default',
                                   boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
                                 }}
                               >
@@ -334,7 +340,7 @@ export default function ADPerfilPage() {
                                 )}
                                 
                                 {/* Overlay de hover para edição */}
-                                {resp.id && !uploadingAvatarId && (
+                                {resp.id && !uploadingAvatarId && isSameUser && (
                                   <div className="avatar-edit-overlay" style={{
                                     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                                     background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -346,7 +352,7 @@ export default function ADPerfilPage() {
                               </div>
 
                               {/* Ícone fixo indicador de edição */}
-                              {resp.id && !uploadingAvatarId && (
+                              {resp.id && !uploadingAvatarId && isSameUser && (
                                 <div 
                                   style={{
                                     position: 'absolute',

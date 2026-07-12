@@ -622,6 +622,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [isSearching, setIsSearching] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
   const [authorizedPerson, setAuthorizedPerson] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   // Computed Launches from real-time database
   const launches = useMemo(() => {
@@ -720,6 +721,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-start',
+      height: '100%',
     }}
     onMouseEnter={e => {
       e.currentTarget.style.transform = 'none'
@@ -768,11 +770,19 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 }}
               />
 
-              {isSearching && (
+              {isSearching ? (
                 <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
                   <RefreshCw size={12} className="spin" color="#f59e0b" />
                 </div>
-              )}
+              ) : search.trim().length > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSearch(''); }}
+                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#d97706' }}
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
 
               {/* Autocomplete Results */}
               {results.length > 0 && (
@@ -1080,9 +1090,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   type="button"
                   onClick={(e) => {
                     e.preventDefault(); e.stopPropagation();
-                    if (window.confirm('Remover esta autorização especial?')) {
-                      deleteCall(l.id)
-                    }
+                    setConfirmDeleteId(l.id)
                   }}
                   title="Excluir Lançamento"
                   style={{
@@ -1114,6 +1122,170 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           )}
         </div>
       </div>
+
+      {/* ── MODAL DE CONFIRMAÇÃO (REMOVER AUTORIZAÇÃO) ───────────────────────── */}
+      <AnimatePresence>
+        {confirmDeleteId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              style={{
+                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                display: 'flex', flexDirection: 'column', gap: 20,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 16,
+                  background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <Trash2 size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-base))' }}>Remover autorização?</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
+                    Tem certeza que deseja remover esta autorização especial? Esta ação não pode ser desfeita.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  onClick={() => setConfirmDeleteId(null)}
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12,
+                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 13,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'hsl(var(--bg-surface))'}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    deleteCall(confirmDeleteId)
+                    setConfirmDeleteId(null)
+                  }}
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12,
+                    background: '#ef4444', border: 'none',
+                    color: '#fff', fontWeight: 700, fontSize: 13,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#dc2626'
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = '#ef4444'
+                    e.currentTarget.style.transform = 'none'
+                  }}
+                >
+                  Remover
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Proibidos Retirada Component ──────────────────────────────────────────
+function ProibidosRetiradaCard() {
+  const [restritos, setRestritos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchRestritos = async () => {
+      try {
+        const res = await fetch('/api/portaria/restritos-hoje')
+        if (res.ok) {
+          const json = await res.json()
+          setRestritos(json.data || [])
+        }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchRestritos()
+  }, [])
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.02) 100%)',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
+      borderRadius: 20, padding: '14px 18px',
+      display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
+      height: '100%',
+    }}>
+      <div style={{ fontWeight: 900, fontSize: 13, color: '#ef4444', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span style={{ fontSize: 16 }}>🚫</span> Proibidos Retirada Hoje
+      </div>
+      
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 4, maxHeight: '250px' }}>
+        {loading ? (
+          <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 12, padding: '20px 0', opacity: 0.7 }}>Buscando restrições...</div>
+        ) : restritos.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 11, padding: '20px 0', opacity: 0.6, fontStyle: 'italic' }}>
+            Nenhuma restrição encontrada para hoje.
+          </div>
+        ) : (
+          restritos.map(aluno => (
+            <div key={aluno.id} style={{
+              background: 'hsl(var(--bg-surface))',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              borderRadius: 12, padding: '8px 10px',
+              display: 'flex', alignItems: 'center', gap: 10,
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
+                background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 900, color: '#ef4444', flexShrink: 0,
+              }}>
+                {aluno.foto ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                ) : (
+                  aluno.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {aluno.nome}
+                </div>
+                {aluno.restritos.map((r: any, idx: number) => (
+                  <div key={idx} style={{ fontSize: 10, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <span style={{ fontWeight: 700 }}>{r.nome}</span>
+                    <span style={{ opacity: 0.7, fontSize: 9 }}>({r.motivo})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   )
 }
@@ -1130,6 +1302,7 @@ function ChamadasContent() {
   const [filter,        setFilter]        = useState<FilterType>('waiting')
   const [callSearch,    setCallSearch]    = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
+  const [confirmClearAll, setConfirmClearAll] = useState(false)
 
   // -- Busca de Alunos Refatorada Direct Supabase --
   const [studentSearch, setStudentSearch] = useState('')
@@ -1317,13 +1490,13 @@ function ChamadasContent() {
 
 
 
-      {/* ── TOP CONTAINERS GRID (SEARCH & STICKER) ─────────────────── */}
+      {/* ── TOP CONTAINERS GRID (SEARCH, PROIBIDOS & STICKER) ─────────────────── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr',
-        gap: 20,
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr)',
+        gap: 16,
         marginBottom: 28,
-        alignItems: 'start',
+        alignItems: 'stretch',
       }}>
         {/* ── SEARCH ─────────────────────────────────────────────────── */}
         <div style={{
@@ -1331,6 +1504,7 @@ function ChamadasContent() {
           border: '1px solid rgba(6,182,212,0.2)',
           borderRadius: 20, padding: '14px 18px',
           display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
+          height: '100%',
         }}>
           <div style={{ fontWeight: 900, fontSize: 13, color: '#06b6d4', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             <Search size={15} color="#06b6d4"/> Chamar Aluno
@@ -1358,34 +1532,50 @@ function ChamadasContent() {
                 <X size={14}/>
               </button>
             )}
-          </div>
-          
-          {studentSearch.trim().length > 0 && studentSearch.trim().length < 3 && (
-            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0' }}>
-              Digite pelo menos 3 letras do nome do aluno.
-            </div>
-          )}
-          
-          {isSearching && (
-            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <RefreshCw size={14} className="spin" /> Buscando alunos...
-            </div>
-          )}
+            {/* OVERLAY DROPDOWN FOR RESULTS */}
+            {studentSearch.trim().length > 0 && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
+                background: 'hsl(var(--bg-elevated))',
+                border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 16,
+                boxShadow: 'var(--shadow-xl)',
+                zIndex: 100,
+                maxHeight: '60vh', overflowY: 'auto',
+                display: 'flex', flexDirection: 'column',
+              }}>
+                {studentSearch.trim().length > 0 && studentSearch.trim().length < 3 && (
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                    Digite pelo menos 3 letras do nome do aluno.
+                  </div>
+                )}
+                
+                {isSearching && (
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <RefreshCw size={14} className="spin" /> Buscando alunos...
+                  </div>
+                )}
 
-          {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {schoolResults.map((a: any) => (
-                <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
-              ))}
-            </div>
-          )}
-          
-          {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
-            <div style={{ marginTop: 12, fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '12px 0' }}>
-              Nenhum aluno encontrado com esse nome.
-            </div>
-          )}
+                {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+                    {schoolResults.map((a: any) => (
+                      <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
+                    ))}
+                  </div>
+                )}
+                
+                {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
+                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                    Nenhum aluno encontrado com esse nome.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* ── PROIBIDOS RETIRADA ────────────────────────────────────────── */}
+        <ProibidosRetiradaCard />
 
         {/* ── STICKER ────────────────────────────────────────────────── */}
         <SpecialExitSticker showToast={showToast} />
@@ -1426,12 +1616,7 @@ function ChamadasContent() {
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            setTimeout(() => {
-              if (window.confirm('Tem certeza que deseja zerar e excluir todas as chamadas? Esta ação não pode ser desfeita.')) {
-                clearCalls()
-                showToast('Todas as chamadas foram zeradas.')
-              }
-            }, 50)
+            setConfirmClearAll(true)
           }}
           style={{
             padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
@@ -1491,6 +1676,90 @@ function ChamadasContent() {
           })}
         </div>
       )}
+
+      {/* ── MODAL DE CONFIRMAÇÃO (ZERAR CHAMADAS) ───────────────────────── */}
+      <AnimatePresence>
+        {confirmClearAll && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              style={{
+                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 24, padding: 24, width: '90%', maxWidth: 400,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                display: 'flex', flexDirection: 'column', gap: 20,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 16,
+                  background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  <Trash2 size={24} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-base))' }}>Zerar chamadas?</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
+                    Tem certeza que deseja zerar e excluir todas as chamadas? Esta ação não pode ser desfeita.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  onClick={() => setConfirmClearAll(false)}
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12,
+                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 13,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'hsl(var(--bg-surface))'}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    clearCalls()
+                    showToast('Todas as chamadas foram zeradas.')
+                    setConfirmClearAll(false)
+                  }}
+                  style={{
+                    flex: 1, height: 44, borderRadius: 12,
+                    background: '#ef4444', border: 'none',
+                    color: '#fff', fontWeight: 700, fontSize: 13,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#dc2626'
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = '#ef4444'
+                    e.currentTarget.style.transform = 'none'
+                  }}
+                >
+                  Sim, zerar tudo
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }

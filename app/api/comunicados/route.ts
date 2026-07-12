@@ -135,9 +135,9 @@ export async function GET(request: Request) {
 
       // Resolver data de acesso
       const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
-      if (dateStr && accessStartDate !== null) {
+      if (dateStr) {
         const studentEntryDate = new Date(dateStr);
-        if (studentEntryDate > accessStartDate) {
+        if (accessStartDate === null || studentEntryDate > accessStartDate) {
           accessStartDate = studentEntryDate;
         }
       }
@@ -161,7 +161,8 @@ export async function GET(request: Request) {
   let query = supabase.from('comunicados').select('*');
 
   if (accessStartDate) {
-    query = query.gte('data', accessStartDate.toISOString());
+    const adjustedStartDate = new Date(accessStartDate.getTime() - 60000); // 1 min buffer para clock skew
+    query = query.gte('data', adjustedStartDate.toISOString());
   }
   
   if (turmaId || alunoId) {
@@ -232,8 +233,8 @@ export async function GET(request: Request) {
     query = query.gt('created_at', sinceParam);
   }
 
-  // Ocultar envios individuais de relatorios para admins no feed (eles veem apenas o resumo/pai)
-  if (isAdmin && !idParam && !alunoId) {
+  // Ocultar envios individuais de relatorios para admins e colaboradores no feed (eles veem apenas o resumo/pai)
+  if (!isFamilyOrStudent && !idParam && !alunoId) {
     query = query.not('id', 'like', 'AD-COM-REL-STU-%');
   }
   
@@ -571,40 +572,71 @@ export async function DELETE(request: Request) {
   const id = searchParams.get('id')
   const idsParam = searchParams.get('ids')
 
+  let initialIds: string[] = []
   if (idsParam) {
-    const ids = idsParam.split(',').filter(Boolean)
-    if (ids.length === 0) return NextResponse.json({ error: 'ids required' }, { status: 400 })
+    initialIds = idsParam.split(',').filter(Boolean)
+  } else if (id) {
+    initialIds = [id]
+  }
 
-    const { data: comunicados } = await supabase.from('comunicados').select('dados').in('id', ids)
-    const urlsToDelete: string[] = []
-    if (comunicados) {
-      for (const com of comunicados) {
-        if (com.dados?.anexos && Array.isArray(com.dados.anexos)) {
-          urlsToDelete.push(...com.dados.anexos)
-        }
+  if (initialIds.length === 0) {
+    return NextResponse.json({ error: 'id or ids required' }, { status: 400 })
+  }
+
+  const { data: comunicados } = await supabase.from('comunicados').select('id, dados, created_at, titulo').in('id', initialIds)
+  const urlsToDelete: string[] = []
+  const idsToDelete = new Set<string>(initialIds)
+
+  if (comunicados) {
+    for (const com of comunicados) {
+      if (com.dados?.anexos && Array.isArray(com.dados.anexos)) {
+        urlsToDelete.push(...com.dados.anexos)
+      }
+
+      if (com.id && String(com.id).startsWith('AD-COM-REL-COLAB-')) {
+         const autorId = com.dados?.autorId;
+         const dateStr = com.created_at || com.dados?.dataEnvio;
+         if (autorId && dateStr) {
+            const createdDate = new Date(dateStr);
+            if (!isNaN(createdDate.getTime())) {
+                const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
+                const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
+                
+                const { data: stus } = await supabaseServer.from('comunicados')
+                  .select('id, dados, titulo')
+                  .ilike('id', 'AD-COM-REL-STU-%')
+                  .gte('created_at', minDate)
+                  .lte('created_at', maxDate);
+                
+                if (stus) {
+                    const colabTitulo = (com.titulo || '').replace('Relatório: ', '');
+                    
+                    const relatedStus = stus.filter((s: any) => {
+                      if (!s.dados || s.dados.autorId !== autorId) return false;
+                      // Tentar garantir que seja do mesmo lote verificando prefixo
+                      if (colabTitulo && s.titulo) {
+                        // Verifica se o titulo do STU contém ou inicia com partes do titulo do COLAB
+                        if (!s.titulo.includes(colabTitulo)) return false;
+                      }
+                      return true;
+                    });
+
+                    for (const stu of relatedStus) {
+                        idsToDelete.add(stu.id);
+                        if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
+                            urlsToDelete.push(...stu.dados.anexos);
+                        }
+                    }
+                }
+            }
+         }
       }
     }
-
-    const { error } = await supabase.from('comunicados').delete().in('id', ids)
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    
-    if (urlsToDelete.length > 0) {
-      // Deleta do storage sem bloquear a response principal
-      deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
-    }
-
-    return NextResponse.json({ ok: true })
   }
 
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const finalIdsToDelete = Array.from(idsToDelete)
 
-  const { data: com } = await supabase.from('comunicados').select('dados').eq('id', id).single()
-  const urlsToDelete: string[] = []
-  if (com && com.dados?.anexos && Array.isArray(com.dados.anexos)) {
-    urlsToDelete.push(...com.dados.anexos)
-  }
-
-  const { error } = await supabase.from('comunicados').delete().eq('id', id)
+  const { error } = await supabaseServer.from('comunicados').delete().in('id', finalIdsToDelete)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   if (urlsToDelete.length > 0) {

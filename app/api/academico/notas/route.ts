@@ -80,70 +80,12 @@ export async function POST(request: Request) {
 
     if (payload.length === 0) return NextResponse.json({ ok: true, count: 0 })
 
-    for (const lanc of payload) {
-      try {
-        if (!lanc.turmaId || !lanc.disciplina || !lanc.bimestre) {
-          console.warn('Pulando lancamento sem campos obrigatorios:', lanc.id);
-          continue;
-        }
-
-        // 1. Upsert Lançamento
-        const { error: err1 } = await supabase.from('academico_notas_lancamento').upsert({
-          id: lanc.id || `LN-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
-          turma_id: lanc.turmaId,
-          disciplina: lanc.disciplina,
-          bimestre: lanc.bimestre,
-          esquema_id: lanc.esquemaId,
-          criado_por: lanc.criadoPor || 'Usuário',
-          created_at: lanc.createdAt || new Date().toISOString()
-        })
-        if (err1) throw err1
-
-        // 2. Preparar Alunos e Valores
-        const alunosRows: any[] = []
-        const valoresRows: any[] = []
-
-        for (const nota of lanc.notas || []) {
-          if (!nota.alunoId) continue;
-
-          const alunoPk = `${lanc.id}_${nota.alunoId}`
-          alunosRows.push({
-            id: alunoPk,
-            lancamento_id: lanc.id,
-            aluno_id: nota.alunoId,
-            media_parcial: nota.mediaParcial,
-            faltas: nota.faltas || 0,
-            situacao: nota.situacao || ''
-          })
-
-          for (const [detalheId, val] of Object.entries(nota.valores || {})) {
-            if (val !== null && val !== '' && val !== undefined) {
-              valoresRows.push({
-                id: `${alunoPk}_${detalheId}`,
-                nota_aluno_id: alunoPk,
-                detalhe_id: detalheId,
-                valor: String(val)
-              })
-            }
-          }
-        }
-
-        if (alunosRows.length > 0) {
-          const { error: err2 } = await supabase.from('academico_notas_aluno').upsert(alunosRows)
-          if (err2) throw err2
-        }
-
-        if (valoresRows.length > 0) {
-          const { error: err3 } = await supabase.from('academico_notas_valor').upsert(valoresRows)
-          if (err3) throw err3
-        }
-      } catch (innerErr: any) {
-        console.error(`Erro ao salvar lancamento ${lanc.id}:`, innerErr);
-        try {
-          require('fs').appendFileSync('/tmp/notas_error.log', `Erro no lanc ${lanc.id}: ${innerErr.message || JSON.stringify(innerErr)}\n`);
-        } catch (err) {}
-        // Continua para o próximo sem quebrar todo o batch
-      }
+    const { error: errRpc } = await supabase.rpc('salvar_notas_em_lote', { p_dados: payload })
+    
+    if (errRpc) {
+      console.error('Erro na RPC salvar_notas_em_lote:', errRpc)
+      // Se a RPC falhar, isso indica erro nos dados ou que a migração não rodou.
+      throw errRpc
     }
 
     return NextResponse.json({ ok: true, count: payload.length }, { status: 201 })

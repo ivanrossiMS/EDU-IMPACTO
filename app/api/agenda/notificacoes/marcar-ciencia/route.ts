@@ -59,7 +59,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: e.message }, { status: 500 })
     }
 
-    return NextResponse.json({ ok: true, count: 1 })
+    const responseKey = isFamily && alunoId ? `${readerId}_${alunoId}` : String(readerId);
+
+    return NextResponse.json({ ok: true, count: 1, key: responseKey })
   } catch (err: any) {
     console.error("Erro em marcar-ciencia:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

@@ -13,13 +13,13 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { getInitials } from '@/lib/utils'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname, useRouter, useParams } from 'next/navigation'
+import { usePathname, useRouter, useParams, useSearchParams } from 'next/navigation'
 import React, { use, useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { 
   Bell, MessageSquare, Image as ImageIcon, Calendar, 
   BarChart2, AlertTriangle, GraduationCap, DollarSign, UserCog, Users, X, LogOut,
-  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send, Check
+  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send, Check, MonitorSmartphone
 } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 
@@ -49,9 +49,29 @@ function PortalWrapper({ children }: { children: React.ReactNode }) {
 }
 
 function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAlunos = [] }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void, meusAlunos?: any[] }) {
+  const searchParams = useSearchParams()
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
   const call = activeCalls.find(c => aluno && String(c.studentId) === String(aluno.id))
+
+  const espelharRespId = searchParams?.get('espelhar_responsavel');
+  const espelharColabId = searchParams?.get('espelhar_colaborador');
+  const isMirroringMode = !!(espelharRespId || espelharColabId || searchParams?.get('espelhar_aluno') === 'true');
+
+  const espelharNome = searchParams?.get('espelhar_nome');
+  
+  const effectiveUser = React.useMemo(() => {
+    if (isMirroringMode) {
+      return { 
+        ...currentUser, 
+        id: espelharRespId || espelharColabId || currentUser.id, 
+        nome: espelharNome || currentUser.nome 
+      };
+    }
+    return currentUser;
+  }, [isMirroringMode, espelharRespId, espelharColabId, espelharNome, currentUser]);
+
+
 
   // Unified effect for local confirmed state
   useEffect(() => {
@@ -133,9 +153,9 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     const autorizados = rawSaude.autorizados || [];
     const responsaveis = aluno?.responsaveis || aluno?.dados?.responsaveis || [];
     
-    const currentNameKey = (currentUser?.nome || '').toLowerCase().trim();
-    const currentId = vinculo?.id || currentUser?.responsavel_id || (currentUser?.dados?.responsavel_id) || currentUser?.id;
-    const currentEmail = (currentUser?.email || '').toLowerCase().trim();
+    const currentNameKey = (effectiveUser?.nome || '').toLowerCase().trim();
+    const currentId = vinculo?.id || effectiveUser?.responsavel_id || (effectiveUser?.dados?.responsavel_id) || effectiveUser?.id;
+    const currentEmail = (effectiveUser?.email || '').toLowerCase().trim();
 
     const findMatch = (list: any[]) => {
       return list.find((r: any) => {
@@ -215,13 +235,13 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     }
 
     return { isProibido: proibido, isDiaRestrito: diaRestrito, diasPermitidos: dias };
-  }, [aluno?.dados, currentUser]);
+  }, [aluno?.dados, effectiveUser]);
 
   const meusAlunosIds = React.useMemo(() => {
     return meusAlunos.map((a: any) => String(a.id))
   }, [meusAlunos])
 
-  const gId = currentUser.id || 'usr-fam'
+  const gId = effectiveUser.id || 'usr-fam';
 
   // Find all active/recent calls for this guardian
   const myCalls = React.useMemo(() => {
@@ -285,6 +305,10 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     if (onOpenModal) {
       onOpenModal()
     } else {
+      if (isMirroringMode) {
+        alert("Ação desabilitada no modo de visualização/espelhamento.");
+        return;
+      }
       const gName = currentUser.nome || 'Responsável'
       const gId = currentUser.id || 'usr-fam'
       callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
@@ -590,8 +614,14 @@ export default function ADInnerLayout({
   const { callStudent, addSpecialAuth } = useSaida()
   const pathname = usePathname()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const paramsHook = useParams<{ slug: string }>()
   const resolvedParams = paramsHook || (params as any)
+
+  const isMirroringAluno = searchParams?.get('espelhar_aluno') === 'true'
+  const espelharRespId = searchParams?.get('espelhar_responsavel')
+  const espelharColabId = searchParams?.get('espelhar_colaborador')
+  const isMirrorModeActive = !!isMirroringAluno || !!espelharRespId || !!espelharColabId
 
   // Intercept generic push notification URLs (e.g., /agenda-digital/comunicados)
   const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
@@ -608,8 +638,11 @@ export default function ADInnerLayout({
     return <LoadingGlass />
   }
 
-  const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
-  const isAlunoLogado = currentUser?.cargo === 'Aluno'
+  const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
+  const respId = espelharRespId || baseRespId
+  const isAlunoLogado = isMirroringAluno || currentUser?.cargo === 'Aluno'
+  
+  const isMirrorMode = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
 
   useEffect(() => {
      if (!hydrated || !currentUser) return
@@ -704,7 +737,7 @@ export default function ADInnerLayout({
   })()
 
   const userAccessRole = React.useMemo(() => {
-    if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria') {
+    if (!isMirrorModeActive && (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria')) {
       return { isFin: true, isPed: true, parentesco: currentUser.perfil }
     }
     if (!vinculo) return { isFin: false, isPed: false, parentesco: 'Responsável' }
@@ -713,7 +746,7 @@ export default function ADInnerLayout({
       isPed: !!vinculo.resp_pedagogico,
       parentesco: vinculo.parentesco || 'Responsável'
     }
-  }, [vinculo, currentUser])
+  }, [vinculo, currentUser, isMirrorModeActive])
   const navItems = [
     { label: 'Comunicados', href: `/agenda-digital/${aluno?.id}/comunicados`, icon: <Bell size={18} /> },
 
@@ -739,6 +772,10 @@ export default function ADInnerLayout({
 
   // ── Handler de Autorização Especial e Chamada Normal ────────────────────
   const handleNormalCallConfirm = useCallback(() => {
+    if (isMirrorModeActive) {
+      alert("Ação desabilitada no modo de visualização/espelhamento.");
+      return;
+    }
     if (selectedAlunos.length === 0) return
     const gName = currentUser?.nome || 'Responsável'
     const gId = currentUser?.id || 'usr-fam'
@@ -759,6 +796,10 @@ export default function ADInnerLayout({
   }, [selectedAlunos, profileData?.meusAlunos, aluno, turmas, currentUser, callStudent])
 
   const handleSpecialAuthConfirm = useCallback(async () => {
+    if (isMirrorModeActive) {
+      alert("Ação desabilitada no modo de visualização/espelhamento.");
+      return;
+    }
     if (!specialAuthText.trim() || selectedAlunos.length === 0) return
     setSpecialAuthSending(true)
     try {
@@ -820,6 +861,30 @@ export default function ADInnerLayout({
 
   return (
     <>
+    {isMirrorModeActive && (
+      <div style={{
+        position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10000,
+        background: 'rgba(239, 68, 68, 0.95)', backdropFilter: 'blur(12px)',
+        color: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', borderBottom: '1px solid rgba(255,255,255,0.1)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Modo Visualização (Espelhar Agenda)</h4>
+            <p style={{ margin: 0, fontSize: 12, opacity: 0.9 }}>Você está visualizando o aplicativo como outro usuário. Ações que modificam dados estão restritas.</p>
+          </div>
+        </div>
+        <Link href="/agenda-digital/admin/espelhar" style={{
+          background: '#fff', color: '#ef4444', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 800, textDecoration: 'none', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
+        }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+          <LogOut size={16} strokeWidth={2.5} />
+          Voltar para Espelhar
+        </Link>
+      </div>
+    )}
     {/* Student Switcher Overlay */}
     <PortalWrapper>
       <AnimatePresence>
@@ -1112,6 +1177,22 @@ export default function ADInnerLayout({
 </PortalWrapper>
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
+      {isMirrorMode && (
+        <div style={{ 
+          background: 'linear-gradient(135deg, #FF0080, #7928CA)', color: 'white', 
+          padding: '12px 24px', borderRadius: 16, display: 'flex', justifyContent: 'space-between', 
+          alignItems: 'center', fontWeight: 'bold', boxShadow: '0 4px 20px rgba(255, 0, 128, 0.3)', 
+          marginBottom: -10, zIndex: 50, position: 'relative' 
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+             <MonitorSmartphone size={20} />
+             <span>Modo Visualização: {resolvedParams?.slug === 'colaborador' ? 'Visão de Colaborador' : `Agenda de ${aluno?.nome || 'Aluno'}`}</span>
+          </div>
+          <button onClick={() => router.push('/agenda-digital/admin/espelhar')} style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: 10, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+             Sair do Espelhamento
+          </button>
+        </div>
+      )}
       <style dangerouslySetInnerHTML={{__html: `
         .ad-main-grid {
           display: grid;
@@ -2171,6 +2252,9 @@ export default function ADInnerLayout({
           }
         }
       `}} />
+
+
+
       {/* Dynamic Header floating profile card */}
 
       <div className="ad-premium-card-wrapper">
@@ -2275,7 +2359,7 @@ export default function ADInnerLayout({
                 </div>
 
                 {/* Mini Card 3: Responsável */}
-                {currentUser?.cargo !== 'Aluno' && (
+                {(currentUser?.cargo !== 'Aluno' && !isMirroringAluno) && (
                   <div className="ad-mini-card">
                     <div className="ad-mini-card-icon-desktop" style={{ color: '#10b981', background: 'rgba(16,185,129,0.08)', width: 30, height: 30, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Users size={14} />
@@ -2287,7 +2371,12 @@ export default function ADInnerLayout({
                       </div>
                       <div className="ad-mini-card-value" style={{ fontSize: 12, color: '#1e293b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '100px' }}>
-                          {abbreviateName(currentUser?.nome || (aluno as any)?.responsavel || 'Responsável')}
+                          {(() => {
+                             const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
+                               ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
+                               : null;
+                             return abbreviateName(mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável');
+                          })()}
                         </span>
                         <span className="ad-badge-parentesco" style={{ fontSize: 8, background: '#3b82f6', color: '#fff', padding: '2px 6px', borderRadius: 8, flexShrink: 0, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', boxShadow: '0 2px 4px rgba(59,130,246,0.3)' }}>{userAccessRole.parentesco}</span>
                         {userAccessRole.isFin && (

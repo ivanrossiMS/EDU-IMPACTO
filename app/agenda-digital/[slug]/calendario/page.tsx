@@ -30,7 +30,7 @@ function todayStr() {
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
 }
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 
 // Caches removidos: utilizando API otimizada de aniversariantes
 
@@ -81,6 +81,11 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()
+  const searchParams = useSearchParams()
+  const espelharRespId = searchParams?.get('espelhar_responsavel');
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+  const isMirroring = !!(espelharRespId || espelharAluno);
+
   const rawTurma = aluno?.turma || 'Sem Turma'
   
   const turmaDoAluno = (() => {
@@ -232,11 +237,11 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     if (!aluno?.id || eventosFiltrados.length === 0) return;
     
     const evts = eventosFiltrados;
-    const currentReaderId = currentUser?.id;
+    const currentReaderId = isMirroring ? (espelharRespId || resolvedParams.slug) : (currentUser?.id || '');
     if (!currentReaderId) return;
 
-    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
+    const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+    const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
     const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${aluno.id}` : '';
     const currentReaderWithSlug = `${currentReaderId}_${aluno.id}`;
     const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
@@ -254,6 +259,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         return !isRead;
       })
       .map(e => e.id);
+
+    // If we are mirroring, we should not mark events as read on behalf of the user.
+    if (isMirroring) return;
 
     if (unreadIds.length > 0 && setLocalEventos) {
       setLocalEventos((old: any) => {

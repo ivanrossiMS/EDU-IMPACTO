@@ -158,7 +158,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const queryClient = useQueryClient()
 
-  const comunicadosQuery = useQueryComunicados(isFamilyFetch, '/api/comunicados')
+  const comunicadosQuery = useQueryComunicados('/api/comunicados', 5, { enabled: !isFamilyFetch })
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading
 
@@ -190,7 +190,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const chatsLoading = false;
   const messagesLoading = false;
   
-  const momentosQuery = useQueryMomentos(isFamilyFetch, '/api/agenda/momentos')
+  const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch })
   const momentosFeed = momentosQuery.data?.pages?.flat() || []
   const momentosLoading = momentosQuery.isLoading
 
